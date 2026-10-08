@@ -12,7 +12,7 @@ use fmd_store::AppDb;
 
 use crate::ImportOptions;
 use crate::error::ImportError;
-use crate::fmd2::{lines, open_db, sqlite_error, text};
+use crate::fmd2::{chapter_links, open_db, sql_text, sqlite_error};
 use crate::report::{ImportReport, SkipReason};
 
 /// Length of FMD2's module ids: 32 hex digits (`m.ID` in lua/modules/*.lua).
@@ -78,7 +78,9 @@ pub(crate) fn import(
     report.downloaded_chapters.found = true;
     let rows = (|| {
         let mut stmt = conn.prepare(r#"SELECT "id", "chapters" FROM "downloadedchapters""#)?;
-        let rows = stmt.query_map([], |r| Ok((text(r.get_ref(0)?), text(r.get_ref(1)?))))?;
+        let rows = stmt.query_map([], |r| {
+            Ok((sql_text(r.get_ref(0)?), sql_text(r.get_ref(1)?)))
+        })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
     })()
     .map_err(|e| sqlite_error(path, e))?;
@@ -92,10 +94,7 @@ pub(crate) fn import(
             );
             continue;
         };
-        let chapters: Vec<&str> = lines(&chapters)
-            .into_iter()
-            .filter(|c| !c.trim().is_empty())
-            .collect();
+        let chapters = chapter_links(&chapters);
         let mut new = Vec::new();
         for chapter in chapters {
             if !repo.contains(&module_id, &link, chapter)? {

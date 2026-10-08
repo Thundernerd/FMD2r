@@ -27,7 +27,7 @@ pub use app::tasks::{
     ChapterStatus, ImportedChapter, ImportedTask, NewChapter, NewPage, NewTask, PageStatus, Task,
     TaskChapter, TaskId, TaskPage, TaskRepo, TaskStatus,
 };
-pub use crypto::{Cipher, KeyFileCipher};
+pub use crypto::{ACCOUNTS_KEY_FILE, Cipher, KeyFileCipher};
 pub use error::{Result, StoreError};
 pub use lists::{
     ListsDb, MangaListing, MasterListEntry, MasterListRepo, PageRequest, SearchFilters,

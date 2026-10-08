@@ -2,6 +2,10 @@
 //!
 //! Schema: `TDownloadsDB.Create` (baseunits/DownloadsDB.pas:67-89); rows are read in `"order"`
 //! like `TDownloadManager.Restore` (:91, baseunits/uDownloadsManager.pas:1638-1692).
+//!
+//! Not imported, because FMD2 derives them from the other columns: `status` and `progress` are
+//! display text (rewritten from the task state, e.g. :1872, :1883), and `numberofpages` is the
+//! length of `pagelinks` (:1213, :1253).
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -14,7 +18,7 @@ use rusqlite::Row;
 
 use crate::ImportOptions;
 use crate::error::ImportError;
-use crate::fmd2::{boolean, datetime, int, lines, open_db, sqlite_error, text};
+use crate::fmd2::{datetime, lines, open_db, sql_bool, sql_int, sql_text, sqlite_error};
 use crate::paths::translate;
 use crate::report::{ImportReport, SkipReason};
 
@@ -42,23 +46,23 @@ struct Download {
 impl Download {
     fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
-            enabled: boolean(row.get_ref("enabled")?),
-            taskstatus: int(row.get_ref("taskstatus")?),
-            chapterptr: int(row.get_ref("chapterptr")?),
-            currentpage: int(row.get_ref("currentpage")?),
-            moduleid: text(row.get_ref("moduleid")?),
-            link: text(row.get_ref("link")?),
-            title: text(row.get_ref("title")?),
-            saveto: text(row.get_ref("saveto")?),
+            enabled: sql_bool(row.get_ref("enabled")?),
+            taskstatus: sql_int(row.get_ref("taskstatus")?),
+            chapterptr: sql_int(row.get_ref("chapterptr")?),
+            currentpage: sql_int(row.get_ref("currentpage")?),
+            moduleid: sql_text(row.get_ref("moduleid")?),
+            link: sql_text(row.get_ref("link")?),
+            title: sql_text(row.get_ref("title")?),
+            saveto: sql_text(row.get_ref("saveto")?),
             dateadded: datetime(row.get_ref("dateadded")?),
             datelastdownloaded: datetime(row.get_ref("datelastdownloaded")?),
-            chapterslinks: text(row.get_ref("chapterslinks")?),
-            chaptersnames: text(row.get_ref("chaptersnames")?),
-            pagelinks: text(row.get_ref("pagelinks")?),
-            pagecontainerlinks: text(row.get_ref("pagecontainerlinks")?),
-            filenames: text(row.get_ref("filenames")?),
-            customfilenames: text(row.get_ref("customfilenames")?),
-            chaptersstatus: text(row.get_ref("chaptersstatus")?),
+            chapterslinks: sql_text(row.get_ref("chapterslinks")?),
+            chaptersnames: sql_text(row.get_ref("chaptersnames")?),
+            pagelinks: sql_text(row.get_ref("pagelinks")?),
+            pagecontainerlinks: sql_text(row.get_ref("pagecontainerlinks")?),
+            filenames: sql_text(row.get_ref("filenames")?),
+            customfilenames: sql_text(row.get_ref("customfilenames")?),
+            chaptersstatus: sql_text(row.get_ref("chaptersstatus")?),
         })
     }
 }

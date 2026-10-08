@@ -11,7 +11,7 @@ use rusqlite::Row;
 
 use crate::ImportOptions;
 use crate::error::ImportError;
-use crate::fmd2::{boolean, datetime, lines, open_db, sqlite_error, text};
+use crate::fmd2::{chapter_links, datetime, open_db, sql_bool, sql_text, sqlite_error};
 use crate::paths::translate;
 use crate::report::{ImportReport, SkipReason};
 
@@ -32,14 +32,14 @@ struct FavoriteRow {
 impl FavoriteRow {
     fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
-            enabled: boolean(row.get_ref("enabled")?),
-            moduleid: text(row.get_ref("moduleid")?),
-            link: text(row.get_ref("link")?),
-            title: text(row.get_ref("title")?),
-            status: text(row.get_ref("status")?),
-            currentchapter: text(row.get_ref("currentchapter")?),
-            downloadedchapterlist: text(row.get_ref("downloadedchapterlist")?),
-            saveto: text(row.get_ref("saveto")?),
+            enabled: sql_bool(row.get_ref("enabled")?),
+            moduleid: sql_text(row.get_ref("moduleid")?),
+            link: sql_text(row.get_ref("link")?),
+            title: sql_text(row.get_ref("title")?),
+            status: sql_text(row.get_ref("status")?),
+            currentchapter: sql_text(row.get_ref("currentchapter")?),
+            downloadedchapterlist: sql_text(row.get_ref("downloadedchapterlist")?),
+            saveto: sql_text(row.get_ref("saveto")?),
             dateadded: datetime(row.get_ref("dateadded")?),
             datelastchecked: datetime(row.get_ref("datelastchecked")?),
             datelastupdated: datetime(row.get_ref("datelastupdated")?),
@@ -87,10 +87,7 @@ pub(crate) fn import(
         }
         // FMD2 merges a favorite's downloaded list into `downloadedchapters.db` as it downloads
         // (baseunits/uFavoritesManager.pas:1131-1133); FMD2r keeps only the latter.
-        let chapters: Vec<&str> = lines(&f.downloadedchapterlist)
-            .into_iter()
-            .filter(|c| !c.trim().is_empty())
-            .collect();
+        let chapters = chapter_links(&f.downloadedchapterlist);
         if !opts.dry_run && !chapters.is_empty() {
             db.downloaded_chapters()
                 .mark(&f.moduleid, &f.link, &chapters)?;
@@ -111,7 +108,8 @@ pub(crate) fn import(
                 cover_url: None,
             },
             status: f.status,
-            // `currentchapter` is TEXT but holds the chapter count (baseunits/FavoritesDB.pas:62).
+            // `currentchapter` is TEXT but holds the chapter count
+            // (baseunits/uFavoritesManager.pas:352, :425).
             current_chapter: f.currentchapter.trim().parse().unwrap_or(0),
             enabled: f.enabled,
             date_added: f.dateadded.unwrap_or(0),

@@ -15,6 +15,7 @@ use serde_json::{Map, Value};
 
 use crate::ImportOptions;
 use crate::error::ImportError;
+use crate::fmd2::{json_bool, json_int, read_json};
 use crate::paths::translate;
 use crate::report::{ImportReport, SkipReason, Unmapped};
 
@@ -31,7 +32,7 @@ enum Conv {
     /// An item index into these FMD2r enum values.
     Index(&'static [&'static str]),
     /// `cbOptionProxyType` text `HTTP`/`SOCKS4`/`SOCKS5` (mangadownloader/forms/frmMain.lfm:3559-3563).
-    Lowercase,
+    ProxyType,
     /// A port typed into a text field; empty means none.
     Port,
     /// Stored with `EncryptString` (read with `DecryptString`, mangadownloader/forms/frmMain.pas:5878-5879).
@@ -107,7 +108,7 @@ const MAP: &[(&str, &str, &str, Conv)] = &[
         "connections",
         "ProxyType",
         "connections.proxy.type",
-        Conv::Lowercase,
+        Conv::ProxyType,
     ),
     ("connections", "Host", "connections.proxy.host", Conv::Str),
     ("connections", "Port", "connections.proxy.port", Conv::Port),
@@ -302,29 +303,6 @@ fn display(value: &Value) -> String {
     }
 }
 
-/// `TJSONIniFile`'s readers accept what its writers wrote, plus the obvious text spellings.
-fn as_bool(v: &Value) -> Option<bool> {
-    match v {
-        Value::Bool(b) => Some(*b),
-        Value::Number(n) => n.as_i64().map(|n| n != 0),
-        Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" => Some(true),
-            "false" | "0" => Some(false),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn as_int(v: &Value) -> Option<i64> {
-    match v {
-        Value::Number(n) => n.as_i64(),
-        Value::String(s) => s.trim().parse().ok(),
-        Value::Bool(b) => Some(i64::from(*b)),
-        _ => None,
-    }
-}
-
 /// The FMD2r value for `value`, or why there is none.
 fn convert(
     conv: Conv,
@@ -334,19 +312,19 @@ fn convert(
 ) -> Result<Value, String> {
     let not = |what: &str| format!("{} is not {what}", display(value));
     Ok(match conv {
-        Conv::Bool => Value::Bool(as_bool(value).ok_or_else(|| not("a boolean"))?),
-        Conv::Int => Value::from(as_int(value).ok_or_else(|| not("an integer"))?),
+        Conv::Bool => Value::Bool(json_bool(Some(value)).ok_or_else(|| not("a boolean"))?),
+        Conv::Int => Value::from(json_int(Some(value)).ok_or_else(|| not("an integer"))?),
         Conv::Str => Value::String(display(value)),
         Conv::Path => Value::String(translate(&opts.path_maps, &display(value), report)),
         Conv::Index(items) => {
-            let i = as_int(value).ok_or_else(|| not("an integer"))?;
+            let i = json_int(Some(value)).ok_or_else(|| not("an integer"))?;
             let item = usize::try_from(i)
                 .ok()
                 .and_then(|i| items.get(i))
                 .ok_or_else(|| not("a known item index"))?;
             Value::String((*item).to_string())
         }
-        Conv::Lowercase => Value::String(display(value).trim().to_ascii_lowercase()),
+        Conv::ProxyType => Value::String(display(value).trim().to_ascii_lowercase()),
         Conv::Port => match display(value).trim() {
             "" => Value::Null,
             port => Value::from(port.parse::<u16>().map_err(|_| not("a port"))?),
@@ -371,14 +349,10 @@ pub(crate) fn import(
     opts: &ImportOptions,
     report: &mut ImportReport,
 ) -> Result<(), ImportError> {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(e) => return Err(json_error(path, e.to_string())),
+    let Some(sections): Option<Map<String, Value>> = read_json(path)? else {
+        return Ok(());
     };
     report.settings.found = true;
-    let sections: Map<String, Value> =
-        serde_json::from_slice(&bytes).map_err(|e| json_error(path, e.to_string()))?;
 
     let service = if opts.dry_run {
         // Validate against a throwaway copy of the current settings.
@@ -432,11 +406,4 @@ pub(crate) fn import(
     unmapped.sort_by(|a, b| a.key.cmp(&b.key));
     report.unmapped.extend(unmapped);
     Ok(())
-}
-
-fn json_error(path: &Path, reason: String) -> ImportError {
-    ImportError::Json {
-        path: path.to_path_buf(),
-        reason,
-    }
 }

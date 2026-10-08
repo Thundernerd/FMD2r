@@ -19,36 +19,25 @@ use serde_json::{Map, Value};
 
 use crate::ImportOptions;
 use crate::error::ImportError;
-use crate::fmd2::{parse_datetime_text, tdatetime_to_ms};
+use crate::fmd2::{
+    json_bool, json_int, json_text, parse_datetime_text, read_json, tdatetime_to_ms,
+};
 use crate::report::{ImportReport, SkipReason, Unmapped};
 
 const SOURCE: &str = "modules.json";
 
 /// The parsed `modules.json`, or `None` when there is none.
 pub(crate) fn read(path: &Path) -> Result<Option<Vec<Map<String, Value>>>, ImportError> {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(json_error(path, e.to_string())),
-    };
-    let entries: Vec<Value> =
-        serde_json::from_slice(&bytes).map_err(|e| json_error(path, e.to_string()))?;
-    Ok(Some(
+    let entries: Option<Vec<Value>> = read_json(path)?;
+    Ok(entries.map(|entries| {
         entries
             .into_iter()
             .filter_map(|e| match e {
                 Value::Object(map) => Some(map),
                 _ => None,
             })
-            .collect(),
-    ))
-}
-
-fn json_error(path: &Path, reason: String) -> ImportError {
-    ImportError::Json {
-        path: path.to_path_buf(),
-        reason,
-    }
+            .collect()
+    }))
 }
 
 /// The module ids `modules.json` lists (FMD2 writes every installed module).
@@ -56,7 +45,8 @@ pub(crate) fn module_ids(entries: &[Map<String, Value>]) -> impl Iterator<Item =
     entries.iter().map(|e| string(get(e, "ID")))
 }
 
-/// A property by name. `TJSONDeStreamer` matches property names case-insensitively.
+/// A property by name, also matched case-insensitively in case a hand-edited file changed the
+/// spelling.
 fn get<'a>(object: &'a Map<String, Value>, name: &str) -> Option<&'a Value> {
     object.get(name).or_else(|| {
         object
@@ -71,33 +61,17 @@ fn object<'a>(object: &'a Map<String, Value>, name: &str) -> Option<&'a Map<Stri
 }
 
 fn string(value: Option<&Value>) -> String {
-    match value {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Number(n)) => n.to_string(),
-        Some(Value::Bool(b)) => b.to_string(),
-        _ => String::new(),
-    }
-}
-
-fn integer(value: Option<&Value>) -> i64 {
-    match value {
-        Some(Value::Number(n)) => n.as_i64().unwrap_or(0),
-        Some(Value::String(s)) => s.trim().parse().unwrap_or(0),
-        _ => 0,
-    }
+    json_text(value)
 }
 
 fn boolean(value: Option<&Value>) -> bool {
-    match value {
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Number(n)) => n.as_i64().is_some_and(|n| n != 0),
-        Some(Value::String(s)) => s.eq_ignore_ascii_case("true"),
-        _ => false,
-    }
+    json_bool(value).unwrap_or(false)
 }
 
 fn limit(value: Option<&Value>) -> u32 {
-    u32::try_from(integer(value)).unwrap_or(0)
+    json_int(value)
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(0)
 }
 
 /// An enumerated property: `TJSONStreamer` writes its identifier, an integer stream its ordinal.
@@ -268,7 +242,9 @@ pub(crate) fn import(
             .and_then(Value::as_array)
             .map(|a| a.iter().filter_map(Value::as_object).map(cookie).collect())
             .unwrap_or_default();
-        // FMD2 writes every installed module; only those with something set are worth a row.
+        // FMD2 writes every installed module; those with no settings, option values or cookies
+        // need no row. Option values are always written, defaults included, so every module that
+        // declares options gets one.
         if overrides != ModuleOverrides::default() || !cookies.is_empty() {
             if settings_repo.get(&module_id)?.is_some() {
                 report

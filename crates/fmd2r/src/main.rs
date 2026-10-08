@@ -7,7 +7,7 @@ use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand};
 use fmd_import::{ImportOptions, PathMap};
 use fmd_server::{EventBus, LogBuffer, ServeConfig};
-use fmd_store::{AppDb, KeyFileCipher};
+use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, KeyFileCipher};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -72,9 +72,6 @@ struct ImportArgs {
     #[arg(long)]
     resume: bool,
 }
-
-/// The key file account credentials are encrypted with, in the data directory.
-const ACCOUNTS_KEY_FILE: &str = "accounts.key";
 
 #[derive(Subcommand)]
 enum ModuleCommand {

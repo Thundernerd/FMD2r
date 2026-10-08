@@ -16,6 +16,9 @@ pub trait Cipher: Send + Sync {
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>>;
 }
 
+/// File name of the [`KeyFileCipher`] key for account credentials, inside the data directory.
+pub const ACCOUNTS_KEY_FILE: &str = "accounts.key";
+
 const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 24;
 

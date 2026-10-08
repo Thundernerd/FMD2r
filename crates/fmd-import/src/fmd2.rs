@@ -4,6 +4,8 @@ use std::path::Path;
 
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
+use serde::de::DeserializeOwned;
+use serde_json::Value;
 
 use crate::error::ImportError;
 
@@ -52,7 +54,7 @@ pub(crate) fn lines(text: &str) -> Vec<&str> {
 }
 
 /// A text column, with NULL (and non-text values) as ''.
-pub(crate) fn text(value: ValueRef<'_>) -> String {
+pub(crate) fn sql_text(value: ValueRef<'_>) -> String {
     match value {
         ValueRef::Text(t) => String::from_utf8_lossy(t).into_owned(),
         ValueRef::Integer(i) => i.to_string(),
@@ -62,7 +64,7 @@ pub(crate) fn text(value: ValueRef<'_>) -> String {
 }
 
 /// An integer column; NULL or non-numeric text is 0, like `TField.AsInteger` on an empty field.
-pub(crate) fn int(value: ValueRef<'_>) -> i64 {
+pub(crate) fn sql_int(value: ValueRef<'_>) -> i64 {
     match value {
         ValueRef::Integer(i) => i,
         ValueRef::Real(r) => r as i64,
@@ -75,14 +77,14 @@ pub(crate) fn int(value: ValueRef<'_>) -> i64 {
 }
 
 /// A BOOLEAN column, written by FMD2 as '1'/'0' (baseunits/SQLiteData.pas:154-157).
-pub(crate) fn boolean(value: ValueRef<'_>) -> bool {
+pub(crate) fn sql_bool(value: ValueRef<'_>) -> bool {
     match value {
         ValueRef::Text(t) => {
             let t = String::from_utf8_lossy(t);
             let t = t.trim();
             t.eq_ignore_ascii_case("true") || t.parse::<i64>().is_ok_and(|n| n != 0)
         }
-        other => int(other) != 0,
+        other => sql_int(other) != 0,
     }
 }
 
@@ -211,4 +213,63 @@ pub(crate) fn parse_datetime_text(s: &str) -> Option<i64> {
         parse_time(time)?
     };
     Some(days_from_civil(y, m, d)? * 86_400_000 + ms)
+}
+
+/// Parses the FMD2 JSON file at `path`, or `None` when it does not exist.
+pub(crate) fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, ImportError> {
+    let json_error = |reason: String| ImportError::Json {
+        path: path.to_path_buf(),
+        reason,
+    };
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(json_error(e.to_string())),
+    };
+    serde_json::from_slice(&bytes)
+        .map(Some)
+        .map_err(|e| json_error(e.to_string()))
+}
+
+/// The non-blank lines of a newline-joined chapter link list.
+pub(crate) fn chapter_links(text: &str) -> Vec<&str> {
+    lines(text)
+        .into_iter()
+        .filter(|c| !c.trim().is_empty())
+        .collect()
+}
+
+/// A JSON value as text: strings as they are, numbers and booleans spelled out, anything else ''.
+pub(crate) fn json_text(value: Option<&Value>) -> String {
+    match value {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Number(n)) => n.to_string(),
+        Some(Value::Bool(b)) => b.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// A JSON boolean as FMD2's JSON readers accept it: `true`/`false`, a number (non-zero is true),
+/// or the text `true`/`false`/`1`/`0`.
+pub(crate) fn json_bool(value: Option<&Value>) -> Option<bool> {
+    match value? {
+        Value::Bool(b) => Some(*b),
+        Value::Number(n) => n.as_i64().map(|n| n != 0),
+        Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" => Some(true),
+            "false" | "0" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// A JSON integer: a number, numeric text, or a boolean as 0/1.
+pub(crate) fn json_int(value: Option<&Value>) -> Option<i64> {
+    match value? {
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => s.trim().parse().ok(),
+        Value::Bool(b) => Some(i64::from(*b)),
+        _ => None,
+    }
 }
