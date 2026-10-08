@@ -252,6 +252,10 @@ async fn openapi_document_is_3_1_and_lists_the_api_paths() {
         "/api/inbox/{id}/read",
         "/api/events",
         "/api/logs",
+        "/api/jobs",
+        "/api/jobs/{id}/run",
+        "/api/jobs/{id}/cancel",
+        "/api/about",
         "/api/settings",
     ] {
         assert!(paths.contains_key(path), "missing {path}");
@@ -377,12 +381,13 @@ async fn logs_returns_the_tail_of_traced_lines_since_a_sequence_number() {
     assert_eq!(lines[0]["target"], "fmd_core::jobs");
     assert_eq!(lines[0]["message"], "favorites check started");
     assert_eq!(lines[1]["level"], "WARN");
-    assert_eq!(lines[1]["message"], "Init failed module=mangadex");
+    assert_eq!(lines[1]["message"], "Init failed");
+    assert_eq!(lines[1]["module"], "mangadex");
 
     let since = lines[0]["seq"].as_u64().unwrap();
     let tail = body_json(send(&state, get(&format!("/api/logs?since={since}"))).await).await;
     assert_eq!(tail.as_array().unwrap().len(), 1);
-    assert_eq!(tail[0]["message"], "Init failed module=mangadex");
+    assert_eq!(tail[0]["message"], "Init failed");
 }
 
 #[tokio::test]

@@ -72,6 +72,91 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/logs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** The tail of the in-memory log, oldest first. */
+		get: operations['listLogs'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/jobs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Every registered background job with its state, in registration order. */
+		get: operations['listJobs'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/jobs/{id}/run': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Start a job now. */
+		post: operations['runJob'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/jobs/{id}/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Ask a running job to stop. */
+		post: operations['cancelJob'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/about': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Server diagnostics. Tool checks run each time, so this may take a few seconds. */
+		get: operations['about'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/events': {
 		parameters: {
 			query?: never;
@@ -121,21 +206,115 @@ export interface components {
 			total: number;
 			bytes_per_sec: number;
 		};
+		/**
+		 * @description What a background job is doing.
+		 * @enum {string}
+		 */
+		JobPhase: 'idle' | 'running' | 'done' | 'failed';
+		/**
+		 * @description A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites
+		 *     check, list update, module update, or any other registered job.
+		 */
 		JobState: {
-			id: string;
-			title: string;
-			/** @enum {string} */
-			state: 'running' | 'idle' | 'done' | 'failed';
+			/** Format: int64 */
 			done: number;
+			id: string;
+			/** @description Why the last run failed. */
+			last_error?: string | null;
+			/** @description RFC 3339 start of the last run. */
+			last_run?: string | null;
+			/** @description RFC 3339 start of the next scheduled run. */
+			next_run?: string | null;
+			state: components['schemas']['JobPhase'];
+			title: string;
+			/**
+			 * Format: int64
+			 * @description 0 when unknown.
+			 */
 			total: number;
 		};
+		/**
+		 * @description Severity of a log line, most severe first. Serialized in upper case; `?level=` also takes
+		 *     lower case.
+		 * @enum {string}
+		 */
+		LogLevel: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE';
+		/** @description One log line, as FMD2's log window shows it (mangadownloader/forms/frmLogger.pas). */
 		LogLine: {
-			/** Format: date-time */
-			time: string;
-			/** @enum {string} */
-			level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
-			target: string;
+			level: components['schemas']['LogLevel'];
 			message: string;
+			/**
+			 * @description The website module that logged the line (the `module` field `fmd.logger` adds,
+			 *     baseunits/lua/LuaLogger.pas:15-46).
+			 */
+			module?: string | null;
+			/**
+			 * Format: int64
+			 * @description Monotonic sequence number; pass the last one seen as `GET /api/logs?since=`.
+			 */
+			seq: number;
+			target: string;
+			/** @description RFC 3339 timestamp. */
+			time: string;
+		};
+		/** @description Diagnostics about the running server. */
+		About: {
+			data_dir?: string | null;
+			databases: components['schemas']['DatabaseSize'][];
+			/** @description The git commit the binary was built from, when known. */
+			git_revision?: string | null;
+			/** @description Module files that failed to load. */
+			load_failures: components['schemas']['LoadFailure'][];
+			/**
+			 * Format: int64
+			 * @description Website modules loaded.
+			 */
+			module_count: number;
+			/** @description External tools modules and conversions rely on. */
+			tools: components['schemas']['ToolCheck'][];
+			/** @description The upstream ref the Lua tree follows (e.g. `master`). */
+			upstream_ref?: string | null;
+			/** @description The upstream commit the Lua tree was last synced to. */
+			upstream_sha?: string | null;
+			/** Format: int64 */
+			uptime_secs: number;
+			version: string;
+			/** @description The XPath engine behind `CreateTXQuery`. */
+			xpath_backend?: string | null;
+		};
+		/** @description The size of one database in the data dir. */
+		DatabaseSize: {
+			/**
+			 * Format: int64
+			 * @description The database file plus its write-ahead log; `null` when the file does not exist.
+			 */
+			bytes?: number | null;
+			name: string;
+		};
+		/** @description A module file that failed to load (`Init` error or unknown Host API). */
+		LoadFailure: {
+			error: string;
+			/** @description The inbox item reporting it. */
+			inbox_id?: string | null;
+			module: string;
+		};
+		/** @description The outcome of checking one tool. */
+		ToolCheck: {
+			/** @description Its version or address when usable, otherwise why not. */
+			detail: string;
+			name: string;
+			/** @description Whether the tool is usable. */
+			ok: boolean;
+		};
+		/** @description RFC 9457 problem details body. */
+		Problem: {
+			detail: string;
+			/** Format: int32 */
+			status: number;
+			/** @description The status code's reason phrase. */
+			title: string;
+			/** @description Always `about:blank`: the status code says it all. */
+			type: string;
 		};
 		SeriesRef: {
 			/** @description Module ID */
@@ -249,6 +428,157 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content?: never;
+			};
+		};
+	};
+	listLogs: {
+		parameters: {
+			query?: {
+				/**
+				 * @description Only lines at this level or more severe.
+				 * @example warn
+				 */
+				level?: string;
+				/** @description Only lines logged by this website module. */
+				module?: string;
+				/** @description Only lines with a sequence number above this one. */
+				since?: number;
+				/** @description At most this many lines: the newest that match. */
+				limit?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LogLine'][];
+				};
+			};
+		};
+	};
+	listJobs: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['JobState'][];
+				};
+			};
+		};
+	};
+	runJob: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Job id */
+				id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Started; progress follows as `job.state` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['JobState'];
+				};
+			};
+			/** @description No such job */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Already running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	cancelJob: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Job id */
+				id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Cancelling; the outcome follows as `job.state` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['JobState'];
+				};
+			};
+			/** @description No such job */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Not running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	about: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['About'];
+				};
 			};
 		};
 	};

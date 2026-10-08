@@ -76,6 +76,156 @@
 				}
 			}
 		},
+			"/api/logs": {
+				"get": {
+					"tags": ["system"],
+					"summary": "The tail of the in-memory log, oldest first.",
+					"operationId": "listLogs",
+					"parameters": [
+						{
+							"name": "level",
+							"in": "query",
+							"description": "Only lines at this level or more severe.",
+							"required": false,
+							"schema": { "type": "string" },
+							"example": "warn"
+						},
+						{
+							"name": "module",
+							"in": "query",
+							"description": "Only lines logged by this website module.",
+							"required": false,
+							"schema": { "type": "string" }
+						},
+						{
+							"name": "since",
+							"in": "query",
+							"description": "Only lines with a sequence number above this one.",
+							"required": false,
+							"schema": { "type": "integer", "format": "int64", "minimum": 0 }
+						},
+						{
+							"name": "limit",
+							"in": "query",
+							"description": "At most this many lines: the newest that match.",
+							"required": false,
+							"schema": { "type": "integer", "minimum": 0 }
+						}
+					],
+					"responses": {
+						"200": {
+							"description": "",
+							"content": {
+								"application/json": {
+									"schema": { "type": "array", "items": { "$ref": "#/components/schemas/LogLine" } }
+								}
+							}
+						}
+					}
+				}
+			},
+			"/api/jobs": {
+				"get": {
+					"tags": ["system"],
+					"summary": "Every registered background job with its state, in registration order.",
+					"operationId": "listJobs",
+					"responses": {
+						"200": {
+							"description": "",
+							"content": {
+								"application/json": {
+									"schema": { "type": "array", "items": { "$ref": "#/components/schemas/JobState" } }
+								}
+							}
+						}
+					}
+				}
+			},
+			"/api/jobs/{id}/run": {
+				"post": {
+					"tags": ["system"],
+					"summary": "Start a job now.",
+					"operationId": "runJob",
+					"parameters": [
+						{
+							"name": "id",
+							"in": "path",
+							"description": "Job id",
+							"required": true,
+							"schema": { "type": "string" }
+						}
+					],
+					"responses": {
+						"202": {
+							"description": "Started; progress follows as `job.state` events",
+							"content": {
+								"application/json": { "schema": { "$ref": "#/components/schemas/JobState" } }
+							}
+						},
+						"404": {
+							"description": "No such job",
+							"content": {
+								"application/json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+							}
+						},
+						"409": {
+							"description": "Already running",
+							"content": {
+								"application/json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+							}
+						}
+					}
+				}
+			},
+			"/api/jobs/{id}/cancel": {
+				"post": {
+					"tags": ["system"],
+					"summary": "Ask a running job to stop.",
+					"operationId": "cancelJob",
+					"parameters": [
+						{
+							"name": "id",
+							"in": "path",
+							"description": "Job id",
+							"required": true,
+							"schema": { "type": "string" }
+						}
+					],
+					"responses": {
+						"202": {
+							"description": "Cancelling; the outcome follows as `job.state` events",
+							"content": {
+								"application/json": { "schema": { "$ref": "#/components/schemas/JobState" } }
+							}
+						},
+						"404": {
+							"description": "No such job",
+							"content": {
+								"application/json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+							}
+						},
+						"409": {
+							"description": "Not running",
+							"content": {
+								"application/json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+							}
+						}
+					}
+				}
+			},
+			"/api/about": {
+				"get": {
+					"tags": ["system"],
+					"summary": "Server diagnostics. Tool checks run each time, so this may take a few seconds.",
+					"operationId": "about",
+					"responses": {
+						"200": {
+							"description": "",
+							"content": { "application/json": { "schema": { "$ref": "#/components/schemas/About" } } }
+						}
+					}
+				}
+			},
 		"/api/events": {
 			"get": {
 				"operationId": "events",
@@ -118,25 +268,152 @@
 					"bytes_per_sec": { "type": "number" }
 				}
 			},
+			"JobPhase": {
+				"type": "string",
+				"description": "What a background job is doing.",
+				"enum": ["idle", "running", "done", "failed"]
+			},
 			"JobState": {
 				"type": "object",
+				"description": "A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites\ncheck, list update, module update, or any other registered job.",
 				"required": ["id", "title", "state", "done", "total"],
 				"properties": {
+					"done": { "type": "integer", "format": "int64", "minimum": 0 },
 					"id": { "type": "string" },
+					"last_error": { "type": ["string", "null"], "description": "Why the last run failed." },
+					"last_run": { "type": ["string", "null"], "description": "RFC 3339 start of the last run." },
+					"next_run": {
+						"type": ["string", "null"],
+						"description": "RFC 3339 start of the next scheduled run."
+					},
+					"state": { "$ref": "#/components/schemas/JobPhase" },
 					"title": { "type": "string" },
-					"state": { "type": "string", "enum": ["running", "idle", "done", "failed"] },
-					"done": { "type": "integer" },
-					"total": { "type": "integer" }
+					"total": {
+						"type": "integer",
+						"format": "int64",
+						"description": "0 when unknown.",
+						"minimum": 0
+					}
 				}
+			},
+			"LogLevel": {
+				"type": "string",
+				"description": "Severity of a log line, most severe first. Serialized in upper case; `?level=` also takes\nlower case.",
+				"enum": ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"]
 			},
 			"LogLine": {
 				"type": "object",
-				"required": ["time", "level", "target", "message"],
+				"description": "One log line, as FMD2's log window shows it (mangadownloader/forms/frmLogger.pas).",
+				"required": ["seq", "time", "level", "target", "message"],
 				"properties": {
-					"time": { "type": "string", "format": "date-time" },
-					"level": { "type": "string", "enum": ["ERROR", "WARN", "INFO", "DEBUG"] },
+					"level": { "$ref": "#/components/schemas/LogLevel" },
+					"message": { "type": "string" },
+					"module": {
+						"type": ["string", "null"],
+						"description": "The website module that logged the line (the `module` field `fmd.logger` adds,\nbaseunits/lua/LuaLogger.pas:15-46)."
+					},
+					"seq": {
+						"type": "integer",
+						"format": "int64",
+						"description": "Monotonic sequence number; pass the last one seen as `GET /api/logs?since=`.",
+						"minimum": 0
+					},
 					"target": { "type": "string" },
-					"message": { "type": "string" }
+					"time": { "type": "string", "description": "RFC 3339 timestamp." }
+				}
+			},
+			"About": {
+				"type": "object",
+				"description": "Diagnostics about the running server.",
+				"required": ["version", "module_count", "load_failures", "databases", "uptime_secs", "tools"],
+				"properties": {
+					"data_dir": { "type": ["string", "null"] },
+					"databases": { "type": "array", "items": { "$ref": "#/components/schemas/DatabaseSize" } },
+					"git_revision": {
+						"type": ["string", "null"],
+						"description": "The git commit the binary was built from, when known."
+					},
+					"load_failures": {
+						"type": "array",
+						"items": { "$ref": "#/components/schemas/LoadFailure" },
+						"description": "Module files that failed to load."
+					},
+					"module_count": {
+						"type": "integer",
+						"format": "int64",
+						"description": "Website modules loaded.",
+						"minimum": 0
+					},
+					"tools": {
+						"type": "array",
+						"items": { "$ref": "#/components/schemas/ToolCheck" },
+						"description": "External tools modules and conversions rely on."
+					},
+					"upstream_ref": {
+						"type": ["string", "null"],
+						"description": "The upstream ref the Lua tree follows (e.g. `master`)."
+					},
+					"upstream_sha": {
+						"type": ["string", "null"],
+						"description": "The upstream commit the Lua tree was last synced to."
+					},
+					"uptime_secs": { "type": "integer", "format": "int64", "minimum": 0 },
+					"version": { "type": "string" },
+					"xpath_backend": {
+						"type": ["string", "null"],
+						"description": "The XPath engine behind `CreateTXQuery`."
+					}
+				}
+			},
+			"DatabaseSize": {
+				"type": "object",
+				"description": "The size of one database in the data dir.",
+				"required": ["name"],
+				"properties": {
+					"bytes": {
+						"type": ["integer", "null"],
+						"format": "int64",
+						"description": "The database file plus its write-ahead log; `null` when the file does not exist.",
+						"minimum": 0
+					},
+					"name": { "type": "string" }
+				}
+			},
+			"LoadFailure": {
+				"type": "object",
+				"description": "A module file that failed to load (`Init` error or unknown Host API).",
+				"required": ["module", "error"],
+				"properties": {
+					"error": { "type": "string" },
+					"inbox_id": { "type": ["string", "null"], "description": "The inbox item reporting it." },
+					"module": { "type": "string" }
+				}
+			},
+			"ToolCheck": {
+				"type": "object",
+				"description": "The outcome of checking one tool.",
+				"required": ["name", "ok", "detail"],
+				"properties": {
+					"detail": {
+						"type": "string",
+						"description": "Its version or address when usable, otherwise why not."
+					},
+					"name": { "type": "string" },
+					"ok": { "type": "boolean", "description": "Whether the tool is usable." }
+				}
+			},
+			"Problem": {
+				"type": "object",
+				"description": "RFC 9457 problem details body.",
+				"required": ["type", "title", "status", "detail"],
+				"properties": {
+					"detail": { "type": "string" },
+					"status": { "type": "integer", "format": "int32", "minimum": 0 },
+					"title": { "type": "string", "description": "The status code's reason phrase." },
+					"type": {
+						"type": "string",
+						"description": "Always `about:blank`: the status code says it all."
+					}
 				}
 			},
 			"SeriesRef": {

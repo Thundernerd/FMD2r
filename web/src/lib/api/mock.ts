@@ -1,6 +1,14 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
 import type { paths } from './schema';
-import type { InboxItem, JobState, SeriesRef, TaskProgress } from './types';
+import type {
+	About,
+	InboxItem,
+	JobState,
+	LogLevel,
+	LogLine,
+	SeriesRef,
+	TaskProgress
+} from './types';
 
 type ResolveBody = paths['/api/resolve']['post']['requestBody']['content']['application/json'];
 
@@ -81,6 +89,73 @@ const seedTasks = (): TaskProgress[] => [
 	}
 ];
 
+const HOUR_MS = 3_600_000;
+
+const seedJobs = (now: number): JobState[] => [
+	{
+		id: 'favorites',
+		title: 'Check favorites',
+		state: 'running',
+		done: 31,
+		total: 48,
+		last_run: new Date(now - 2 * 60_000).toISOString(),
+		next_run: new Date(now + HOUR_MS).toISOString(),
+		last_error: null
+	},
+	{
+		id: 'lists',
+		title: 'Update lists',
+		state: 'idle',
+		done: 0,
+		total: 0,
+		last_run: new Date(now - 20 * HOUR_MS).toISOString(),
+		next_run: new Date(now + 4 * HOUR_MS).toISOString(),
+		last_error: null
+	},
+	{
+		id: 'modules',
+		title: 'Update modules',
+		state: 'failed',
+		done: 212,
+		total: 665,
+		last_run: new Date(now - 3 * HOUR_MS).toISOString(),
+		next_run: new Date(now + 21 * HOUR_MS).toISOString(),
+		last_error:
+			'GitHub API: HTTP 403 rate limit exceeded\nRetry after 2026-10-08T10:00:00Z (X-RateLimit-Reset).'
+	}
+];
+
+/** How many items a mock job run works through. */
+const JOB_RUN_SIZE: Record<string, number> = { favorites: 48, lists: 40, modules: 665 };
+
+const seedAbout = (): About => ({
+	version: '0.1.0',
+	git_revision: '2780af1e7ede',
+	upstream_ref: 'master',
+	upstream_sha: '4f2c9e1b7a30',
+	module_count: 665,
+	load_failures: [
+		{
+			module: 'Batoto.lua',
+			error: "attempt to call a nil value (field 'ResolveRedirect')",
+			inbox_id: 'batoto-host-api'
+		}
+	],
+	xpath_backend: 'fpc',
+	data_dir: '/data',
+	databases: [
+		{ name: 'app.db', bytes: 2_412_544 },
+		{ name: 'lists.db', bytes: 318_767_104 }
+	],
+	uptime_secs: 93_784,
+	tools: [
+		{ name: 'python3', ok: true, detail: 'Python 3.12.3' },
+		{ name: 'node', ok: true, detail: 'v22.4.0' },
+		{ name: 'magick', ok: false, detail: 'not found on PATH' },
+		{ name: 'FlareSolverr', ok: false, detail: 'localhost:8191: Connection refused (os error 111)' }
+	]
+});
+
 /** Hosts the mock pretends to have modules for; anything else resolves to a 404. */
 const MODULES: Record<string, string> = {
 	'mangadex.org': 'MangaDex',
@@ -95,20 +170,37 @@ const json = (body: unknown, status = 200): Response =>
 export interface MockBackend {
 	/** Answers `/api/*` requests from in-memory state. */
 	fetch: (input: Request) => Promise<Response>;
-	/** A fake `/api/events` stream that advances tasks and a job, logs, and posts one inbox item after 30 s. */
+	/** A fake `/api/events` stream that advances tasks and running jobs, logs, and posts one inbox item after 30 s. */
 	eventSource: (url: string) => EventSourceLike;
 }
 
 export function createMockBackend(): MockBackend {
 	const inbox = seedInbox();
 	const tasks = seedTasks();
-	const favorites: JobState = {
-		id: 'favorites',
-		title: 'Checking favorites',
-		state: 'running',
-		done: 31,
-		total: 48
+	const jobs = seedJobs(Date.now());
+	const about = seedAbout();
+	const logs: LogLine[] = [];
+	let logSeq = 0;
+	const log = (level: LogLevel, target: string, module: string | null, message: string) => {
+		const line: LogLine = {
+			seq: ++logSeq,
+			time: new Date().toISOString(),
+			level,
+			target,
+			module,
+			message
+		};
+		logs.push(line);
+		if (logs.length > 2000) logs.shift();
+		return line;
 	};
+	log('INFO', 'fmd_server', null, 'listening on 0.0.0.0:8080');
+	for (let n = 1; n <= 40; n++) {
+		log('DEBUG', 'fmd_lua', 'MangaDex', `GET https://api.mangadex.org/at-home/server/${n}`);
+		if (n % 8 === 0) log('WARN', 'fmd.logger', 'MangaDex', 'rate limited, retrying in 2s');
+	}
+	log('ERROR', 'fmd.logger', 'Bato.to', "attempt to call a nil value (field 'ResolveRedirect')");
+	log('INFO', 'fmd_core::jobs', null, 'favorites check started');
 
 	const resolve = (raw: string): SeriesRef | null => {
 		let url: URL;
@@ -128,6 +220,37 @@ export function createMockBackend(): MockBackend {
 
 		if (route === 'GET /api/inbox') return json(inbox);
 		if (route === 'GET /api/tasks') return json(tasks);
+		if (route === 'GET /api/logs') return json(logs);
+		if (route === 'GET /api/jobs') return json(jobs);
+		if (route === 'GET /api/about') {
+			return json({
+				...about,
+				uptime_secs: about.uptime_secs + Math.round(performance.now() / 1000)
+			});
+		}
+
+		const control = /^POST \/api\/jobs\/([^/]+)\/(run|cancel)$/.exec(route);
+		if (control?.[1]) {
+			const job = jobs.find((j) => j.id === decodeURIComponent(control[1] ?? ''));
+			if (!job) return json({ status: 404, title: 'Not Found' }, 404);
+			const running = job.state === 'running';
+			if (control[2] === 'run') {
+				if (running) return json({ status: 409, detail: 'job is already running' }, 409);
+				Object.assign(job, {
+					state: 'running',
+					done: 0,
+					total: JOB_RUN_SIZE[job.id] ?? 10,
+					last_run: new Date().toISOString(),
+					last_error: null
+				});
+				log('INFO', 'fmd_core::jobs', null, `${job.title} started`);
+			} else {
+				if (!running) return json({ status: 409, detail: 'job is not running' }, 409);
+				job.state = 'idle';
+				log('INFO', 'fmd_core::jobs', null, `${job.title} cancelled`);
+			}
+			return json(job, 202);
+		}
 
 		const read = /^POST \/api\/inbox\/([^/]+)\/read$/.exec(route);
 		if (read?.[1]) {
@@ -162,16 +285,25 @@ export function createMockBackend(): MockBackend {
 				task.done = task.done >= task.total ? 0 : task.done + 1;
 				task.bytes_per_sec = Math.round(1_500_000 + Math.random() * 1_500_000);
 				emit('task.progress', task);
-				emit('log', {
-					time: new Date().toISOString(),
-					level: 'INFO',
-					target: 'download',
-					message: `${task.title}: page ${task.done}/${task.total} saved`
-				});
+				emit(
+					'log',
+					log(
+						'INFO',
+						'fmd.logger',
+						'MangaDex',
+						`${task.title}: page ${task.done}/${task.total} saved`
+					)
+				);
 			}
-			favorites.done = Math.min(favorites.done + 1, favorites.total);
-			if (favorites.done === favorites.total) favorites.state = 'done';
-			emit('job.state', favorites);
+			for (const job of jobs) {
+				if (job.state !== 'running') continue;
+				job.done = Math.min(job.done + Math.ceil(job.total / 20), job.total);
+				if (job.done === job.total) {
+					job.state = 'done';
+					emit('log', log('INFO', 'fmd_core::jobs', null, `${job.title} finished`));
+				}
+				emit('job.state', job);
+			}
 			// Late enough not to disturb the smoke tests, early enough to see in `npm run dev:mock`.
 			if (ticks === 30) {
 				const item: InboxItem = {

@@ -2,10 +2,11 @@
 	import type { Api } from '#lib/api/client.ts';
 	import type { InboxItem } from '#lib/api/types.ts';
 	import type { EventStore } from '#lib/events.svelte.ts';
+	import { inboxUi } from '#lib/inbox.svelte.ts';
 
 	let { api, store }: { api: Api; store: EventStore } = $props();
 
-	let open = $state(false);
+	let pop: HTMLElement | undefined = $state();
 	let error = $state<string | null>(null);
 	let root: HTMLElement | undefined = $state();
 
@@ -22,13 +23,26 @@
 		}
 	}
 
+	function close() {
+		inboxUi.open = false;
+		inboxUi.focus = null;
+	}
+
 	function onWindowClick(event: MouseEvent) {
-		if (open && root && event.target instanceof Node && !root.contains(event.target)) open = false;
+		if (inboxUi.open && root && event.target instanceof Node && !root.contains(event.target)) {
+			close();
+		}
 	}
 
 	function onKeydown(event: KeyboardEvent) {
-		if (open && event.key === 'Escape') open = false;
+		if (inboxUi.open && event.key === 'Escape') close();
 	}
+
+	// Bring the item another page pointed at into view.
+	$effect(() => {
+		if (!inboxUi.open || !inboxUi.focus || !pop) return;
+		pop.querySelector('.focused')?.scrollIntoView({ block: 'nearest' });
+	});
 </script>
 
 <svelte:window onclick={onWindowClick} onkeydown={onKeydown} />
@@ -37,9 +51,9 @@
 	<button
 		class="bell"
 		type="button"
-		aria-expanded={open}
+		aria-expanded={inboxUi.open}
 		aria-haspopup="dialog"
-		onclick={() => (open = !open)}
+		onclick={() => (inboxUi.open ? close() : (inboxUi.open = true))}
 	>
 		Inbox
 		{#if store.unread > 0}
@@ -47,14 +61,18 @@
 		{/if}
 	</button>
 
-	{#if open}
-		<div class="pop" role="dialog" aria-label="Inbox">
+	{#if inboxUi.open}
+		<div class="pop" role="dialog" aria-label="Inbox" bind:this={pop}>
 			{#if store.inbox.length === 0}
 				<p class="empty muted">Nothing needs you.</p>
 			{:else}
 				<ul>
 					{#each store.inbox as item (item.id)}
-						<li class="item kind-{item.kind}" class:unread={!item.read}>
+						<li
+							class="item kind-{item.kind}"
+							class:unread={!item.read}
+							class:focused={item.id === inboxUi.focus}
+						>
 							<div class="head">
 								<b class="title">{item.title}</b>
 								<span class="small muted">{formatTime(item.created_at)}</span>
@@ -139,6 +157,9 @@
 	}
 	.item.unread.kind-info {
 		border-left-color: var(--accent);
+	}
+	.item.focused {
+		background: var(--accent-soft);
 	}
 	.item:not(.unread) {
 		color: var(--muted);
