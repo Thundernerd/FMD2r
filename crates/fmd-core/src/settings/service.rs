@@ -3,6 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use fmd_store::{AppDb, StoreError};
+use serde::Deserialize;
 use serde_json::{Map, Value};
 use thiserror::Error;
 use tokio::sync::watch;
@@ -37,17 +38,23 @@ pub struct SettingsService {
 
 impl SettingsService {
     /// Reads the stored settings, filling every missing group or field with its default.
+    ///
+    /// A stored value this build cannot read (an enum value from a newer build, a wrong type)
+    /// falls back to its default instead of failing the load; the group's other fields are kept.
+    /// The unreadable value stays in the table until that group is next updated.
     pub fn load(db: AppDb) -> Result<Self, SettingsError> {
         let mut tree = serde_json::to_value(Settings::default())?;
-        if let Value::Object(groups) = &mut tree {
-            let repo = db.settings();
-            for (key, group) in groups.iter_mut() {
-                if let Some(stored) = repo.get::<Value>(key)? {
-                    merge(group, stored);
-                }
+        let keys: Vec<String> = tree
+            .as_object()
+            .map(|groups| groups.keys().cloned().collect())
+            .unwrap_or_default();
+        let repo = db.settings();
+        for key in keys {
+            if let Some(stored) = repo.get::<Value>(&key)? {
+                overlay_group(&mut tree, &key, stored);
             }
         }
-        let settings: Settings = serde_json::from_value(tree)?;
+        let settings = Settings::deserialize(&tree)?;
         let (tx, _) = watch::channel(Arc::new(settings));
         Ok(Self {
             db,
@@ -113,6 +120,31 @@ impl SettingsService {
         let entries: Vec<(&str, &Value)> = changed.iter().map(|(k, v)| (k.as_str(), v)).collect();
         repo.set_many(&entries)?;
         Ok(())
+    }
+}
+
+/// Overlays the stored `group` onto `tree[key]`: whole if the result still parses as
+/// [`Settings`], otherwise field by field, skipping each field that does not parse.
+fn overlay_group(tree: &mut Value, key: &str, group: Value) {
+    let try_overlay = |tree: &mut Value, patch: Value| {
+        let mut candidate = tree.clone();
+        if let Some(slot) = candidate.get_mut(key) {
+            merge(slot, patch);
+        }
+        if Settings::deserialize(&candidate).is_ok() {
+            *tree = candidate;
+            true
+        } else {
+            false
+        }
+    };
+    if try_overlay(tree, group.clone()) {
+        return;
+    }
+    if let Value::Object(fields) = group {
+        for (field, value) in fields {
+            try_overlay(tree, Value::Object(Map::from_iter([(field, value)])));
+        }
     }
 }
 

@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 
 use super::model::{
     DEFAULT_CHAPTER_CUSTOMRENAME, DEFAULT_FILENAME_CUSTOMRENAME, DEFAULT_MANGA_CUSTOMRENAME,
-    DEFAULT_USER_AGENT, SaveToSettings, Settings,
+    DEFAULT_PATH, DEFAULT_USER_AGENT, Settings,
 };
 use super::service::SettingsError;
 
@@ -22,8 +22,7 @@ pub(super) fn normalize(s: &mut Settings) {
     c.user_agent = c.user_agent.trim().to_string();
     reset_blank(&mut c.user_agent, DEFAULT_USER_AGENT);
     let saveto = &mut s.saveto;
-    let defaults = SaveToSettings::default();
-    reset_blank(&mut saveto.default_dir, &defaults.default_dir);
+    reset_blank(&mut saveto.default_dir, DEFAULT_PATH);
     reset_blank(&mut saveto.manga_rename, DEFAULT_MANGA_CUSTOMRENAME);
     reset_blank(&mut saveto.chapter_rename, DEFAULT_CHAPTER_CUSTOMRENAME);
     reset_blank(&mut saveto.filename_rename, DEFAULT_FILENAME_CUSTOMRENAME);

@@ -157,22 +157,26 @@ pub fn effective_limits(
         _ => declared,
     };
 
-    let task_limit = pick(enabled.map(|l| l.max_task_limit), module.max_task_limit);
-    let max_tasks = match task_limit {
-        0 => global.max_parallel_tasks,
-        limit => limit.min(global.max_parallel_tasks),
+    // A declared or overridden limit of 0 means "use the global limit"; any other limit is
+    // still capped by it.
+    let capped = |limit: u32, global: u32| match limit {
+        0 => global,
+        limit => limit.min(global),
     };
+    let max_tasks = capped(
+        pick(enabled.map(|l| l.max_task_limit), module.max_task_limit),
+        global.max_parallel_tasks,
+    );
 
     let max_connections = enabled.map_or(module.max_connection_limit, |l| l.max_connection_limit);
 
-    let thread_limit = pick(
-        enabled.map(|l| l.max_thread_per_task_limit),
-        module.max_thread_per_task_limit,
+    let mut threads_per_task = capped(
+        pick(
+            enabled.map(|l| l.max_thread_per_task_limit),
+            module.max_thread_per_task_limit,
+        ),
+        global.threads_per_task,
     );
-    let mut threads_per_task = match thread_limit {
-        0 => global.threads_per_task,
-        limit => limit.min(global.threads_per_task),
-    };
     if max_connections > 0 {
         threads_per_task = threads_per_task.min(max_connections);
     }

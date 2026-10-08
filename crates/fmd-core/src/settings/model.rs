@@ -66,30 +66,32 @@ pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) 
 pub struct ConnectionSettings {
     /// Tasks downloading at once, over all modules (`connections/NumberOfTasks`,
     /// `OptionMaxParallel` = 1, baseunits/FMDOptions.pas:133). Range 1..=64: the Win64
-    /// `MAX_TASKLIMIT` (baseunits/FMDOptions.pas:41), so any FMD2 value imports.
+    /// `MAX_TASKLIMIT` (baseunits/FMDOptions.pas:42), so any FMD2 value imports.
     pub max_parallel_tasks: u32,
     /// Page download threads per task (`connections/NumberOfThreadsPerTask`, `OptionMaxThreads`
     /// = 1, baseunits/FMDOptions.pas:134). Range 1..=256: the Win64 `MAX_CONNECTIONPERHOSTLIMIT`
-    /// (baseunits/FMDOptions.pas:42).
+    /// (baseunits/FMDOptions.pas:43).
     pub threads_per_task: u32,
     /// HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,
     /// baseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;
     /// meaning in baseunits/httpsendthread.pas:626).
     pub retry_count: i32,
     /// Times a failed task is restarted automatically (`connections/NumberOfAutoRetryFailedTask`,
-    /// `OptionRetryFailedTask` = 1, baseunits/FMDOptions.pas:136). Range 0..=100.
+    /// `OptionRetryFailedTask` = 1, baseunits/FMDOptions.pas:136). Range 0..=100, the TSpinEdit default (no bounds
+    /// set, mangadownloader/forms/frmMain.lfm:3669-3681).
     pub auto_retry_failed_tasks: u32,
     /// Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,
     /// baseunits/FMDOptions.pas:137).
     pub always_start_from_failed_chapters: bool,
     /// Threads checking favorites (`connections/MaxFavoriteThreads`,
-    /// baseunits/FMDOptions.pas:130). Range 1..=32.
+    /// baseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).
     pub max_favorite_threads: u32,
     /// Threads updating manga lists (`connections/MaxUpdateListThreads`,
-    /// baseunits/FMDOptions.pas:131). Range 1..=32.
+    /// baseunits/FMDOptions.pas:131). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3827-3828).
     pub max_update_list_threads: u32,
     /// Connection timeout in seconds (`connections/ConnectionTimeout`, `OptionConnectionTimeout`
-    /// = 30, baseunits/FMDOptions.pas:129). Range 1..=300.
+    /// = 30, baseunits/FMDOptions.pas:129). Range 1..=300
+    /// (mangadownloader/forms/frmMain.lfm:3387-3388).
     pub timeout_secs: u32,
     /// Default user agent; an empty value resets to [`DEFAULT_USER_AGENT`]
     /// (`connections/DefaultUserAgent`, mangadownloader/forms/frmMain.pas:5867-5871).
@@ -142,6 +144,9 @@ pub enum ProxyType {
     Socks5,
 }
 
+/// Default download directory (`DEFAULT_PATH`, baseunits/FMDOptions.pas:283).
+pub const DEFAULT_PATH: &str = "downloads";
+
 /// The rename templates' defaults (baseunits/FMDOptions.pas:24-26).
 pub const DEFAULT_MANGA_CUSTOMRENAME: &str = "%MANGA%";
 pub const DEFAULT_CHAPTER_CUSTOMRENAME: &str = "%CHAPTER%";
@@ -155,7 +160,7 @@ pub const DEFAULT_FILENAME_CUSTOMRENAME: &str = "%FILENAME%";
 #[serde(default)]
 pub struct SaveToSettings {
     /// Download directory; empty resets to the default (`saveto/SaveTo`, `DEFAULT_PATH`,
-    /// baseunits/FMDOptions.pas:282, mangadownloader/forms/frmMain.pas:5882-5886).
+    /// baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886).
     pub default_dir: String,
     /// `saveto/GenerateMangaFolder`, default true (mangadownloader/forms/frmMain.pas:5893).
     pub generate_manga_folder: bool,
@@ -195,7 +200,7 @@ pub struct SaveToSettings {
 impl Default for SaveToSettings {
     fn default() -> Self {
         Self {
-            default_dir: "downloads".into(),
+            default_dir: DEFAULT_PATH.into(),
             generate_manga_folder: true,
             manga_rename: DEFAULT_MANGA_CUSTOMRENAME.into(),
             generate_chapter_folder: true,
@@ -406,8 +411,8 @@ impl Default for UpdateListSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(default)]
 pub struct ModuleUpdaterSettings {
-    /// Sync at startup and on the interval. FMD2 checks at startup
-    /// (mangadownloader/forms/frmLuaModulesUpdater.pas); the interval is FMD2r's.
+    /// Sync at startup and on the interval. No FMD2 counterpart: FMD2 checks when the user
+    /// clicks "Check update" (`btCheckUpdateClick`, mangadownloader/forms/frmLuaModulesUpdater.pas:70).
     pub auto_update: bool,
     /// Minutes between syncs. No FMD2 counterpart. Minimum 1.
     pub interval_minutes: u32,

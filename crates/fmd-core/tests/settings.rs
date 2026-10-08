@@ -21,7 +21,7 @@ fn fresh_db_returns_fmd2_defaults() {
     assert_eq!(s.saveto.manga_rename, "%MANGA%");
     assert_eq!(s.saveto.chapter_rename, "%CHAPTER%");
     assert_eq!(s.saveto.filename_rename, "%FILENAME%");
-    // DEFAULT_PATH (baseunits/FMDOptions.pas:282).
+    // DEFAULT_PATH (baseunits/FMDOptions.pas:283).
     assert_eq!(s.saveto.default_dir, "downloads");
     // DigitVolumeLength 2, DigitChapterLength 3 (mangadownloader/forms/frmMain.pas:5907-5911).
     assert!(s.saveto.convert_digit_volume);
@@ -201,4 +201,25 @@ fn stored_groups_are_forward_compatible() {
 
     // Lossless: what was stored loads back as the same settings.
     assert_eq!(*SettingsService::load(db).unwrap().get(), *service.get());
+}
+
+#[test]
+fn a_bad_stored_value_falls_back_to_its_default_without_losing_the_rest() {
+    let (_dir, db) = open_db();
+    // A newer build's output format and a value of the wrong type.
+    db.settings()
+        .set("output", &json!({ "format": "cbr", "pdf_quality": 50 }))
+        .unwrap();
+    db.settings()
+        .set(
+            "connections",
+            &json!({ "max_parallel_tasks": 3, "timeout_secs": "slow" }),
+        )
+        .unwrap();
+
+    let s = SettingsService::load(db).unwrap().get();
+    assert_eq!(s.output.format, OutputFormat::Folder);
+    assert_eq!(s.output.pdf_quality, 50);
+    assert_eq!(s.connections.max_parallel_tasks, 3);
+    assert_eq!(s.connections.timeout_secs, 30);
 }
