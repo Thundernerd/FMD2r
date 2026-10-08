@@ -37,6 +37,11 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     )
 }
 
+/// `+hhmm` or `-hhmm`.
+fn is_zone(token: &str) -> bool {
+    token.len() == 5 && (token.starts_with('+') || token.starts_with('-'))
+}
+
 /// Parses an HTTP date into Unix seconds, accepting the RFC 1123, RFC 850, Netscape
 /// cookie (`Wed, 21-Oct-15 ...`) and asctime forms. `None` when no full date is found;
 /// Synapse returns 0 (1899) then, which makes a cookie expire at once.
@@ -66,8 +71,8 @@ pub(crate) fn parse(value: &str) -> Option<i64> {
             let (h, m) = (parts.next()??, parts.next()??);
             let s = parts.next().flatten().unwrap_or(0);
             time = Some(h * 3600 + m * 60 + s);
-        } else if token.len() == 5 && (token.starts_with('+') || token.starts_with('-')) {
-            let n: i64 = token[1..].parse().ok()?;
+        } else if is_zone(token) {
+            let n: i64 = token.get(1..)?.parse().ok()?;
             let offset = (n / 100) * 3600 + (n % 100) * 60;
             zone = if token.starts_with('-') {
                 -offset

@@ -22,8 +22,8 @@ pub struct HttpClient {
 pub(crate) struct ClientInner {
     // Taken on drop to shut down without blocking.
     runtime: Option<Runtime>,
-    pub(crate) handle: Handle,
-    pub(crate) transport: Arc<dyn Transport>,
+    handle: Handle,
+    transport: Arc<dyn Transport>,
     modules: Mutex<HashMap<String, ModuleHttp>>,
     defaults: Mutex<Defaults>,
     generation: AtomicU64,
@@ -122,6 +122,14 @@ impl HttpClient {
     /// A new session that uses `module`'s connection queue and cookie jar.
     pub fn session_for(&self, module: &ModuleHttp) -> HttpSession {
         HttpSession::new(self.clone(), Some(module.clone()))
+    }
+
+    pub(crate) fn handle(&self) -> Handle {
+        self.inner.handle.clone()
+    }
+
+    pub(crate) fn transport(&self) -> Arc<dyn Transport> {
+        self.inner.transport.clone()
     }
 
     pub(crate) fn defaults(&self) -> MutexGuard<'_, Defaults> {

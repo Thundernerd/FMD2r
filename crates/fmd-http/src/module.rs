@@ -27,6 +27,7 @@ impl ModuleHttp {
         self.queue.max_connections()
     }
 
+    /// Sets `MaxConnectionLimit`; waiting requests re-check the new limit.
     pub fn set_max_connections(&self, max: u32) {
         self.queue.set_max_connections(max);
     }

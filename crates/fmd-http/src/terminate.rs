@@ -20,15 +20,18 @@ struct Inner {
 }
 
 impl TerminateToken {
+    /// A token that has not been terminated.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Terminates every session holding this token (`Stop`, baseunits/httpsendthread.pas:818-825).
     pub fn terminate(&self) {
         self.inner.terminated.store(true, Ordering::SeqCst);
         self.inner.notify.notify_waiters();
     }
 
+    /// `ThreadTerminated` (baseunits/httpsendthread.pas:810-816).
     pub fn is_terminated(&self) -> bool {
         self.inner.terminated.load(Ordering::SeqCst)
     }

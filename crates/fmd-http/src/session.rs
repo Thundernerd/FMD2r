@@ -10,7 +10,11 @@ use crate::transport::{Proxy, ProxyKind, WireRequest, WireResponse};
 use crate::{HttpError, decode, url};
 
 /// Headers, document and MIME type of a request, restored before each re-send.
-type RequestState = (NameValueList, Vec<u8>, String);
+struct RequestState {
+    headers: NameValueList,
+    document: Vec<u8>,
+    mime_type: String,
+}
 
 /// FMD2's default user agent (baseunits/httpsendthread.pas:160).
 pub const USER_AGENT_DEFAULT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
@@ -176,7 +180,7 @@ impl HttpSession {
         if tokio::runtime::Handle::try_current().is_ok() {
             return Err(HttpError::InsideRuntime);
         }
-        let handle = self.client.inner.handle.clone();
+        let handle = self.client.handle();
         Ok(handle.block_on(self.http_request(method, url)))
     }
 
@@ -213,7 +217,7 @@ impl HttpSession {
         // Follow 301/302/303/307 as GET, at most MaxRedirect times; past that the
         // request fails. The first hop adds `Referer: <url before the redirect>` unless
         // one is set (baseunits/httpsendthread.pas:631-678).
-        let mut headers = saved.0;
+        let mut headers = saved.headers;
         let mut redirects = 0;
         while self.follow_redirection && matches!(self.result_code, 301 | 302 | 303 | 307) {
             if self.terminate.is_terminated() {
@@ -235,7 +239,11 @@ impl HttpSession {
                 self.last_url = host + &path;
             }
             // Synapse `Clear`: no body, MimeType text/html (baseunits/synapse/httpsend.pas:346-355).
-            let request = (headers.clone(), Vec::new(), "text/html".to_string());
+            let request = RequestState {
+                headers: headers.clone(),
+                document: Vec::new(),
+                mime_type: "text/html".into(),
+            };
             self.restore(&request);
             if !self.send_with_retries("GET", &request).await {
                 return false;
@@ -274,17 +282,17 @@ impl HttpSession {
     /// the error response (baseunits/synapse/httpsend.pas:613), so a retried POST would
     /// upload the error page. We re-send the original body and MIME type instead.
     fn request_snapshot(&self) -> RequestState {
-        (
-            self.headers.clone(),
-            self.document.clone(),
-            self.mime_type.clone(),
-        )
+        RequestState {
+            headers: self.headers.clone(),
+            document: self.document.clone(),
+            mime_type: self.mime_type.clone(),
+        }
     }
 
-    fn restore(&mut self, (headers, document, mime_type): &RequestState) {
-        self.headers = headers.clone();
-        self.document = document.clone();
-        self.mime_type = mime_type.clone();
+    fn restore(&mut self, request: &RequestState) {
+        self.headers = request.headers.clone();
+        self.document = request.document.clone();
+        self.mime_type = request.mime_type.clone();
     }
 
     /// One exchange, like Synapse's `THTTPSend.HTTPMethod`
@@ -295,7 +303,7 @@ impl HttpSession {
         self.result_text.clear();
         self.set_http_cookies();
         let request = self.wire_request(method);
-        let transport = self.client.inner.transport.clone();
+        let transport = self.client.transport();
         let terminate = self.terminate.clone();
         // Termination closes the socket mid-request (`Stop`, baseunits/httpsendthread.pas:818-825).
         let response = tokio::select! {
@@ -310,12 +318,10 @@ impl HttpSession {
             Err(_) => false,
         };
         // Runs whether or not the exchange succeeded (baseunits/httpsendthread.pas:566-569).
-        if !self.enabled_cookies {
+        if self.enabled_cookies {
+            self.parse_server_cookies();
+        } else {
             self.cookies.clear();
-        } else if let Some(module) = &self.module {
-            module
-                .cookies
-                .add_response_cookies(&self.last_url, &self.headers);
         }
         sent
     }
@@ -338,7 +344,7 @@ impl HttpSession {
 
     /// Builds the request from the header list plus the lines Synapse inserts:
     /// User-Agent, Cookie, and Content-Type when a body is sent
-    /// (baseunits/synapse/httpsend.pas:457-497).
+    /// (baseunits/synapse/httpsend.pas:471-497).
     fn wire_request(&self, method: &str) -> WireRequest {
         let mut headers: Vec<(String, String)> = Vec::new();
         if !self.user_agent.is_empty() {
@@ -373,6 +379,10 @@ impl HttpSession {
     /// response's status line and headers, `MimeType` its Content-Type (default
     /// `text/html`) and `Document` its body (baseunits/synapse/httpsend.pas:346-355,
     /// 613-697).
+    ///
+    /// Unlike Synapse's raw lines, header names arrive lowercased from hyper and the
+    /// status line and `ResultString` carry the canonical reason phrase rather than the
+    /// server's. `Values[...]` lookups are case-insensitive, so modules see no difference.
     fn take_response(&mut self, response: WireResponse) {
         self.headers.clear();
         self.mime_type = "text/html".into();
@@ -402,26 +412,30 @@ impl HttpSession {
     }
 
     /// Status code of the last response; 500 after a transport error (`ResultCode`,
-    /// baseunits/synapse/httpsend.pas:435).
+    /// baseunits/synapse/httpsend.pas:215, 436).
     pub fn result_code(&self) -> i32 {
         self.result_code
     }
 
-    /// Reason phrase of the last response (`ResultString`).
+    /// Reason phrase of the last response (`ResultString`,
+    /// baseunits/synapse/httpsend.pas:218, 357-367).
     pub fn result_text(&self) -> &str {
         &self.result_text
     }
 
-    /// Response body of the last request, or the body to send (`Document`).
+    /// Response body of the last request, or the body to send (`Document`,
+    /// baseunits/synapse/httpsend.pas:168).
     pub fn document(&self) -> &[u8] {
         &self.document
     }
 
+    /// Mutable `Document`, e.g. to set a body before `request("PUT", …)`.
     pub fn document_mut(&mut self) -> &mut Vec<u8> {
         &mut self.document
     }
 
-    /// `LastURL`: the URL of the last request, after normalisation and redirects.
+    /// `LastURL`: the URL of the last request, after normalisation and redirects
+    /// (baseunits/httpsendthread.pas:128, 613-616, 657).
     pub fn last_url(&self) -> &str {
         &self.last_url
     }
@@ -443,11 +457,13 @@ impl HttpSession {
         self.terminate.is_terminated()
     }
 
-    /// `Cookies`: the cookies sent with the next request, as `name=value` lines.
+    /// `Cookies`: the cookies sent with the next request, as `name=value` lines
+    /// (baseunits/synapse/httpsend.pas:164, 488-497).
     pub fn cookies(&self) -> &NameValueList {
         &self.cookies
     }
 
+    /// Mutable `Cookies`; see [`cookies`](Self::cookies).
     pub fn cookies_mut(&mut self) -> &mut NameValueList {
         &mut self.cookies
     }
@@ -512,24 +528,29 @@ impl HttpSession {
         self.enabled_cookies
     }
 
+    /// Sets `EnabledCookies`; see [`enabled_cookies`](Self::enabled_cookies).
     pub fn set_enabled_cookies(&mut self, enabled: bool) {
         self.enabled_cookies = enabled;
     }
 
-    /// `MimeType`: Content-Type of the body to send, and of the last response.
+    /// `MimeType`: Content-Type of the body to send, and of the last response
+    /// (baseunits/synapse/httpsend.pas:181, 473-475, 669-670).
     pub fn mime_type(&self) -> &str {
         &self.mime_type
     }
 
+    /// Sets `MimeType`; see [`mime_type`](Self::mime_type).
     pub fn set_mime_type(&mut self, mime_type: impl Into<String>) {
         self.mime_type = mime_type.into();
     }
 
-    /// Request headers before a call, response headers after it (`Headers`).
+    /// Request headers before a call, response headers after it (`Headers`,
+    /// baseunits/synapse/httpsend.pas:158, 613-662).
     pub fn headers(&self) -> &NameValueList {
         &self.headers
     }
 
+    /// Mutable `Headers`; see [`headers`](Self::headers).
     pub fn headers_mut(&mut self) -> &mut NameValueList {
         &mut self.headers
     }
@@ -541,6 +562,7 @@ impl HttpSession {
             .effective(&self.client.defaults().retry_count)
     }
 
+    /// Sets `RetryCount` for this session; see [`retry_count`](Self::retry_count).
     pub fn set_retry_count(&mut self, retry_count: i32) {
         self.retry_count = self.stamp(retry_count);
     }
@@ -552,6 +574,7 @@ impl HttpSession {
             .effective(&self.client.defaults().timeout_ms)
     }
 
+    /// Sets `Timeout` for this session; see [`timeout`](Self::timeout).
     pub fn set_timeout(&mut self, timeout_ms: u32) {
         self.timeout_ms = self.stamp(timeout_ms);
     }
@@ -589,11 +612,46 @@ impl HttpSession {
             .filter(|p| !p.host.is_empty())
     }
 
-    /// `UserAgent`.
+    /// `ParseServerCookies` (baseunits/lua/LuaHTTPSend.pas:85-89, `ParseHTTPCookies`,
+    /// baseunits/httpsendthread.pas:481-485): stores the `Set-Cookie` lines of the
+    /// current `Headers` in the module's jar.
+    pub fn parse_server_cookies(&self) {
+        if let Some(module) = &self.module {
+            module
+                .cookies
+                .add_response_cookies(&self.last_url, &self.headers);
+        }
+    }
+
+    /// Sets `AllowServerErrorResponse`: when on, a status above 500 is a final answer
+    /// instead of a reason to retry (baseunits/httpsendthread.pas:125, 623-624).
+    pub fn set_allow_server_error_response(&mut self, allow: bool) {
+        self.allow_server_error_response = allow;
+    }
+
+    /// Sets `FollowRedirection` (baseunits/httpsendthread.pas:124, 642).
+    pub fn set_follow_redirection(&mut self, follow: bool) {
+        self.follow_redirection = follow;
+    }
+
+    /// Sets `MaxRedirect`, 5 by default (baseunits/httpsendthread.pas:127, 516, 646).
+    pub fn set_max_redirect(&mut self, max_redirect: u32) {
+        self.max_redirect = max_redirect;
+    }
+
+    /// Sets `Compress`: whether `ResetBasic` asks for compressed responses
+    /// (baseunits/httpsendthread.pas:123, 945).
+    pub fn set_compress(&mut self, compress: bool) {
+        self.compress = compress;
+    }
+
+    /// `UserAgent`, sent as `User-Agent` when non-empty
+    /// (baseunits/synapse/httpsend.pas:212, 478-479).
     pub fn user_agent(&self) -> &str {
         &self.user_agent
     }
 
+    /// Sets `UserAgent`; see [`user_agent`](Self::user_agent).
     pub fn set_user_agent(&mut self, user_agent: impl Into<String>) {
         self.user_agent = user_agent.into();
     }

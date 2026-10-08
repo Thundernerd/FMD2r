@@ -30,12 +30,6 @@ pub struct CookieJar {
     cookies: Mutex<Vec<Cookie>>,
 }
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64)
-}
-
 fn unix(time: SystemTime) -> i64 {
     time.duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64)
@@ -102,7 +96,7 @@ impl CookieJar {
         }
         let date = headers.value("Date").trim();
         let date = if date.is_empty() {
-            unix_now()
+            unix(SystemTime::now())
         } else {
             httpdate::parse(date).unwrap_or(0)
         };
@@ -124,7 +118,7 @@ impl CookieJar {
         };
         let protocol = protocol.to_lowercase();
         let host = host.to_lowercase();
-        let now = unix_now();
+        let now = unix(SystemTime::now());
         let mut jar = self.lock();
         jar.retain(|c| c.expires.is_none_or(|e| e > now));
         for c in jar.iter() {

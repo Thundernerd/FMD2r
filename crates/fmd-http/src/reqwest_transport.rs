@@ -1,7 +1,7 @@
 //! The network [`Transport`], on reqwest.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -15,7 +15,8 @@ use crate::transport::{
 /// no cookie store, HTTP/1.1 with title-cased header names.
 ///
 /// reqwest itself adds `Accept: */*` when the request has no `Accept` header; Synapse
-/// would send none. FMD2's `Reset` always sets `Accept` (baseunits/httpsendthread.pas:928).
+/// would send none. Synapse's `Connection: keep-alive` (baseunits/synapse/httpsend.pas:502-509)
+/// is implied by HTTP/1.1 and not sent. FMD2's `Reset` always sets `Accept` (baseunits/httpsendthread.pas:928).
 #[derive(Default)]
 pub struct ReqwestTransport {
     // One reqwest client per proxy/timeout combination: both are client-level settings.
@@ -72,8 +73,9 @@ fn reqwest_proxy(proxy: &Proxy) -> Result<reqwest::Proxy, TransportError> {
     let mut url = reqwest::Url::parse(&format!("{scheme}://{}{port}", proxy.host))
         .map_err(|e| TransportError(format!("bad proxy: {e}")))?;
     if !proxy.user.is_empty() {
-        let _ = url.set_username(&proxy.user);
-        let _ = url.set_password(Some(&proxy.pass));
+        url.set_username(&proxy.user)
+            .and_then(|()| url.set_password(Some(&proxy.pass)))
+            .map_err(|()| TransportError("bad proxy credentials".into()))?;
     }
     reqwest::Proxy::all(url).map_err(|e| TransportError(format!("bad proxy: {e}")))
 }
@@ -128,11 +130,5 @@ impl Transport for ReqwestTransport {
                 body: body.to_vec(),
             })
         })
-    }
-}
-
-impl From<ReqwestTransport> for Arc<dyn Transport> {
-    fn from(t: ReqwestTransport) -> Self {
-        Arc::new(t)
     }
 }

@@ -211,3 +211,88 @@ fn blocking_calls_are_refused_inside_a_tokio_runtime() {
 
     assert!(matches!(result, Err(fmd_http::HttpError::InsideRuntime)));
 }
+
+#[test]
+fn allow_server_error_response_stops_retrying_5xx() {
+    let stub = StubTransport::new(vec![
+        response(503, &[], b"challenge"),
+        response(200, &[], b"ok"),
+    ]);
+    let client = HttpClient::with_transport(stub.clone()).unwrap();
+    let mut session = client.session();
+    session.set_retry_count(3);
+    session.set_allow_server_error_response(true);
+
+    assert!(session.get("example.test/").unwrap());
+
+    assert_eq!(stub.requests().len(), 1);
+    assert_eq!(session.result_code(), 503);
+}
+
+#[test]
+fn redirects_are_not_followed_when_follow_redirection_is_off() {
+    let stub = StubTransport::new(vec![response(302, &[("Location", "/next")], b"moved")]);
+    let client = HttpClient::with_transport(stub.clone()).unwrap();
+    let mut session = client.session();
+    session.set_follow_redirection(false);
+
+    assert!(session.get("example.test/").unwrap());
+    assert_eq!(session.result_code(), 302);
+}
+
+#[test]
+fn max_redirect_limits_the_hops() {
+    let stub = StubTransport::new(vec![
+        response(302, &[("Location", "/a")], b""),
+        response(302, &[("Location", "/b")], b""),
+    ]);
+    let client = HttpClient::with_transport(stub.clone()).unwrap();
+    let mut session = client.session();
+    session.set_max_redirect(1);
+
+    assert!(!session.get("example.test/").unwrap());
+    assert_eq!(stub.requests().len(), 2);
+}
+
+#[test]
+fn compress_off_drops_accept_encoding_on_reset() {
+    let stub = StubTransport::new(vec![response(200, &[], b"ok")]);
+    let client = HttpClient::with_transport(stub.clone()).unwrap();
+    let mut session = client.session();
+    session.set_compress(false);
+    session.reset();
+
+    session.get("example.test/").unwrap();
+
+    assert!(
+        !stub.requests()[0]
+            .headers
+            .iter()
+            .any(|(n, _)| n == "Accept-Encoding")
+    );
+}
+
+#[test]
+fn parse_server_cookies_stores_the_response_cookies_in_the_jar() {
+    let stub = StubTransport::new(vec![response(
+        200,
+        &[("Set-Cookie", "sid=1; path=/")],
+        b"ok",
+    )]);
+    let client = HttpClient::with_transport(stub.clone()).unwrap();
+    let module = client.module("m");
+    let mut session = client.session_for(&module);
+    session.set_enabled_cookies(false);
+    session.get("example.test/").unwrap();
+    assert_eq!(
+        module.cookies().get_server_cookies("example.test", "sid"),
+        ""
+    );
+
+    session.parse_server_cookies();
+
+    assert_eq!(
+        module.cookies().get_server_cookies("example.test", "sid"),
+        "sid=1; domain=example.test; path=/"
+    );
+}
