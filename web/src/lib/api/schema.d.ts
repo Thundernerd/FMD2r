@@ -4,6 +4,119 @@
  */
 
 export interface paths {
+	'/api/about': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Server diagnostics. Tool checks run each time, so this may take a few seconds. */
+		get: operations['about'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/accounts': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** The accounts of every module with account support, by module ID. */
+		get: operations['listAccounts'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/accounts/{module}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		/**
+		 * Change a module's username, password or enabled flag. New credentials make the status
+		 *     `unknown` until the next login. Turning the account on or off runs the module's
+		 *     `OnAccountState`.
+		 */
+		put: operations['putAccount'];
+		post?: never;
+		/** Clear a module's credentials and cookies and turn its account off. */
+		delete: operations['deleteAccount'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/accounts/{module}/login': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Log in with the module's `OnLogin`, then its `OnAccountState`; answers once the login is
+		 *     done, with the status the module set. `account.state` events announce the start and the end.
+		 */
+		post: operations['loginAccount'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/covers': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** A manga cover, fetched with its module's cookies, user agent and referer and cached on disk. */
+		get: operations['getCover'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/events': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Server-sent event stream.
+		 * @description Named events: `task.progress` (TaskProgress, at most 4 a second per task), `task.status` (TaskStatusChange), `task.removed` (TaskRemoved), `task.reordered` (TasksReordered), `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), `account.state` (AccountStateChange), `job.lists.started|progress|finished|cancelled|failed` (ListEvent), and `job.favorites.started|progress|finished|cancelled|failed` (FavoritesEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox item id as the SSE id; on reconnect, `Last-Event-ID` replays the inbox items stored since. Comment frames are heartbeats.
+		 */
+		get: operations['events'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/favorites': {
 		parameters: {
 			query?: never;
@@ -87,6 +200,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/health': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Liveness probe; never requires auth. */
+		get: operations['health'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/inbox': {
 		parameters: {
 			query?: never;
@@ -94,7 +224,7 @@ export interface paths {
 			path?: never;
 			cookie?: never;
 		};
-		/** Inbox items, newest first */
+		/** Inbox items, newest first. */
 		get: operations['listInbox'];
 		put?: never;
 		post?: never;
@@ -113,76 +243,8 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Mark one inbox item as read */
+		/** Mark one inbox item as read. */
 		post: operations['markInboxRead'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/tasks': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Download tasks with their progress */
-		get: operations['listTasks'];
-		put?: never;
-		/** Queue a download of chapters of a series (seed contract until T23 implements it) */
-		post: operations['createTask'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/resolve': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		get?: never;
-		put?: never;
-		/** Find the module that handles a manga URL. */
-		post: operations['resolveUrl'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/series': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		get: operations['getSeries'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/logs': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** The tail of the in-memory log, oldest first. */
-		get: operations['listLogs'];
-		put?: never;
-		post?: never;
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -206,17 +268,17 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/jobs/{id}/run': {
+	'/api/jobs/{id}': {
 		parameters: {
 			query?: never;
 			header?: never;
 			path?: never;
 			cookie?: never;
 		};
-		get?: never;
+		/** One registered job with its state, e.g. `modules` for the module updater. */
+		get: operations['getJob'];
 		put?: never;
-		/** Start a job now. */
-		post: operations['runJob'];
+		post?: never;
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -240,65 +302,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/about': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Server diagnostics. Tool checks run each time, so this may take a few seconds. */
-		get: operations['about'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/events': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/**
-		 * Server-sent event stream
-		 * @description Named events: `task.progress` (TaskProgress), `inbox.new` (InboxItem), `job.state` (JobState), `log` (LogLine), `account.state` (AccountStateChange). Each frame's data is the JSON payload.
-		 */
-		get: operations['events'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/settings': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** All settings. */
-		get: operations['getSettings'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		/**
-		 * Update settings with a JSON merge patch (RFC 7396) over [`Settings`]; `null` resets a setting
-		 *     to its default. Nothing is stored unless the whole result is valid.
-		 */
-		patch: operations['patchSettings'];
-		trace?: never;
-	};
-	'/api/preview-rename': {
+	'/api/jobs/{id}/run': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -307,109 +311,8 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/**
-		 * Preview the rename templates of a (possibly unsaved) `saveto` group on a sample series, the
-		 *     way downloads will name their folders and files.
-		 */
-		post: operations['previewRename'];
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/modules': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Every loaded module, sorted by ID. */
-		get: operations['listModules'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/modules/{id}/settings': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** A module's options, limits and overrides. */
-		get: operations['getModuleSettings'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		/**
-		 * Update a module's settings with a JSON merge patch (RFC 7396) over `enabled`, `limits`,
-		 *     `http` and `options` (option values keyed by `key`; `null` resets one to its default).
-		 *     Nothing is stored unless the whole patch is valid.
-		 */
-		patch: operations['patchModuleSettings'];
-		trace?: never;
-	};
-	'/api/accounts': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** The accounts of every module with account support, by module ID. */
-		get: operations['listAccounts'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/accounts/{module}': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		get?: never;
-		/**
-		 * Change a module's username, password or enabled flag. New credentials make the status
-		 *     `unknown` until the next login. Turning the account on or off runs the module's
-		 *     `OnAccountState`.
-		 */
-		put: operations['putAccount'];
-		post?: never;
-		/** Clear a module's credentials and cookies and turn its account off. */
-		delete: operations['deleteAccount'];
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/api/accounts/{module}/login': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		get?: never;
-		put?: never;
-		/**
-		 * Log in with the module's `OnLogin`, then its `OnAccountState`; answers once the login is
-		 *     done, with the status the module set. `account.state` events announce the start and the end.
-		 */
-		post: operations['loginAccount'];
+		/** Start a job now. */
+		post: operations['runJob'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -501,180 +404,392 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/login': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Trade the configured password for a session cookie. */
+		post: operations['login'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/logs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** The tail of the in-memory log, oldest first. */
+		get: operations['listLogs'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/modules': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Every loaded module, sorted by ID. */
+		get: operations['listModules'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/modules/update': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Sync the Lua modules with upstream now and hot-reload the ones that changed: runs the
+		 *     `modules` job.
+		 */
+		post: operations['updateModules'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/modules/{id}/settings': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** A module's options, limits and overrides. */
+		get: operations['getModuleSettings'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		/**
+		 * Update a module's settings with a JSON merge patch (RFC 7396) over `enabled`, `limits`,
+		 *     `http` and `options` (option values keyed by `key`; `null` resets one to its default).
+		 *     Nothing is stored unless the whole patch is valid.
+		 */
+		patch: operations['patchModuleSettings'];
+		trace?: never;
+	};
+	'/api/preview-rename': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Preview the rename templates of a (possibly unsaved) `saveto` group on a sample series, the
+		 *     way downloads will name their folders and files.
+		 */
+		post: operations['previewRename'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/resolve': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Find the module that handles a manga URL. */
+		post: operations['resolveUrl'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/series': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get: operations['getSeries'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/settings': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** All settings. */
+		get: operations['getSettings'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		/**
+		 * Update settings with a JSON merge patch (RFC 7396) over [`Settings`]; `null` resets a setting
+		 *     to its default. Nothing is stored unless the whole result is valid.
+		 */
+		patch: operations['patchSettings'];
+		trace?: never;
+	};
+	'/api/tasks': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** The download queue, filtered, sorted and paged. */
+		get: operations['listTasks'];
+		put?: never;
+		/** Queue chapters of a series for download. */
+		post: operations['createTask'];
+		/**
+		 * Remove the finished tasks, keeping their files (`RemoveAllFinishedTasks`,
+		 *     baseunits/uDownloadsManager.pas:1987-2001).
+		 */
+		delete: operations['removeFinishedTasks'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/reorder': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Reorder the queue; waiting tasks start in queue order. */
+		post: operations['reorderTasks'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/start-all': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Set every task but the finished and disabled ones waiting (`StartAllTasks`,
+		 *     baseunits/uDownloadsManager.pas:1922-1941).
+		 */
+		post: operations['startAllTasks'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/stop-all': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Stop every task (`StopAllTasks`, baseunits/uDownloadsManager.pas:1943-1955). */
+		post: operations['stopAllTasks'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/{id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** A task with its chapters and their progress. */
+		get: operations['getTask'];
+		put?: never;
+		post?: never;
+		/**
+		 * Remove a task, stopping it first (miDownloadDeleteTaskClick,
+		 *     mangadownloader/forms/frmMain.pas:2214-2310).
+		 */
+		delete: operations['deleteTask'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/{id}/disable': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Stop a task and disable it, so start-all skips it (`DisableTask`,
+		 *     baseunits/uDownloadsManager.pas:2028-2045).
+		 */
+		post: operations['disableTask'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/{id}/enable': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Enable a disabled task, which becomes Stopped (`EnableTask`,
+		 *     baseunits/uDownloadsManager.pas:2022-2026).
+		 */
+		post: operations['enableTask'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/{id}/files': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Download a task's files: its one packed chapter as it is, or a zip of its archives and
+		 *     chapter folders, as an attachment.
+		 */
+		get: operations['getTaskFiles'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/{id}/redownload': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Download every chapter of a task again (`RedownloadTask`,
+		 *     baseunits/uDownloadsManager.pas:1846-1857); pages and archives on disk are kept.
+		 */
+		post: operations['redownloadTask'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/{id}/start': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Start a stopped or failed task (`SetTaskActive`, baseunits/uDownloadsManager.pas:1835-1844). */
+		post: operations['startTask'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/tasks/{id}/stop': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Stop a waiting or running task (`StopTask`, baseunits/uDownloadsManager.pas:1900-1920). A
+		 *     running task shows Stopped once its download has ended, which follows as a `task.status`
+		 *     event.
+		 */
+		post: operations['stopTask'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
 	schemas: {
-		/** @description A series to add to the library. */
-		AddFavorite: {
-			/** @description The series link relative to the module's `RootURL`. */
-			link: string;
-			module_id: string;
-			/**
-			 * @description The download directory; the default one when missing. The manga folder is added when
-			 *     generated.
-			 */
-			save_to?: string | null;
-		};
-		/**
-		 * @description What a run looks for.
-		 * @enum {string}
-		 */
-		CheckMode: 'new' | 'missing';
-		/** @description Which favorites to check. */
-		CheckRequest: {
-			/** @description These favorites; every enabled favorite when missing. */
-			ids?: number[] | null;
-		};
-		/** @description Fields of a favorite to change; missing ones stay. */
-		FavoritePatch: {
-			enabled?: boolean | null;
-			save_to?: string | null;
-			title?: string | null;
-		};
-		/** @description A favorite as the Library shows it. */
-		FavoriteView: {
-			/** @description The cover through `/api/covers`. */
-			cover_url?: string | null;
-			/**
-			 * Format: int32
-			 * @description Chapters on the site at the last check (FMD2's `currentchapter`).
-			 */
-			current_chapter: number;
-			/** @description RFC 3339. */
-			date_added: string;
-			/** @description Checked by the new-chapter check. */
-			enabled: boolean;
-			/** Format: int64 */
-			id: number;
-			/** @description RFC 3339. */
-			last_checked?: string | null;
-			/** @description RFC 3339: when a check last found new chapters. */
-			last_updated?: string | null;
-			/** @description The series link relative to the module's `RootURL`. */
-			link: string;
-			module_id: string;
-			/**
-			 * Format: int32
-			 * @description Chapters on the site at the last check that are not downloaded: the chapter count less
-			 *     the downloaded ones, as only the count of the site's list is stored. Downloaded chapters
-			 *     the site no longer lists make it an undercount; a check finds the real ones by link.
-			 */
-			new_chapters: number;
-			save_to: string;
-			status: components['schemas']['SeriesStatus'];
-			title: string;
-			/** @description The module's name; its ID when the module is not loaded. */
-			website: string;
-		};
-		/** @description One step of a check run, for the Library's progress (`job.favorites.<kind>` events). */
-		FavoritesEvent: {
-			/**
-			 * Format: int64
-			 * @description Favorites checked so far.
-			 */
-			done: number;
-			/** @description Why it failed. */
-			error?: string | null;
-			/**
-			 * Format: int64
-			 * @description The favorite just checked (`progress`).
-			 */
-			favorite_id?: number | null;
-			kind: components['schemas']['FavoritesEventKind'];
-			mode: components['schemas']['CheckMode'];
-			/**
-			 * Format: int64
-			 * @description New (or missing) chapters found, once finished.
-			 */
-			new_chapters?: number | null;
-			/**
-			 * Format: int64
-			 * @description Favorites to check.
-			 */
-			total: number;
-		};
-		/**
-		 * @description What happened to a check run.
-		 * @enum {string}
-		 */
-		FavoritesEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
-		InboxItem: {
-			id: string;
-			/** @enum {string} */
-			kind: 'info' | 'warn' | 'error';
-			title: string;
-			body: string;
-			/** Format: date-time */
-			created_at: string;
-			read: boolean;
-		};
-		/** @enum {string} */
-		TaskStatus: 'downloading' | 'queued' | 'stopped' | 'failed' | 'completed' | 'disabled';
-		TaskProgress: {
-			/** Format: int64 */
-			id: number;
-			title: string;
-			/** @description Human readable chapter range, e.g. `Ch. 97–98` */
-			chapters: string;
-			status: components['schemas']['TaskStatus'];
-			/** @description Pages downloaded */
-			done: number;
-			/** @description Pages in total */
-			total: number;
-			bytes_per_sec: number;
-		};
-		/**
-		 * @description What a background job is doing.
-		 * @enum {string}
-		 */
-		JobPhase: 'idle' | 'running' | 'done' | 'failed';
-		/**
-		 * @description A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites
-		 *     check, list update, module update, or any other registered job.
-		 */
-		JobState: {
-			/** Format: int64 */
-			done: number;
-			id: string;
-			/** @description Why the last run failed. */
-			last_error?: string | null;
-			/** @description RFC 3339 start of the last run. */
-			last_run?: string | null;
-			/** @description RFC 3339 start of the next scheduled run. */
-			next_run?: string | null;
-			state: components['schemas']['JobPhase'];
-			title: string;
-			/**
-			 * Format: int64
-			 * @description 0 when unknown.
-			 */
-			total: number;
-		};
-		/**
-		 * @description Severity of a log line, most severe first. Serialized in upper case; `?level=` also takes
-		 *     lower case.
-		 * @enum {string}
-		 */
-		LogLevel: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE';
-		/** @description One log line, as FMD2's log window shows it (mangadownloader/forms/frmLogger.pas). */
-		LogLine: {
-			level: components['schemas']['LogLevel'];
-			message: string;
-			/**
-			 * @description The website module that logged the line (the `module` field `fmd.logger` adds,
-			 *     baseunits/lua/LuaLogger.pas:15-46).
-			 */
-			module?: string | null;
-			/**
-			 * Format: int64
-			 * @description Monotonic sequence number; pass the last one seen as `GET /api/logs?since=`.
-			 */
-			seq: number;
-			target: string;
-			/** @description RFC 3339 timestamp. */
-			time: string;
-		};
 		/** @description Diagnostics about the running server. */
 		About: {
 			data_dir?: string | null;
@@ -700,44 +815,50 @@ export interface components {
 			/** @description The XPath engine behind `CreateTXQuery`. */
 			xpath_backend?: string | null;
 		};
-		/** @description The size of one database in the data dir. */
-		DatabaseSize: {
-			/**
-			 * Format: int64
-			 * @description The database file plus its write-ahead log; `null` when the file does not exist.
-			 */
-			bytes?: number | null;
-			name: string;
-		};
-		/** @description A module file that failed to load (`Init` error or unknown Host API). */
-		LoadFailure: {
-			error: string;
-			/** @description The inbox item reporting it. */
-			inbox_id?: string | null;
+		/** @description A module's account. The password is never returned; `has_password` says whether one is set. */
+		AccountInfo: {
+			enabled: boolean;
+			has_password: boolean;
+			/** @description The module ID. */
 			module: string;
-		};
-		/** @description The outcome of checking one tool. */
-		ToolCheck: {
-			/** @description Its version or address when usable, otherwise why not. */
-			detail: string;
+			/** @description The module's name. */
 			name: string;
-			/** @description Whether the tool is usable. */
-			ok: boolean;
+			status: components['schemas']['AccountState'];
+			username: string;
 		};
-		/** @description RFC 9457 problem details body. */
-		Problem: {
-			detail: string;
+		/**
+		 * @description The fields to change; a missing field keeps its value. Not `Debug`, so the password cannot
+		 *     be logged.
+		 */
+		AccountRequest: {
+			enabled?: boolean | null;
 			/**
-			 * @description The setting a validation error (422) is about, as a dotted path such as
-			 *     `connections.timeout_secs` or `options.server`.
+			 * Format: password
+			 * @description Write-only.
 			 */
-			field?: string | null;
-			/** Format: int32 */
-			status: number;
-			/** @description The status code's reason phrase. */
-			title: string;
-			/** @description Always `about:blank`: the status code says it all. */
-			type: string;
+			password?: string | null;
+			username?: string | null;
+		};
+		/**
+		 * @description An account's status (`TAccountStatus`, baseunits/WebsiteModules.pas:78).
+		 * @enum {string}
+		 */
+		AccountState: 'unknown' | 'checking' | 'valid' | 'invalid';
+		/** @description An account's status changed (`account.state`): a login started or finished. */
+		AccountStateChange: {
+			module: string;
+			status: components['schemas']['AccountState'];
+		};
+		/** @description A series to add to the library. */
+		AddFavorite: {
+			/** @description The series link relative to the module's `RootURL`. */
+			link: string;
+			module_id: string;
+			/**
+			 * @description The download directory; the default one when missing. The manga folder is added when
+			 *     generated.
+			 */
+			save_to?: string | null;
 		};
 		/** @description One chapter of a series. */
 		ChapterInfo: {
@@ -747,56 +868,21 @@ export interface components {
 			link: string;
 			name: string;
 		};
-		/** @description A download to queue: chapters of one series, where to save them and how to pack them. */
-		NewTask: {
-			module_id: string;
-			/** @description Series link relative to the module's RootURL */
-			link: string;
-			title: string;
-			/** @description In module order */
-			chapters: components['schemas']['NewTaskChapter'][];
-			/** @description Folder the series folder goes in */
-			save_to: string;
-			format: components['schemas']['OutputFormat'];
-		};
-		NewTaskChapter: {
-			name: string;
-			link: string;
-		};
-		/** @description A manga URL to resolve. */
-		ResolveRequest: {
-			url: string;
-		};
-		/** @description A series as FMD2's info panel shows it. */
-		SeriesInfo: {
-			alt_titles: string;
-			artists: string;
-			authors: string;
-			/** @description In module order. */
-			chapters: components['schemas']['ChapterInfo'][];
-			/** @description The cover through `/api/covers`; `None` when the module reports none. */
-			cover_url?: string | null;
-			/** @description The module's comma-separated genres, split. */
-			genres: string[];
-			/** @description Whether the series is a favorite. */
-			in_library: boolean;
-			/** @description The series link relative to the module's `RootURL`, as the module reports it. */
-			link: string;
-			module_id: string;
-			status: components['schemas']['SeriesStatus'];
-			summary: string;
-			title: string;
-		};
-		/** @description A series: its module and its link relative to the module's `RootURL`. */
-		SeriesRef: {
-			link: string;
-			module_id: string;
-		};
 		/**
-		 * @description `MangaInfo.Status` (`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).
+		 * @description A chapter's status, FMD2's `ChaptersStatus` markers (baseunits/uDownloadsManager.pas:1117-1123).
 		 * @enum {string}
 		 */
-		SeriesStatus: 'completed' | 'ongoing' | 'hiatus' | 'cancelled' | 'unknown';
+		ChapterState: 'pending' | 'downloaded' | 'failed';
+		/**
+		 * @description What a run looks for.
+		 * @enum {string}
+		 */
+		CheckMode: 'new' | 'missing';
+		/** @description Which favorites to check. */
+		CheckRequest: {
+			/** @description These favorites; every enabled favorite when missing. */
+			ids?: number[] | null;
+		};
 		ConnectionSettings: {
 			/**
 			 * @description Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,
@@ -904,6 +990,27 @@ export interface components {
 			 */
 			revalidate_after_hours: number;
 		};
+		/** @description The size of one database in the data dir. */
+		DatabaseSize: {
+			/**
+			 * Format: int64
+			 * @description The database file plus its write-ahead log; `null` when the file does not exist.
+			 */
+			bytes?: number | null;
+			name: string;
+		};
+		/** @description How many matching titles carry a genre or status. */
+		FacetValue: {
+			/** Format: int64 */
+			count: number;
+			value: string;
+		};
+		/** @description Fields of a favorite to change; missing ones stay. */
+		FavoritePatch: {
+			enabled?: boolean | null;
+			save_to?: string | null;
+			title?: string | null;
+		};
 		/** @description New-chapter checks for the library (mangadownloader/forms/frmMain.pas:5946-5955). */
 		FavoriteSettings: {
 			/**
@@ -934,6 +1041,73 @@ export interface components {
 			 */
 			remove_completed: boolean;
 		};
+		/** @description A favorite as the Library shows it. */
+		FavoriteView: {
+			/** @description The cover through `/api/covers`. */
+			cover_url?: string | null;
+			/**
+			 * Format: int32
+			 * @description Chapters on the site at the last check (FMD2's `currentchapter`).
+			 */
+			current_chapter: number;
+			/** @description RFC 3339. */
+			date_added: string;
+			/** @description Checked by the new-chapter check. */
+			enabled: boolean;
+			/** Format: int64 */
+			id: number;
+			/** @description RFC 3339. */
+			last_checked?: string | null;
+			/** @description RFC 3339: when a check last found new chapters. */
+			last_updated?: string | null;
+			/** @description The series link relative to the module's `RootURL`. */
+			link: string;
+			module_id: string;
+			/**
+			 * Format: int32
+			 * @description Chapters on the site at the last check that are not downloaded: the chapter count less
+			 *     the downloaded ones, as only the count of the site's list is stored. Downloaded chapters
+			 *     the site no longer lists make it an undercount; a check finds the real ones by link.
+			 */
+			new_chapters: number;
+			save_to: string;
+			status: components['schemas']['SeriesStatus'];
+			title: string;
+			/** @description The module's name; its ID when the module is not loaded. */
+			website: string;
+		};
+		/** @description One step of a check run, for the Library's progress (`job.favorites.<kind>` events). */
+		FavoritesEvent: {
+			/**
+			 * Format: int64
+			 * @description Favorites checked so far.
+			 */
+			done: number;
+			/** @description Why it failed. */
+			error?: string | null;
+			/**
+			 * Format: int64
+			 * @description The favorite just checked (`progress`).
+			 */
+			favorite_id?: number | null;
+			kind: components['schemas']['FavoritesEventKind'];
+			mode: components['schemas']['CheckMode'];
+			/**
+			 * Format: int64
+			 * @description New (or missing) chapters found, once finished.
+			 */
+			new_chapters?: number | null;
+			/**
+			 * Format: int64
+			 * @description Favorites to check.
+			 */
+			total: number;
+		};
+		/**
+		 * @description What happened to a check run.
+		 * @enum {string}
+		 */
+		FavoritesEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
 		GeneralSettings: {
 			/**
 			 * @description Add new tasks stopped instead of waiting (`general/AddAsStopped`,
@@ -963,6 +1137,10 @@ export interface components {
 			 * @default lua
 			 */
 			lua_dir: string;
+		};
+		Health: {
+			/** @description Always `ok` while the server answers. */
+			status: string;
 		};
 		/** @description HTTP overrides applied in `PrepareHTTP` (baseunits/WebsiteModules.pas:353-379). */
 		HttpOverrides: {
@@ -1040,6 +1218,49 @@ export interface components {
 			/** @default png */
 			webp_save_as: components['schemas']['WebpSaveAs'];
 		};
+		/** @description One inbox item (a row of the `events` table). */
+		InboxItem: {
+			/** @description The event body: a string as-is, anything else as JSON text. */
+			body: string;
+			/** @description RFC 3339 timestamp. */
+			created_at: string;
+			id: string;
+			kind: components['schemas']['InboxKind'];
+			read: boolean;
+			title: string;
+		};
+		/**
+		 * @description How urgent an inbox item is.
+		 * @enum {string}
+		 */
+		InboxKind: 'info' | 'warn' | 'error';
+		/**
+		 * @description What a background job is doing.
+		 * @enum {string}
+		 */
+		JobPhase: 'idle' | 'running' | 'done' | 'failed';
+		/**
+		 * @description A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites
+		 *     check, list update, module update, or any other registered job.
+		 */
+		JobState: {
+			/** Format: int64 */
+			done: number;
+			id: string;
+			/** @description Why the last run failed. */
+			last_error?: string | null;
+			/** @description RFC 3339 start of the last run. */
+			last_run?: string | null;
+			/** @description RFC 3339 start of the next scheduled run. */
+			next_run?: string | null;
+			state: components['schemas']['JobPhase'];
+			title: string;
+			/**
+			 * Format: int64
+			 * @description 0 when unknown.
+			 */
+			total: number;
+		};
 		/**
 		 * @description Limit overrides; 0 means "not overridden" for tasks and threads
 		 *     (baseunits/WebsiteModulesSettings.pas:81-83).
@@ -1062,6 +1283,116 @@ export interface components {
 			 * @default 0
 			 */
 			max_thread_per_task_limit: number;
+		};
+		/** @description One step of a list job, for the Discover page's progress (`job.lists.<kind>` events). */
+		ListEvent: {
+			/**
+			 * Format: int64
+			 * @description Work items of the current step done.
+			 */
+			done: number;
+			/** @description Why it failed. */
+			error?: string | null;
+			job: components['schemas']['ListJobKind'];
+			kind: components['schemas']['ListEventKind'];
+			module_id: string;
+			/** @description FMD2's status text, or the module's own. */
+			status_text: string;
+			/**
+			 * Format: int64
+			 * @description Titles added (update) or imported (import), once finished.
+			 */
+			titles?: number | null;
+			/**
+			 * Format: int64
+			 * @description Work items of the current step; 0 when unknown.
+			 */
+			total: number;
+		};
+		/**
+		 * @description What happened to a list job.
+		 * @enum {string}
+		 */
+		ListEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
+		/** @description The genres and statuses of the titles a search matches, most common first. */
+		ListFacets: {
+			genres: components['schemas']['FacetValue'][];
+			statuses: components['schemas']['FacetValue'][];
+		};
+		/** @description One title of a module's list. */
+		ListItem: {
+			/**
+			 * Format: int64
+			 * @description Julian day number of the day the title was first listed.
+			 */
+			added_jdn: number;
+			alttitles: string;
+			artists: string;
+			authors: string;
+			genres: string[];
+			/** @description The title's link without the module's host, as the series page takes it. */
+			link: string;
+			module_id: string;
+			/** Format: int32 */
+			numchapter: number;
+			/** @description As in the `status` filter; empty when unknown. */
+			status: string;
+			title: string;
+		};
+		/**
+		 * @description Which job a [`ListEvent`] is about.
+		 * @enum {string}
+		 */
+		ListJobKind: 'update' | 'import_db';
+		/** @description A list job that was started. */
+		ListJobStarted: {
+			job: components['schemas']['ListJobKind'];
+			module_id: string;
+		};
+		/** @description A module file that failed to load (`Init` error or unknown Host API). */
+		LoadFailure: {
+			error: string;
+			/** @description The inbox item reporting it. */
+			inbox_id?: string | null;
+			module: string;
+		};
+		/**
+		 * @description Severity of a log line, most severe first. Serialized in upper case; `?level=` also takes
+		 *     lower case.
+		 * @enum {string}
+		 */
+		LogLevel: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE';
+		/** @description One log line, as FMD2's log window shows it (mangadownloader/forms/frmLogger.pas). */
+		LogLine: {
+			level: components['schemas']['LogLevel'];
+			message: string;
+			/**
+			 * @description The website module that logged the line (the `module` field `fmd.logger` adds,
+			 *     baseunits/lua/LuaLogger.pas:15-46).
+			 */
+			module?: string | null;
+			/**
+			 * Format: int64
+			 * @description Monotonic sequence number; pass the last one seen as `GET /api/logs?since=`.
+			 */
+			seq: number;
+			target: string;
+			/** @description RFC 3339 timestamp. */
+			time: string;
+		};
+		Login: {
+			password: string;
+		};
+		/** @description What a module can do, from the callbacks and flags it declares. */
+		ModuleCapabilities: {
+			/** @description It has an account to log in with (`AccountSupport`). */
+			account: boolean;
+			/** @description It downloads chapters: it declares `OnGetPageNumber`. */
+			download: boolean;
+			/** @description It reads manga info: it declares `OnGetInfo` (`InformationAvailable` aside). */
+			info: boolean;
+			/** @description Its list can be updated: it declares `OnGetNameAndLink`. */
+			update_list: boolean;
 		};
 		/**
 		 * @description The limits a module declares (`MaxTaskLimit`, `MaxThreadPerTaskLimit`, `MaxConnectionLimit`
@@ -1191,6 +1522,36 @@ export interface components {
 			/** @default master */
 			repo_ref: string;
 		};
+		/** @description A download to queue: chapters of one series. */
+		NewTask: {
+			/** @description For `%ARTIST%` in the folder and chapter names. */
+			artists?: string;
+			/** @description For `%AUTHOR%` in the folder and chapter names. */
+			authors?: string;
+			/** @description In download order. */
+			chapters: components['schemas']['NewTaskChapter'][];
+			/** @description The series link relative to the module's `RootURL`. */
+			link: string;
+			module_id: string;
+			/**
+			 * @description The folder the series folder is made in; the configured download folder when empty or
+			 *     missing.
+			 */
+			save_to?: string;
+			title: string;
+		};
+		/** @description A chapter to download. */
+		NewTaskChapter: {
+			/** @description Relative to the module's `RootURL`. */
+			link: string;
+			name: string;
+			/**
+			 * Format: int32
+			 * @description 1-based position in the series' chapter list, for `%NUMBERING%`; the position in
+			 *     `chapters` when missing.
+			 */
+			number?: number | null;
+		};
 		/**
 		 * @description `rgOptionCompress` items None/ZIP/CBZ/PDF/EPUB (mangadownloader/forms/frmMain.lfm:3912-3918).
 		 * @enum {string}
@@ -1213,6 +1574,21 @@ export interface components {
 		 * @enum {string}
 		 */
 		PngCompression: 'none' | 'fastest' | 'default' | 'maximum';
+		/** @description RFC 9457 problem details body. */
+		Problem: {
+			detail: string;
+			/**
+			 * @description The setting a validation error (422) is about, as a dotted path such as
+			 *     `connections.timeout_secs` or `options.server`.
+			 */
+			field?: string | null;
+			/** Format: int32 */
+			status: number;
+			/** @description The status code's reason phrase. */
+			title: string;
+			/** @description Always `about:blank`: the status code says it all. */
+			type: string;
+		};
 		ProxyOverride: {
 			/** @default  */
 			host: string;
@@ -1268,6 +1644,10 @@ export interface components {
 			filename: string;
 			/** @description The manga folder name (`manga_rename`). */
 			manga: string;
+		};
+		/** @description A manga URL to resolve. */
+		ResolveRequest: {
+			url: string;
 		};
 		/**
 		 * @description Where and under which names downloads are saved. The templates take the tokens `%MANGA%`,
@@ -1352,6 +1732,52 @@ export interface components {
 			 */
 			replace_unicode_with: string;
 		};
+		/** @description One page of search results. */
+		SearchPage: {
+			items: components['schemas']['ListItem'][];
+			/**
+			 * Format: int32
+			 * @description 1-based.
+			 */
+			page: number;
+			/** Format: int32 */
+			page_size: number;
+			/**
+			 * Format: int64
+			 * @description Matches across all pages.
+			 */
+			total: number;
+		};
+		/** @description A series as FMD2's info panel shows it. */
+		SeriesInfo: {
+			alt_titles: string;
+			artists: string;
+			authors: string;
+			/** @description In module order. */
+			chapters: components['schemas']['ChapterInfo'][];
+			/** @description The cover through `/api/covers`; `None` when the module reports none. */
+			cover_url?: string | null;
+			/** @description The module's comma-separated genres, split. */
+			genres: string[];
+			/** @description Whether the series is a favorite. */
+			in_library: boolean;
+			/** @description The series link relative to the module's `RootURL`, as the module reports it. */
+			link: string;
+			module_id: string;
+			status: components['schemas']['SeriesStatus'];
+			summary: string;
+			title: string;
+		};
+		/** @description A series: its module and its link relative to the module's `RootURL`. */
+		SeriesRef: {
+			link: string;
+			module_id: string;
+		};
+		/**
+		 * @description `MangaInfo.Status` (`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).
+		 * @enum {string}
+		 */
+		SeriesStatus: 'completed' | 'ongoing' | 'hiatus' | 'cancelled' | 'unknown';
 		/** @description The HTTP server. No FMD2 counterpart. */
 		ServerSettings: {
 			/**
@@ -1501,6 +1927,197 @@ export interface components {
 		 * @enum {string}
 		 */
 		SymbolMode: 'posix' | 'windows';
+		/** @description One chapter of a task. */
+		TaskChapterView: {
+			/**
+			 * Format: int64
+			 * @description Pages done.
+			 */
+			done: number;
+			/** Format: int32 */
+			index: number;
+			/** @description Relative to the module's `RootURL`. */
+			link: string;
+			name: string;
+			status: components['schemas']['ChapterState'];
+			/**
+			 * Format: int64
+			 * @description Pages in total; 0 until the page count is known.
+			 */
+			total: number;
+		};
+		/** @description Tasks per status group, for the queue's group headers. */
+		TaskCounts: {
+			/**
+			 * Format: int64
+			 * @description Preparing, downloading, converting or compressing.
+			 */
+			downloading: number;
+			/** Format: int64 */
+			finished: number;
+			/**
+			 * Format: int64
+			 * @description Stopped, failed or disabled.
+			 */
+			stopped: number;
+			/** Format: int64 */
+			waiting: number;
+		};
+		/** @description A task with its chapters. */
+		TaskDetail: {
+			/** @description In download order. */
+			chapters: components['schemas']['TaskChapterView'][];
+			task: components['schemas']['TaskSummary'];
+		};
+		/**
+		 * @description The status groups of the queue page.
+		 * @enum {string}
+		 */
+		TaskGroup: 'downloading' | 'waiting' | 'stopped' | 'finished';
+		/** @description One page of the queue. */
+		TaskList: {
+			/** @description Tasks per group matching the text and date filters (not the status filter). */
+			counts: components['schemas']['TaskCounts'];
+			items: components['schemas']['TaskSummary'][];
+			/**
+			 * Format: int32
+			 * @description 1-based.
+			 */
+			page: number;
+			/** Format: int32 */
+			per_page: number;
+			/**
+			 * Format: int64
+			 * @description Tasks matching the filter, over all pages.
+			 */
+			total: number;
+		};
+		/** @description A new queue order. */
+		TaskOrder: {
+			/** @description These tasks go first, in this order; the others keep theirs after them. */
+			ids: number[];
+		};
+		/**
+		 * @description Download progress of one task (`task.progress`), the data behind FMD2's periodic downloads
+		 *     view refresh (mangadownloader/forms/frmMain.pas:2015).
+		 */
+		TaskProgress: {
+			/** Format: double */
+			bytes_per_sec: number;
+			/** @description Human readable chapter range, e.g. `Ch. 97–98`. */
+			chapters: string;
+			/**
+			 * Format: int64
+			 * @description Pages downloaded.
+			 */
+			done: number;
+			/** Format: int64 */
+			id: number;
+			status: components['schemas']['TaskState'];
+			title: string;
+			/**
+			 * Format: int64
+			 * @description Pages in total.
+			 */
+			total: number;
+		};
+		/** @description A task was deleted (`task.removed`). */
+		TaskRemoved: {
+			/** Format: int64 */
+			id: number;
+		};
+		/**
+		 * @description The columns FMD2 sorts its downloads list by (`CompareTaskContainer`,
+		 *     baseunits/uDownloadsManager.pas:2046-2083), plus the queue order itself.
+		 * @enum {string}
+		 */
+		TaskSort: 'queue' | 'title' | 'status' | 'progress' | 'speed' | 'website' | 'save_to' | 'added';
+		/**
+		 * @description Task status, mirroring FMD2's `TDownloadStatusType` (baseunits/uDownloadsManager.pas:19-31).
+		 * @enum {string}
+		 */
+		TaskState:
+			| 'stopped'
+			| 'waiting'
+			| 'preparing'
+			| 'downloading'
+			| 'converting'
+			| 'compressing'
+			| 'finished'
+			| 'failed'
+			| 'disabled';
+		/**
+		 * @description A task moved to another status (`task.status`), e.g. finished or failed
+		 *     (baseunits/uDownloadsManager.pas:741-803).
+		 */
+		TaskStatusChange: {
+			/** @description Why the task failed. */
+			error?: string | null;
+			/** Format: int64 */
+			id: number;
+			status: components['schemas']['TaskState'];
+		};
+		/** @description A task as the queue lists it. */
+		TaskSummary: {
+			/**
+			 * Format: double
+			 * @description Download speed; 0 when not running.
+			 */
+			bytes_per_sec: number;
+			/** Format: int32 */
+			chapter_count: number;
+			/** @description The chapter the task is at, e.g. `Ch. 1101 (2/2)`. */
+			chapters: string;
+			/**
+			 * Format: int32
+			 * @description Chapters downloaded.
+			 */
+			chapters_done: number;
+			/**
+			 * Format: int32
+			 * @description Index of the chapter the task is at.
+			 */
+			current_chapter: number;
+			/** @description RFC 3339. */
+			date_added: string;
+			/** @description RFC 3339 end of the last download run. */
+			date_last_downloaded?: string | null;
+			/**
+			 * Format: int64
+			 * @description Pages of the current chapter done (FMD2's `DownCounter`).
+			 */
+			done: number;
+			/** @description Disabled tasks are skipped by start and start-all. */
+			enabled: boolean;
+			/** @description Why the task failed. */
+			error?: string | null;
+			/** Format: int64 */
+			id: number;
+			/** @description The series link relative to the module's `RootURL`. */
+			link: string;
+			module_id: string;
+			/** @description Whether the task's thread runs (it may still show Waiting until its first chapter starts). */
+			running: boolean;
+			/** @description The folder the chapters are saved in. */
+			save_to: string;
+			status: components['schemas']['TaskState'];
+			title: string;
+			/**
+			 * Format: int64
+			 * @description Pages of the current chapter.
+			 */
+			total: number;
+		};
+		/** @description The queue order changed (`task.reordered`); the data is an empty object. */
+		TasksReordered: Record<string, never>;
+		/** @description The outcome of checking one tool. */
+		ToolCheck: {
+			/** @description Its version or address when usable, otherwise why not. */
+			detail: string;
+			name: string;
+			/** @description Whether the tool is usable. */
+			ok: boolean;
+		};
 		UpdateListSettings: {
 			/**
 			 * @description Update the selected modules' lists on a timer. No FMD2 counterpart (FMD2 only updates
@@ -1509,7 +2126,7 @@ export interface components {
 			 */
 			auto_update: boolean;
 			/**
-			 * @description FMD2-DB URL template ([`DEFAULT_DB_URL`]).
+			 * @description FMD2-DB URL template ([`DEFAULT_DB_URL`]); `<website>` is replaced by the module ID.
 			 * @default https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z
 			 */
 			db_url: string;
@@ -1554,138 +2171,6 @@ export interface components {
 			/** @default fpc */
 			backend: components['schemas']['XPathBackend'];
 		};
-		/** @description A module's account. The password is never returned; `has_password` says whether one is set. */
-		AccountInfo: {
-			enabled: boolean;
-			has_password: boolean;
-			/** @description The module ID. */
-			module: string;
-			/** @description The module's name. */
-			name: string;
-			status: components['schemas']['AccountState'];
-			username: string;
-		};
-		/**
-		 * @description The fields to change; a missing field keeps its value. Not `Debug`, so the password cannot
-		 *     be logged.
-		 */
-		AccountRequest: {
-			enabled?: boolean | null;
-			/**
-			 * Format: password
-			 * @description Write-only.
-			 */
-			password?: string | null;
-			username?: string | null;
-		};
-		/**
-		 * @description An account's status (`TAccountStatus`, baseunits/WebsiteModules.pas:78).
-		 * @enum {string}
-		 */
-		AccountState: 'unknown' | 'checking' | 'valid' | 'invalid';
-		/** @description An account's status changed (`account.state`): a login started or finished. */
-		AccountStateChange: {
-			module: string;
-			status: components['schemas']['AccountState'];
-		};
-		/** @description How many matching titles carry a genre or status. */
-		FacetValue: {
-			/** Format: int64 */
-			count: number;
-			value: string;
-		};
-		/** @description One step of a list job, for the Discover page's progress (`job.lists.<kind>` events). */
-		ListEvent: {
-			/**
-			 * Format: int64
-			 * @description Work items of the current step done.
-			 */
-			done: number;
-			/** @description Why it failed. */
-			error?: string | null;
-			job: components['schemas']['ListJobKind'];
-			kind: components['schemas']['ListEventKind'];
-			module_id: string;
-			/** @description FMD2's status text, or the module's own. */
-			status_text: string;
-			/**
-			 * Format: int64
-			 * @description Titles added (update) or imported (import), once finished.
-			 */
-			titles?: number | null;
-			/**
-			 * Format: int64
-			 * @description Work items of the current step; 0 when unknown.
-			 */
-			total: number;
-		};
-		/**
-		 * @description What happened to a list job.
-		 * @enum {string}
-		 */
-		ListEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
-		/** @description The genres and statuses of the titles a search matches, most common first. */
-		ListFacets: {
-			genres: components['schemas']['FacetValue'][];
-			statuses: components['schemas']['FacetValue'][];
-		};
-		/** @description One title of a module's list. */
-		ListItem: {
-			/**
-			 * Format: int64
-			 * @description Julian day number of the day the title was first listed.
-			 */
-			added_jdn: number;
-			alttitles: string;
-			artists: string;
-			authors: string;
-			genres: string[];
-			/** @description The title's link without the module's host, as the series page takes it. */
-			link: string;
-			module_id: string;
-			/** Format: int32 */
-			numchapter: number;
-			/** @description As in the `status` filter; empty when unknown. */
-			status: string;
-			title: string;
-		};
-		/**
-		 * @description Which job a [`ListEvent`] is about.
-		 * @enum {string}
-		 */
-		ListJobKind: 'update' | 'import_db';
-		/** @description A list job that was started. */
-		ListJobStarted: {
-			job: components['schemas']['ListJobKind'];
-			module_id: string;
-		};
-		/** @description What a module can do, from the callbacks and flags it declares. */
-		ModuleCapabilities: {
-			/** @description It has an account to log in with (`AccountSupport`). */
-			account: boolean;
-			/** @description It downloads chapters: it declares `OnGetPageNumber`. */
-			download: boolean;
-			/** @description It reads manga info: it declares `OnGetInfo` (`InformationAvailable` aside). */
-			info: boolean;
-			/** @description Its list can be updated: it declares `OnGetNameAndLink`. */
-			update_list: boolean;
-		};
-		/** @description One page of search results. */
-		SearchPage: {
-			items: components['schemas']['ListItem'][];
-			/**
-			 * Format: int32
-			 * @description 1-based.
-			 */
-			page: number;
-			/** Format: int32 */
-			page_size: number;
-			/**
-			 * Format: int64
-			 * @description Matches across all pages.
-			 */
-			total: number;
-		};
 	};
 	responses: never;
 	parameters: never;
@@ -1695,6 +2180,254 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+	about: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['About'];
+				};
+			};
+		};
+	};
+	listAccounts: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The accounts */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['AccountInfo'][];
+				};
+			};
+		};
+	};
+	putAccount: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['AccountRequest'];
+			};
+		};
+		responses: {
+			/** @description The updated account */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['AccountInfo'];
+				};
+			};
+			/** @description No loaded module with account support has that ID */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A login of the account is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	deleteAccount: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The account is cleared */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description No loaded module with account support has that ID */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A login of the account is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	loginAccount: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The account after the login */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['AccountInfo'];
+				};
+			};
+			/** @description No loaded module with account support has that ID */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The module has no login, or a login is already running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	getCover: {
+		parameters: {
+			query: {
+				/** @description The website module the cover belongs to. */
+				module: string;
+				/** @description The cover's URL on the site (http or https). */
+				url: string;
+				/** @description Scale down to this width in pixels (1 to 2000), keeping the aspect ratio. */
+				w?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The cover image */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'image/*': unknown;
+				};
+			};
+			/** @description The browser's copy (`If-None-Match`) is current */
+			304: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Not an http(s) URL, or a private-network target */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Unknown module */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Upstream failed to deliver the cover */
+			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	events: {
+		parameters: {
+			query?: never;
+			header?: {
+				/** @description Resume after this inbox item id */
+				'Last-Event-ID'?: string | null;
+			};
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Event stream */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'text/event-stream': unknown;
+				};
+			};
+		};
+	};
 	listFavorites: {
 		parameters: {
 			query?: {
@@ -1914,6 +2647,25 @@ export interface operations {
 			};
 		};
 	};
+	health: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Health'];
+				};
+			};
+		};
+	};
 	listInbox: {
 		parameters: {
 			query?: never;
@@ -1923,7 +2675,6 @@ export interface operations {
 		};
 		requestBody?: never;
 		responses: {
-			/** @description Inbox items */
 			200: {
 				headers: {
 					[name: string]: unknown;
@@ -1939,6 +2690,7 @@ export interface operations {
 			query?: never;
 			header?: never;
 			path: {
+				/** @description Inbox item id */
 				id: string;
 			};
 			cookie?: never;
@@ -1957,166 +2709,8 @@ export interface operations {
 				headers: {
 					[name: string]: unknown;
 				};
-				content?: never;
-			};
-		};
-	};
-	listTasks: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Tasks */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['TaskProgress'][];
-				};
-			};
-		};
-	};
-	createTask: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': components['schemas']['NewTask'];
-			};
-		};
-		responses: {
-			/** @description The queued task */
-			201: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['TaskProgress'];
-				};
-			};
-			/** @description The request is invalid (e.g. no chapters) */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
 				content: {
 					'application/json': components['schemas']['Problem'];
-				};
-			};
-		};
-	};
-	resolveUrl: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': components['schemas']['ResolveRequest'];
-			};
-		};
-		responses: {
-			/** @description The module and the module-relative link of the series */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['SeriesRef'];
-				};
-			};
-			/** @description No module handles this URL */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-		};
-	};
-	getSeries: {
-		parameters: {
-			query: {
-				/** @description Module ID. */
-				module: string;
-				/** @description The series link relative to the module's `RootURL`. */
-				link: string;
-			};
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description The series' info and chapters */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['SeriesInfo'];
-				};
-			};
-			/** @description No such module, or the module found no series there */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-			/** @description The website could not be reached */
-			502: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-		};
-	};
-	listLogs: {
-		parameters: {
-			query?: {
-				/**
-				 * @description Only lines at this level or more severe.
-				 * @example warn
-				 */
-				level?: string;
-				/** @description Only lines logged by this website module. */
-				module?: string;
-				/** @description Only lines with a sequence number above this one. */
-				since?: number;
-				/** @description At most this many lines: the newest that match. */
-				limit?: number;
-			};
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['LogLine'][];
 				};
 			};
 		};
@@ -2140,7 +2734,7 @@ export interface operations {
 			};
 		};
 	};
-	runJob: {
+	getJob: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -2152,8 +2746,7 @@ export interface operations {
 		};
 		requestBody?: never;
 		responses: {
-			/** @description Started; progress follows as `job.state` events */
-			202: {
+			200: {
 				headers: {
 					[name: string]: unknown;
 				};
@@ -2163,15 +2756,6 @@ export interface operations {
 			};
 			/** @description No such job */
 			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-			/** @description Already running */
-			409: {
 				headers: {
 					[name: string]: unknown;
 				};
@@ -2222,184 +2806,28 @@ export interface operations {
 			};
 		};
 	};
-	about: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['About'];
-				};
-			};
-		};
-	};
-	events: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Event stream */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'text/event-stream': unknown;
-				};
-			};
-		};
-	};
-	getSettings: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Every setting */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Settings'];
-				};
-			};
-		};
-	};
-	patchSettings: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': {
-					[key: string]: unknown;
-				};
-			};
-		};
-		responses: {
-			/** @description The updated settings */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Settings'];
-				};
-			};
-			/** @description The patch is not a JSON object */
-			400: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-			/** @description A value is invalid or a setting unknown; `field` names it */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-		};
-	};
-	previewRename: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': components['schemas']['SaveToSettings'];
-			};
-		};
-		responses: {
-			/** @description The expanded names */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['RenamePreview'];
-				};
-			};
-			/** @description Malformed body */
-			400: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-		};
-	};
-	listModules: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description The loaded modules */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['ModuleSummary'][];
-				};
-			};
-		};
-	};
-	getModuleSettings: {
+	runJob: {
 		parameters: {
 			query?: never;
 			header?: never;
 			path: {
-				/** @description Module ID */
+				/** @description Job id */
 				id: string;
 			};
 			cookie?: never;
 		};
 		requestBody?: never;
 		responses: {
-			/** @description The module's settings */
-			200: {
+			/** @description Started; progress follows as `job.state` events */
+			202: {
 				headers: {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['ModuleSettingsView'];
+					'application/json': components['schemas']['JobState'];
 				};
 			};
-			/** @description No module with that ID is loaded */
+			/** @description No such job */
 			404: {
 				headers: {
 					[name: string]: unknown;
@@ -2408,199 +2836,7 @@ export interface operations {
 					'application/json': components['schemas']['Problem'];
 				};
 			};
-		};
-	};
-	patchModuleSettings: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path: {
-				/** @description Module ID */
-				id: string;
-			};
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': {
-					[key: string]: unknown;
-				};
-			};
-		};
-		responses: {
-			/** @description The updated settings */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['ModuleSettingsView'];
-				};
-			};
-			/** @description The patch is not a JSON object */
-			400: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-			/** @description No module with that ID is loaded */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-			/** @description A value is invalid or a setting unknown; `field` names it */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-		};
-	};
-	listAccounts: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description The accounts */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['AccountInfo'][];
-				};
-			};
-		};
-	};
-	putAccount: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path: {
-				/** @description Module ID */
-				module: string;
-			};
-			cookie?: never;
-		};
-		requestBody: {
-			content: {
-				'application/json': components['schemas']['AccountRequest'];
-			};
-		};
-		responses: {
-			/** @description The updated account */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['AccountInfo'];
-				};
-			};
-			/** @description No loaded module with account support has that ID */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-			/** @description A login of the account is running */
-			409: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-		};
-	};
-	deleteAccount: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path: {
-				/** @description Module ID */
-				module: string;
-			};
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description The account is cleared */
-			204: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content?: never;
-			};
-			/** @description No loaded module with account support has that ID */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-			/** @description A login of the account is running */
-			409: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-		};
-	};
-	loginAccount: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path: {
-				/** @description Module ID */
-				module: string;
-			};
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description The account after the login */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['AccountInfo'];
-				};
-			};
-			/** @description No loaded module with account support has that ID */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['Problem'];
-				};
-			};
-			/** @description The module has no login, or a login is already running */
+			/** @description Already running */
 			409: {
 				headers: {
 					[name: string]: unknown;
@@ -2822,6 +3058,814 @@ export interface operations {
 			};
 			/** @description List jobs are not available */
 			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	login: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['Login'];
+			};
+		};
+		responses: {
+			/** @description Logged in; the session cookie is set (nothing to do when auth is off) */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Wrong password */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	listLogs: {
+		parameters: {
+			query?: {
+				/**
+				 * @description Only lines at this level or more severe.
+				 * @example warn
+				 */
+				level?: string;
+				/** @description Only lines logged by this website module. */
+				module?: string;
+				/** @description Only lines with a sequence number above this one. */
+				since?: number;
+				/** @description At most this many lines: the oldest after `since` when given, else the newest. */
+				limit?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['LogLine'][];
+				};
+			};
+		};
+	};
+	listModules: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The loaded modules */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ModuleSummary'][];
+				};
+			};
+		};
+	};
+	updateModules: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Started; progress follows as `job.state` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['JobState'];
+				};
+			};
+			/** @description The module updater is not running in this server */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Already running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	getModuleSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The module's settings */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ModuleSettingsView'];
+				};
+			};
+			/** @description No module with that ID is loaded */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	patchModuleSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': {
+					[key: string]: unknown;
+				};
+			};
+		};
+		responses: {
+			/** @description The updated settings */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ModuleSettingsView'];
+				};
+			};
+			/** @description The patch is not a JSON object */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description No module with that ID is loaded */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A value is invalid or a setting unknown; `field` names it */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	previewRename: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['SaveToSettings'];
+			};
+		};
+		responses: {
+			/** @description The expanded names */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['RenamePreview'];
+				};
+			};
+			/** @description Malformed body */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	resolveUrl: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ResolveRequest'];
+			};
+		};
+		responses: {
+			/** @description The module and the module-relative link of the series */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SeriesRef'];
+				};
+			};
+			/** @description No module handles this URL */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	getSeries: {
+		parameters: {
+			query: {
+				/** @description Module ID. */
+				module: string;
+				/** @description The series link relative to the module's `RootURL`. */
+				link: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The series' info and chapters */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SeriesInfo'];
+				};
+			};
+			/** @description No such module, or the module found no series there */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The website could not be reached */
+			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	getSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Every setting */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Settings'];
+				};
+			};
+		};
+	};
+	patchSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': {
+					[key: string]: unknown;
+				};
+			};
+		};
+		responses: {
+			/** @description The updated settings */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Settings'];
+				};
+			};
+			/** @description The patch is not a JSON object */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A value is invalid or a setting unknown; `field` names it */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	listTasks: {
+		parameters: {
+			query?: {
+				/** @description Only this status group. */
+				status?: components['schemas']['TaskGroup'];
+				/** @description Text in the title, the module ID or a chapter name, ignoring case. */
+				q?: string;
+				/** @description Unix ms: only tasks last downloaded (or, never downloaded, added) at or after this. */
+				from?: number;
+				/** @description Unix ms: only tasks last downloaded (or, never downloaded, added) at or before this. */
+				to?: number;
+				/** @description 1-based page; default 1. */
+				page?: number;
+				/** @description Default 100, at most 1000. */
+				per_page?: number;
+				/** @description Default: queue order. */
+				sort?: components['schemas']['TaskSort'];
+				/** @description Sort descending. */
+				desc?: boolean;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description One page of the matching tasks */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskList'];
+				};
+			};
+			/** @description A malformed query, e.g. page 0 */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	createTask: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['NewTask'];
+			};
+		};
+		responses: {
+			/** @description The queued task */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskSummary'];
+				};
+			};
+			/** @description No chapters, or no such module */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	removeFinishedTasks: {
+		parameters: {
+			query?: {
+				/** @description Must be `finished`. */
+				status?: components['schemas']['TaskGroup'];
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Removed */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description `status` is not `finished` */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	reorderTasks: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['TaskOrder'];
+			};
+		};
+		responses: {
+			/** @description Reordered */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+		};
+	};
+	startAllTasks: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Started */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+		};
+	};
+	stopAllTasks: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Stopped */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+		};
+	};
+	getTask: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Task ID */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The task and its chapters */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskDetail'];
+				};
+			};
+			/** @description No such task */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	deleteTask: {
+		parameters: {
+			query?: {
+				/** @description Also delete the chapters' folders and archives (default false). */
+				files?: boolean;
+			};
+			header?: never;
+			path: {
+				/** @description Task ID */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Deleted */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description No such task */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	disableTask: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Task ID */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The task */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskSummary'];
+				};
+			};
+			/** @description No such task */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	enableTask: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Task ID */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The task */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskSummary'];
+				};
+			};
+			/** @description No such task */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	getTaskFiles: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Task ID */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The chapter archive, or a zip of the task's files */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/vnd.comicbook+zip': unknown;
+					'application/zip': unknown;
+					'application/pdf': unknown;
+					'application/epub+zip': unknown;
+				};
+			};
+			/** @description No such task, or nothing saved yet */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	redownloadTask: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Task ID */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The task, now waiting */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskSummary'];
+				};
+			};
+			/** @description No such task */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	startTask: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Task ID */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The task, now waiting */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskSummary'];
+				};
+			};
+			/** @description No such task */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	stopTask: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Task ID */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The task */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskSummary'];
+				};
+			};
+			/** @description No such task */
+			404: {
 				headers: {
 					[name: string]: unknown;
 				};

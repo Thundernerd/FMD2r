@@ -19,8 +19,7 @@ test('a pasted URL opens its series page, and Download queues the chosen chapter
 
 	await box.getByRole('button', { name: 'Download 2 chapters' }).click();
 
-	// The mock answers with the task it queued, named after the chapters it was sent.
-	await expect(box.getByRole('status')).toContainText('Chapter 1, Chapter 2');
+	await expect(box.getByRole('status')).toContainText('Queued: Frieren, 2 chapters');
 });
 
 test('selection shortcuts pick new chapters or a typed range', async ({ page }) => {

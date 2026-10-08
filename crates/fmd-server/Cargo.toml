@@ -9,6 +9,7 @@ publish = false
 axum = { version = "0.8", features = ["macros"] }
 fmd-core = { path = "../fmd-core" }
 fmd-http = { path = "../fmd-http" }
+fmd-lua = { path = "../fmd-lua" }
 fmd-pack = { path = "../fmd-pack" }
 fmd-store = { path = "../fmd-store" }
 futures-util = "0.3"
@@ -22,19 +23,20 @@ sha2 = "0.10"
 subtle = "2"
 thiserror.workspace = true
 time = { version = "0.3", features = ["formatting"] }
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tempfile.workspace = true
+tokio = { version = "1", features = ["fs", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["io"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"] }
 url = "2"
 utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.2"
+zip = { version = "8.6.0", default-features = false }
 
 [dev-dependencies]
-fmd-lua = { path = "../fmd-lua" }
 http-body-util = "0.1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
-tempfile.workspace = true
 tower = { version = "0.5", features = ["util"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"] }
 

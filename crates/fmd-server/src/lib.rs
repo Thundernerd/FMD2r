@@ -20,6 +20,9 @@ mod services;
 mod settings;
 mod spa;
 mod state;
+mod task_events;
+mod task_files;
+mod tasks;
 mod time;
 mod tools;
 
@@ -34,7 +37,10 @@ use utoipa_axum::routes;
 pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange};
 pub use covers::{CoverConfig, CoverModules, CoverSession, cover_url};
 pub use error::{ApiError, Problem};
-pub use events::{EventBus, JobState, ServerEvent, TaskProgress, TaskState, TaskStatusChange};
+pub use events::{
+    EventBus, JobState, ServerEvent, TaskProgress, TaskRemoved, TaskState, TaskStatusChange,
+    TasksReordered,
+};
 pub use favorites::{AddFavorite, CheckRequest, FavoriteFilter, FavoritePatch, FavoriteView};
 pub use fmd_core::jobs::JobPhase;
 pub use fmd_core::lists::{ListEvent, ListEventKind};
@@ -50,6 +56,10 @@ pub use services::{
 pub use settings::RenamePreview;
 pub use spa::{Assets, EmbeddedAssets};
 pub use state::AppState;
+pub use tasks::{
+    ChapterState, NewTask, NewTaskChapter, TaskChapterView, TaskCounts, TaskDetail, TaskGroup,
+    TaskList, TaskOrder, TaskSort, TaskSummary,
+};
 pub use tools::{SystemTools, ToolCheck, ToolProbe};
 
 #[derive(OpenApi)]
@@ -58,6 +68,10 @@ pub use tools::{SystemTools, ToolCheck, ToolProbe};
     components(schemas(
         TaskProgress,
         TaskStatusChange,
+        TaskRemoved,
+        TasksReordered,
+        TaskGroup,
+        TaskSort,
         JobState,
         InboxItem,
         LogLine,
@@ -107,6 +121,17 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(accounts::list))
         .routes(routes!(accounts::put, accounts::delete))
         .routes(routes!(accounts::login))
+        .routes(routes!(tasks::list, tasks::create, tasks::remove_finished))
+        .routes(routes!(tasks::get, tasks::delete))
+        .routes(routes!(tasks::start))
+        .routes(routes!(tasks::stop))
+        .routes(routes!(tasks::redownload))
+        .routes(routes!(tasks::enable))
+        .routes(routes!(tasks::disable))
+        .routes(routes!(tasks::start_all))
+        .routes(routes!(tasks::stop_all))
+        .routes(routes!(tasks::reorder))
+        .routes(routes!(task_files::get))
 }
 
 /// The public and protected `/api` routers plus the OpenAPI document describing both.

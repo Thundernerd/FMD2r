@@ -2,13 +2,16 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use fmd_core::download::{DownloadManager, EngineConfig};
 use fmd_core::settings::write_websitebypass_config;
 use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, ListsDb};
 use thiserror::Error;
 use tokio::net::TcpListener;
 
-use crate::{AppState, CoverConfig, Idle, LogBuffer, SystemTools, build_router, module_updates};
+use crate::module_updates::{self, LuaRuntime};
+use crate::{AppState, CoverConfig, Idle, LogBuffer, SystemTools, build_router};
 
 /// What [`serve`] needs.
 pub struct ServeConfig {
@@ -23,8 +26,9 @@ pub struct ServeConfig {
     /// The buffer the `tracing` subscriber feeds; `GET /api/logs` reads it and `GET /api/events`
     /// streams its bus.
     pub logs: LogBuffer,
-    /// Load the Lua modules and keep them in sync with upstream (the `modules` job and its
-    /// schedule). Off, no module updater runs and nothing is fetched from GitHub.
+    /// Keep the Lua modules in sync with upstream (the `modules` job and its schedule). Off, no
+    /// module updater runs and nothing is fetched from GitHub; the modules already in
+    /// `<data dir>/lua` are still loaded for the download engine.
     pub module_updates: bool,
 }
 
@@ -88,13 +92,33 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }
-    if config.module_updates {
-        tokio::spawn(module_updates::start(
-            state.clone(),
-            lua_dir,
-            data_dir.join(ACCOUNTS_KEY_FILE),
-            flaresolverr_url,
-        ));
+    // Loading the modules and resuming the downloads that were running block.
+    let db = state.db.clone();
+    let key_file = data_dir.join(ACCOUNTS_KEY_FILE);
+    let dir = lua_dir.clone();
+    let runtime = tokio::task::spawn_blocking(move || LuaRuntime::load(db, &dir, &key_file))
+        .await
+        .map_err(std::io::Error::other)?;
+    match runtime {
+        Ok(runtime) => {
+            let live = runtime.modules.clone();
+            let engine = DownloadManager::open(EngineConfig {
+                db: state.db.clone(),
+                pool: runtime.pool.clone(),
+                modules: Arc::new(move |id: &str| live.current().get(id).cloned()),
+                settings: state.settings.clone(),
+                http: runtime.http.clone(),
+            })
+            .await;
+            match engine {
+                Ok(engine) => state = state.with_engine(engine),
+                Err(e) => tracing::error!(target: "fmd_server", "download engine: {e}"),
+            }
+            if config.module_updates {
+                module_updates::start(state.clone(), &runtime, lua_dir, flaresolverr_url);
+            }
+        }
+        Err(e) => tracing::error!(target: "fmd_server", "Lua modules: {e}"),
     }
     let listener = TcpListener::bind(config.bind)
         .await

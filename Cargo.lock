@@ -924,12 +924,14 @@ dependencies = [
  "time",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tower",
  "tracing",
  "tracing-subscriber",
  "url",
  "utoipa",
  "utoipa-axum",
+ "zip",
 ]
 
 [[package]]

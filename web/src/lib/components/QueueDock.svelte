@@ -1,36 +1,17 @@
 <script lang="ts">
-	import type { EventStore } from '#lib/events.svelte.ts';
+	import SpeedGraph from '#lib/components/queue/SpeedGraph.svelte';
+	import type { QueueStore } from '#lib/queue.svelte.ts';
+	import { formatRate, percent } from '#lib/queue-format.ts';
 
-	let { store }: { store: EventStore } = $props();
+	let { queue }: { queue: QueueStore } = $props();
 
-	const SAMPLES = 60;
-
-	const tasks = $derived(Object.values(store.tasks));
-	const active = $derived(tasks.filter((t) => t.status === 'downloading'));
-	const waiting = $derived(tasks.filter((t) => t.status === 'queued').length);
-	const rate = $derived(active.reduce((sum, t) => sum + t.bytes_per_sec, 0) / 1_000_000);
-	const percent = (done: number, total: number) =>
-		total > 0 ? Math.round((done / total) * 100) : 0;
-
-	// Total transfer rate over the last minute, sampled once a second.
-	let history = $state<number[]>([]);
-	$effect(() => {
-		const timer = setInterval(() => {
-			history = [...history, rate].slice(-SAMPLES);
-		}, 1000);
-		return () => clearInterval(timer);
-	});
-	// Newest sample on the right edge, so the line scrolls left as it fills.
-	const xOf = (i: number) => (((SAMPLES - history.length + i) / (SAMPLES - 1)) * 100).toFixed(2);
-	const points = $derived.by(() => {
-		const max = Math.max(1, ...history);
-		return history.map((r, i) => `${xOf(i)},${(40 - (r / max) * 36).toFixed(2)}`).join(' ');
-	});
+	/** The dock's graph spans the last minute. */
+	const SLOTS = 60;
 </script>
 
 <section class="dock" aria-label="Download queue">
 	<div class="tasks">
-		{#each active as task (task.id)}
+		{#each queue.active as task (task.id)}
 			<div class="task">
 				<div class="task-head small">
 					<span class="task-title"><b>{task.title}</b> {task.chapters}</span>
@@ -43,15 +24,12 @@
 		{/each}
 	</div>
 	<div class="summary">
-		<b class="mono num">{rate.toFixed(1)} MB/s</b>
-		<span class="small muted">{active.length} active · {waiting} waiting</span>
+		<b class="mono num">{formatRate(queue.rate)}</b>
+		<span class="small muted">{queue.active.length} active · {queue.waiting} waiting</span>
 	</div>
-	<svg class="graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
-		{#if history.length > 1}
-			<polygon class="graph-fill" points="{xOf(0)},40 {points} 100,40" />
-			<polyline class="graph-line" {points} />
-		{/if}
-	</svg>
+	<div class="graph">
+		<SpeedGraph samples={queue.history} slots={SLOTS} />
+	</div>
 	<a class="btn sm primary" href="/queue">Open queue</a>
 </section>
 
@@ -107,15 +85,6 @@
 	.summary .small,
 	.graph {
 		display: none;
-	}
-	.graph-fill {
-		fill: var(--accent-soft);
-	}
-	.graph-line {
-		fill: none;
-		stroke: var(--accent);
-		stroke-width: 1.5;
-		vector-effect: non-scaling-stroke;
 	}
 
 	@media (min-width: 861px) {
