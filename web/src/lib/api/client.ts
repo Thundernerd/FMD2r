@@ -1,17 +1,23 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './schema';
+import type { FacetQuery, SearchQuery } from '#lib/discover/filters.ts';
 import type {
 	About,
 	AccountInfo,
 	AccountRequest,
 	InboxItem,
 	JobState,
+	ListFacets,
+	ListJobStarted,
 	LogLine,
 	ModuleSettingsView,
 	ModuleSummary,
+	NewTask,
 	Problem,
 	RenamePreview,
 	SaveToSettings,
+	SearchPage,
+	SeriesInfo,
 	SeriesRef,
 	Settings,
 	TaskProgress
@@ -21,7 +27,9 @@ import type {
 export class ApiError extends Error {
 	constructor(
 		readonly status: number,
-		what: string
+		what: string,
+		/** The problem's `detail`, when the server said why. */
+		readonly detail: string | null = null
 	) {
 		super(`${what} failed: HTTP ${status}`);
 	}
@@ -34,7 +42,7 @@ export class ValidationError extends ApiError {
 		readonly detail: string,
 		what: string
 	) {
-		super(422, what);
+		super(422, what, detail);
 	}
 }
 
@@ -49,6 +57,13 @@ export interface Api {
 	listTasks(): Promise<TaskProgress[]>;
 	/** The series a manga URL points at, or `null` when no module handles the URL. */
 	resolveUrl(url: string): Promise<SeriesRef | null>;
+	/**
+	 * A series' info and chapters; rejects with an {@link ApiError} carrying the server's reason:
+	 * 404 when the module finds no series there, 502 when the website cannot be reached.
+	 */
+	getSeries(module: string, link: string): Promise<SeriesInfo>;
+	/** Queues a download; resolves to the new task. */
+	createTask(task: NewTask): Promise<TaskProgress>;
 	/** The server's buffered log lines, oldest first. */
 	listLogs(): Promise<LogLine[]>;
 	listJobs(): Promise<JobState[]>;
@@ -67,6 +82,19 @@ export interface Api {
 	getModuleSettings(id: string): Promise<ModuleSettingsView>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
 	patchModuleSettings(id: string, patch: MergePatch): Promise<ModuleSettingsView>;
+	/** One page of the manga lists matching `query`. */
+	searchLists(query: SearchQuery): Promise<SearchPage>;
+	/** Genre and status counts of the titles `query` matches. */
+	listFacets(query: FacetQuery): Promise<ListFacets>;
+	/**
+	 * Starts updating a module's list from its website; progress follows as `job.lists.*`
+	 * events. Rejects with status 409 when a list job of the module runs.
+	 */
+	updateList(module: string): Promise<ListJobStarted>;
+	/** Starts replacing a module's list with its FMD2-DB dump; otherwise like {@link updateList}. */
+	importListDb(module: string): Promise<ListJobStarted>;
+	/** Stops a module's list job; rejects with status 409 when none runs. */
+	cancelListJob(module: string): Promise<void>;
 	/** The accounts of the modules with account support. Passwords are never returned. */
 	listAccounts(): Promise<AccountInfo[]>;
 	/** Changes the given fields of a module's account; omitted fields keep their value. */
@@ -122,6 +150,18 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 			if (res.response.status === 404) return null;
 			return unwrap('resolveUrl', res);
 		},
+		async getSeries(module, link) {
+			const res = await client.GET('/api/series', { params: { query: { module, link } } });
+			if (!res.response.ok || res.data === undefined) {
+				// Every error here is a `Problem`.
+				const problem = res.error as Partial<Problem> | undefined;
+				throw new ApiError(res.response.status, 'getSeries', problem?.detail ?? null);
+			}
+			return res.data;
+		},
+		async createTask(task) {
+			return validated('createTask', await client.POST('/api/tasks', { body: task }));
+		},
 		async listLogs() {
 			return unwrap('listLogs', await client.GET('/api/logs'));
 		},
@@ -169,6 +209,30 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 					body: patch
 				})
 			);
+		},
+		async searchLists(query) {
+			return unwrap('searchLists', await client.GET('/api/lists/search', { params: { query } }));
+		},
+		async listFacets(query) {
+			return unwrap('listFacets', await client.GET('/api/lists/facets', { params: { query } }));
+		},
+		async updateList(module) {
+			return unwrap(
+				'updateList',
+				await client.POST('/api/lists/{module}/update', { params: { path: { module } } })
+			);
+		},
+		async importListDb(module) {
+			return unwrap(
+				'importListDb',
+				await client.POST('/api/lists/{module}/import-db', { params: { path: { module } } })
+			);
+		},
+		async cancelListJob(module) {
+			const { response } = await client.POST('/api/lists/{module}/cancel', {
+				params: { path: { module } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'cancelListJob');
 		},
 		async listAccounts() {
 			return unwrap('listAccounts', await client.GET('/api/accounts'));

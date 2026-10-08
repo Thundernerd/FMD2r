@@ -15,6 +15,9 @@ use utoipa::ToSchema;
 pub enum ApiError {
     #[error("no such resource")]
     NotFound,
+    /// A 404 that says why (e.g. no module handles a URL).
+    #[error("{0}")]
+    Missing(String),
     #[error("authentication required")]
     Unauthorized,
     #[error("method not allowed")]
@@ -37,6 +40,9 @@ pub enum ApiError {
     /// An upstream site failed to deliver (e.g. a cover).
     #[error("{0}")]
     BadGateway(String),
+    /// A service the request needs is not running in this server (e.g. no Lua modules loaded).
+    #[error("{0}")]
+    Unavailable(String),
     #[error(transparent)]
     Store(#[from] fmd_store::StoreError),
     #[error("internal error: {0}")]
@@ -62,7 +68,7 @@ pub struct Problem {
 impl ApiError {
     fn status(&self) -> StatusCode {
         match self {
-            Self::NotFound => StatusCode::NOT_FOUND,
+            Self::NotFound | Self::Missing(_) => StatusCode::NOT_FOUND,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
@@ -70,6 +76,7 @@ impl ApiError {
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Rejected(status, _) => *status,
             Self::BadGateway(_) => StatusCode::BAD_GATEWAY,
+            Self::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Store(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -79,8 +86,9 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
         // Server errors go to the log in full; clients only learn that something failed.
-        let detail = if let Self::BadGateway(msg) = &self {
-            // Sites failing is routine, not a server fault: the client may see why.
+        let detail = if let Self::BadGateway(msg) | Self::Unavailable(msg) = &self {
+            // Sites failing and services not configured are routine, not server faults: the
+            // client may see why.
             tracing::debug!(target: "fmd_server", "{msg}");
             msg.clone()
         } else if status.is_server_error() {
@@ -119,6 +127,17 @@ impl From<fmd_core::jobs::JobError> for ApiError {
         match err {
             E::AlreadyRunning | E::NotRunning => Self::Conflict(err.to_string()),
             E::Failed(msg) => Self::Internal(msg),
+        }
+    }
+}
+
+impl From<fmd_core::lists::ListJobError> for ApiError {
+    fn from(err: fmd_core::lists::ListJobError) -> Self {
+        use fmd_core::lists::ListJobError as E;
+        match err {
+            E::UnknownModule(_) => Self::NotFound,
+            E::AlreadyRunning(_) | E::NotRunning(_) => Self::Conflict(err.to_string()),
+            E::Spawn(_) => Self::Internal(err.to_string()),
         }
     }
 }

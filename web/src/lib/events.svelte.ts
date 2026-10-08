@@ -1,4 +1,11 @@
-import type { InboxItem, JobState, LogLine, TaskProgress } from '#lib/api/types.ts';
+import type {
+	InboxItem,
+	JobState,
+	ListEvent,
+	ListEventKind,
+	LogLine,
+	TaskProgress
+} from '#lib/api/types.ts';
 import { LogFeed, MAX_LOG_LINES } from '#lib/logs.svelte.ts';
 
 /** The part of the browser's `EventSource` the store uses, so tests and mock mode can supply their own. */
@@ -16,6 +23,15 @@ export interface EventStoreOptions {
 	maxLogLines?: number;
 }
 
+/** The `job.lists.<kind>` events the server sends. */
+const LIST_EVENT_KINDS: ListEventKind[] = [
+	'started',
+	'progress',
+	'finished',
+	'cancelled',
+	'failed'
+];
+
 /** First reconnect delay; it doubles on every failed attempt up to the cap. */
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
@@ -27,6 +43,8 @@ export class EventStore {
 	inbox = $state<InboxItem[]>([]);
 	unread = $derived(this.inbox.filter((i) => !i.read).length);
 	jobs = $state<Record<string, JobState>>({});
+	/** The latest list update or FMD2-DB import event of each module, by module ID. */
+	lists = $state<Record<string, ListEvent>>({});
 	/** Recent log lines, oldest first. */
 	logs: LogFeed;
 	connected = $state(false);
@@ -118,6 +136,12 @@ export class EventStore {
 			this.#jobFrames[job.id] = this.jobVersion(job.id) + 1;
 			this.jobs[job.id] = job;
 		});
+		for (const kind of LIST_EVENT_KINDS) {
+			es.addEventListener(`job.lists.${kind}`, (ev) => {
+				const event = JSON.parse(ev.data) as ListEvent;
+				this.lists[event.module_id] = event;
+			});
+		}
 		es.addEventListener('log', (ev) => {
 			this.logs.push(JSON.parse(ev.data) as LogLine);
 		});

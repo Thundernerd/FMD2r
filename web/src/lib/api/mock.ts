@@ -1,4 +1,5 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
+import { createMockLists } from './mock-lists';
 import { Invalid, createMockSettings } from './mock-settings';
 import type { paths } from './schema';
 import type {
@@ -9,7 +10,10 @@ import type {
 	JobState,
 	LogLevel,
 	LogLine,
+	ModuleSummary,
+	NewTask,
 	SaveToSettings,
+	SeriesInfo,
 	SeriesRef,
 	TaskProgress
 } from './types';
@@ -160,12 +164,49 @@ const seedAbout = (): About => ({
 	]
 });
 
-/** Hosts the mock pretends to have modules for; anything else resolves to a 404. */
+/** Hosts the mock pretends to have modules for (by module ID); anything else resolves to a 404. */
 const MODULES: Record<string, string> = {
-	'mangadex.org': 'MangaDex',
-	'comick.io': 'ComicK',
-	'bato.to': 'Bato.to',
-	'www.webtoons.com': 'Webtoons'
+	'mangadex.org': 'mangadex',
+	'comick.io': 'comick',
+	'bato.to': 'batoto',
+	'www.webtoons.com': 'webtoons'
+};
+
+/** Series the mock knows, by link; `chapters` of them, the first `downloaded` downloaded. */
+const SERIES: Record<
+	string,
+	Omit<SeriesInfo, 'module_id' | 'link' | 'chapters'> & {
+		count: number;
+		downloaded: number;
+	}
+> = {
+	'/title/abc123/frieren': {
+		title: 'Frieren',
+		alt_titles: "Sousou no Frieren, Frieren: Beyond Journey's End",
+		authors: 'Kanehito Yamada',
+		artists: 'Tsukasa Abe',
+		genres: ['Adventure', 'Drama', 'Fantasy', 'Shounen'],
+		status: 'ongoing',
+		summary:
+			'The demon king is dead and the hero party has gone home. Frieren, the elf mage who outlives them all, sets out to understand the people she travelled with.\r\nDecades later, she retraces their journey with a new apprentice, visiting the places they saved and the graves of the friends she barely got to know.\r\nAlong the way she learns what a short human life is worth, and why her companions bothered to spend theirs with her.',
+		cover_url: null,
+		in_library: true,
+		count: 142,
+		downloaded: 138
+	},
+	'/title/op/one-piece': {
+		title: 'One Piece',
+		alt_titles: 'ワンピース',
+		authors: 'Eiichiro Oda',
+		artists: 'Eiichiro Oda',
+		genres: ['Action', 'Adventure', 'Comedy', 'Shounen'],
+		status: 'ongoing',
+		summary: 'Gol D. Roger was the King of the Pirates. His treasure is still out there.',
+		cover_url: null,
+		in_library: false,
+		count: 2000,
+		downloaded: 0
+	}
 };
 
 const json = (body: unknown, status = 200): Response =>
@@ -213,12 +254,49 @@ export function createMockBackend(): MockBackend {
 		} catch {
 			return null;
 		}
-		const module = MODULES[url.hostname];
-		const link = (url.pathname + url.search).replace(/^\/+/, '');
-		return module && link ? { module, link } : null;
+		const module_id = MODULES[url.hostname];
+		// Like fmd-server: the path (and query) relative to the module's RootURL.
+		const link = url.pathname + url.search;
+		return module_id && link !== '/' ? { module_id, link } : null;
+	};
+
+	const series = (module_id: string, link: string): SeriesInfo | null => {
+		const known = SERIES[link];
+		if (!known || !Object.values(MODULES).includes(module_id)) return null;
+		const { count, downloaded, ...info } = known;
+		// Oldest first, as FMD2 modules list chapters.
+		const chapters = Array.from({ length: count }, (_, i) => ({
+			name: `Chapter ${i + 1}`,
+			link: `${link}/chapter/${i + 1}`,
+			downloaded: i < downloaded
+		}));
+		return { ...info, module_id, link, chapters };
+	};
+
+	let nextTaskId = 100;
+	/** Queues `task` as fmd-server's T23 will: one task named after its chapters. */
+	const createTask = (task: NewTask): TaskProgress => {
+		const queued: TaskProgress = {
+			id: nextTaskId++,
+			title: task.title,
+			chapters: task.chapters.map((c) => c.name).join(', '),
+			status: 'queued',
+			done: 0,
+			total: task.chapters.length * 20,
+			bytes_per_sec: 0
+		};
+		tasks.push(queued);
+		return queued;
 	};
 
 	const settings = createMockSettings();
+	const lists = createMockLists();
+	const modules = (): ModuleSummary[] =>
+		settings.listModules().map((m) => ({
+			...m,
+			capabilities: { update_list: true, info: true, download: true, account: false },
+			...lists.summary(m.id)
+		}));
 	// Login succeeds for any non-empty username and password, like a module that accepts them.
 	const accounts: Record<string, AccountInfo> = {
 		ehentai: {
@@ -259,17 +337,52 @@ export function createMockBackend(): MockBackend {
 	};
 
 	const fetch = async (req: Request): Promise<Response> => {
-		const { pathname } = new URL(req.url);
+		const { pathname, searchParams } = new URL(req.url);
 		const route = `${req.method} ${pathname}`;
 
 		if (route === 'GET /api/inbox') return json(inbox);
 		if (route === 'GET /api/tasks') return json(tasks);
+		if (route === 'POST /api/tasks') {
+			// Untrusted input: check the shape instead of trusting the generated type.
+			const body = (await req.json()) as Partial<NewTask> | null;
+			if (!body || typeof body.title !== 'string' || !Array.isArray(body.chapters)) {
+				return json({ status: 400, detail: 'expected a task' }, 400);
+			}
+			if (body.chapters.length === 0) {
+				return json({ status: 422, detail: 'no chapters to download', field: 'chapters' }, 422);
+			}
+			return json(createTask(body as NewTask), 201);
+		}
+		if (route === 'GET /api/series') {
+			const info = series(searchParams.get('module') ?? '', searchParams.get('link') ?? '');
+			return info
+				? json(info)
+				: json({ status: 404, title: 'Not Found', detail: 'series not found' }, 404);
+		}
 		if (route === 'GET /api/logs') return json(logs);
 		if (route === 'GET /api/jobs') return json(jobs);
 		if (route === 'GET /api/settings') return json(settings.getSettings());
 		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
 		if (route === 'POST /api/preview-rename') {
 			return json(settings.previewRename((await req.json()) as SaveToSettings));
+		}
+		if (route === 'GET /api/modules') return json(modules());
+		if (route === 'GET /api/lists/search') return json(lists.search(searchParams));
+		if (route === 'GET /api/lists/facets') return json(lists.facets(searchParams));
+		const listJob = /^POST \/api\/lists\/([^/]+)\/(update|import-db|cancel)$/.exec(route);
+		if (listJob?.[1]) {
+			const module = decodeURIComponent(listJob[1]);
+			if (!modules().some((m) => m.id === module)) return json({ status: 404 }, 404);
+			if (listJob[2] === 'cancel') {
+				return lists.cancel(module)
+					? new Response(null, { status: 202 })
+					: json({ status: 409, detail: 'no list job is running' }, 409);
+			}
+			const job = listJob[2] === 'update' ? 'update' : 'import_db';
+			if (!lists.start(module, job)) {
+				return json({ status: 409, detail: 'a list job is already running' }, 409);
+			}
+			return json({ module_id: module, job }, 202);
 		}
 		if (route === 'GET /api/accounts') return json(Object.values(accounts));
 		const account =
@@ -304,7 +417,6 @@ export function createMockBackend(): MockBackend {
 			entry.status = entry.username && passwords[entry.module] ? 'valid' : 'invalid';
 			return json(entry);
 		}
-		if (route === 'GET /api/modules') return json(settings.listModules());
 		const moduleSettings = /^(GET|PATCH) \/api\/modules\/([^/]+)\/settings$/.exec(route);
 		if (moduleSettings?.[2]) {
 			const id = decodeURIComponent(moduleSettings[2]);
@@ -396,6 +508,7 @@ export function createMockBackend(): MockBackend {
 				}
 				emit('job.state', job);
 			}
+			lists.tick((event) => emit(`job.lists.${event.kind}`, event));
 			// Late enough not to disturb the smoke tests, early enough to see in `npm run dev:mock`.
 			if (ticks === 30) {
 				const item: InboxItem = {

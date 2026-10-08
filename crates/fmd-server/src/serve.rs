@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use fmd_core::settings::write_websitebypass_config;
-use fmd_store::{ACCOUNTS_KEY_FILE, AppDb};
+use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, ListsDb};
 use thiserror::Error;
 use tokio::net::TcpListener;
 
@@ -13,7 +13,7 @@ use crate::{AppState, CoverConfig, Idle, LogBuffer, SystemTools, build_router, m
 /// What [`serve`] needs.
 pub struct ServeConfig {
     pub bind: SocketAddr,
-    /// Holds `app.db`, the Lua tree (`lua/`) and the cover cache (`covers/`); created when missing.
+    /// Holds `app.db`, `lists.db`, the Lua tree (`lua/`) and the cover cache (`covers/`); created when missing.
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
     pub auth: Option<String>,
@@ -36,7 +36,7 @@ pub enum ServeError {
         path: PathBuf,
         source: std::io::Error,
     },
-    #[error("app.db: {0}")]
+    #[error("app.db or lists.db: {0}")]
     Store(#[from] fmd_store::StoreError),
     #[error("settings: {0}")]
     Settings(#[from] fmd_core::settings::SettingsError),
@@ -57,9 +57,11 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         source,
     })?;
     let db_path = config.data_dir.join("app.db");
-    // Opening the store and loading the settings block.
+    let lists_path = config.data_dir.join("lists.db");
+    // Opening the stores and loading the settings block.
     let state = tokio::task::spawn_blocking(move || -> Result<AppState, ServeError> {
-        Ok(AppState::new(AppDb::open(db_path)?)?)
+        let lists = ListsDb::open(lists_path)?;
+        Ok(AppState::new(AppDb::open(db_path)?)?.with_lists(lists))
     })
     .await
     .map_err(std::io::Error::other)??;
