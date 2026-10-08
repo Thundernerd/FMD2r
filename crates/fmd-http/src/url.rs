@@ -66,7 +66,7 @@ fn poschar(c: u8, s: &[u8], offset: usize, escape: &[u8]) -> usize {
 /// splits a URL into `(host, path)` where host is `proto://host[:port]` (`https://` when
 /// the URL has no scheme) and path starts with `/`. Either may be empty. A host is only
 /// recognised when it contains a dot or comes with a scheme or port.
-pub(crate) fn split_url(url: &str) -> (String, String) {
+pub fn split_url(url: &str) -> (String, String) {
     fn cleanuri(u: &mut Vec<u8>) {
         while u.first().is_some_and(|b| matches!(b, b'.' | b':' | b'/')) {
             u.remove(0);
