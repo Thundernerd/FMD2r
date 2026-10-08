@@ -665,6 +665,7 @@ dependencies = [
  "fmd-http",
  "mlua",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tracing",
  "tracing-subscriber",
