@@ -28,6 +28,8 @@ CREATE VIRTUAL TABLE masterlist_fts USING fts5 (
     prefix = '2 3'
 );
 
+-- MasterListRepo::replace_module drops masterlist_ai/masterlist_ad inside its transaction and
+-- recreates them from sqlite_master afterwards, syncing the index with set-based statements.
 CREATE TRIGGER masterlist_ai AFTER INSERT ON masterlist BEGIN
     INSERT INTO masterlist_fts (rowid, title, alttitles, authors, artists, genres, summary)
     VALUES (new.id, new.title, new.alttitles, new.authors, new.artists, new.genres, new.summary);

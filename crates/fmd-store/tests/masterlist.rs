@@ -131,4 +131,56 @@ fn fts_stays_in_sync_on_upsert_and_replace() {
     assert_eq!(links(&db, "piece", &none), ["/1"]);
     assert_eq!(links(&db, "bleach", &none), ["/9"]);
     assert_eq!(repo.count(None).unwrap(), 2);
+
+    // The per-row sync still works after a bulk replace.
+    repo.upsert("m", &listing("/5", "Dragon Ball", "", "")).unwrap();
+    assert_eq!(links(&db, "dragon", &none), ["/5"]);
+    repo.replace_module("m", Vec::<MangaListing>::new()).unwrap();
+    assert!(links(&db, "dragon", &none).is_empty());
+    assert_eq!(links(&db, "", &none), ["/9"]);
+}
+
+#[test]
+fn failed_replace_leaves_list_and_index_untouched() {
+    let (_dir, db) = open();
+    let repo = db.masterlist();
+    let duplicate = [listing("/x", "Bleach", "", ""), listing("/x", "Bleach", "", "")];
+    assert!(repo.replace_module("m", duplicate).is_err());
+
+    let none = SearchFilters::default();
+    assert_eq!(links(&db, "one piece", &none), ["/1", "/2"]);
+    assert!(links(&db, "bleach", &none).is_empty());
+    repo.upsert("m", &listing("/5", "Dragon Ball", "", "")).unwrap();
+    assert_eq!(links(&db, "dragon", &none), ["/5"]);
+}
+
+#[test]
+fn bulk_import_of_100k_rows_is_fast() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = ListsDb::open(dir.path().join("lists.db")).unwrap();
+    let rows = (0..100_000).map(|i| MangaListing {
+        link: format!("/manga/{i}"),
+        title: format!("Synthetic title {i}"),
+        alttitles: format!("Alt {i}"),
+        authors: "Author".into(),
+        genres: "Action, Comedy".into(),
+        summary: "A fairly short synthetic summary of the series.".into(),
+        numchapter: 10,
+        ..MangaListing::default()
+    });
+
+    let start = std::time::Instant::now();
+    db.masterlist().replace_module("bulk", rows).unwrap();
+    let elapsed = start.elapsed();
+
+    // The target is >= 100k rows/s in release builds; the bound is generous for debug builds and
+    // slow CI machines.
+    assert!(elapsed.as_secs() < 30, "import took {elapsed:?}");
+    assert_eq!(db.masterlist().count(Some("bulk")).unwrap(), 100_000);
+    let hits = db
+        .masterlist()
+        .search("title 99999", &SearchFilters::default(), PageRequest { offset: 0, limit: 10 })
+        .unwrap();
+    assert_eq!(hits.entries[0].listing.link, "/manga/99999");
+    eprintln!("imported 100k rows in {elapsed:?}");
 }

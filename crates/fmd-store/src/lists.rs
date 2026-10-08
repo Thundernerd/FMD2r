@@ -92,6 +92,9 @@ pub struct MasterListRepo<'a> {
     db: &'a Db,
 }
 
+/// The per-row insert/delete triggers that keep `masterlist_fts` in sync.
+const BULK_TRIGGERS: [&str; 2] = ["masterlist_ai", "masterlist_ad"];
+
 const INSERT: &str = "INSERT INTO masterlist
     (module_id, link, title, alttitles, authors, artists, genres, status, summary, numchapter, added_jdn)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
@@ -132,8 +135,11 @@ fn entry_from_row(row: &Row<'_>) -> rusqlite::Result<MasterListEntry> {
 }
 
 impl MasterListRepo<'_> {
-    /// Replaces the whole list of `module_id` with `rows` in one transaction (the bulk import
-    /// path: one prepared statement, FTS kept in sync by triggers).
+    /// Replaces the whole list of `module_id` with `rows` in one transaction. This is the bulk
+    /// import path: the per-row FTS triggers are dropped for the duration of the transaction (and
+    /// recreated from their stored SQL before commit, or restored by the rollback on error), the
+    /// rows go through one prepared statement, and the index is synced with two set-based
+    /// statements. This is several times faster than letting the triggers fire per row.
     pub fn replace_module<I>(&self, module_id: &str, rows: I) -> Result<()>
     where
         I: IntoIterator,
@@ -141,12 +147,38 @@ impl MasterListRepo<'_> {
     {
         let mut conn = self.db.lock();
         let tx = conn.transaction()?;
+        let triggers: Vec<(String, String)> = {
+            let mut stmt = tx.prepare(
+                "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name IN (?1, ?2)",
+            )?;
+            let rows = stmt.query_map(BULK_TRIGGERS, |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        for (name, _) in &triggers {
+            tx.execute_batch(&format!("DROP TRIGGER \"{name}\""))?;
+        }
+        tx.execute(
+            "INSERT INTO masterlist_fts
+                (masterlist_fts, rowid, title, alttitles, authors, artists, genres, summary)
+             SELECT 'delete', id, title, alttitles, authors, artists, genres, summary
+             FROM masterlist WHERE module_id = ?1",
+            [module_id],
+        )?;
         tx.execute("DELETE FROM masterlist WHERE module_id = ?1", [module_id])?;
         {
             let mut stmt = tx.prepare_cached(INSERT)?;
             for row in rows {
                 execute_insert(&mut stmt, module_id, row.borrow())?;
             }
+        }
+        tx.execute(
+            "INSERT INTO masterlist_fts (rowid, title, alttitles, authors, artists, genres, summary)
+             SELECT id, title, alttitles, authors, artists, genres, summary
+             FROM masterlist WHERE module_id = ?1",
+            [module_id],
+        )?;
+        for (_, sql) in &triggers {
+            tx.execute_batch(sql)?;
         }
         tx.commit()?;
         Ok(())
