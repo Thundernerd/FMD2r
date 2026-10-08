@@ -49,3 +49,29 @@ jobs:
           name: libfmdxpath-linux-x86_64
           path: crates/xpath-fpc/build/libfmdxpath.so
           if-no-files-found: error
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run check
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Smoke tests
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
