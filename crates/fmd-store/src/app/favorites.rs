@@ -44,6 +44,21 @@ pub struct Favorite {
     pub cover_url: Option<String>,
 }
 
+/// A favorite with its state and dates, as an importer restores it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedFavorite {
+    pub favorite: NewFavorite,
+    pub status: String,
+    pub current_chapter: u32,
+    pub enabled: bool,
+    /// Unix milliseconds.
+    pub date_added: i64,
+    /// Unix milliseconds.
+    pub date_last_checked: Option<i64>,
+    /// Unix milliseconds.
+    pub date_last_updated: Option<i64>,
+}
+
 const COLUMNS: &str = "id, module_id, link, title, status, current_chapter, save_to, enabled, \
      sort_order, date_added, date_last_checked, date_last_updated, cover_url";
 
@@ -93,6 +108,37 @@ impl<'a> FavoriteRepo<'a> {
                 new.save_to,
                 new.cover_url,
                 now_ms()
+            ],
+            favorite_from_row,
+        )?)
+    }
+
+    /// Adds a favorite at the end of the list with its state and dates kept as given. Fails if
+    /// the module already has a favorite with this link.
+    pub fn import(&self, imported: &ImportedFavorite) -> Result<Favorite> {
+        let conn = self.db.lock();
+        let new = &imported.favorite;
+        Ok(conn.query_row(
+            &format!(
+                "INSERT INTO favorites (module_id, link, title, save_to, cover_url, status,
+                    current_chapter, enabled, sort_order, date_added, date_last_checked,
+                    date_last_updated)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, {}, ?9, ?10, ?11)
+                 RETURNING {COLUMNS}",
+                next_sort_order("favorites")
+            ),
+            params![
+                new.module_id,
+                new.link,
+                new.title,
+                new.save_to,
+                new.cover_url,
+                imported.status,
+                imported.current_chapter,
+                imported.enabled,
+                imported.date_added,
+                imported.date_last_checked,
+                imported.date_last_updated
             ],
             favorite_from_row,
         )?)
