@@ -166,7 +166,7 @@ export interface paths {
 		};
 		/**
 		 * Server-sent event stream
-		 * @description Named events: `task.progress` (TaskProgress), `inbox.new` (InboxItem), `job.state` (JobState), `log` (LogLine). Each frame's data is the JSON payload.
+		 * @description Named events: `task.progress` (TaskProgress), `inbox.new` (InboxItem), `job.state` (JobState), `log` (LogLine), `account.state` (AccountStateChange). Each frame's data is the JSON payload.
 		 */
 		get: operations['events'];
 		put?: never;
@@ -255,6 +255,65 @@ export interface paths {
 		 *     Nothing is stored unless the whole patch is valid.
 		 */
 		patch: operations['patchModuleSettings'];
+		trace?: never;
+	};
+	'/api/accounts': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** The accounts of every module with account support, by module ID. */
+		get: operations['listAccounts'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/accounts/{module}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		/**
+		 * Change a module's username, password or enabled flag. New credentials make the status
+		 *     `unknown` until the next login. Turning the account on or off runs the module's
+		 *     `OnAccountState`.
+		 */
+		put: operations['putAccount'];
+		post?: never;
+		/** Clear a module's credentials and cookies and turn its account off. */
+		delete: operations['deleteAccount'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/accounts/{module}/login': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Log in with the module's `OnLogin`, then its `OnAccountState`; answers once the login is
+		 *     done, with the status the module set. `account.state` events announce the start and the end.
+		 */
+		post: operations['loginAccount'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
 		trace?: never;
 	};
 }
@@ -1154,6 +1213,40 @@ export interface components {
 			/** @default fpc */
 			backend: components['schemas']['XPathBackend'];
 		};
+		/** @description A module's account. The password is never returned; `has_password` says whether one is set. */
+		AccountInfo: {
+			enabled: boolean;
+			has_password: boolean;
+			/** @description The module ID. */
+			module: string;
+			/** @description The module's name. */
+			name: string;
+			status: components['schemas']['AccountState'];
+			username: string;
+		};
+		/**
+		 * @description The fields to change; a missing field keeps its value. Not `Debug`, so the password cannot
+		 *     be logged.
+		 */
+		AccountRequest: {
+			enabled?: boolean | null;
+			/**
+			 * Format: password
+			 * @description Write-only.
+			 */
+			password?: string | null;
+			username?: string | null;
+		};
+		/**
+		 * @description An account's status (`TAccountStatus`, baseunits/WebsiteModules.pas:78).
+		 * @enum {string}
+		 */
+		AccountState: 'unknown' | 'checking' | 'valid' | 'invalid';
+		/** @description An account's status changed (`account.state`): a login started or finished. */
+		AccountStateChange: {
+			module: string;
+			status: components['schemas']['AccountState'];
+		};
 	};
 	responses: never;
 	parameters: never;
@@ -1630,6 +1723,151 @@ export interface operations {
 			};
 			/** @description A value is invalid or a setting unknown; `field` names it */
 			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	listAccounts: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The accounts */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['AccountInfo'][];
+				};
+			};
+		};
+	};
+	putAccount: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['AccountRequest'];
+			};
+		};
+		responses: {
+			/** @description The updated account */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['AccountInfo'];
+				};
+			};
+			/** @description No loaded module with account support has that ID */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A login of the account is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	deleteAccount: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The account is cleared */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description No loaded module with account support has that ID */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A login of the account is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	loginAccount: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The account after the login */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['AccountInfo'];
+				};
+			};
+			/** @description No loaded module with account support has that ID */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The module has no login, or a login is already running */
+			409: {
 				headers: {
 					[name: string]: unknown;
 				};
