@@ -2,6 +2,7 @@
 
 pub(crate) mod accounts;
 pub(crate) mod downloaded_chapters;
+pub(crate) mod events;
 pub(crate) mod tasks;
 
 use std::path::Path;
@@ -11,6 +12,7 @@ use crate::db::Db;
 use crate::error::Result;
 use accounts::AccountRepo;
 use downloaded_chapters::DownloadedChaptersRepo;
+use events::EventRepo;
 use tasks::TaskRepo;
 
 const MIGRATIONS: &[&str] = &[include_str!("../migrations/app_v1.sql")];
@@ -47,5 +49,10 @@ impl AppDb {
     /// Module accounts; credentials are encrypted and decrypted with `cipher`.
     pub fn accounts<'a>(&'a self, cipher: &'a dyn Cipher) -> AccountRepo<'a> {
         AccountRepo::new(&self.db, cipher)
+    }
+
+    /// Inbox and history events.
+    pub fn events(&self) -> EventRepo<'_> {
+        EventRepo::new(&self.db)
     }
 }
