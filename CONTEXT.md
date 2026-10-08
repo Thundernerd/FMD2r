@@ -15,3 +15,10 @@ _Avoid_: plugin, connector, extension, source
 **Host API**:
 The set of globals, objects and functions FMD2r exposes to modules, matching upstream FMD2 behaviour so modules run unmodified.
 _Avoid_: Lua bindings, SDK
+
+**Runs cleanly**:
+A module loads, and its hooks run without Lua errors or calls to Host API functions FMD2r lacks. Every upstream module must meet this bar.
+
+**Matches upstream**:
+For the same inputs, a module running on FMD2r gives the same results it gives on upstream FMD2. Checked directly for a curated set of modules, and for the rest through Host API conformance.
+_Avoid_: compatible (without saying which bar)
