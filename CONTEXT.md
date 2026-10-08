@@ -22,3 +22,7 @@ A module loads, and its hooks run without Lua errors or calls to Host API functi
 **Matches upstream**:
 For the same inputs, a module running on FMD2r gives the same results it gives on upstream FMD2. Checked directly for a curated set of modules, and for the rest through Host API conformance.
 _Avoid_: compatible (without saying which bar)
+
+**Catalog**:
+Everything FMD2r knows each website offers: the per-website manga lists, seeded from FMD2-DB and refreshed by updating a website's list. FMD2r can always rebuild it, so it is not the user's data.
+_Avoid_: manga list (when meaning all websites), database
