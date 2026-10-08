@@ -9,5 +9,12 @@ publish = false
 workspace = true
 
 [dependencies]
+fmd-http = { path = "../fmd-http" }
+log = "0.4"
 mlua.workspace = true
+rquickjs = "0.14"
 thiserror.workspace = true
+
+[dev-dependencies]
+fmd-testkit = { path = "../fmd-testkit" }
+tempfile.workspace = true
