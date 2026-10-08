@@ -3,6 +3,9 @@
 pub(crate) mod accounts;
 pub(crate) mod downloaded_chapters;
 pub(crate) mod events;
+pub(crate) mod module_files;
+pub(crate) mod module_settings;
+pub(crate) mod settings;
 pub(crate) mod tasks;
 
 use std::path::Path;
@@ -13,6 +16,9 @@ use crate::error::Result;
 use accounts::AccountRepo;
 use downloaded_chapters::DownloadedChaptersRepo;
 use events::EventRepo;
+use module_files::ModuleFileRepo;
+use module_settings::ModuleSettingsRepo;
+use settings::SettingsRepo;
 use tasks::TaskRepo;
 
 const MIGRATIONS: &[&str] = &[include_str!("../migrations/app_v1.sql")];
@@ -54,5 +60,20 @@ impl AppDb {
     /// Inbox and history events.
     pub fn events(&self) -> EventRepo<'_> {
         EventRepo::new(&self.db)
+    }
+
+    /// Per-module options, HTTP and limit overrides, and cookie jars.
+    pub fn module_settings(&self) -> ModuleSettingsRepo<'_> {
+        ModuleSettingsRepo::new(&self.db)
+    }
+
+    /// Application settings (key → JSON).
+    pub fn settings(&self) -> SettingsRepo<'_> {
+        SettingsRepo::new(&self.db)
+    }
+
+    /// Lua files synced from upstream.
+    pub fn module_files(&self) -> ModuleFileRepo<'_> {
+        ModuleFileRepo::new(&self.db)
     }
 }

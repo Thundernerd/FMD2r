@@ -18,6 +18,9 @@ mod sql;
 pub use app::AppDb;
 pub use app::accounts::{Account, AccountRepo, AccountStatus};
 pub use app::downloaded_chapters::DownloadedChaptersRepo;
+pub use app::module_files::{ModuleFile, ModuleFileRepo};
+pub use app::module_settings::{ModuleSettings, ModuleSettingsRepo};
+pub use app::settings::SettingsRepo;
 pub use app::events::{Event, EventId, EventQuery, EventRepo, EventSeverity, NewEvent};
 pub use app::tasks::{
     ChapterStatus, NewChapter, NewTask, PageStatus, Task, TaskChapter, TaskId, TaskPage, TaskRepo,
