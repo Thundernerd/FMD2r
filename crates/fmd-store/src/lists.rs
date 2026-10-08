@@ -1,6 +1,7 @@
 //! `lists.db`: one master list of manga for every module, with an FTS5 index.
 
 use std::borrow::Borrow;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use rusqlite::types::Value;
@@ -9,7 +10,15 @@ use rusqlite::{Row, Statement, params, params_from_iter};
 use crate::db::Db;
 use crate::error::Result;
 
-const MIGRATIONS: &[&str] = &[include_str!("migrations/lists_v1.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("migrations/lists_v1.sql"),
+    include_str!("migrations/lists_v2.sql"),
+];
+
+/// Records that `module_id`'s list changed now, inside the transaction that changed it.
+const MARK_UPDATED: &str = "INSERT INTO list_updates (module_id, updated_at)
+    VALUES (?1, CAST(unixepoch('subsec') * 1000 AS INTEGER))
+    ON CONFLICT (module_id) DO UPDATE SET updated_at = excluded.updated_at";
 
 /// Handle to `lists.db`. Clone it to share between threads.
 #[derive(Clone)]
@@ -87,6 +96,31 @@ pub struct SearchResults {
     pub entries: Vec<MasterListEntry>,
 }
 
+/// How many listings carry one genre or status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FacetCount {
+    pub value: String,
+    pub count: u64,
+}
+
+/// The genres and statuses of a set of listings, from [`MasterListRepo::facets`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Facets {
+    pub genres: Vec<FacetCount>,
+    pub statuses: Vec<FacetCount>,
+}
+
+/// A module's list at a glance, from [`MasterListRepo::summaries`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListSummary {
+    pub module_id: String,
+    /// Titles listed.
+    pub count: u64,
+    /// When the list was last updated or imported (even if that added nothing), in Unix
+    /// milliseconds.
+    pub updated_at: Option<i64>,
+}
+
 /// Repository for the master list. Obtain it with [`ListsDb::masterlist`].
 pub struct MasterListRepo<'a> {
     db: &'a Db,
@@ -99,8 +133,9 @@ const INSERT: &str = "INSERT INTO masterlist
     (module_id, link, title, alttitles, authors, artists, genres, status, summary, numchapter, added_jdn)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
 
-fn execute_insert(stmt: &mut Statement<'_>, module_id: &str, l: &MangaListing) -> Result<()> {
-    stmt.execute(params![
+/// Inserts `l`; returns the number of rows changed (0 when a conflict clause skipped it).
+fn execute_insert(stmt: &mut Statement<'_>, module_id: &str, l: &MangaListing) -> Result<usize> {
+    Ok(stmt.execute(params![
         module_id,
         l.link,
         l.title,
@@ -112,8 +147,7 @@ fn execute_insert(stmt: &mut Statement<'_>, module_id: &str, l: &MangaListing) -
         l.summary,
         l.numchapter,
         l.added_jdn
-    ])?;
-    Ok(())
+    ])?)
 }
 
 fn entry_from_row(row: &Row<'_>) -> rusqlite::Result<MasterListEntry> {
@@ -182,6 +216,7 @@ impl MasterListRepo<'_> {
         for (_, sql) in &triggers {
             tx.execute_batch(sql)?;
         }
+        tx.execute(MARK_UPDATED, [module_id])?;
         tx.commit()?;
         Ok(())
     }
@@ -197,7 +232,40 @@ impl MasterListRepo<'_> {
                 summary = excluded.summary, numchapter = excluded.numchapter,
                 added_jdn = excluded.added_jdn"
         ))?;
-        execute_insert(&mut stmt, module_id, listing)
+        execute_insert(&mut stmt, module_id, listing)?;
+        Ok(())
+    }
+
+    /// Adds the listings whose link `module_id` does not list yet, in one transaction, and keeps
+    /// the stored ones as they are, like FMD2's `INSERT OR IGNORE` (baseunits/DBDataProcess.pas:1089).
+    /// Returns how many were added.
+    pub fn insert_new<I>(&self, module_id: &str, rows: I) -> Result<u64>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<MangaListing>,
+    {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        let mut added = 0;
+        {
+            let mut stmt = tx.prepare_cached(&format!("{INSERT} ON CONFLICT DO NOTHING"))?;
+            for row in rows {
+                added += execute_insert(&mut stmt, module_id, row.borrow())? as u64;
+            }
+        }
+        tx.execute(MARK_UPDATED, [module_id])?;
+        tx.commit()?;
+        Ok(added)
+    }
+
+    /// Every link `module_id` lists.
+    pub fn links(&self, module_id: &str) -> Result<HashSet<String>> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare("SELECT link FROM masterlist WHERE module_id = ?1")?;
+        let links = stmt
+            .query_map([module_id], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(links)
     }
 
     /// Number of listings of `module_id`, or of every module for `None`.
@@ -223,38 +291,7 @@ impl MasterListRepo<'_> {
         filters: &SearchFilters,
         page: PageRequest,
     ) -> Result<SearchResults> {
-        let mut conds: Vec<String> = Vec::new();
-        let mut args: Vec<Value> = Vec::new();
-
-        if let Some(fts) = fts_query(query) {
-            conds.push(
-                "m.id IN (SELECT rowid FROM masterlist_fts WHERE masterlist_fts MATCH ?)".into(),
-            );
-            args.push(fts.into());
-        }
-        if !filters.module_ids.is_empty() {
-            let marks = vec!["?"; filters.module_ids.len()].join(", ");
-            conds.push(format!("m.module_id IN ({marks})"));
-            args.extend(filters.module_ids.iter().cloned().map(Value::from));
-        }
-        for (genres, op) in [
-            (&filters.include_genres, "LIKE"),
-            (&filters.exclude_genres, "NOT LIKE"),
-        ] {
-            for genre in genres {
-                conds.push(format!("m.genres {op} ? ESCAPE '\\'"));
-                args.push(format!("%{}%", escape_like(genre)).into());
-            }
-        }
-        if let Some(status) = &filters.status {
-            conds.push("m.status = ?".into());
-            args.push(status.clone().into());
-        }
-        let where_clause = if conds.is_empty() {
-            String::new()
-        } else {
-            format!("WHERE {}", conds.join(" AND "))
-        };
+        let (where_clause, mut args) = where_clause(query, filters);
 
         let conn = self.db.lock();
         let total = conn.query_row(
@@ -278,6 +315,110 @@ impl MasterListRepo<'_> {
     }
 }
 
+impl MasterListRepo<'_> {
+    /// How many of the listings [`MasterListRepo::search`] matches carry each genre and each
+    /// status. `genres` is FMD2's comma-separated list (e.g. `Action, Comedy`); each trimmed,
+    /// non-empty item counts once per listing. Both are ordered by count, then name.
+    pub fn facets(&self, query: &str, filters: &SearchFilters) -> Result<Facets> {
+        let (where_clause, args) = where_clause(query, filters);
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT m.genres, m.status FROM masterlist m {where_clause}"
+        ))?;
+        let mut rows = stmt.query(params_from_iter(&args))?;
+        let mut genres: HashMap<String, u64> = HashMap::new();
+        let mut statuses: HashMap<String, u64> = HashMap::new();
+        while let Some(row) = rows.next()? {
+            let row_genres: &str = row.get_ref(0)?.as_str().unwrap_or_default();
+            let mut seen: HashSet<&str> = HashSet::new();
+            for genre in row_genres
+                .split(',')
+                .map(str::trim)
+                .filter(|g| !g.is_empty())
+            {
+                if seen.insert(genre) {
+                    *genres.entry(genre.to_owned()).or_default() += 1;
+                }
+            }
+            let status: String = row.get(1)?;
+            *statuses.entry(status).or_default() += 1;
+        }
+        Ok(Facets {
+            genres: sorted_counts(genres),
+            statuses: sorted_counts(statuses),
+        })
+    }
+
+    /// The size and last change of every module's list, by module ID.
+    pub fn summaries(&self) -> Result<Vec<ListSummary>> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare(
+            "SELECT module_id, SUM(n), MAX(updated_at) FROM (
+                 SELECT module_id, COUNT(*) AS n, NULL AS updated_at
+                 FROM masterlist GROUP BY module_id
+                 UNION ALL
+                 SELECT module_id, 0, updated_at FROM list_updates
+             ) GROUP BY module_id ORDER BY module_id",
+        )?;
+        let summaries = stmt
+            .query_map([], |r| {
+                Ok(ListSummary {
+                    module_id: r.get(0)?,
+                    count: r.get(1)?,
+                    updated_at: r.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(summaries)
+    }
+}
+
+/// `(value, count)` pairs by descending count, then value.
+fn sorted_counts(counts: HashMap<String, u64>) -> Vec<FacetCount> {
+    let mut counts: Vec<FacetCount> = counts
+        .into_iter()
+        .map(|(value, count)| FacetCount { value, count })
+        .collect();
+    counts.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.value.cmp(&b.value)));
+    counts
+}
+
+/// The `WHERE` clause (empty when nothing filters) and its arguments for
+/// [`MasterListRepo::search`] and [`MasterListRepo::facets`], over `masterlist m`.
+fn where_clause(query: &str, filters: &SearchFilters) -> (String, Vec<Value>) {
+    let mut conds: Vec<String> = Vec::new();
+    let mut args: Vec<Value> = Vec::new();
+
+    if let Some(fts) = fts_query(query) {
+        conds
+            .push("m.id IN (SELECT rowid FROM masterlist_fts WHERE masterlist_fts MATCH ?)".into());
+        args.push(fts.into());
+    }
+    if !filters.module_ids.is_empty() {
+        let marks = vec!["?"; filters.module_ids.len()].join(", ");
+        conds.push(format!("m.module_id IN ({marks})"));
+        args.extend(filters.module_ids.iter().cloned().map(Value::from));
+    }
+    for (genres, op) in [
+        (&filters.include_genres, "LIKE"),
+        (&filters.exclude_genres, "NOT LIKE"),
+    ] {
+        for genre in genres {
+            conds.push(format!("m.genres {op} ? ESCAPE '\\'"));
+            args.push(format!("%{}%", escape_like(genre)).into());
+        }
+    }
+    if let Some(status) = &filters.status {
+        conds.push("m.status = ?".into());
+        args.push(status.clone().into());
+    }
+    if conds.is_empty() {
+        (String::new(), args)
+    } else {
+        (format!("WHERE {}", conds.join(" AND ")), args)
+    }
+}
+
 /// Turns user input into an FTS5 query over `title` and `alttitles`: each word becomes a quoted
 /// prefix term, so FTS5 operators in the input are treated as text. `None` when the input has no
 /// searchable characters.
@@ -294,4 +435,52 @@ fn escape_like(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('%', "\\%")
         .replace('_', "\\_")
+}
+
+/// Reads the list in an FMD2 per-site database (`<module id>.db`, as FMD2-DB ships them): the
+/// `masterlist` table of baseunits/DBDataProcess.pas:143-153, `jdn` read as `added_jdn`. FMD2
+/// leaves SQLite's type affinity alone, so a value of the wrong type converts the way SQLite
+/// casts it, NULL becomes empty or 0, and text that is not UTF-8 is decoded lossily.
+pub fn read_fmd2_list(path: impl AsRef<Path>) -> Result<Vec<MangaListing>> {
+    let conn = rusqlite::Connection::open_with_flags(
+        path.as_ref(),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    let mut stmt = conn.prepare(
+        "SELECT link, title, alttitles, authors, artists, genres, status, summary,
+                CAST(numchapter AS INTEGER), CAST(jdn AS INTEGER)
+         FROM masterlist",
+    )?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(MangaListing {
+                link: lossy_text(r, 0)?,
+                title: lossy_text(r, 1)?,
+                alttitles: lossy_text(r, 2)?,
+                authors: lossy_text(r, 3)?,
+                artists: lossy_text(r, 4)?,
+                genres: lossy_text(r, 5)?,
+                status: lossy_text(r, 6)?,
+                summary: lossy_text(r, 7)?,
+                numchapter: r
+                    .get::<_, Option<i64>>(8)?
+                    .map_or(0, |n| u32::try_from(n).unwrap_or(0)),
+                added_jdn: r.get::<_, Option<i64>>(9)?.unwrap_or(0),
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// Column `i` as text: NULL is empty, numbers are formatted, bytes decoded lossily.
+fn lossy_text(row: &Row<'_>, i: usize) -> rusqlite::Result<String> {
+    use rusqlite::types::ValueRef;
+    Ok(match row.get_ref(i)? {
+        ValueRef::Null => String::new(),
+        ValueRef::Integer(n) => n.to_string(),
+        ValueRef::Real(x) => x.to_string(),
+        ValueRef::Text(bytes) | ValueRef::Blob(bytes) => {
+            String::from_utf8_lossy(bytes).into_owned()
+        }
+    })
 }

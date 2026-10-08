@@ -50,10 +50,10 @@ fn fresh_lists_db_runs_all_migrations_and_reopen_is_a_noop() {
     let path = dir.path().join("lists.db");
 
     let db = ListsDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 1);
+    assert_eq!(db.schema_version().unwrap(), 2);
     drop(db);
     let db = ListsDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 1);
+    assert_eq!(db.schema_version().unwrap(), 2);
     drop(db);
 
     let names = tables(&path);

@@ -8,7 +8,7 @@ mod settings;
 mod sync;
 
 use std::path::PathBuf;
-use std::sync::atomic::AtomicI32;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock};
 
 use fmd_http::ModuleHttp;
@@ -292,6 +292,12 @@ impl Module {
         }
     }
 
+    /// Sets `MODULE.CurrentDirectoryIndex`, as the update-list manager does before it walks a
+    /// directory's pages (baseunits/uUpdateThread.pas:702).
+    pub fn set_current_directory_index(&self, index: i32) {
+        self.def_write().current_directory_index = index;
+    }
+
     /// The module's shared HTTP state: its cookie jar and connection queue.
     pub fn http(&self) -> &ModuleHttp {
         &self.http
@@ -311,6 +317,24 @@ impl Module {
     /// The module's account, present while `AccountSupport` is true.
     pub fn account(&self) -> Option<Arc<Account>> {
         lock(&self.account).clone()
+    }
+
+    /// `ActiveTaskCount`: the module's running download tasks, as `MODULE.ActiveTaskCount`
+    /// shows it (baseunits/WebsiteModules.pas:388-396).
+    pub fn active_task_count(&self) -> i32 {
+        self.active_task_count.load(Ordering::SeqCst)
+    }
+
+    /// `IncActiveTaskCount`, when a download task starts (baseunits/WebsiteModules.pas:388-391,
+    /// called from baseunits/uDownloadsManager.pas:466).
+    pub fn inc_active_task_count(&self) {
+        self.active_task_count.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// `DecActiveTaskCount`, when a download task ends (baseunits/WebsiteModules.pas:393-396,
+    /// called from baseunits/uDownloadsManager.pas:491).
+    pub fn dec_active_task_count(&self) {
+        self.active_task_count.fetch_sub(1, Ordering::SeqCst);
     }
 
     /// Changes the account's fields with `change`, under the account's lock so a concurrent

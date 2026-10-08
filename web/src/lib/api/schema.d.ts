@@ -333,6 +333,91 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/lists/facets': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Genre and status counts of the titles a search matches. */
+		get: operations['listFacets'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/lists/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Search the manga lists. */
+		get: operations['searchLists'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/lists/{module}/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Stop a module's running list job. */
+		post: operations['cancelListJob'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/lists/{module}/import-db': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Replace a module's list with its FMD2-DB dump (`update_lists.db_url`). */
+		post: operations['importListDb'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/lists/{module}/update': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Update a module's list by running its update-list callbacks. */
+		post: operations['updateList'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -874,10 +959,20 @@ export interface components {
 			/** @description The options the module declares with `AddOption*`, in declaration order. */
 			options: components['schemas']['ModuleOptionSetting'][];
 		};
-		/** @description A loaded module, for the module picker. */
+		/** @description A loaded module, for the module pickers. */
 		ModuleSummary: {
+			capabilities: components['schemas']['ModuleCapabilities'];
 			category: string;
 			id: string;
+			/** @description Whether a list update or import of it is running. */
+			list_job_running: boolean;
+			/**
+			 * Format: int64
+			 * @description Titles in its list (`lists.db`).
+			 */
+			list_size: number;
+			/** @description RFC 3339 time its list last changed through an update or import. */
+			list_updated?: string | null;
 			name: string;
 			/** @description How many options the module declares. */
 			option_count: number;
@@ -1315,6 +1410,104 @@ export interface components {
 		AccountStateChange: {
 			module: string;
 			status: components['schemas']['AccountState'];
+		};
+		/** @description How many matching titles carry a genre or status. */
+		FacetValue: {
+			/** Format: int64 */
+			count: number;
+			value: string;
+		};
+		/** @description One step of a list job, for the Discover page's progress (`job.lists.<kind>` events). */
+		ListEvent: {
+			/**
+			 * Format: int64
+			 * @description Work items of the current step done.
+			 */
+			done: number;
+			/** @description Why it failed. */
+			error?: string | null;
+			job: components['schemas']['ListJobKind'];
+			kind: components['schemas']['ListEventKind'];
+			module_id: string;
+			/** @description FMD2's status text, or the module's own. */
+			status_text: string;
+			/**
+			 * Format: int64
+			 * @description Titles added (update) or imported (import), once finished.
+			 */
+			titles?: number | null;
+			/**
+			 * Format: int64
+			 * @description Work items of the current step; 0 when unknown.
+			 */
+			total: number;
+		};
+		/**
+		 * @description What happened to a list job.
+		 * @enum {string}
+		 */
+		ListEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
+		/** @description The genres and statuses of the titles a search matches, most common first. */
+		ListFacets: {
+			genres: components['schemas']['FacetValue'][];
+			statuses: components['schemas']['FacetValue'][];
+		};
+		/** @description One title of a module's list. */
+		ListItem: {
+			/**
+			 * Format: int64
+			 * @description Julian day number of the day the title was first listed.
+			 */
+			added_jdn: number;
+			alttitles: string;
+			artists: string;
+			authors: string;
+			genres: string[];
+			/** @description The title's link without the module's host, as the series page takes it. */
+			link: string;
+			module_id: string;
+			/** Format: int32 */
+			numchapter: number;
+			/** @description As in the `status` filter; empty when unknown. */
+			status: string;
+			title: string;
+		};
+		/**
+		 * @description Which job a [`ListEvent`] is about.
+		 * @enum {string}
+		 */
+		ListJobKind: 'update' | 'import_db';
+		/** @description A list job that was started. */
+		ListJobStarted: {
+			job: components['schemas']['ListJobKind'];
+			module_id: string;
+		};
+		/** @description What a module can do, from the callbacks and flags it declares. */
+		ModuleCapabilities: {
+			/** @description It has an account to log in with (`AccountSupport`). */
+			account: boolean;
+			/** @description It downloads chapters: it declares `OnGetPageNumber`. */
+			download: boolean;
+			/** @description It reads manga info: it declares `OnGetInfo` (`InformationAvailable` aside). */
+			info: boolean;
+			/** @description Its list can be updated: it declares `OnGetNameAndLink`. */
+			update_list: boolean;
+		};
+		/** @description One page of search results. */
+		SearchPage: {
+			items: components['schemas']['ListItem'][];
+			/**
+			 * Format: int32
+			 * @description 1-based.
+			 */
+			page: number;
+			/** Format: int32 */
+			page_size: number;
+			/**
+			 * Format: int64
+			 * @description Matches across all pages.
+			 */
+			total: number;
 		};
 	};
 	responses: never;
@@ -2013,6 +2206,226 @@ export interface operations {
 			};
 			/** @description The module has no login, or a login is already running */
 			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	listFacets: {
+		parameters: {
+			query?: {
+				/** @description Only this module's list; every module's when absent. */
+				module?: string;
+				/** @description As in `/api/lists/search`. */
+				q?: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Genre and status counts */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ListFacets'];
+				};
+			};
+			/** @description No lists.db */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	searchLists: {
+		parameters: {
+			query?: {
+				/** @description Only this module's list; every module's when absent. */
+				module?: string;
+				/** @description Words that must each start a word of the title or an alternative title. */
+				q?: string;
+				/** @description Comma-separated genres that must all occur. */
+				genres_include?: string;
+				/** @description Comma-separated genres none of which may occur. */
+				genres_exclude?: string;
+				/**
+				 * @description Exact status: `0` completed, `1` ongoing, `2` hiatus, `3` cancelled
+				 *     (`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).
+				 */
+				status?: string;
+				/** @description 1-based page number. */
+				page?: number;
+				/** @description Results per page, 50 by default. */
+				page_size?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description One page of matches, by title */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SearchPage'];
+				};
+			};
+			/** @description No lists.db */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	cancelListJob: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Cancelling; a `job.lists.cancelled` event follows */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description No list job of the module is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description List jobs are not available */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	importListDb: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Started; progress follows as `job.lists.*` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ListJobStarted'];
+				};
+			};
+			/** @description No module with that ID is loaded */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A list job of the module is already running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description List jobs are not available */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	updateList: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				module: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Started; progress follows as `job.lists.*` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ListJobStarted'];
+				};
+			};
+			/** @description No module with that ID is loaded */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A list job of the module is already running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description List jobs are not available */
+			503: {
 				headers: {
 					[name: string]: unknown;
 				};

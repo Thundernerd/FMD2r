@@ -1,4 +1,5 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
+import { createMockLists } from './mock-lists';
 import { Invalid, createMockSettings } from './mock-settings';
 import type { paths } from './schema';
 import type {
@@ -9,6 +10,7 @@ import type {
 	JobState,
 	LogLevel,
 	LogLine,
+	ModuleSummary,
 	NewTask,
 	SaveToSettings,
 	SeriesInfo,
@@ -288,6 +290,13 @@ export function createMockBackend(): MockBackend {
 	};
 
 	const settings = createMockSettings();
+	const lists = createMockLists();
+	const modules = (): ModuleSummary[] =>
+		settings.listModules().map((m) => ({
+			...m,
+			capabilities: { update_list: true, info: true, download: true, account: false },
+			...lists.summary(m.id)
+		}));
 	// Login succeeds for any non-empty username and password, like a module that accepts them.
 	const accounts: Record<string, AccountInfo> = {
 		ehentai: {
@@ -357,6 +366,24 @@ export function createMockBackend(): MockBackend {
 		if (route === 'POST /api/preview-rename') {
 			return json(settings.previewRename((await req.json()) as SaveToSettings));
 		}
+		if (route === 'GET /api/modules') return json(modules());
+		if (route === 'GET /api/lists/search') return json(lists.search(searchParams));
+		if (route === 'GET /api/lists/facets') return json(lists.facets(searchParams));
+		const listJob = /^POST \/api\/lists\/([^/]+)\/(update|import-db|cancel)$/.exec(route);
+		if (listJob?.[1]) {
+			const module = decodeURIComponent(listJob[1]);
+			if (!modules().some((m) => m.id === module)) return json({ status: 404 }, 404);
+			if (listJob[2] === 'cancel') {
+				return lists.cancel(module)
+					? new Response(null, { status: 202 })
+					: json({ status: 409, detail: 'no list job is running' }, 409);
+			}
+			const job = listJob[2] === 'update' ? 'update' : 'import_db';
+			if (!lists.start(module, job)) {
+				return json({ status: 409, detail: 'a list job is already running' }, 409);
+			}
+			return json({ module_id: module, job }, 202);
+		}
 		if (route === 'GET /api/accounts') return json(Object.values(accounts));
 		const account =
 			/^(PUT|DELETE) \/api\/accounts\/([^/]+)$|^POST \/api\/accounts\/([^/]+)\/login$/.exec(route);
@@ -390,7 +417,6 @@ export function createMockBackend(): MockBackend {
 			entry.status = entry.username && passwords[entry.module] ? 'valid' : 'invalid';
 			return json(entry);
 		}
-		if (route === 'GET /api/modules') return json(settings.listModules());
 		const moduleSettings = /^(GET|PATCH) \/api\/modules\/([^/]+)\/settings$/.exec(route);
 		if (moduleSettings?.[2]) {
 			const id = decodeURIComponent(moduleSettings[2]);
@@ -482,6 +508,7 @@ export function createMockBackend(): MockBackend {
 				}
 				emit('job.state', job);
 			}
+			lists.tick((event) => emit(`job.lists.${event.kind}`, event));
 			// Late enough not to disturb the smoke tests, early enough to see in `npm run dev:mock`.
 			if (ticks === 30) {
 				const item: InboxItem = {
