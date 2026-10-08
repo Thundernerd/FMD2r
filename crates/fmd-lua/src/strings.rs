@@ -589,20 +589,14 @@ fn first_char(lua: &Lua, value: Value) -> mlua::Result<u8> {
 
 /// Registers the `fmd.strings` library, whose `New` and `Create` make a standalone list
 /// (baseunits/lua/LuaStrings.pas:20-24, :215-220, :266-273; the `fmd.` prefix is
-/// baseunits/lua/LuaPackage.pas:23). It goes in `package.preload` until the package searcher
-/// arrives (T06).
+/// baseunits/lua/LuaPackage.pas:23).
 pub(crate) fn register(lua: &Lua) -> crate::Result<()> {
-    let open = lua.create_function(|lua, ()| {
+    crate::package::add_lib(lua, "strings", |lua| {
         let lib = lua.create_table()?;
         let create = lua.create_function(|lua, ()| Ok(LuaStrings::new().build(lua)?))?;
         lib.set("New", create.clone())?;
         lib.set("Create", create)?;
         Ok(lib)
     })?;
-    let preload: mlua::Table = lua
-        .globals()
-        .get::<mlua::Table>("package")?
-        .get("preload")?;
-    preload.set("fmd.strings", open)?;
     Ok(())
 }

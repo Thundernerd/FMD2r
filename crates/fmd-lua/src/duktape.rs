@@ -9,7 +9,7 @@ use mlua::IntoLuaMulti;
 use rquickjs::context::EvalOptions;
 use rquickjs::{Context, Ctx, FromJs, Function, Value};
 
-use crate::LuaDir;
+use crate::{LuaDir, app_data_or_default};
 
 /// Bounds on one `ExecJS` call. FMD2's Duktape has none; a script that exceeds them fails like
 /// any script error, so a runaway script cannot hang or crash a worker.
@@ -42,14 +42,10 @@ pub(crate) struct JsSettings {
 /// Why a script produced no result. The message is what Duktape's error coerces to.
 struct JsError(String);
 
-/// Puts `fmd.duktape` in `package.preload`, like `LuaPackage.AddLib`
+/// Registers `fmd.duktape`, like `LuaPackage.AddLib`
 /// (baseunits/lua/LuaDuktape.pas:39).
 pub(crate) fn register(lua: &mlua::Lua) -> mlua::Result<()> {
-    let preload: mlua::Table = lua
-        .globals()
-        .get::<mlua::Table>("package")?
-        .get("preload")?;
-    preload.set("fmd.duktape", lua.create_function(|lua, ()| open(lua))?)
+    crate::package::add_lib(lua, "duktape", open)
 }
 
 /// Opens the library table, like `luaopen_duktape` (baseunits/lua/LuaDuktape.pas:32-36).
@@ -88,13 +84,6 @@ fn exec_js(lua: &mlua::Lua, code: mlua::Value) -> mlua::Result<mlua::MultiValue>
             Ok(mlua::MultiValue::new())
         }
     }
-}
-
-/// A copy of the runtime's app data of type `T`, or its default when none is set.
-fn app_data_or_default<T: Clone + Default + 'static>(lua: &mlua::Lua) -> T {
-    lua.app_data_ref::<T>()
-        .map(|data| data.clone())
-        .unwrap_or_default()
 }
 
 /// `ExecJS` (baseunits/Duktape.pas:77-104): evaluates `source` as global code in a fresh heap

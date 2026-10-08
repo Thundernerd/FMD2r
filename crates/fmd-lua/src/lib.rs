@@ -8,6 +8,8 @@ mod globals;
 mod http;
 mod libs;
 mod memory_stream;
+mod module;
+mod package;
 mod strings;
 pub mod xquery;
 
@@ -23,6 +25,12 @@ pub use http::{
 pub use libs::subprocess;
 pub use memory_stream::{LuaMemoryStream, MemoryStream};
 pub use mlua;
+pub use module::{
+    Account, AccountState, CriticalSection, LoadFailure, LoadReport, MemorySettingsStore, Module,
+    ModuleDef, ModuleOption, ModuleRegistry, ModuleSettingsStore, OptionKind, OptionValue,
+    SettingsStoreError,
+};
+pub use package::PackageCache;
 pub use strings::{ListIndexError, LuaStrings, StringList};
 
 /// Errors raised by the Lua runtime.
@@ -48,6 +56,13 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Clone, Default)]
 struct LuaDir(PathBuf);
 
+/// A copy of the runtime's app data of type `T`, or its default when none is set.
+fn app_data_or_default<T: Clone + Default + 'static>(lua: &mlua::Lua) -> T {
+    lua.app_data_ref::<T>()
+        .map(|data| data.clone())
+        .unwrap_or_default()
+}
+
 /// One Lua state with the FMD2 Host API installed.
 pub struct Runtime {
     lua: mlua::Lua,
@@ -56,15 +71,16 @@ pub struct Runtime {
 impl Runtime {
     /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
     /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with the `fmd.*` Host API libraries
-    /// implemented so far (`fmd.strings`, [`crypto`], `fmd.duktape`, gzip, fileutil, logger, subprocess, imagepuzzle,
-    /// mangafoxwatermark, the pcre2 stub, and the `pb` C module) in `package.preload`. FMD2's package
-    /// searcher (:124) comes with T06.
+    /// implemented so far (`fmd.env`, `fmd.strings`, [`crypto`], `fmd.duktape`, gzip, fileutil, logger,
+    /// subprocess, imagepuzzle, mangafoxwatermark and the pcre2 stub) behind FMD2's package searcher
+    /// (:125), and the `pb` C module in `package.preload`.
     pub fn new() -> Result<Runtime> {
         // SAFETY: FMD2 opens every standard library, including `debug` (used by e.g.
         // lua/modules/MangaPlus.lua), which mlua only loads in unsafe mode. Later tickets also
         // need C modules (`pb`), which the safe mode forbids.
         let lua =
             unsafe { mlua::Lua::unsafe_new_with(mlua::StdLib::ALL, mlua::LuaOptions::default()) };
+        package::register(&lua)?;
         strings::register(&lua)?;
         crypto::register(&lua)?;
         lua.set_app_data(LuaDir(PathBuf::from("lua")));
@@ -83,6 +99,22 @@ impl Runtime {
     /// `lua` in the working directory, like `DukLibDir` (baseunits/Duktape.pas:13).
     pub fn set_lua_dir(&self, dir: impl Into<PathBuf>) {
         self.lua.set_app_data(LuaDir(dir.into()));
+    }
+
+    /// Makes `require 'fmd.<name>'` return the table `open` builds, like FMD2's `AddLib`
+    /// (baseunits/lua/LuaPackage.pas:132-139). Registering a name again replaces it.
+    pub fn register_host_lib<F>(&self, name: &str, open: F) -> Result<()>
+    where
+        F: Fn(&mlua::Lua) -> mlua::Result<mlua::Table> + 'static,
+    {
+        package::add_lib(&self.lua, name, open)?;
+        Ok(())
+    }
+
+    /// Makes `require` share `cache` of compiled Lua files with every other runtime using it.
+    /// Each runtime starts with a cache of its own.
+    pub fn set_package_cache(&self, cache: PackageCache) {
+        self.lua.set_app_data(cache);
     }
 
     /// Sets the time and memory bounds of every `fmd.duktape.ExecJS` call.
@@ -130,6 +162,16 @@ impl Runtime {
     /// `LuaBaseRegisterAll` (baseunits/lua/LuaBase.pas:86-92). Installing again replaces them.
     pub fn install_globals(&self, globals: Globals) -> Result<()> {
         globals::install(&self.lua, globals)?;
+        Ok(())
+    }
+
+    /// Sets the global `MODULE` to an object over `module`, as FMD2 does before running a
+    /// module's callbacks (`LuaPushMe`, baseunits/lua/LuaWebsiteModules.pas:820-823). Every
+    /// runtime given the same module shares its properties, options, cookies, `Storage`,
+    /// `Guardian` and `Account`.
+    pub fn set_module(&self, module: &std::sync::Arc<Module>) -> Result<()> {
+        let object = module::build_module(&self.lua, module)?;
+        self.lua.globals().set("MODULE", object)?;
         Ok(())
     }
 

@@ -17,28 +17,24 @@ use crate::LuaMemoryStream;
 /// Opens one library, returning its table, like the `luaopen_*` functions FMD2 registers.
 type Opener = fn(&Lua) -> mlua::Result<Table>;
 
-/// Every host library, by the name modules `require` it under.
+/// Every host library, by its name after the `fmd.` prefix modules `require` it under.
 const LIBS: &[(&str, Opener)] = &[
-    ("fmd.fileutil", fileutil::open),
-    ("fmd.gzip", gzip::open),
-    ("fmd.imagepuzzle", imagepuzzle::open),
-    ("fmd.logger", logger::open),
-    ("fmd.mangafoxwatermark", mangafoxwatermark::open),
-    ("fmd.pcre2", pcre2::open),
-    ("fmd.subprocess", subprocess::open),
+    ("fileutil", fileutil::open),
+    ("gzip", gzip::open),
+    ("imagepuzzle", imagepuzzle::open),
+    ("logger", logger::open),
+    ("mangafoxwatermark", mangafoxwatermark::open),
+    ("pcre2", pcre2::open),
+    ("subprocess", subprocess::open),
 ];
 
-/// Makes every host library loadable with `require`.
-///
-/// FMD2 resolves `fmd.<lib>` in its own searcher (baseunits/lua/LuaPackage.pas:71-79); until
-/// the module loader installs that searcher, `package.preload` serves the same names without
-/// touching the filesystem.
+/// Makes every host library loadable with `require`, through FMD2's searcher
+/// (baseunits/lua/LuaPackage.pas:71-79), and `pb` through `package.preload`.
 pub(crate) fn register(lua: &Lua) -> mlua::Result<()> {
-    let preload: Table = lua.globals().get::<Table>("package")?.get("preload")?;
     for &(name, open) in LIBS {
-        let loader: Function = lua.create_function(move |lua, ()| open(lua))?;
-        preload.set(name, loader)?;
+        crate::package::add_lib(lua, name, open)?;
     }
+    let preload: Table = lua.globals().get::<Table>("package")?.get("preload")?;
     pb::register(lua, &preload)
 }
 

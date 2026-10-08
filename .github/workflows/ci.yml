@@ -21,6 +21,9 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+      # Prints how many upstream modules pass `Init` (the test itself fails on any failure).
+      - name: Module corpus
+        run: cargo test -p fmd-lua --test module_corpus -- --nocapture
 
   # crates/xpath-fpc is outside the root workspace: it needs fpc, which the check job doesn't install.
   xpath-fpc:
