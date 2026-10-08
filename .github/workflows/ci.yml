@@ -21,3 +21,31 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+
+  # crates/xpath-fpc is outside the root workspace: it needs fpc, which the check job doesn't install.
+  xpath-fpc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/xpath-fpc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FPC
+        run: sudo apt-get update && sudo apt-get install -y fpc
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/xpath-fpc
+      - name: Format
+        run: cargo fmt -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test
+      - name: Build libfmdxpath.so
+        run: ./build.sh build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libfmdxpath-linux-x86_64
+          path: crates/xpath-fpc/build/libfmdxpath.so
+          if-no-files-found: error

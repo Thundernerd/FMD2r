@@ -31,3 +31,5 @@ rustc-ice-*.txt
 /fixtures/local
 /userdata
 /data
+# xpath-fpc: default output of crates/xpath-fpc/build.sh
+/crates/xpath-fpc/build
