@@ -10,6 +10,7 @@ use tokio::sync::watch;
 
 use crate::ApiError;
 use crate::auth::Auth;
+use crate::covers::{CoverConfig, CoverModules, Covers};
 use crate::events::{EventBus, ServerEvent};
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
@@ -34,6 +35,7 @@ pub struct AppState {
     pub(crate) jobs: JobRegistry,
     pub(crate) modules: Arc<dyn ModuleCatalog>,
     pub(crate) tools: Arc<dyn ToolProbe>,
+    pub(crate) covers: Option<Arc<Covers>>,
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) started: Instant,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
@@ -41,7 +43,7 @@ pub struct AppState {
 
 impl AppState {
     /// State backed by `db`, serving the embedded web UI, with untyped store settings, an idle
-    /// engine, no jobs, modules or tool checks, and no auth configured.
+    /// engine, no jobs, modules, covers or tool checks, and no auth configured.
     pub fn new(db: AppDb) -> Self {
         let events = EventBus::new();
         Self {
@@ -51,6 +53,7 @@ impl AppState {
             jobs: JobRegistry::new(),
             modules: Arc::new(Idle),
             tools: Arc::new(NoTools),
+            covers: None,
             data_dir: None,
             started: Instant::now(),
             shutdown: Arc::new(watch::channel(false).0),
@@ -109,6 +112,13 @@ impl AppState {
     /// Checks external tools with `tools` for `GET /api/about`.
     pub fn with_tools(mut self, tools: impl ToolProbe) -> Self {
         self.tools = Arc::new(tools);
+        self
+    }
+
+    /// Serves `GET /api/covers`, fetching covers through `modules` and caching them as `config`
+    /// says. Without it, every cover is a 404.
+    pub fn with_covers(mut self, config: CoverConfig, modules: impl CoverModules) -> Self {
+        self.covers = Some(Arc::new(Covers::new(config, Arc::new(modules))));
         self
     }
 

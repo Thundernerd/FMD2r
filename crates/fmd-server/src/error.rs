@@ -27,6 +27,9 @@ pub enum ApiError {
     /// A request an extractor could not parse (bad JSON body, bad query string, ...).
     #[error("{1}")]
     Rejected(StatusCode, String),
+    /// An upstream site failed to deliver (e.g. a cover).
+    #[error("{0}")]
+    BadGateway(String),
     #[error(transparent)]
     Store(#[from] fmd_store::StoreError),
     #[error("internal error: {0}")]
@@ -54,6 +57,7 @@ impl ApiError {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Rejected(status, _) => *status,
+            Self::BadGateway(_) => StatusCode::BAD_GATEWAY,
             Self::Store(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -63,7 +67,11 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
         // Server errors go to the log in full; clients only learn that something failed.
-        let detail = if status.is_server_error() {
+        let detail = if let Self::BadGateway(msg) = &self {
+            // Sites failing is routine, not a server fault: the client may see why.
+            tracing::debug!(target: "fmd_server", "{msg}");
+            msg.clone()
+        } else if status.is_server_error() {
             tracing::error!(target: "fmd_server", "{self}");
             "internal server error".to_owned()
         } else {

@@ -26,6 +26,7 @@ pub struct Settings {
     pub module_updater: ModuleUpdaterSettings,
     pub server: ServerSettings,
     pub xpath: XPathSettings,
+    pub covers: CoverSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -486,4 +487,26 @@ pub enum XPathBackend {
     Fpc,
     /// The pure-Rust engine.
     Native,
+}
+
+/// The cover proxy's disk cache (`/api/covers`). No FMD2 counterpart: FMD2 keeps the one cover it
+/// shows in memory (baseunits/uGetMangaInfosThread.pas:168-191).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct CoverSettings {
+    /// Hours a cached cover is served before the site is asked whether it changed; 0 asks every
+    /// time.
+    pub revalidate_after_hours: u32,
+    /// Size cap of the cover cache in MiB; least recently used covers are evicted past it.
+    /// Minimum 1.
+    pub cache_size_mb: u32,
+}
+
+impl Default for CoverSettings {
+    fn default() -> Self {
+        Self {
+            revalidate_after_hours: 7 * 24,
+            cache_size_mb: 256,
+        }
+    }
 }
