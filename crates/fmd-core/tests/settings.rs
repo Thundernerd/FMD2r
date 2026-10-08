@@ -65,6 +65,10 @@ fn fresh_db_returns_fmd2_defaults() {
 
     // FMD2's own XPath engine until the native one reaches parity (T35).
     assert_eq!(s.xpath.backend, XPathBackend::Fpc);
+
+    // Covers are revalidated weekly and capped at 256 MiB.
+    assert_eq!(s.covers.revalidate_after_hours, 168);
+    assert_eq!(s.covers.cache_size_mb, 256);
 }
 
 #[test]

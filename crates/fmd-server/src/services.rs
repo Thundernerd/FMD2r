@@ -2,6 +2,8 @@
 //! not depend on the engine crates.
 
 use serde::Serialize;
+
+use crate::covers::{CoverModules, CoverSession};
 use utoipa::ToSchema;
 
 /// The download engine (T20). Queue endpoints (T23) add the methods they need.
@@ -36,7 +38,7 @@ pub struct LoadFailure {
     pub inbox_id: Option<String>,
 }
 
-/// Stand-in until the real services exist: no tasks, no modules.
+/// Stand-in until the real services exist: no tasks, no modules (so no covers).
 pub struct Idle;
 
 impl DownloadEngine for Idle {}
@@ -44,5 +46,11 @@ impl DownloadEngine for Idle {}
 impl ModuleCatalog for Idle {
     fn report(&self) -> ModulesReport {
         ModulesReport::default()
+    }
+}
+
+impl CoverModules for Idle {
+    fn cover_session(&self, _id: &str) -> Option<CoverSession> {
+        None
     }
 }

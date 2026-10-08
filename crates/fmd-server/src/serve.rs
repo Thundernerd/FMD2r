@@ -7,12 +7,12 @@ use fmd_store::AppDb;
 use thiserror::Error;
 use tokio::net::TcpListener;
 
-use crate::{AppState, LogBuffer, SystemTools, build_router};
+use crate::{AppState, CoverConfig, Idle, LogBuffer, SystemTools, build_router};
 
 /// What [`serve`] needs.
 pub struct ServeConfig {
     pub bind: SocketAddr,
-    /// Holds `app.db` and the Lua tree (`lua/`); created when missing.
+    /// Holds `app.db`, the Lua tree (`lua/`) and the cover cache (`covers/`); created when missing.
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
     pub auth: Option<String>,
@@ -57,7 +57,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let mut state = AppState::new(db)
         .with_logs(config.logs)
         .with_data_dir(&data_dir)
-        .with_tools(SystemTools::new(bypass_config));
+        .with_tools(SystemTools::new(bypass_config))
+        .with_covers(CoverConfig::new(data_dir.join("covers")), Idle);
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }
