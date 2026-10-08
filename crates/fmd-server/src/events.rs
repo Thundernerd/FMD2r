@@ -80,7 +80,19 @@ pub struct TaskProgress {
 pub struct TaskStatusChange {
     pub id: i64,
     pub status: TaskState,
+    /// Why the task failed.
+    pub error: Option<String>,
 }
+
+/// A task was deleted (`task.removed`).
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct TaskRemoved {
+    pub id: i64,
+}
+
+/// The queue order changed (`task.reordered`); the data is an empty object.
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct TasksReordered {}
 
 /// A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites
 /// check, list update, module update, or any other registered job.
@@ -123,6 +135,8 @@ impl JobState {
 pub enum ServerEvent {
     TaskProgress(TaskProgress),
     TaskStatus(TaskStatusChange),
+    TaskRemoved(TaskRemoved),
+    TasksReordered,
     Job(JobState),
     /// A new inbox item; its SSE id is the `events` row id, so clients can resume.
     InboxNew(InboxItem),
@@ -138,6 +152,8 @@ impl ServerEvent {
         match self {
             Self::TaskProgress(_) => "task.progress",
             Self::TaskStatus(_) => "task.status",
+            Self::TaskRemoved(_) => "task.removed",
+            Self::TasksReordered => "task.reordered",
             Self::Job(_) => "job.state",
             Self::InboxNew(_) => "inbox.new",
             Self::Log(_) => "log",
@@ -157,6 +173,8 @@ impl ServerEvent {
         let event = match self {
             Self::TaskProgress(p) => event.json_data(p),
             Self::TaskStatus(s) => event.json_data(s),
+            Self::TaskRemoved(r) => event.json_data(r),
+            Self::TasksReordered => event.json_data(TasksReordered {}),
             Self::Job(j) => event.json_data(j),
             Self::InboxNew(item) => event.id(item.id.clone()).json_data(item),
             Self::Log(line) => event.json_data(line),
@@ -198,7 +216,9 @@ impl EventBus {
 
 /// Server-sent event stream.
 #[utoipa::path(get, path = "/api/events", tag = "events", operation_id = "events",
-    description = "Named events: `task.progress` (TaskProgress), `task.status` (TaskStatusChange), \
+    description = "Named events: `task.progress` (TaskProgress, at most 4 a second per task), \
+        `task.status` (TaskStatusChange), `task.removed` (TaskRemoved), `task.reordered` \
+        (TasksReordered), \
         `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), `account.state` \
         (AccountStateChange), and `job.lists.started|progress|finished|cancelled|failed` \
         (ListEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox \
@@ -231,7 +251,8 @@ pub(crate) async fn stream(
             .boxed(),
         None => stream::empty().boxed(),
     };
-    let live = stream::select(stream::select(bus, jobs), accounts);
+    let tasks = crate::task_events::stream(state.engine.clone());
+    let live = stream::select(stream::select(bus, jobs), stream::select(accounts, tasks));
     let last_id = headers
         .get("last-event-id")
         .and_then(|v| v.to_str().ok())

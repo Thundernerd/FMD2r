@@ -1,6 +1,6 @@
 //! Starting the module updater with the server and running it on its schedule.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -11,63 +11,76 @@ use fmd_core::module_updater::{
 use fmd_core::modules::StoreModuleSettings;
 use fmd_core::settings::{ModuleUpdaterSettings, write_websitebypass_config};
 use fmd_http::HttpClient;
-use fmd_store::KeyFileCipher;
+use fmd_lua::{PoolConfig, WorkerPool};
+use fmd_store::{AppDb, KeyFileCipher};
 use tokio::time::Instant;
 
 use crate::AppState;
 
-/// Loads the modules in `lua_dir`, registers the `modules` job, then runs it at startup and
-/// every `module_updater.interval_minutes` while `module_updater.auto_update` is on. A tree with
-/// no modules yet is synced at startup either way (the first-run bootstrap).
+/// The Lua modules the server runs: loaded from `<data dir>/lua`, run on one worker pool by the
+/// download engine, and reloaded there by the module updater.
+pub(crate) struct LuaRuntime {
+    pub(crate) modules: Arc<LiveModules>,
+    pub(crate) pool: Arc<WorkerPool>,
+    pub(crate) http: HttpClient,
+}
+
+impl LuaRuntime {
+    /// Loads the modules in `lua_dir` with their settings (options, cookies, accounts) read
+    /// through `db`, credentials and cookies decrypted by the key in `key_file`. Blocks.
+    pub(crate) fn load(db: AppDb, lua_dir: &Path, key_file: &Path) -> Result<LuaRuntime, String> {
+        let cipher = KeyFileCipher::open_or_create(key_file)
+            .map_err(|e| format!("{}: {e}", key_file.display()))?;
+        let modules = Arc::new(LiveModules::load(
+            lua_dir,
+            Arc::new(StoreModuleSettings::new(db, Arc::new(cipher))),
+        ));
+        let http = HttpClient::new().map_err(|e| e.to_string())?;
+        let mut config = PoolConfig::new(http.clone());
+        config.lua_dir = lua_dir.to_owned();
+        let pool = Arc::new(WorkerPool::new(config).map_err(|e| e.to_string())?);
+        Ok(LuaRuntime {
+            modules,
+            pool,
+            http,
+        })
+    }
+}
+
+/// Registers the `modules` job over `runtime`'s modules, then runs it at startup and every
+/// `module_updater.interval_minutes` while `module_updater.auto_update` is on. A tree with no
+/// modules yet is synced at startup either way (the first-run bootstrap).
 ///
 /// The repository, token and keep-last-good settings are read once: changes apply on the next
 /// start. `flaresolverr_url` is written back into `websitebypass_config.json` whenever a sync
 /// replaces it with upstream's.
-///
-/// Module settings (options, cookies, accounts) are read through `app.db`, with credentials and
-/// cookies decrypted by the key in `key_file`.
-pub(crate) async fn start(
+pub(crate) fn start(
     state: AppState,
+    runtime: &LuaRuntime,
     lua_dir: PathBuf,
-    key_file: PathBuf,
     flaresolverr_url: String,
 ) {
     let settings = state.settings.get().module_updater.clone();
-    let db = state.db.clone();
-    let jobs = state.jobs.clone();
+    let config = UpdaterConfig::from_settings(&settings, &lua_dir);
     let dir = lua_dir.clone();
-    let job = tokio::task::spawn_blocking(move || -> Result<ModuleUpdaterJob, String> {
-        let cipher = KeyFileCipher::open_or_create(&key_file)
-            .map_err(|e| format!("{}: {e}", key_file.display()))?;
-        let modules = Arc::new(LiveModules::load(
-            &dir,
-            Arc::new(StoreModuleSettings::new(db.clone(), Arc::new(cipher))),
-        ));
-        let http = HttpClient::new().map_err(|e| e.to_string())?;
-        let config = UpdaterConfig::from_settings(&settings, &dir);
-        let updater = ModuleUpdater::new(config, db, http, modules).with_after_sync({
-            let dir = dir.clone();
-            move |report| {
-                if report.downloaded.iter().any(|f| f == WEBSITEBYPASS_CONFIG)
-                    && let Err(e) = write_websitebypass_config(&dir, &flaresolverr_url)
-                {
-                    tracing::warn!(target: "fmd_server", "writing {WEBSITEBYPASS_CONFIG}: {e}");
-                }
-            }
-        });
-        Ok(ModuleUpdaterJob::new(Arc::new(updater), jobs))
-    })
-    .await;
-    let job = match job.map_err(|e| e.to_string()).and_then(|built| built) {
-        Ok(job) => job,
-        Err(e) => {
-            tracing::error!(target: "fmd_server", "module updater: {e}");
-            return;
+    let updater = ModuleUpdater::new(
+        config,
+        state.db.clone(),
+        runtime.http.clone(),
+        runtime.modules.clone(),
+    )
+    .with_pool(runtime.pool.clone())
+    .with_after_sync(move |report| {
+        if report.downloaded.iter().any(|f| f == WEBSITEBYPASS_CONFIG)
+            && let Err(e) = write_websitebypass_config(&dir, &flaresolverr_url)
+        {
+            tracing::warn!(target: "fmd_server", "writing {WEBSITEBYPASS_CONFIG}: {e}");
         }
-    };
+    });
+    let job = ModuleUpdaterJob::new(Arc::new(updater), state.jobs.clone());
     state.jobs.register(job.clone());
     state.jobs.changed(ModuleUpdaterJob::ID);
-    schedule(job, state, lua_dir).await;
+    tokio::spawn(schedule(job, state, lua_dir));
 }
 
 /// The config file `write_websitebypass_config` writes, relative to the Lua dir.
