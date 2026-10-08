@@ -90,7 +90,7 @@ pub(crate) fn build_module(lua: &Lua, module: &Arc<Module>) -> mlua::Result<AnyU
     // baseunits/lua/LuaWebsiteModules.pas:1033, :1035-1036
     class = class.object("Storage", build_storage(lua, module)?);
     if let Some(account) = module.account() {
-        class = class.object("Account", build_account(lua, &account)?);
+        class = class.object("Account", build_account(lua, module, &account)?);
     }
     class.build(lua).map_err(mlua::Error::from)
 }
@@ -326,57 +326,67 @@ fn build_guardian(lua: &Lua, guardian: &Arc<CriticalSection>) -> mlua::Result<An
 }
 
 /// `Account` (`luaWebsiteModuleAccountAddMetaTable`, baseunits/lua/LuaWebsiteModules.pas:977-989).
-fn build_account(lua: &Lua, account: &Arc<Account>) -> mlua::Result<AnyUserData> {
+/// FMD2 saves the account with the rest of `modules.json` when it saves the settings
+/// (baseunits/WebsiteModules.pas:665-675); here every assignment is written to the module's
+/// settings store right away, so what a callback sets survives a restart.
+fn build_account(
+    lua: &Lua,
+    module: &Arc<Module>,
+    account: &Arc<Account>,
+) -> mlua::Result<AnyUserData> {
     let guardian = build_guardian(lua, account.guardian())?;
-    LuaClass::new(Rc::new(RefCell::new(account.clone())))
+    LuaClass::new(Rc::new(RefCell::new((module.clone(), account.clone()))))
         .property(
             "Enabled",
-            |_, a: &mut Arc<Account>| Ok(super::lock(&a.state).enabled),
-            |_, a: &mut Arc<Account>, value: Value| {
+            |_, (_, a): &mut AccountRef| Ok(super::lock(&a.state).enabled),
+            |_, (m, a): &mut AccountRef, value: Value| {
                 super::lock(&a.state).enabled = truthy(&value);
-                Ok(())
+                m.save_account().map_err(mlua::Error::external)
             },
         )
         .property(
             "Username",
-            |lua, a: &mut Arc<Account>| lua.create_string(&super::lock(&a.state).username),
-            |lua, a: &mut Arc<Account>, value: Value| {
+            |lua, (_, a): &mut AccountRef| lua.create_string(&super::lock(&a.state).username),
+            |lua, (m, a): &mut AccountRef, value: Value| {
                 let value = to_string(lua, value)?;
                 super::lock(&a.state).username = value;
-                Ok(())
+                m.save_account().map_err(mlua::Error::external)
             },
         )
         .property(
             "Password",
-            |lua, a: &mut Arc<Account>| lua.create_string(&super::lock(&a.state).password),
-            |lua, a: &mut Arc<Account>, value: Value| {
+            |lua, (_, a): &mut AccountRef| lua.create_string(&super::lock(&a.state).password),
+            |lua, (m, a): &mut AccountRef, value: Value| {
                 let value = to_string(lua, value)?;
                 super::lock(&a.state).password = value;
-                Ok(())
+                m.save_account().map_err(mlua::Error::external)
             },
         )
         .property(
             "Status",
-            |_, a: &mut Arc<Account>| Ok(super::lock(&a.state).status),
-            |lua, a: &mut Arc<Account>, value: Value| {
+            |_, (_, a): &mut AccountRef| Ok(super::lock(&a.state).status),
+            |lua, (m, a): &mut AccountRef, value: Value| {
                 let value = to_integer(lua, value)?;
                 super::lock(&a.state).status = value;
-                Ok(())
+                m.save_account().map_err(mlua::Error::external)
             },
         )
         .property(
             "Cookies",
-            |lua, a: &mut Arc<Account>| lua.create_string(&super::lock(&a.state).cookies),
-            |lua, a: &mut Arc<Account>, value: Value| {
+            |lua, (_, a): &mut AccountRef| lua.create_string(&super::lock(&a.state).cookies),
+            |lua, (m, a): &mut AccountRef, value: Value| {
                 let value = to_string(lua, value)?;
                 super::lock(&a.state).cookies = value;
-                Ok(())
+                m.save_account().map_err(mlua::Error::external)
             },
         )
         .object("Guardian", guardian)
         .build(lua)
         .map_err(mlua::Error::from)
 }
+
+/// The state behind an `Account` object: the module it belongs to and the account itself.
+type AccountRef = (Arc<Module>, Arc<Account>);
 
 type StringField = fn(&mut ModuleDef) -> &mut String;
 type IntegerField = fn(&mut ModuleDef) -> &mut i32;
