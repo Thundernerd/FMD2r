@@ -2,6 +2,8 @@ import createClient from 'openapi-fetch';
 import type { paths } from './schema';
 import type {
 	About,
+	AccountInfo,
+	AccountRequest,
 	InboxItem,
 	JobState,
 	LogLine,
@@ -76,6 +78,14 @@ export interface Api {
 	getModuleSettings(id: string): Promise<ModuleSettingsView>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
 	patchModuleSettings(id: string, patch: MergePatch): Promise<ModuleSettingsView>;
+	/** The accounts of the modules with account support. Passwords are never returned. */
+	listAccounts(): Promise<AccountInfo[]>;
+	/** Changes the given fields of a module's account; omitted fields keep their value. */
+	putAccount(module: string, account: AccountRequest): Promise<AccountInfo>;
+	/** Clears a module's credentials and cookies and turns its account off. */
+	deleteAccount(module: string): Promise<void>;
+	/** Logs in; resolves once the module's login is done. Rejects with 409 while one runs. */
+	loginAccount(module: string): Promise<AccountInfo>;
 }
 
 export interface ApiOptions {
@@ -181,6 +191,30 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 					params: { path: { id } },
 					body: patch
 				})
+			);
+		},
+		async listAccounts() {
+			return unwrap('listAccounts', await client.GET('/api/accounts'));
+		},
+		async putAccount(module, account) {
+			return unwrap(
+				'putAccount',
+				await client.PUT('/api/accounts/{module}', {
+					params: { path: { module } },
+					body: account
+				})
+			);
+		},
+		async deleteAccount(module) {
+			const { response } = await client.DELETE('/api/accounts/{module}', {
+				params: { path: { module } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'deleteAccount');
+		},
+		async loginAccount(module) {
+			return unwrap(
+				'loginAccount',
+				await client.POST('/api/accounts/{module}/login', { params: { path: { module } } })
 			);
 		}
 	};

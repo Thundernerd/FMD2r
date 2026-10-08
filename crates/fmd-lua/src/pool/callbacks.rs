@@ -33,6 +33,26 @@ pub enum Callback {
 }
 
 impl Callback {
+    /// Every callback, in `TLuaWebsiteModule`'s declaration order
+    /// (baseunits/lua/LuaWebsiteModules.pas:19-33).
+    pub const ALL: [Callback; 15] = [
+        Callback::OnBeforeUpdateList,
+        Callback::OnAfterUpdateList,
+        Callback::OnGetDirectoryPageNumber,
+        Callback::OnGetNameAndLink,
+        Callback::OnGetInfo,
+        Callback::OnTaskStart,
+        Callback::OnGetPageNumber,
+        Callback::OnGetImageURL,
+        Callback::OnBeforeDownloadImage,
+        Callback::OnDownloadImage,
+        Callback::OnSaveImage,
+        Callback::OnAfterImageSaved,
+        Callback::OnLogin,
+        Callback::OnAccountState,
+        Callback::OnCheckSite,
+    ];
+
     /// The name of the Lua function the module declared for this callback.
     pub fn function(self, def: &ModuleDef) -> Option<&str> {
         let name = match self {

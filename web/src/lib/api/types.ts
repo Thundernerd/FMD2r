@@ -23,3 +23,6 @@ export type ChapterInfo = Schemas['ChapterInfo'];
 export type SeriesStatus = Schemas['SeriesStatus'];
 export type NewTask = Schemas['NewTask'];
 export type OutputFormat = Schemas['OutputFormat'];
+export type AccountInfo = Schemas['AccountInfo'];
+export type AccountRequest = Schemas['AccountRequest'];
+export type AccountState = Schemas['AccountState'];

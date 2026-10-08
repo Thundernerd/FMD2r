@@ -1,5 +1,7 @@
 //! `fmd2r`: the FMD2r server binary plus developer CLI subcommands.
 
+mod module;
+
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
@@ -8,6 +10,7 @@ use clap::{Args, Parser, Subcommand};
 use fmd_import::{ImportOptions, PathMap};
 use fmd_server::{EventBus, LogBuffer, ServeConfig};
 use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, KeyFileCipher};
+use module::ModuleCommand;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -43,10 +46,10 @@ enum Command {
 #[derive(Args)]
 struct ServeArgs {
     /// Address to listen on.
-    #[arg(long, default_value = "127.0.0.1:8080")]
+    #[arg(long, env = "FMD2R_BIND", default_value = "127.0.0.1:8080")]
     bind: SocketAddr,
     /// Directory holding the databases.
-    #[arg(long, default_value = "data")]
+    #[arg(long, env = "FMD2R_DATA_DIR", default_value = "data")]
     data_dir: PathBuf,
     /// Password/token required for the API; leave unset for no auth.
     #[arg(long, env = "FMD2R_PASSWORD", hide_env_values = true)]
@@ -78,18 +81,6 @@ struct ImportArgs {
 }
 
 #[derive(Subcommand)]
-enum ModuleCommand {
-    /// Load the Lua website modules and report them.
-    Init,
-    /// Run `OnGetInfo` for a manga URL and print the result.
-    Info,
-    /// Run the page callbacks for a chapter URL and print the page links.
-    Pages,
-    /// Download a chapter.
-    Download,
-}
-
-#[derive(Subcommand)]
 enum XpathCommand {
     /// Evaluate an expression against an HTML document.
     Eval,
@@ -103,8 +94,7 @@ fn main() -> anyhow::Result<()> {
         Command::Serve(args) => return serve(args),
         Command::Openapi { out } => return openapi(out),
         Command::Import(args) => return import(args),
-        Command::Module(ModuleCommand::Init | ModuleCommand::Info | ModuleCommand::Pages) => "T15",
-        Command::Module(ModuleCommand::Download) => "T20",
+        Command::Module(command) => return module::run(command),
         Command::Xpath(XpathCommand::Eval) => "T35",
     };
     bail!("not implemented yet ({ticket})")
