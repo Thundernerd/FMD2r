@@ -35,14 +35,14 @@ done
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-git_() { git -C "$tmp/repo" -c advice.detachedHead=false "$@"; }
+git_checkout() { git -C "$tmp/repo" -c advice.detachedHead=false "$@"; }
 
 git init --quiet "$tmp/repo"
-git_ remote add origin "$repo"
-git_ sparse-checkout set --no-cone "/$path/"
-git_ fetch --quiet --depth 1 --filter=blob:none origin "$ref"
-git_ checkout --quiet FETCH_HEAD
-sha=$(git_ rev-parse HEAD)
+git_checkout remote add origin "$repo"
+git_checkout sparse-checkout set --no-cone "/$path/"
+git_checkout fetch --quiet --depth 1 --filter=blob:none origin "$ref"
+git_checkout checkout --quiet FETCH_HEAD
+sha=$(git_checkout rev-parse HEAD)
 
 if [[ ! -d "$tmp/repo/$path/modules" ]]; then
     echo "$repo at $ref has no $path/modules directory" >&2

@@ -81,3 +81,18 @@ fn finds_host_globals_but_not_local_definitions() {
         ])
     );
 }
+
+#[test]
+fn table_constructor_keys_are_not_references() {
+    let source = "local t = { URL = 1, [2] = 3; sleep = URL == 1 }";
+    assert_eq!(scan_host_api_names(source), names(&["URL"]));
+}
+
+#[test]
+fn hex_literals_do_not_swallow_the_next_operand() {
+    let source = "local x = 0xE-HTTP.GET(u) + 1e-5 - 0x1p-2-MODULE.ID";
+    assert_eq!(
+        scan_host_api_names(source),
+        names(&["HTTP.GET", "MODULE.ID"])
+    );
+}
