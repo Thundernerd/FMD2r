@@ -12,8 +12,18 @@ use fmd_store::{ListsDb, MangaListing, PageRequest, SearchFilters};
 
 const TITLES: usize = 100_000;
 const GENRES: [&str; 12] = [
-    "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Isekai", "Mystery", "Romance",
-    "School Life", "Shounen", "Slice of Life",
+    "Action",
+    "Adventure",
+    "Comedy",
+    "Drama",
+    "Fantasy",
+    "Horror",
+    "Isekai",
+    "Mystery",
+    "Romance",
+    "School Life",
+    "Shounen",
+    "Slice of Life",
 ];
 const WORDS: [&str; 16] = [
     "dragon", "piece", "sword", "academy", "hero", "demon", "king", "love", "night", "shadow",
@@ -22,7 +32,9 @@ const WORDS: [&str; 16] = [
 
 fn listing(i: usize) -> MangaListing {
     let word = |n: usize| WORDS[(i / n) % WORDS.len()];
-    let genres: Vec<&str> = (0..3).map(|g| GENRES[(i * 7 + g * 5) % GENRES.len()]).collect();
+    let genres: Vec<&str> = (0..3)
+        .map(|g| GENRES[(i * 7 + g * 5) % GENRES.len()])
+        .collect();
     MangaListing {
         link: format!("/manga/{i}"),
         title: format!("{} {} {} {i}", word(1), word(3), word(11)),
@@ -47,7 +59,11 @@ fn time(name: &str, runs: usize, mut f: impl FnMut()) {
         })
         .collect();
     times.sort();
-    println!("{name:<48} median {:>8.2?}  max {:>8.2?}", times[runs / 2], times[runs - 1]);
+    println!(
+        "{name:<48} median {:>8.2?}  max {:>8.2?}",
+        times[runs / 2],
+        times[runs - 1]
+    );
 }
 
 fn main() {
@@ -62,7 +78,10 @@ fn main() {
     println!("import of {TITLES} titles: {:.2?}", start.elapsed());
 
     let repo = db.masterlist();
-    let page = PageRequest { offset: 0, limit: 50 };
+    let page = PageRequest {
+        offset: 0,
+        limit: 50,
+    };
     let site = SearchFilters {
         module_ids: vec!["site".into()],
         ..SearchFilters::default()
@@ -81,7 +100,10 @@ fn main() {
         repo.search("", &site, page).unwrap();
     });
     time("search: one module, page 1000", runs, || {
-        let deep = PageRequest { offset: 50_000, limit: 50 };
+        let deep = PageRequest {
+            offset: 50_000,
+            limit: 50,
+        };
         repo.search("", &site, deep).unwrap();
     });
     time("search: 'dragon pie' in one module", runs, || {

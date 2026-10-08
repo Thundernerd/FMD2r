@@ -331,3 +331,20 @@ fn a_terminated_update_of_a_sorted_list_stores_nothing() {
     assert_eq!(outcome.added, 0);
     assert!(f.rows().is_empty());
 }
+
+#[test]
+fn a_link_repeated_within_one_page_of_a_listed_sorted_list_stops_it_too() {
+    let f = Fixture::new();
+    f.update(&without_info());
+    // `mainDataProcess.AddData` keeps a page's new links until its `Rollback`, so the repeat
+    // counts as listed (baseunits/uUpdateThread.pas:244-252).
+    f.site.set("/list/0", "/m/7 Seven\n/m/7 Seven");
+
+    f.update(&without_info());
+
+    assert_eq!(f.site.requested("/list/1"), 1);
+    assert!(
+        f.rows()
+            .contains(&("/m/7".to_string(), "Seven".to_string()))
+    );
+}

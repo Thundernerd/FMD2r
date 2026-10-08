@@ -200,11 +200,11 @@ impl ListUpdater {
         run.report("Preparing...".into());
         let threads = threads(&run.def, options);
 
-        self.after_update_list(&mut run)?;
-        self.before_update_list(&mut run)?;
+        self.update_list_callback(&mut run, false)?;
+        self.update_list_callback(&mut run, true)?;
         let pages = self.directory_page_counts(&mut run, threads)?;
         if terminate.is_terminated() {
-            self.after_update_list(&mut run)?;
+            self.update_list_callback(&mut run, false)?;
             return Ok(cancelled());
         }
 
@@ -218,7 +218,7 @@ impl ListUpdater {
             }
         }
 
-        self.before_update_list(&mut run)?;
+        self.update_list_callback(&mut run, true)?;
         let sorted = run.def.sorted_list;
         if terminate.is_terminated() && !(options.no_manga_info && !sorted) {
             return Ok(cancelled());
@@ -246,10 +246,7 @@ impl ListUpdater {
         // the stored ones that a later early stop never reaches (:743-748).
         let cancelled = terminate.is_terminated();
         if cancelled && sorted {
-            return Ok(UpdateOutcome {
-                cancelled,
-                ..UpdateOutcome::default()
-            });
+            return Ok(self::cancelled());
         }
         run.phase = ListPhase::Saving;
         run.report("Saving data...".into());
@@ -261,26 +258,23 @@ impl ListUpdater {
         })
     }
 
-    /// `OnBeforeUpdateList`, when declared; its result is not looked at
-    /// (baseunits/uUpdateThread.pas:674-675, :705-706).
-    fn before_update_list(&self, run: &mut Run<'_>) -> Result<(), ListError> {
-        if run.def.on_before_update_list.is_none() {
+    /// `OnBeforeUpdateList` (baseunits/uUpdateThread.pas:674-675, :705-706) or
+    /// `OnAfterUpdateList` (:672-673, :683-684), when declared; the result is not looked at.
+    fn update_list_callback(&self, run: &mut Run<'_>, before: bool) -> Result<(), ListError> {
+        let declared = if before {
+            &run.def.on_before_update_list
+        } else {
+            &run.def.on_after_update_list
+        };
+        if declared.is_none() {
             return Ok(());
         }
-        let pending = self.caller(run).before_update_list(run.list());
-        if let Some(reply) = callback_result(&run.def.id, pending.wait())? {
-            run.read_back(reply.value.list);
-        }
-        Ok(())
-    }
-
-    /// `OnAfterUpdateList`, when declared; its result is not looked at
-    /// (baseunits/uUpdateThread.pas:672-673, :683-684).
-    fn after_update_list(&self, run: &mut Run<'_>) -> Result<(), ListError> {
-        if run.def.on_after_update_list.is_none() {
-            return Ok(());
-        }
-        let pending = self.caller(run).after_update_list(run.list());
+        let caller = self.caller(run);
+        let pending = if before {
+            caller.before_update_list(run.list())
+        } else {
+            caller.after_update_list(run.list())
+        };
         if let Some(reply) = callback_result(&run.def.id, pending.wait())? {
             run.read_back(reply.value.list);
         }
@@ -305,10 +299,7 @@ impl ListUpdater {
         if run.def.on_get_directory_page_number.is_none() {
             return Ok(pages);
         }
-        run.phase = ListPhase::DirectoryCount;
-        run.limit = run.def.total_directory;
-        run.handed_out = 0;
-        run.finished = false;
+        run.start_phase(ListPhase::DirectoryCount, run.def.total_directory);
         check_out(
             run,
             threads,
@@ -349,10 +340,7 @@ impl ListUpdater {
             return Ok(());
         }
         run.module.set_current_directory_index(directory);
-        run.phase = ListPhase::DirectoryPages;
-        run.limit = pages;
-        run.handed_out = 0;
-        run.finished = false;
+        run.start_phase(ListPhase::DirectoryPages, pages);
         let total_directory = run.def.total_directory;
         check_out(
             run,
@@ -382,9 +370,10 @@ impl ListUpdater {
 
     /// The info of each new title (`CS_INFO`, baseunits/uUpdateThread.pas:278-307).
     fn info(&self, run: &mut Run<'_>, threads: usize, jdn: i64) -> Result<(), ListError> {
-        run.limit = i32::try_from(run.found.len()).unwrap_or(i32::MAX);
-        run.handed_out = 0;
-        run.finished = false;
+        run.start_phase(
+            ListPhase::Info,
+            i32::try_from(run.found.len()).unwrap_or(i32::MAX),
+        );
         check_out(
             run,
             threads,
@@ -413,6 +402,14 @@ impl ListUpdater {
 }
 
 impl Run<'_> {
+    /// Starts a `CheckOut` of `limit` work items (baseunits/uUpdateThread.pas:441-449).
+    fn start_phase(&mut self, phase: ListPhase, limit: i32) {
+        self.phase = phase;
+        self.limit = limit;
+        self.handed_out = 0;
+        self.finished = false;
+    }
+
     /// The `(link, name)` of new title `i`.
     fn found_title(&self, i: i32) -> (String, String) {
         usize::try_from(i)
@@ -427,6 +424,9 @@ impl Run<'_> {
         // `RemoveHostFromURLsPair` only strips hosts, and drops pairs whose link becomes
         // empty, when both lists are the same length (baseunits/uBaseUnit.pas:983-1000).
         let paired = names.len() == links.len();
+        // `mainDataProcess.AddData` holds a page's new links until the `Rollback` after it, so
+        // a link repeated within one page counts as listed the second time (:244-252).
+        let mut on_page: HashSet<String> = HashSet::new();
         for (i, link) in links.iter().enumerate() {
             let link = if paired {
                 remove_host(link)
@@ -437,7 +437,7 @@ impl Run<'_> {
                 continue;
             }
             let name = names.get(i).cloned().unwrap_or_default();
-            if pre_list && self.known.contains(&link) {
+            if pre_list && (self.known.contains(&link) || !on_page.insert(link.clone())) {
                 if self.def.sorted_list {
                     self.finished = true;
                     self.stopped_early = true;
@@ -476,7 +476,9 @@ fn threads(def: &ModuleDef, options: &UpdateOptions) -> usize {
 /// One `CheckOut` (baseunits/uUpdateThread.pas:441-449): hands out work items `0..run.limit`
 /// to at most `threads` callbacks at a time, as `GetNext` does (:842-903), and handles each
 /// result in the order handed out. Nothing more is handed out once the run is terminated or
-/// `run.finished` is set; callbacks in flight still finish.
+/// `run.finished` is set; callbacks in flight still finish. FMD2's workers take the next item
+/// as each finishes, so with several workers a slow page can make this hand out the next
+/// items a little later than FMD2 would; what is fetched and stored is the same.
 fn check_out<'r, T: 'static>(
     run: &mut Run<'r>,
     threads: usize,

@@ -10,7 +10,9 @@ use serde::Serialize;
 use thiserror::Error;
 use utoipa::ToSchema;
 
-use super::{DbImporter, ListPhase, ListProgress, ListUpdater, UpdateOptions};
+use super::{
+    DbImporter, ImportError, ListError, ListPhase, ListProgress, ListUpdater, UpdateOptions,
+};
 use crate::settings::SettingsService;
 
 /// Which job a [`ListEvent`] is about.
@@ -32,18 +34,6 @@ pub enum ListEventKind {
     Finished,
     Cancelled,
     Failed,
-}
-
-impl ListEventKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Started => "started",
-            Self::Progress => "progress",
-            Self::Finished => "finished",
-            Self::Cancelled => "cancelled",
-            Self::Failed => "failed",
-        }
-    }
 }
 
 /// One step of a list job, for the Discover page's progress (`job.lists.<kind>` events).
@@ -83,6 +73,22 @@ pub trait ListModules: Send + Sync + 'static {
 }
 
 type EventSink = dyn Fn(ListEvent) + Send + Sync;
+
+/// How a list job that did not fail ended.
+struct JobOutcome {
+    /// Titles added (update) or imported (import).
+    titles: u64,
+    cancelled: bool,
+}
+
+/// Why a list job failed.
+#[derive(Debug, Error)]
+enum JobFailure {
+    #[error(transparent)]
+    Update(#[from] ListError),
+    #[error(transparent)]
+    Import(#[from] ImportError),
+}
 
 /// Starts and cancels list jobs. Cheap to clone.
 #[derive(Clone)]
@@ -141,9 +147,11 @@ impl ListJobs {
                 let mut progress = |p: &ListProgress| events.progress(p);
                 let outcome = inner
                     .updater
-                    .update(&module, &options, terminate, &mut progress)
-                    .map_err(|e| e.to_string())?;
-                Ok((outcome.added, outcome.cancelled))
+                    .update(&module, &options, terminate, &mut progress)?;
+                Ok(JobOutcome {
+                    titles: outcome.added,
+                    cancelled: outcome.cancelled,
+                })
             },
         )
     }
@@ -157,12 +165,19 @@ impl ListJobs {
         self.start(
             module_id,
             ListJobKind::ImportDb,
-            move |inner, terminate, _| {
+            move |inner, terminate, events| {
                 let url = inner.settings.get().update_lists.db_url.clone();
-                match inner.importer.import(&id, &url, terminate) {
-                    Ok(titles) => Ok((titles, false)),
-                    Err(super::ImportError::Cancelled) => Ok((0, true)),
-                    Err(e) => Err(e.to_string()),
+                let mut status = |text: &str| events.send(ListEventKind::Progress, text.into());
+                match inner.importer.import(&id, &url, terminate, &mut status) {
+                    Ok(titles) => Ok(JobOutcome {
+                        titles,
+                        cancelled: false,
+                    }),
+                    Err(ImportError::Cancelled) => Ok(JobOutcome {
+                        titles: 0,
+                        cancelled: true,
+                    }),
+                    Err(e) => Err(e.into()),
                 }
             },
         )
@@ -184,12 +199,12 @@ impl ListJobs {
     }
 
     /// Runs `work` on a new thread unless `module_id` already has a job, reporting it as
-    /// `kind`. `work` returns the titles it added and whether it was cancelled.
+    /// `kind`.
     fn start(
         &self,
         module_id: &str,
         kind: ListJobKind,
-        work: impl FnOnce(&Inner, &TerminateToken, &Events<'_>) -> Result<(u64, bool), String>
+        work: impl FnOnce(&Inner, &TerminateToken, &Events<'_>) -> Result<JobOutcome, JobFailure>
         + Send
         + 'static,
     ) -> Result<(), ListJobError> {
@@ -267,9 +282,9 @@ impl Events<'_> {
         (self.inner.on_event)(event);
     }
 
-    fn end(&self, result: Result<(u64, bool), String>) {
+    fn end(&self, result: Result<JobOutcome, JobFailure>) {
         let event = match result {
-            Ok((titles, cancelled)) => {
+            Ok(JobOutcome { titles, cancelled }) => {
                 let kind = if cancelled {
                     ListEventKind::Cancelled
                 } else {
@@ -283,7 +298,7 @@ impl Events<'_> {
             Err(error) => {
                 tracing::warn!(target: "fmd_core", "list job of {}: {error}", self.module_id);
                 ListEvent {
-                    error: Some(error),
+                    error: Some(error.to_string()),
                     ..self.event(ListEventKind::Failed, String::new())
                 }
             }

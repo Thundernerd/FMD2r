@@ -116,7 +116,8 @@ pub struct ListSummary {
     pub module_id: String,
     /// Titles listed.
     pub count: u64,
-    /// When the list last changed through an update or import, in Unix milliseconds.
+    /// When the list was last updated or imported (even if that added nothing), in Unix
+    /// milliseconds.
     pub updated_at: Option<i64>,
 }
 

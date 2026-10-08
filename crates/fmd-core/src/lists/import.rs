@@ -19,7 +19,7 @@ pub enum ImportError {
     #[error("HTTP: {0}")]
     Http(#[from] HttpError),
     /// The download did not succeed (`HTTP.GET(...) and (HTTP.ResultCode < 300)`,
-    /// baseunits/DBUpdater.pas:124).
+    /// baseunits/DBUpdater.pas:125).
     #[error("downloading {url} failed with HTTP status {status}")]
     Download { url: String, status: i32 },
     #[error("the download was cancelled")]
@@ -37,13 +37,12 @@ pub enum ImportError {
 }
 
 /// `GetDBURL` (baseunits/DBUpdater.pas:56-63): `<website>` in `template` (any case) replaced
-/// by the module ID, or the ID appended when the template has no `<website>`.
+/// by the module ID. FMD2's fallback that appends the ID never runs, as its guard
+/// `Pos(...) <> -1` is always true (`Pos` returns 0 when nothing is found), so a template
+/// without `<website>` is used as it is.
 pub fn db_url(template: &str, module_id: &str) -> String {
     const PLACEHOLDER: &str = "<website>";
     let lower = template.to_ascii_lowercase();
-    if !lower.contains(PLACEHOLDER) {
-        return format!("{template}{module_id}");
-    }
     let mut url = String::with_capacity(template.len() + module_id.len());
     let mut rest = 0;
     for (at, _) in lower.match_indices(PLACEHOLDER) {
@@ -68,24 +67,29 @@ impl DbImporter {
 
     /// Downloads module `module_id`'s dump from [`db_url`]`(url_template, module_id)` and
     /// imports it with [`DbImporter::import_archive`]. Blocks, so call it from a thread outside
-    /// any tokio runtime. Returns the number of titles imported.
+    /// any tokio runtime. `status` hears each step, as FMD2's status bar shows it
+    /// (`RS_Downloading`, `RS_Extracting`, baseunits/DBUpdater.pas:123, :166). Returns the
+    /// number of titles imported.
     pub fn import(
         &self,
         module_id: &str,
         url_template: &str,
         terminate: &TerminateToken,
+        status: &mut dyn FnMut(&str),
     ) -> Result<u64, ImportError> {
         let url = db_url(url_template, module_id);
+        status("Downloading...");
         let mut http = self.http.session();
         http.set_terminate_token(terminate.clone());
         let ok = http.get(&url)?;
         if terminate.is_terminated() {
             return Err(ImportError::Cancelled);
         }
-        let status = http.result_code();
-        if !ok || status >= 300 {
-            return Err(ImportError::Download { url, status });
+        let code = http.result_code();
+        if !ok || code >= 300 {
+            return Err(ImportError::Download { url, status: code });
         }
+        status("Extracting...");
         self.import_archive(module_id, http.document())
     }
 

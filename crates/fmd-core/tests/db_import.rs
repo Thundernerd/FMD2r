@@ -153,21 +153,34 @@ fn text_that_is_not_utf8_is_imported_lossily() {
 
 #[test]
 fn the_dump_is_downloaded_from_the_url_template_with_the_module_id() {
-    // `GetDBURL(FModule.ID)` (baseunits/DBUpdater.pas:56-63, :124).
+    // `GetDBURL(FModule.ID)` (baseunits/DBUpdater.pas:56-63, :125).
     let template = "https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z";
     assert_eq!(
         db_url(template, GOURMET),
         format!("https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/{GOURMET}.7z")
     );
-    assert_eq!(db_url("https://mirror.test/", "x"), "https://mirror.test/x");
+    // `Pos('<website>', DB_URL) <> -1` is always true, so nothing is appended (:58-61).
+    assert_eq!(
+        db_url("https://mirror.test/db.7z", "x"),
+        "https://mirror.test/db.7z"
+    );
+    assert_eq!(
+        db_url("https://m.test/<WEBSITE>.7z", "x"),
+        "https://m.test/x.7z"
+    );
 
     let f = fixture(200, archive(GOURMET));
+    let mut steps = Vec::new();
     let imported = f
         .importer
-        .import(GOURMET, template, &TerminateToken::new())
+        .import(GOURMET, template, &TerminateToken::new(), &mut |s| {
+            steps.push(s.to_owned())
+        })
         .unwrap();
 
     assert_eq!(imported, 3);
+    // `RS_Downloading`, `RS_Extracting` (baseunits/DBUpdater.pas:123, :166).
+    assert_eq!(steps, ["Downloading...", "Extracting..."]);
     assert_eq!(*f.server.urls.lock().unwrap(), [db_url(template, GOURMET)]);
 }
 
@@ -184,6 +197,7 @@ fn a_failed_download_leaves_the_list_as_it_was() {
         GOURMET,
         "https://db.test/<website>.7z",
         &TerminateToken::new(),
+        &mut |_| {},
     );
 
     assert!(

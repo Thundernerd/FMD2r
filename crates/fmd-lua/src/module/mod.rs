@@ -276,7 +276,7 @@ impl Module {
     }
 
     /// Sets `MODULE.CurrentDirectoryIndex`, as the update-list manager does before it walks a
-    /// directory's pages (baseunits/uUpdateThread.pas:695).
+    /// directory's pages (baseunits/uUpdateThread.pas:702).
     pub fn set_current_directory_index(&self, index: i32) {
         self.def_write().current_directory_index = index;
     }

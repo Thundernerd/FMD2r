@@ -33,25 +33,27 @@ pub(super) fn listing(info: &MangaInfo, name: &str, link: &str, jdn: i64) -> Man
     MangaListing {
         link,
         title,
-        alttitles: placeholder(one_line(&info.alt_titles)),
-        authors: placeholder(list(&info.authors)),
-        artists: placeholder(list(&info.artists)),
-        genres: list(&info.genres),
+        alttitles: drop_placeholder(one_line(&info.alt_titles)),
+        authors: drop_placeholder(comma_list(&info.authors)),
+        artists: drop_placeholder(comma_list(&info.artists)),
+        genres: comma_list(&info.genres),
         status: info.status.trim().to_owned(),
         // `StringBreaks` (baseunits/uBaseUnit.pas:2126-2133) on the trimmed summary.
         summary: match info.summary.trim() {
             "-" | ":" => String::new(),
-            summary => fix_white_space(summary).replace("\\n", "\n"),
+            summary => fix_white_space(summary)
+                .replace("\\n", "\n")
+                .replace("\\r", "\r"),
         },
         numchapter: chapter_count(&info.chapter_links),
         added_jdn: jdn,
     }
 }
 
-/// `FixWhiteSpace` (baseunits/uBaseUnit.pas:1913-1938): no-break spaces and byte order marks
-/// become spaces.
+/// `FixWhiteSpace` (baseunits/uBaseUnit.pas:1913-1926): no-break spaces and byte order marks
+/// removed.
 fn fix_white_space(s: &str) -> String {
-    s.replace(['\u{a0}', '\u{feff}'], " ")
+    s.replace(['\u{a0}', '\u{feff}'], "")
 }
 
 /// `Trim(FixWhiteSpace(RemoveStringBreaks(...)))`: line breaks removed.
@@ -61,14 +63,15 @@ fn one_line(s: &str) -> String {
         .to_owned()
 }
 
-/// [`one_line`] without trailing commas (`TrimRightChar(..., [','])`).
-fn list(s: &str) -> String {
+/// [`one_line`] without trailing commas (`TrimRightChar(..., [','])`), for FMD2's
+/// comma-separated people and genre lists.
+fn comma_list(s: &str) -> String {
     one_line(s).trim_end_matches(',').trim().to_owned()
 }
 
 /// Drops the placeholders FMD2 drops: a value starting with `<`, or `-` or `:`
 /// (baseunits/uData.pas:129-138).
-fn placeholder(s: String) -> String {
+fn drop_placeholder(s: String) -> String {
     if s.starts_with('<') || s == "-" || s == ":" {
         String::new()
     } else {
