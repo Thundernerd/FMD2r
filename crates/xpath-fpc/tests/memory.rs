@@ -11,7 +11,7 @@ use common::*;
 
 const HTML: &str = r#"<ul><li><a href="/1" title="one">a</a></li><li> b </li><p>x<p>y</ul>"#;
 
-/// Resident set size in KiB, from `/proc/self/statm` (second field, in pages).
+/// Resident set size in KiB, from `/proc/self/statm` (second field, in 4 KiB pages on x86_64 Linux).
 fn rss_kib() -> u64 {
     let statm = std::fs::read_to_string("/proc/self/statm").unwrap();
     let pages: u64 = statm.split_whitespace().nth(1).unwrap().parse().unwrap();
@@ -41,7 +41,7 @@ fn round_trip() {
     assert!(!take(unsafe { fx_last_error() }).is_empty());
 }
 
-/// Runs `round_trip` `n` times and returns how much the process grew, in KiB.
+/// Runs `each` `n` times (after `n / 10` warm-up runs) and returns how much the process grew, in KiB.
 fn growth_kib(n: usize, each: impl Fn()) -> u64 {
     for _ in 0..n / 10 {
         each();

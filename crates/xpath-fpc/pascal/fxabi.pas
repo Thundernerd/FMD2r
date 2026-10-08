@@ -202,29 +202,33 @@ end;
 { TXQueryEngineHTML.Eval (baseunits/XQueryEngineHTML.pas:252-284): an evaluation error yields an empty sequence. }
 function fx_eval(doc: PFxDoc; expr: PChar; len: SizeUInt; context: PFxValue; is_css: LongInt): PFxValue; cdecl;
 var
-  e: String;
-  r: IXQValue;
+  expression: String;
+  context_item: IXQValue;
+  tree: TTreeNode;
+  engine: TXQueryEngine;
   fpu: TFpuEnv;
 begin
   fpu := EnterFpc;
   try
     LastError := '';
-    e := PasString(expr, len);
+    expression := PasString(expr, len);
+    engine := DocOf(doc)^.Engine;
     if context <> nil then
     begin
+      context_item := context^.Value;
       if is_css <> 0 then
-        r := DocOf(doc)^.Engine.evaluateCSS3(e, context^.Value)
+        Result := NewValue(doc, engine.evaluateCSS3(expression, context_item))
       else
-        r := DocOf(doc)^.Engine.evaluateXPath(e, context^.Value);
+        Result := NewValue(doc, engine.evaluateXPath(expression, context_item));
     end
     else
     begin
+      tree := doc^.TreeParser.getLastTree;
       if is_css <> 0 then
-        r := DocOf(doc)^.Engine.evaluateCSS3(e, doc^.TreeParser.getLastTree)
+        Result := NewValue(doc, engine.evaluateCSS3(expression, tree))
       else
-        r := DocOf(doc)^.Engine.evaluateXPath(e, doc^.TreeParser.getLastTree);
+        Result := NewValue(doc, engine.evaluateXPath(expression, tree));
     end;
-    Result := NewValue(doc, r);
   except
     on E: TObject do
       Result := Failed(E);
@@ -414,8 +418,13 @@ end;
 
 procedure fx_string_free(s: TFxString); cdecl;
 begin
-  if s.ptr <> nil then
-    FreeMem(s.ptr);
+  try
+    if s.ptr <> nil then
+      FreeMem(s.ptr);
+  except
+    on E: TObject do
+      SetLastError(E);
+  end;
 end;
 
 { The message of the last failure on the calling thread; empty after a successful fx_eval. }

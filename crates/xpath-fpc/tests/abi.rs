@@ -21,7 +21,8 @@ fn get_is_one_based_and_to_string_trims_like_fmd2() {
     let doc = Doc::parse("<ul><li>a</li><li> b </li></ul>");
     let items = doc.eval("//li");
     assert_eq!(items.get(1).string(), "a");
-    // Node-to-string conversion is trimmed by internettools' XQGlobalTrimNodes, which FMD2 leaves at its default (true).
+    // Node-to-string conversion is trimmed: internettools' XQGlobalTrimNodes defaults to true (data/xquery.pas:3145)
+    // and FMD2 never sets it, so LuaIXQValue's ToString sees "b" (baseunits/lua/LuaIXQValue.pas:37-41).
     assert_eq!(items.get(2).string(), "b");
 }
 
@@ -111,7 +112,8 @@ fn get_property_reads_a_json_object_property() {
     assert_eq!(doc.eval("1").property("b").count(), 0);
 }
 
-// `fx_kind` from fmdxpath.h.
+// `fx_kind` from fmdxpath.h: internettools' TXQValueKind (data/xquery.pas:103-109), which LuaIXQValue's iterator
+// checks for pvkUndefined (baseunits/lua/LuaIXQValue.pas:101).
 const FX_KIND_UNDEFINED: c_int = 0;
 const FX_KIND_BOOLEAN: c_int = 1;
 const FX_KIND_INT64: c_int = 2;
@@ -209,7 +211,8 @@ fn evaluation_runs_with_fpcs_default_float_exceptions_like_fmd2s_threads() {
     assert_eq!(overflow.count(), 0);
     assert!(take(unsafe { fx_last_error() }).contains("EOverflow"));
     assert_eq!(doc.eval(r#"xs:float("1e40")"#).count(), 0);
-    // Observed from internettools built as an FPC program, as FMD2 is.
+    // Observed from internettools at the pinned revision built as an FPC program, as FMD2 is (no FMD2 source to cite:
+    // it follows from the engine plus FPC's float environment).
     assert_eq!(doc.eval(r#"xs:double("1e400")"#).string(), "5.0E-324");
     assert_eq!(doc.eval("0e0 div 0e0").string(), "NaN");
     assert_eq!(doc.eval(r#"(xs:double("1e400"), 1e308 * 10)"#).count(), 0);
