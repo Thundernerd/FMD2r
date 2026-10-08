@@ -6,6 +6,7 @@ use std::time::Duration;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+use fmd_core::jobs::{Job, JobPhase};
 use fmd_store::EventId;
 use futures_util::stream::{self, Stream, StreamExt};
 use serde::Serialize;
@@ -79,24 +80,39 @@ pub struct TaskStatusChange {
     pub status: TaskState,
 }
 
-/// What a background job is doing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum JobPhase {
-    Running,
-    Idle,
-    Done,
-    Failed,
-}
-
-/// Progress of a background job (`job.state`): favorites check, list update, module update.
+/// A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites
+/// check, list update, module update, or any other registered job.
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
 pub struct JobState {
     pub id: String,
     pub title: String,
     pub state: JobPhase,
     pub done: u64,
+    /// 0 when unknown.
     pub total: u64,
+    /// RFC 3339 start of the last run.
+    pub last_run: Option<String>,
+    /// RFC 3339 start of the next scheduled run.
+    pub next_run: Option<String>,
+    /// Why the last run failed.
+    pub last_error: Option<String>,
+}
+
+impl JobState {
+    /// The current state of `job`.
+    pub fn of(job: &dyn Job) -> Self {
+        let status = job.status();
+        Self {
+            id: job.id().to_owned(),
+            title: job.title().to_owned(),
+            state: status.phase,
+            done: status.done,
+            total: status.total,
+            last_run: status.last_run.map(crate::time::rfc3339_from_unix_ms),
+            next_run: status.next_run.map(crate::time::rfc3339_from_unix_ms),
+            last_error: status.last_error,
+        }
+    }
 }
 
 /// Everything pushed over `GET /api/events`. The SSE event name is [`ServerEvent::name`]; the
@@ -178,8 +194,14 @@ pub(crate) async fn stream(
     headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
     // Subscribe before reading the backlog so nothing published in between is lost.
-    let live = BroadcastStream::new(state.events().subscribe())
+    let bus = BroadcastStream::new(state.events().subscribe())
         .filter_map(|event| async move { event.ok() });
+    let registry = state.jobs.clone();
+    let jobs = BroadcastStream::new(registry.subscribe()).filter_map(move |id| {
+        let job = id.ok().and_then(|id| registry.get(&id));
+        async move { job.map(|job| ServerEvent::Job(JobState::of(job.as_ref()))) }
+    });
+    let live = stream::select(bus, jobs);
     let last_id = headers
         .get("last-event-id")
         .and_then(|v| v.to_str().ok())

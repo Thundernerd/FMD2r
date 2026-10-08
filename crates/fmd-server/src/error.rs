@@ -21,6 +21,9 @@ pub enum ApiError {
     MethodNotAllowed,
     #[error("{0}")]
     BadRequest(String),
+    /// The resource is in a state that does not allow the request (e.g. a job already running).
+    #[error("{0}")]
+    Conflict(String),
     /// A request an extractor could not parse (bad JSON body, bad query string, ...).
     #[error("{1}")]
     Rejected(StatusCode, String),
@@ -49,6 +52,7 @@ impl ApiError {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Rejected(status, _) => *status,
             Self::Store(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -82,6 +86,16 @@ impl IntoResponse for ApiError {
                 .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
         }
         res
+    }
+}
+
+impl From<fmd_core::jobs::JobError> for ApiError {
+    fn from(err: fmd_core::jobs::JobError) -> Self {
+        use fmd_core::jobs::JobError as E;
+        match err {
+            E::AlreadyRunning | E::NotRunning => Self::Conflict(err.to_string()),
+            E::Failed(msg) => Self::Internal(msg),
+        }
     }
 }
 

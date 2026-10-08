@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 axum = { version = "0.8", features = ["macros"] }
+fmd-core = { path = "../fmd-core" }
 fmd-store = { path = "../fmd-store" }
 futures-util = "0.3"
 getrandom = "0.3"

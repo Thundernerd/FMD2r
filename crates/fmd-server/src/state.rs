@@ -1,7 +1,10 @@
 //! Shared state handed to every handler.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
+use fmd_core::jobs::JobRegistry;
 use fmd_store::{AppDb, NewEvent};
 use tokio::sync::watch;
 
@@ -10,9 +13,10 @@ use crate::auth::Auth;
 use crate::events::{EventBus, ServerEvent};
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
-use crate::services::{DownloadEngine, Idle, Jobs};
+use crate::services::{DownloadEngine, Idle, ModuleCatalog};
 use crate::settings::{SettingsService, StoreSettings};
 use crate::spa::{Assets, EmbeddedAssets};
+use crate::tools::{SystemTools, ToolProbe};
 
 /// Log lines kept when no buffer is supplied.
 const DEFAULT_LOG_LINES: usize = 1000;
@@ -27,20 +31,28 @@ pub struct AppState {
     pub(crate) logs: LogBuffer,
     pub(crate) settings: Arc<dyn SettingsService>,
     pub(crate) engine: Arc<dyn DownloadEngine>,
-    pub(crate) jobs: Arc<dyn Jobs>,
+    pub(crate) jobs: JobRegistry,
+    pub(crate) modules: Arc<dyn ModuleCatalog>,
+    pub(crate) tools: Arc<dyn ToolProbe>,
+    pub(crate) data_dir: Option<PathBuf>,
+    pub(crate) started: Instant,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
 }
 
 impl AppState {
     /// State backed by `db`, serving the embedded web UI, with untyped store settings, an idle
-    /// engine and no auth configured.
+    /// engine, no jobs or modules, real tool checks and no auth configured.
     pub fn new(db: AppDb) -> Self {
         let events = EventBus::new();
         Self {
             logs: LogBuffer::new(DEFAULT_LOG_LINES, events.clone()),
             settings: Arc::new(StoreSettings::new(db.clone())),
             engine: Arc::new(Idle),
-            jobs: Arc::new(Idle),
+            jobs: JobRegistry::new(),
+            modules: Arc::new(Idle),
+            tools: Arc::new(SystemTools::default()),
+            data_dir: None,
+            started: Instant::now(),
             shutdown: Arc::new(watch::channel(false).0),
             db,
             assets: Arc::new(EmbeddedAssets),
@@ -81,8 +93,28 @@ impl AppState {
         self
     }
 
-    pub fn with_jobs(mut self, jobs: impl Jobs) -> Self {
-        self.jobs = Arc::new(jobs);
+    /// Lists and controls the jobs in `jobs` via `/api/jobs`, and streams their changes as
+    /// `job.state` events.
+    pub fn with_jobs(mut self, jobs: JobRegistry) -> Self {
+        self.jobs = jobs;
+        self
+    }
+
+    /// Reports the Lua modules from `modules` in `GET /api/about`.
+    pub fn with_modules(mut self, modules: impl ModuleCatalog) -> Self {
+        self.modules = Arc::new(modules);
+        self
+    }
+
+    /// Checks external tools with `tools` for `GET /api/about`.
+    pub fn with_tools(mut self, tools: impl ToolProbe) -> Self {
+        self.tools = Arc::new(tools);
+        self
+    }
+
+    /// Reports `dir` and the sizes of the databases in it in `GET /api/about`.
+    pub fn with_data_dir(mut self, dir: impl AsRef<Path>) -> Self {
+        self.data_dir = Some(dir.as_ref().to_owned());
         self
     }
 

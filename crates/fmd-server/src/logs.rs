@@ -17,14 +17,20 @@ use crate::AppState;
 use crate::error::ApiQuery;
 use crate::events::{EventBus, ServerEvent};
 
-/// Severity of a log line, most severe first.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, ToSchema)]
+/// Severity of a log line, most severe first. Serialized in upper case; `?level=` also takes
+/// lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum LogLevel {
+    #[serde(alias = "error")]
     Error,
+    #[serde(alias = "warn")]
     Warn,
+    #[serde(alias = "info")]
     Info,
+    #[serde(alias = "debug")]
     Debug,
+    #[serde(alias = "trace")]
     Trace,
 }
 
@@ -37,6 +43,9 @@ pub struct LogLine {
     pub time: String,
     pub level: LogLevel,
     pub target: String,
+    /// The website module that logged the line (the `module` field `fmd.logger` adds,
+    /// baseunits/lua/LuaLogger.pas:15-46).
+    pub module: Option<String>,
     pub message: String,
 }
 
@@ -74,18 +83,30 @@ impl LogBuffer {
 
     /// Buffered lines with a sequence number above `since` (all of them for `None`), oldest first.
     pub fn since(&self, since: Option<u64>) -> Vec<LogLine> {
+        self.query(&LogFilter {
+            since,
+            ..LogFilter::default()
+        })
+    }
+
+    /// The newest buffered lines matching `filter`, oldest first.
+    pub fn query(&self, filter: &LogFilter) -> Vec<LogLine> {
         let Ok(ring) = self.inner.lock() else {
             return Vec::new();
         };
-        let since = since.unwrap_or(0);
-        ring.lines
+        let mut lines: Vec<LogLine> = ring
+            .lines
             .iter()
-            .filter(|l| l.seq > since)
+            .rev()
+            .filter(|l| filter.matches(l))
+            .take(filter.limit.unwrap_or(usize::MAX))
             .cloned()
-            .collect()
+            .collect();
+        lines.reverse();
+        lines
     }
 
-    fn push(&self, level: LogLevel, target: &str, message: String) {
+    fn push(&self, level: LogLevel, target: &str, module: Option<String>, message: String) {
         let line = {
             let Ok(mut ring) = self.inner.lock() else {
                 return;
@@ -95,6 +116,7 @@ impl LogBuffer {
                 time: crate::time::now_rfc3339(),
                 level,
                 target: target.to_owned(),
+                module,
                 message,
             };
             ring.next_seq += 1;
@@ -122,16 +144,19 @@ impl<S: Subscriber> Layer<S> for LogBuffer {
             Level::DEBUG => LogLevel::Debug,
             Level::TRACE => LogLevel::Trace,
         };
-        let mut message = MessageVisitor::default();
-        event.record(&mut message);
-        self.push(level, meta.target(), message.finish());
+        let mut visitor = MessageVisitor::default();
+        event.record(&mut visitor);
+        let module = visitor.module.take();
+        self.push(level, meta.target(), module, visitor.finish());
     }
 }
 
-/// Renders an event as its message followed by ` key=value` for every other field.
+/// Renders an event as its message followed by ` key=value` for every other field except
+/// `module`, which is kept apart.
 #[derive(Default)]
 struct MessageVisitor {
     message: String,
+    module: Option<String>,
     fields: String,
 }
 
@@ -145,6 +170,8 @@ impl Visit for MessageVisitor {
     fn record_str(&mut self, field: &Field, value: &str) {
         if field.name() == "message" {
             self.message.push_str(value);
+        } else if field.name() == "module" {
+            self.module = Some(value.to_owned());
         } else {
             let _ = write!(self.fields, " {}={value}", field.name());
         }
@@ -159,18 +186,38 @@ impl Visit for MessageVisitor {
     }
 }
 
-#[derive(Deserialize, IntoParams)]
-pub(crate) struct LogsQuery {
+/// Which buffered lines [`LogBuffer::query`] returns.
+#[derive(Debug, Default, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct LogFilter {
+    /// Only lines at this level or more severe.
+    #[param(value_type = Option<String>, example = "warn")]
+    pub level: Option<LogLevel>,
+    /// Only lines logged by this website module.
+    pub module: Option<String>,
     /// Only lines with a sequence number above this one.
-    since: Option<u64>,
+    pub since: Option<u64>,
+    /// At most this many lines: the newest that match.
+    pub limit: Option<usize>,
 }
 
-/// The tail of the in-memory log.
+impl LogFilter {
+    fn matches(&self, line: &LogLine) -> bool {
+        self.since.is_none_or(|since| line.seq > since)
+            && self.level.is_none_or(|level| line.level <= level)
+            && self
+                .module
+                .as_deref()
+                .is_none_or(|module| line.module.as_deref() == Some(module))
+    }
+}
+
+/// The tail of the in-memory log, oldest first.
 #[utoipa::path(get, path = "/api/logs", tag = "system", operation_id = "listLogs",
-    params(LogsQuery), responses((status = 200, body = Vec<LogLine>)))]
+    params(LogFilter), responses((status = 200, body = Vec<LogLine>)))]
 pub(crate) async fn list(
     State(state): State<AppState>,
-    ApiQuery(query): ApiQuery<LogsQuery>,
+    ApiQuery(filter): ApiQuery<LogFilter>,
 ) -> Json<Vec<LogLine>> {
-    Json(state.logs.since(query.since))
+    Json(state.logs.query(&filter))
 }

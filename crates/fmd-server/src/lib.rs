@@ -1,10 +1,12 @@
 //! axum: REST (OpenAPI via utoipa) + SSE event stream + cover proxy/cache + embedded SPA (rust-embed).
 
+mod about;
 mod auth;
 mod error;
 mod events;
 mod health;
 mod inbox;
+mod jobs;
 mod logs;
 mod serve;
 mod services;
@@ -12,6 +14,7 @@ mod settings;
 mod spa;
 mod state;
 mod time;
+mod tools;
 
 use std::sync::Arc;
 
@@ -22,16 +25,16 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 pub use error::{ApiError, Problem};
-pub use events::{
-    EventBus, JobPhase, JobState, ServerEvent, TaskProgress, TaskState, TaskStatusChange,
-};
+pub use events::{EventBus, JobState, ServerEvent, TaskProgress, TaskState, TaskStatusChange};
+pub use fmd_core::jobs::JobPhase;
 pub use inbox::{InboxItem, InboxKind};
-pub use logs::{LogBuffer, LogLevel, LogLine};
+pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use serve::{ServeConfig, ServeError, serve};
-pub use services::{DownloadEngine, Idle, Jobs};
+pub use services::{DownloadEngine, Idle, LoadFailure, ModuleCatalog, ModulesReport};
 pub use settings::{SettingsError, SettingsService, StoreSettings};
 pub use spa::{Assets, EmbeddedAssets};
 pub use state::AppState;
+pub use tools::{SystemTools, ToolCheck, ToolProbe};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -54,6 +57,10 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(inbox::list))
         .routes(routes!(inbox::mark_read))
         .routes(routes!(logs::list))
+        .routes(routes!(jobs::list))
+        .routes(routes!(jobs::run))
+        .routes(routes!(jobs::cancel))
+        .routes(routes!(about::about))
         .routes(routes!(settings::get, settings::patch))
 }
 

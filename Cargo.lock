@@ -789,6 +789,7 @@ name = "fmd-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "fmd-core",
  "fmd-store",
  "futures-util",
  "getrandom 0.3.4",
