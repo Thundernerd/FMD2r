@@ -1,5 +1,6 @@
 //! One `THTTPSendThread`: request state plus the request algorithm.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::client::{HttpClient, Setting};
@@ -23,6 +24,10 @@ pub const USER_AGENT_DEFAULT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) 
 /// (baseunits/synapse/httpsend.pas:311, baseunits/httpsendthread.pas:500-501).
 pub const USER_AGENT_SYNAPSE: &str = "Mozilla/4.0 (compatible; Synapse)";
 
+/// A hook run on a session while it prepares a request; see
+/// [`HttpSession::set_on_after_set_cookies`].
+pub type SessionHook = Arc<dyn Fn(&mut HttpSession) + Send + Sync>;
+
 /// The Rust counterpart of one FMD2 `THTTPSendThread` (baseunits/httpsendthread.pas:73-140).
 pub struct HttpSession {
     client: HttpClient,
@@ -45,6 +50,7 @@ pub struct HttpSession {
     allow_server_error_response: bool,
     enabled_cookies: bool,
     clear_cookies: bool,
+    after_set_cookies: Option<SessionHook>,
 }
 
 impl HttpSession {
@@ -78,6 +84,7 @@ impl HttpSession {
             allow_server_error_response: false,
             enabled_cookies: true,
             clear_cookies: false,
+            after_set_cookies: None,
         };
         session.reset();
         session
@@ -327,7 +334,8 @@ impl HttpSession {
     }
 
     /// `SetHTTPCookies` (baseunits/httpsendthread.pas:468-479): adds the module jar's
-    /// matching cookies, except right after `ClearCookies`, which skips one request.
+    /// matching cookies, then runs the `OnAfterSetHTTPCookies` hook; right after
+    /// `ClearCookies` it does neither, once.
     fn set_http_cookies(&mut self) {
         if self.clear_cookies {
             self.clear_cookies = false;
@@ -340,6 +348,16 @@ impl HttpSession {
                 .cookies
                 .set_cookies(&self.last_url, &mut self.cookies);
         }
+        if let Some(hook) = self.after_set_cookies.clone() {
+            hook(self);
+        }
+    }
+
+    /// Sets `OnAfterSetHTTPCookies` (baseunits/httpsendthread.pas:477-478): a hook run before
+    /// every exchange, after the module jar's cookies were added. FMD2 uses it to merge the
+    /// module's settings cookies (baseunits/WebsiteModules.pas:278-282, :359).
+    pub fn set_on_after_set_cookies(&mut self, hook: Option<SessionHook>) {
+        self.after_set_cookies = hook;
     }
 
     /// Builds the request from the header list plus the lines Synapse inserts:

@@ -5,6 +5,7 @@ pub mod crypto;
 mod duktape;
 mod file;
 mod globals;
+mod http;
 mod libs;
 mod memory_stream;
 mod strings;
@@ -16,6 +17,9 @@ pub use class::LuaClass;
 pub use duktape::JsLimits;
 pub use fmd_http::TerminateToken;
 pub use globals::Globals;
+pub use http::{
+    HttpModule, LuaHttp, ModuleHttpOverrides, ModuleHttpSettings, ProxyOverride, create_http,
+};
 pub use libs::subprocess;
 pub use memory_stream::{LuaMemoryStream, MemoryStream};
 pub use mlua;
