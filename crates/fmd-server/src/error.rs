@@ -15,6 +15,9 @@ use utoipa::ToSchema;
 pub enum ApiError {
     #[error("no such resource")]
     NotFound,
+    /// A 404 that says why (e.g. no module handles a URL).
+    #[error("{0}")]
+    Missing(String),
     #[error("authentication required")]
     Unauthorized,
     #[error("method not allowed")]
@@ -62,7 +65,7 @@ pub struct Problem {
 impl ApiError {
     fn status(&self) -> StatusCode {
         match self {
-            Self::NotFound => StatusCode::NOT_FOUND,
+            Self::NotFound | Self::Missing(_) => StatusCode::NOT_FOUND,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,

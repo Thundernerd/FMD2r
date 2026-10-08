@@ -19,6 +19,8 @@ pub const SPIN_EDIT_RANGE: RangeInclusive<i32> = 0..=10000;
 pub struct ModuleInfo {
     pub id: String,
     pub name: String,
+    /// Lowercased, as the loader leaves it.
+    pub root_url: String,
     pub category: String,
     /// The limits the module declares; a negative one counts as 0 (unlimited).
     pub limits: ModuleLimits,
@@ -63,6 +65,7 @@ impl From<&ModuleDef> for ModuleInfo {
         ModuleInfo {
             id: def.id.clone(),
             name: def.name.clone(),
+            root_url: def.root_url.clone(),
             category: def.category.clone(),
             limits: ModuleLimits {
                 max_task_limit: limit(def.max_task_limit),
@@ -177,5 +180,78 @@ impl ModuleSettingsStore for StoreModuleSettings {
             .module_settings()
             .set_cookie_jar(module_id, Some(cookies.as_bytes()))
             .map_err(SettingsStoreError::new)
+    }
+}
+
+/// Where a manga URL leads: the module handling it and the link FMD2 opens and stores for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Located<'a> {
+    pub module: &'a ModuleInfo,
+    /// The URL's path (and query), relative to the module's `RootURL`.
+    pub link: String,
+}
+
+/// The module handling `url`, as FMD2's "paste URL" box finds it (`edURLButtonClick`,
+/// mangadownloader/forms/frmMain.pas:6578-6606): `SplitURL` splits off the host, which
+/// [`locate_by_host`] matches lowercased, and the path is the link. A URL without a host or a
+/// path matches nothing. `modules` must be sorted by ID.
+pub fn locate_by_url<'a>(modules: &'a [ModuleInfo], url: &str) -> Option<Located<'a>> {
+    let (host, link) = fmd_http::split_url_bytes(url.as_bytes());
+    if host.is_empty() || link.is_empty() {
+        return None;
+    }
+    let host = String::from_utf8_lossy(&host).to_lowercase();
+    let module = locate_by_host(modules, &host)?;
+    Some(Located {
+        module,
+        link: String::from_utf8_lossy(&link).into_owned(),
+    })
+}
+
+/// `TWebsiteModules.LocateModuleByHost` (baseunits/WebsiteModules.pas:500-530): the last module
+/// (by ID) whose `RootURL` contains `host`; failing that, the last one containing `host` without
+/// its scheme and port; failing that, the last one containing that bare host minus its first
+/// four characters, when it starts with `www.` or matches `w+\d*`. FMD2's `Exec` finds that
+/// pattern anywhere, so any host holding a `w` gets the second retry. FMD2's shortcut through the
+/// last located module is left out: it only changes which of several matching modules wins.
+/// `modules` must be sorted by ID.
+pub fn locate_by_host<'a>(modules: &'a [ModuleInfo], host: &str) -> Option<&'a ModuleInfo> {
+    // `Pos` of an empty string is 0, so it matches nothing.
+    let pos = |s: &str| {
+        modules
+            .iter()
+            .rev()
+            .find(|m| !s.is_empty() && m.root_url.contains(s))
+    };
+    let host = host.to_lowercase();
+    if let Some(module) = pos(&host) {
+        return Some(module);
+    }
+    let bare = bare_host(&host);
+    if bare.is_empty() {
+        return None;
+    }
+    if let Some(module) = pos(&bare) {
+        return Some(module);
+    }
+    if bare.starts_with("www.") || bare.contains('w') {
+        // `Substring(4)`: everything after the first four characters.
+        return pos(&String::from_utf8_lossy(bare.as_bytes().get(4..)?));
+    }
+    None
+}
+
+/// `SplitURL(h, @h, nil, False, False)` (baseunits/httpsendthread.pas:191-276): the host of `url`
+/// without scheme or port.
+fn bare_host(url: &str) -> String {
+    let (host, _) = fmd_http::split_url_bytes(url.as_bytes());
+    let host = String::from_utf8_lossy(&host);
+    // `split_url_bytes` always adds a scheme, and the port it found as `:<digits>`.
+    let host = host.split_once("://").map_or(&*host, |(_, rest)| rest);
+    match host.rsplit_once(':') {
+        Some((name, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => {
+            name.to_owned()
+        }
+        _ => host.to_owned(),
     }
 }

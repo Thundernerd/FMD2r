@@ -2,7 +2,9 @@
 //! not drive the Lua runtime or the download engine itself; it only sees `fmd-core`'s view of
 //! them.
 
+use fmd_core::info::{InfoError, InfoOptions, MangaInfo};
 use fmd_core::modules::ModuleInfo;
+use futures_util::future::BoxFuture;
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -25,6 +27,18 @@ pub trait ModuleCatalog: Send + Sync + 'static {
     /// The loaded module with ID `id`.
     fn module(&self, id: &str) -> Option<ModuleInfo> {
         self.modules().into_iter().find(|m| m.id == id)
+    }
+
+    /// The info of the series at `link` (relative to the module's `RootURL`) from module `id`'s
+    /// `OnGetInfo`, cleaned up with `options` (`fmd_core::info::get_info`).
+    fn get_info(
+        &self,
+        id: &str,
+        link: &str,
+        options: InfoOptions,
+    ) -> BoxFuture<'static, Result<MangaInfo, InfoError>> {
+        let _ = (id, link, options);
+        Box::pin(std::future::ready(Err(InfoError::UnknownModule)))
     }
 }
 
