@@ -6,7 +6,7 @@ Implement `require('fmd.duktape').ExecJS(code)` with an embedded QuickJS (`rquic
 
 ## Scope (in/out)
 In:
-- `ExecJS(code) -> string`: evaluate `code` in a fresh JS context; return the completion value converted to string the way Duktape's `duk_safe_to_string` does (`undefined` → `"undefined"`, numbers formatted like JS `String(n)`, objects → `"[object Object]"`, etc.). On a JS error, log it and return nothing (`nil`), matching the Pascal `except` branch.
+- `ExecJS(code) -> string`: evaluate `code` in a fresh JS context; return the completion value converted to string the way Duktape's `duk_safe_to_string` does (numbers formatted like JS `String(n)`, objects → `"[object Object]"`, etc.), except that a result of `"undefined"` is returned as `''` (`baseunits/Duktape.pas:98-99`). On a JS error, log it and return nothing (`nil`), matching the Pascal `except` branch.
 - CommonJS `require(id)` inside JS, resolving relative to the Lua directory as FMD2's Duktape module loader does (check `Duktape.pas` for search paths and `module.exports` handling).
 - Strings: JS uses UTF-16; FMD2 passes UTF-8. Document and test non-ASCII and binary-ish input.
 - Execution limits: memory and time limit (interrupt handler) so a runaway script cannot hang a worker; tie into the worker's cancellation token.
@@ -20,7 +20,7 @@ Lua snippets via the `fmd-lua` runtime:
 local js = require 'fmd.duktape'
 assert(js.ExecJS('1+2') == '3')
 assert(js.ExecJS('var a=[1,2]; a.join("-")') == '1-2')
-assert(js.ExecJS('undefined') == 'undefined')
+assert(js.ExecJS('undefined') == '')            -- Duktape.pas:98-99
 assert(js.ExecJS('throw new Error("x")') == nil)
 assert(js.ExecJS('var C=require("utils/crypto-js.min.js"); C.MD5("a").toString()') == '0cc175b9c0f1b6a831c399e269772661')
 assert(js.ExecJS('while(true){}') == nil)           -- interrupted by the limit

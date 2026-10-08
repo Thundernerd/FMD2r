@@ -17,6 +17,7 @@ Decisions taken:
 - Deployment: one binary that serves the API and the embedded SPA, plus a Docker image. Optional password/token auth. No user accounts.
 - Lua: `mlua` with vendored Lua 5.4. C modules are allowed, because `pb` is needed.
 - JavaScript (`fmd.duktape.ExecJS`): `rquickjs`, a C engine with a Rust API and an ES5 superset. Duktape via `cc` is the fallback if QuickJS behaves differently.
+  - T12 kept QuickJS: the upstream snippets (packed `eval`, crypto-js `require`, JSON state) evaluate as under Duktape once scripts run as non-strict global code (rquickjs defaults to strict, which makes `eval("var x")` local). Known, unused-by-modules differences: no `Duktape` global object (`modLoaded`/`modSearch`) and no `module.filename`/`module.name`; non-BMP characters are UTF-16 surrogate pairs (`length` 2, returned as 4-byte UTF-8) where Duktape 2.3 keeps its own extended UTF-8 (unverified against a Duktape build); error messages and `Function.prototype.toString` text differ, and QuickJS adds ES2015+ built-ins that feature-detecting scripts may pick up. Each `ExecJS` is bounded by a time and memory limit and the worker's `TerminateToken`; Duktape has none.
 - Storage: `rusqlite`, with a fresh normalized schema. FMD2 data comes in through a one-time importer; FMD2's file layout is not reused.
 
 ## Architecture (Cargo workspace)

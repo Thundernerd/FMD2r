@@ -2,13 +2,18 @@
 
 mod class;
 pub mod crypto;
+mod duktape;
 mod file;
 mod globals;
 mod memory_stream;
 mod strings;
 pub mod xquery;
 
+use std::path::PathBuf;
+
 pub use class::LuaClass;
+pub use duktape::JsLimits;
+pub use fmd_http::TerminateToken;
 pub use globals::Globals;
 pub use memory_stream::{LuaMemoryStream, MemoryStream};
 pub use mlua;
@@ -33,6 +38,10 @@ impl From<Error> for mlua::Error {
 /// Result type of the `fmd-lua` crate.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+/// The `lua/` directory of a runtime, stored as app data on its Lua state.
+#[derive(Clone, Default)]
+struct LuaDir(PathBuf);
+
 /// One Lua state with the FMD2 Host API installed.
 pub struct Runtime {
     lua: mlua::Lua,
@@ -41,7 +50,7 @@ pub struct Runtime {
 impl Runtime {
     /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
     /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with the `fmd.*` Host API libraries
-    /// implemented so far (`fmd.strings`, [`crypto`]) in `package.preload`. FMD2's package
+    /// implemented so far (`fmd.strings`, [`crypto`], `fmd.duktape`) in `package.preload`. FMD2's package
     /// searcher (:124) comes with T06.
     pub fn new() -> Result<Runtime> {
         // SAFETY: FMD2 opens every standard library, including `debug` (used by e.g.
@@ -51,12 +60,38 @@ impl Runtime {
             unsafe { mlua::Lua::unsafe_new_with(mlua::StdLib::ALL, mlua::LuaOptions::default()) };
         strings::register(&lua)?;
         crypto::register(&lua)?;
+        lua.set_app_data(LuaDir(PathBuf::from("lua")));
+        lua.set_app_data(duktape::JsSettings::default());
+        duktape::register(&lua)?;
         // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) needs an XPath backend: without
         // the `xpath-fpc` feature there is none yet (the native one is T34), so the global is
         // missing.
         #[cfg(feature = "xpath-fpc")]
         xquery::register(&lua, std::rc::Rc::new(fmd_xpath::fpc::FpcEngine))?;
         Ok(Runtime { lua })
+    }
+
+    /// Sets the directory holding FMD2's `lua/` tree (`modules/`, `utils/`, ...). Defaults to
+    /// `lua` in the working directory, like `DukLibDir` (baseunits/Duktape.pas:13).
+    pub fn set_lua_dir(&self, dir: impl Into<PathBuf>) {
+        self.lua.set_app_data(LuaDir(dir.into()));
+    }
+
+    /// Sets the time and memory bounds of every `fmd.duktape.ExecJS` call.
+    pub fn set_js_limits(&self, limits: JsLimits) {
+        self.js_settings(|settings| settings.limits = limits);
+    }
+
+    /// Ties the runtime to its worker's token: terminating it interrupts a running
+    /// `fmd.duktape.ExecJS` script, which then fails like a script error.
+    pub fn set_terminate_token(&self, token: TerminateToken) {
+        self.js_settings(|settings| settings.terminate = token);
+    }
+
+    fn js_settings(&self, update: impl FnOnce(&mut duktape::JsSettings)) {
+        if let Some(mut settings) = self.lua.app_data_mut::<duktape::JsSettings>() {
+            update(&mut settings);
+        }
     }
 
     /// The underlying Lua state, for registering Host API objects and globals.
