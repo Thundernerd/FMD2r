@@ -1,0 +1,18 @@
+[package]
+name = "fmd2r"
+description = "FMD2r: self-hosted manga downloader running FMD2's Lua website modules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+
+[lints]
+workspace = true
