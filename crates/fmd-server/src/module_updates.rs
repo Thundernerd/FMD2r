@@ -17,6 +17,20 @@ use tokio::time::Instant;
 
 use crate::AppState;
 
+/// Why the Lua modules could not be set up.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum LuaRuntimeError {
+    #[error("accounts key {path}: {source}")]
+    KeyFile {
+        path: PathBuf,
+        source: fmd_store::StoreError,
+    },
+    #[error("HTTP client: {0}")]
+    Http(#[from] fmd_http::HttpError),
+    #[error("Lua workers: {0}")]
+    Pool(#[from] std::io::Error),
+}
+
 /// The Lua modules the server runs: loaded from `<data dir>/lua`, run on one worker pool by the
 /// download engine, and reloaded there by the module updater.
 pub(crate) struct LuaRuntime {
@@ -28,17 +42,24 @@ pub(crate) struct LuaRuntime {
 impl LuaRuntime {
     /// Loads the modules in `lua_dir` with their settings (options, cookies, accounts) read
     /// through `db`, credentials and cookies decrypted by the key in `key_file`. Blocks.
-    pub(crate) fn load(db: AppDb, lua_dir: &Path, key_file: &Path) -> Result<LuaRuntime, String> {
-        let cipher = KeyFileCipher::open_or_create(key_file)
-            .map_err(|e| format!("{}: {e}", key_file.display()))?;
+    pub(crate) fn load(
+        db: AppDb,
+        lua_dir: &Path,
+        key_file: &Path,
+    ) -> Result<LuaRuntime, LuaRuntimeError> {
+        let cipher =
+            KeyFileCipher::open_or_create(key_file).map_err(|source| LuaRuntimeError::KeyFile {
+                path: key_file.to_owned(),
+                source,
+            })?;
         let modules = Arc::new(LiveModules::load(
             lua_dir,
             Arc::new(StoreModuleSettings::new(db, Arc::new(cipher))),
         ));
-        let http = HttpClient::new().map_err(|e| e.to_string())?;
+        let http = HttpClient::new()?;
         let mut config = PoolConfig::new(http.clone());
         config.lua_dir = lua_dir.to_owned();
-        let pool = Arc::new(WorkerPool::new(config).map_err(|e| e.to_string())?);
+        let pool = Arc::new(WorkerPool::new(config)?);
         Ok(LuaRuntime {
             modules,
             pool,

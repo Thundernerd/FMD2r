@@ -20,8 +20,8 @@ pub trait DownloadEngine: Send + Sync + 'static {
     /// Every task in queue order.
     fn list(&self) -> BoxFuture<'_, Result<Vec<TaskInfo>, EngineError>>;
 
-    /// Queues `download` at the end of the queue (`AddToDownload`,
-    /// mangadownloader/forms/frmMain.pas:2653-2790).
+    /// Queues `download` at the end of the queue (`btDownloadClick`,
+    /// mangadownloader/forms/frmMain.pas:2646-2795).
     fn add(&self, download: NewDownload) -> BoxFuture<'_, Result<TaskId, EngineError>>;
 
     /// Sets a stopped or failed task waiting (`SetTaskActive`,

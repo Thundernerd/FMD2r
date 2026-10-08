@@ -1851,7 +1851,7 @@ export interface components {
 		};
 		/**
 		 * @description The columns FMD2 sorts its downloads list by (`CompareTaskContainer`,
-		 *     baseunits/uDownloadsManager.pas:2046-2099), plus the queue order itself.
+		 *     baseunits/uDownloadsManager.pas:2046-2083), plus the queue order itself.
 		 * @enum {string}
 		 */
 		TaskSort: 'queue' | 'title' | 'status' | 'progress' | 'speed' | 'website' | 'save_to' | 'added';

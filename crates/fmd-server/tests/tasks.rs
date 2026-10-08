@@ -16,6 +16,7 @@ use fmd_core::download::{
     ChapterSpec, ChapterStatus, EngineError, EngineEvent, NewDownload, Progress, Task, TaskChapter,
     TaskId, TaskInfo, TaskStatus,
 };
+use fmd_core::settings::SettingsService;
 use fmd_server::{AppState, DownloadEngine, build_router};
 use fmd_store::AppDb;
 use futures_util::future::BoxFuture;
@@ -237,12 +238,22 @@ struct Harness {
 }
 
 fn harness(tasks: Vec<TaskInfo>) -> Harness {
+    harness_with(tasks, json!({}))
+}
+
+/// [`harness`] with `settings` merge-patched over the defaults.
+fn harness_with(tasks: Vec<TaskInfo>, settings: Value) -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let service = SettingsService::load(db.clone()).unwrap();
+    service.update(settings).unwrap();
     let engine = FakeEngine::new(tasks);
     Harness {
         _dir: dir,
-        state: AppState::new(db).unwrap().with_engine(engine.clone()),
+        state: AppState::new(db)
+            .unwrap()
+            .with_settings(Arc::new(service))
+            .with_engine(engine.clone()),
         engine,
     }
 }
@@ -377,7 +388,7 @@ async fn pages_through_the_queue() {
 }
 
 /// FMD2 sorts the downloads list by a column, comparing text naturally and dates by time
-/// (`CompareTaskContainer`, baseunits/uDownloadsManager.pas:2046-2099).
+/// (`CompareTaskContainer`, baseunits/uDownloadsManager.pas:2046-2083).
 #[tokio::test]
 async fn sorts_by_fmd2_columns() {
     let h = harness(queue());
@@ -421,7 +432,7 @@ async fn a_task_shows_its_chapters_with_per_chapter_progress() {
     assert_eq!(res.headers()["content-type"], "application/problem+json");
 }
 
-/// `AddToDownload` (mangadownloader/forms/frmMain.pas:2653-2790) queues the selected chapters,
+/// `btDownloadClick` (mangadownloader/forms/frmMain.pas:2646-2795) queues the selected chapters,
 /// numbered by their position in the series' chapter list.
 #[tokio::test]
 async fn adding_a_task_queues_the_selected_chapters() {
@@ -675,16 +686,41 @@ async fn get_files_zips_folder_output() {
         ]
     );
 
-    // Pages saved straight into the series folder (no chapter folders).
+    // Pages saved straight into the series folder (no chapter folders): its files, not the
+    // folders of other series in it.
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("Ch. 1 001.png"), b"p1").unwrap();
-    let h = harness(vec![finished_in(dir.path(), "Blame!", &["Ch. 1"])]);
+    std::fs::create_dir(dir.path().join("Other series")).unwrap();
+    std::fs::write(dir.path().join("Other series/x.png"), b"x").unwrap();
+    let no_chapter_folders = json!({"saveto": {"generate_chapter_folder": false}});
+    let h = harness_with(
+        vec![finished_in(dir.path(), "Blame!", &["Ch. 1"])],
+        no_chapter_folders.clone(),
+    );
     let res = send(&h.state, get("/api/tasks/1/files")).await;
     assert_eq!(res.status(), StatusCode::OK);
     assert_eq!(
         unzip(body_bytes(res).await),
         [("Ch. 1 001.png".into(), b"p1".to_vec())]
     );
+
+    // Nothing downloaded yet: nothing in the folder is the task's.
+    let mut waiting = finished_in(dir.path(), "Blame!", &["Ch. 1"]);
+    waiting.task.status = TaskStatus::Waiting;
+    waiting.chapters[0].status = ChapterStatus::Pending;
+    let h = harness_with(vec![waiting], no_chapter_folders);
+    let res = send(&h.state, get("/api/tasks/1/files")).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+/// With chapter folders, a series folder holding only other files has nothing of the task's.
+#[tokio::test]
+async fn get_files_never_zips_a_folder_the_task_shares() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("Another task.cbz"), b"other").unwrap();
+    let h = harness(vec![finished_in(dir.path(), "Blame!", &["Ch. 1"])]);
+    let res = send(&h.state, get("/api/tasks/1/files")).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -804,4 +840,22 @@ async fn engine_events_are_streamed_as_task_frames_with_progress_throttled() {
             ("task.removed".into(), json!({"id": 2})),
         ]
     );
+}
+
+/// A stopped task's last progress report is stale: list and detail both show what was saved.
+#[tokio::test]
+async fn a_stopped_task_shows_its_saved_page_counts_everywhere() {
+    let mut stopped = queue().remove(0);
+    stopped.task.status = TaskStatus::Stopped;
+    stopped.running = false;
+    stopped.chapters[1].page_count = 20;
+    stopped.chapters[1].current_page = 4;
+    let h = harness(vec![stopped]);
+    let list = body_json(send(&h.state, get("/api/tasks")).await).await;
+    assert_eq!(
+        (&list["items"][0]["done"], &list["items"][0]["total"]),
+        (&json!(4), &json!(20))
+    );
+    let detail = body_json(send(&h.state, get("/api/tasks/1")).await).await;
+    assert_eq!(detail["chapters"][1]["done"], 4);
 }

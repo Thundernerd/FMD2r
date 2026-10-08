@@ -4152,7 +4152,7 @@
       },
       "TaskSort": {
         "type": "string",
-        "description": "The columns FMD2 sorts its downloads list by (`CompareTaskContainer`,\nbaseunits/uDownloadsManager.pas:2046-2099), plus the queue order itself.",
+        "description": "The columns FMD2 sorts its downloads list by (`CompareTaskContainer`,\nbaseunits/uDownloadsManager.pas:2046-2083), plus the queue order itself.",
         "enum": [
           "queue",
           "title",

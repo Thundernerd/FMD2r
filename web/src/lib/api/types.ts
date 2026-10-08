@@ -44,3 +44,4 @@ export type TaskGroup = Schemas['TaskGroup'];
 export type TaskStatusChange = Schemas['TaskStatusChange'];
 export type TaskRemoved = Schemas['TaskRemoved'];
 export type ChapterState = Schemas['ChapterState'];
+export type TaskOrder = Schemas['TaskOrder'];

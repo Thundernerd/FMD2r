@@ -164,4 +164,17 @@ describe('queue store', () => {
 		await vi.runAllTimersAsync();
 		expect(store.tasks.find((t) => t.id === 1)?.done).toBe(19);
 	});
+
+	it('keeps an action’s answer over a refetch that was in flight', async () => {
+		let answer: (tasks: TaskSummary[]) => void = () => {};
+		const refresh = vi.fn(() => new Promise<TaskSummary[]>((resolve) => (answer = resolve)));
+		const store = new QueueStore({ refresh });
+		store.load(queue());
+		store.reordered();
+		await vi.runAllTimersAsync();
+		store.upsert(task({ id: 3, title: 'Blue Lock', status: 'stopped' }));
+		answer(queue());
+		await vi.runAllTimersAsync();
+		expect(store.tasks.find((t) => t.id === 3)?.status).toBe('stopped');
+	});
 });

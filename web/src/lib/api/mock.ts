@@ -16,10 +16,12 @@ import type {
 	SeriesInfo,
 	SeriesRef,
 	TaskDetail,
-	TaskGroup,
+	TaskOrder,
 	TaskState,
 	TaskSummary
 } from './types';
+import type { TaskAction } from './client';
+import { groupOf } from '#lib/queue.svelte.ts';
 
 type ResolveBody = paths['/api/resolve']['post']['requestBody']['content']['application/json'];
 
@@ -62,6 +64,15 @@ const seedInbox = (): InboxItem[] => [
 ];
 
 const DAY_MS = 86_400_000;
+
+const TASK_ACTIONS: readonly string[] = [
+	'start',
+	'stop',
+	'redownload',
+	'enable',
+	'disable'
+] satisfies TaskAction[];
+const isTaskAction = (action: string): action is TaskAction => TASK_ACTIONS.includes(action);
 
 /** A queued task as fmd-server lists it; `chapter_count` chapters, `chapters_done` of them done. */
 const mockTask = (
@@ -161,19 +172,6 @@ const chapterLabel = (task: TaskSummary): string => {
 	const index = Math.min(task.current_chapter, task.chapter_count - 1);
 	const name = `Chapter ${index + 1}`;
 	return task.chapter_count > 1 ? `${name} (${index + 1}/${task.chapter_count})` : name;
-};
-
-/** fmd-server's status groups (crates/fmd-server/src/tasks.rs). */
-const GROUP: Record<TaskState, TaskGroup> = {
-	preparing: 'downloading',
-	downloading: 'downloading',
-	converting: 'downloading',
-	compressing: 'downloading',
-	waiting: 'waiting',
-	stopped: 'stopped',
-	failed: 'stopped',
-	disabled: 'stopped',
-	finished: 'finished'
 };
 
 const HOUR_MS = 3_600_000;
@@ -375,7 +373,7 @@ export function createMockBackend(): MockBackend {
 			},
 			Date.now()
 		);
-		queued.chapters = `${task.chapters[0]?.name ?? ''}${task.chapters.length > 1 ? ` (1/${task.chapters.length})` : ''}`;
+		queued.chapters = chapterLabel(queued);
 		tasks.push(queued);
 		broadcast('task.status', { id: queued.id, status: queued.status, error: null });
 		return queued;
@@ -385,48 +383,41 @@ export function createMockBackend(): MockBackend {
 		if (task.status === status) return;
 		task.status = status;
 		task.error = error;
-		task.running = GROUP[status] === 'downloading';
+		task.running = groupOf(status) === 'downloading';
 		if (!task.running) task.bytes_per_sec = 0;
 		broadcast('task.status', { id: task.id, status, error });
 	};
 
 	/** `POST /api/tasks/{id}/<action>`, following FMD2's `TDownloadManager` rules. */
-	const act = (task: TaskSummary, action: string): boolean => {
+	const act = (task: TaskSummary, action: TaskAction): void => {
 		switch (action) {
 			case 'start':
 				if (task.enabled && ['stopped', 'failed'].includes(task.status)) setStatus(task, 'waiting');
-				return true;
+				return;
 			case 'stop':
-				if (
-					[
-						'waiting',
-						...Object.keys(GROUP).filter((s) => GROUP[s as TaskState] === 'downloading')
-					].includes(task.status)
-				) {
+				if (['waiting', 'downloading'].includes(groupOf(task.status))) {
 					setStatus(task, 'stopped');
 				}
-				return true;
+				return;
 			case 'redownload':
 				if (task.enabled && task.status !== 'waiting' && !task.running) {
 					Object.assign(task, { chapters_done: 0, current_chapter: 0, done: 0 });
 					task.chapters = chapterLabel(task);
 					setStatus(task, 'waiting');
 				}
-				return true;
+				return;
 			case 'enable':
 				if (!task.enabled) {
 					task.enabled = true;
 					setStatus(task, 'stopped');
 				}
-				return true;
+				return;
 			case 'disable':
 				if (task.enabled) {
 					task.enabled = false;
 					setStatus(task, 'disabled');
 				}
-				return true;
-			default:
-				return false;
+				return;
 		}
 	};
 
@@ -510,7 +501,7 @@ export function createMockBackend(): MockBackend {
 		if (route === 'GET /api/inbox') return json(inbox);
 		if (route === 'GET /api/tasks') {
 			const counts = { downloading: 0, waiting: 0, stopped: 0, finished: 0 };
-			for (const task of tasks) counts[GROUP[task.status]]++;
+			for (const task of tasks) counts[groupOf(task.status)]++;
 			const page = Number(searchParams.get('page') ?? 1);
 			const perPage = Number(searchParams.get('per_page') ?? 100);
 			const items = tasks.slice((page - 1) * perPage, page * perPage);
@@ -527,7 +518,7 @@ export function createMockBackend(): MockBackend {
 			return new Response(null, { status: 204 });
 		}
 		if (route === 'POST /api/tasks/reorder') {
-			const { ids } = (await req.json()) as { ids: number[] };
+			const { ids } = (await req.json()) as TaskOrder;
 			const first = ids.flatMap((id) => tasks.filter((t) => t.id === id));
 			tasks = [...first, ...tasks.filter((t) => !ids.includes(t.id))];
 			broadcast('task.reordered', {});
@@ -550,7 +541,10 @@ export function createMockBackend(): MockBackend {
 				remove(task);
 				return new Response(null, { status: 204 });
 			}
-			if (method === 'POST' && action && act(task, action)) return json(task);
+			if (method === 'POST' && action && isTaskAction(action)) {
+				act(task, action);
+				return json(task);
+			}
 		}
 		if (route === 'POST /api/tasks') {
 			// Untrusted input: check the shape instead of trusting the generated type.

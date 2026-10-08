@@ -9,7 +9,7 @@ use axum::body::Body;
 use axum::extract::{Path as UrlPath, State};
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
-use fmd_core::download::TaskChapter;
+use fmd_core::download::{ChapterStatus, TaskChapter};
 use tokio_util::io::ReaderStream;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -19,7 +19,7 @@ use crate::tasks::find;
 use crate::{ApiError, AppState, Problem};
 
 /// The archive formats a chapter may be packed in and their media types
-/// (`FMDSupportedPackedOutputExt`, baseunits/FMDOptions.pas).
+/// (`FMDSupportedPackedOutputExt`, baseunits/uBaseUnit.pas:235).
 const PACKED: [(&str, &str); 4] = [
     ("cbz", "application/vnd.comicbook+zip"),
     ("zip", "application/zip"),
@@ -33,13 +33,15 @@ enum Saved {
     File { path: PathBuf, mime: &'static str },
     /// A chapter folder.
     Folder(PathBuf),
-    /// The series folder, holding pages saved without chapter folders.
-    Contents(PathBuf),
+    /// The series folder, holding pages saved without chapter folders: its files, not its
+    /// subfolders.
+    Pages(PathBuf),
 }
 
-/// What the task's chapters left in `save_to`: each chapter's archive, else its folder. With
-/// neither (pages saved straight into `save_to`, without chapter folders), `save_to` itself.
-fn saved(save_to: &Path, chapters: &[TaskChapter]) -> Vec<Saved> {
+/// What the task's chapters left in `save_to`: each chapter's archive, else its folder. Saved
+/// without chapter folders (`chapter_folders` off), a task with downloaded chapters that has
+/// neither saved its pages straight into `save_to`, among those of other tasks of the series.
+fn saved(save_to: &Path, chapters: &[TaskChapter], chapter_folders: bool) -> Vec<Saved> {
     let mut found = Vec::new();
     for chapter in chapters {
         let packed = PACKED.iter().find_map(|(ext, mime)| {
@@ -53,8 +55,11 @@ fn saved(save_to: &Path, chapters: &[TaskChapter]) -> Vec<Saved> {
             None => {}
         }
     }
-    if found.is_empty() && save_to.is_dir() {
-        found.push(Saved::Contents(save_to.to_owned()));
+    let downloaded = chapters
+        .iter()
+        .any(|c| c.status == ChapterStatus::Downloaded);
+    if found.is_empty() && !chapter_folders && downloaded && save_to.is_dir() {
+        found.push(Saved::Pages(save_to.to_owned()));
     }
     found
 }
@@ -81,8 +86,9 @@ pub(crate) async fn get(
     let save_to = PathBuf::from(&info.task.save_to);
     let title = info.task.title.clone();
     let chapters = info.chapters;
+    let chapter_folders = state.settings.get().saveto.generate_chapter_folder;
     let (file, name, mime) = off_thread(move || -> Result<_, ApiError> {
-        let mut saved = saved(&save_to, &chapters);
+        let mut saved = saved(&save_to, &chapters, chapter_folders);
         match saved.as_mut_slice() {
             [] => Err(ApiError::Missing("the task has saved no files yet".into())),
             [Saved::File { path, mime }] => {
@@ -128,7 +134,11 @@ fn zip_all(saved: &[Saved]) -> io::Result<File> {
         match item {
             Saved::File { path, .. } => add_file(&mut zip, path, &file_name(path))?,
             Saved::Folder(dir) => add_dir(&mut zip, dir, &format!("{}/", file_name(dir)))?,
-            Saved::Contents(dir) => add_dir(&mut zip, dir, "")?,
+            Saved::Pages(dir) => {
+                for path in sorted_entries(dir)?.into_iter().filter(|p| p.is_file()) {
+                    add_file(&mut zip, &path, &file_name(&path))?;
+                }
+            }
         }
     }
     let mut file = zip.finish().map_err(io::Error::other)?;
@@ -136,12 +146,18 @@ fn zip_all(saved: &[Saved]) -> io::Result<File> {
     Ok(file)
 }
 
+/// The entries of `dir`, by name.
+fn sorted_entries(dir: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)?
+        .map(|e| e.map(|e| e.path()))
+        .collect::<Result<_, _>>()?;
+    entries.sort();
+    Ok(entries)
+}
+
 fn add_dir(zip: &mut ZipWriter<File>, dir: &Path, prefix: &str) -> io::Result<()> {
-    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
-    entries.sort_by_key(|e| e.file_name());
-    for entry in entries {
-        let name = format!("{prefix}{}", entry.file_name().to_string_lossy());
-        let path = entry.path();
+    for path in sorted_entries(dir)? {
+        let name = format!("{prefix}{}", file_name(&path));
         if path.is_dir() {
             add_dir(zip, &path, &format!("{name}/"))?;
         } else {

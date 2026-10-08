@@ -12,7 +12,9 @@
 
 	$effect(() => {
 		events.start();
-		// Snapshot what happened before the stream connected (the queue refetches on connect).
+		// Snapshot what happened before the stream connected. The queue also refetches on every
+		// connect, but should show even when the stream cannot connect.
+		events.queue.resync();
 		api
 			.listInbox()
 			.then((inbox) => events.seed({ inbox }))

@@ -103,6 +103,8 @@ export class QueueStore {
 		const i = this.tasks.findIndex((t) => t.id === task.id);
 		if (i < 0) this.tasks.push(task);
 		else this.tasks[i] = task;
+		// Newer than a refetch already in flight.
+		if (this.#inFlight) this.#inFlight[task.id] = task;
 	}
 
 	/** A `task.progress` frame. */

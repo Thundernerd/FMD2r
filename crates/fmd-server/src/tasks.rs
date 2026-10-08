@@ -7,7 +7,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use fmd_core::download::{
-    ChapterSpec, ChapterStatus, EngineError, NewDownload, TaskId, TaskInfo, TaskStatus,
+    ChapterSpec, ChapterStatus, EngineError, NewDownload, Progress, TaskId, TaskInfo, TaskStatus,
 };
 use fmd_pack::natural_cmp;
 use futures_util::future::BoxFuture;
@@ -96,9 +96,14 @@ impl From<ChapterStatus> for ChapterState {
     }
 }
 
+/// A task's last progress report, while it runs; a stopped task's is stale.
+fn live(info: &TaskInfo) -> Option<Progress> {
+    info.progress.filter(|_| info.running)
+}
+
 impl From<&TaskInfo> for TaskDetail {
     fn from(info: &TaskInfo) -> Self {
-        let live = info.progress.filter(|_| info.running);
+        let live = live(info);
         TaskDetail {
             task: TaskSummary::from(info),
             chapters: info
@@ -175,7 +180,7 @@ pub(crate) struct TaskQuery {
 }
 
 /// The columns FMD2 sorts its downloads list by (`CompareTaskContainer`,
-/// baseunits/uDownloadsManager.pas:2046-2099), plus the queue order itself.
+/// baseunits/uDownloadsManager.pas:2046-2083), plus the queue order itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskSort {
@@ -238,7 +243,8 @@ impl From<&TaskInfo> for TaskSummary {
         let task = &info.task;
         let names: Vec<&str> = info.chapters.iter().map(|c| c.name.as_str()).collect();
         let current = info.chapters.get(task.current_chapter as usize);
-        let (done, total) = match (&info.progress, current) {
+        let live = live(info);
+        let (done, total) = match (live, current) {
             (Some(p), _) => (u64::from(p.pages_done), u64::from(p.pages_total)),
             (None, Some(c)) => (u64::from(c.current_page), u64::from(c.page_count)),
             (None, None) => (0, 0),
@@ -263,10 +269,7 @@ impl From<&TaskInfo> for TaskSummary {
             current_chapter: task.current_chapter,
             done,
             total,
-            bytes_per_sec: match (&info.progress, info.running) {
-                (Some(p), true) => p.bytes_per_sec as f64,
-                _ => 0.0,
-            },
+            bytes_per_sec: live.map_or(0.0, |p| p.bytes_per_sec as f64),
             date_added: rfc3339_from_unix_ms(task.date_added),
             date_last_downloaded: task.date_last_downloaded.map(rfc3339_from_unix_ms),
         }
@@ -307,7 +310,7 @@ fn matches(info: &TaskInfo, query: &TaskQuery) -> bool {
     }
 }
 
-/// `CompareTaskContainer` (baseunits/uDownloadsManager.pas:2046-2079): text columns compare
+/// `CompareTaskContainer` (baseunits/uDownloadsManager.pas:2046-2083): text columns compare
 /// naturally, the date added by time. The speed compares as a number rather than as FMD2's
 /// formatted rate text.
 fn compare(sort: TaskSort, a: &TaskSummary, b: &TaskSummary) -> Ordering {
