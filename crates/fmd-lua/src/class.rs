@@ -1,6 +1,7 @@
 //! The generic binding through which every Host API object is exposed to Lua, reproducing the
 //! object semantics of FMD2's `LuaClass` (baseunits/lua/LuaClass.pas).
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -320,7 +321,8 @@ impl<T: 'static> LuaClass<T> {
 
     /// Creates the Lua object.
     pub fn build(self, lua: &Lua) -> crate::Result<AnyUserData> {
-        let object = lua.create_userdata(LuaObject)?;
+        let state: Rc<dyn Any> = self.state.clone();
+        let object = lua.create_userdata(LuaObject(state))?;
         let table = lua.create_table()?;
         // Registered first, as in FMD2, so a member named `self` replaces it
         // (baseunits/lua/LuaClass.pas:290).
@@ -331,6 +333,15 @@ impl<T: 'static> LuaClass<T> {
         }
         object.set_user_value(table)?;
         Ok(object)
+    }
+}
+
+impl<T: 'static> LuaClass<T> {
+    /// The state behind `object` when it is a `LuaClass<T>` object, as FMD2 reads the Pascal
+    /// object back out of a userdata argument (`luaToUserData`, baseunits/lua/LuaUtils.pas:201).
+    pub fn state_of(object: &AnyUserData) -> Option<Rc<RefCell<T>>> {
+        let state = object.borrow::<LuaObject>().ok()?.0.clone();
+        state.downcast::<RefCell<T>>().ok()
     }
 }
 
@@ -348,8 +359,9 @@ fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
     })
 }
 
-/// The userdata behind every `LuaClass` object; its members live in its user value.
-struct LuaObject;
+/// The userdata behind every `LuaClass` object: its state, for [`LuaClass::state_of`]. Its
+/// members live in its user value.
+struct LuaObject(Rc<dyn Any>);
 
 /// Converts a number key to its string form, as `lua_tostring` does in place on the key's
 /// stack slot (baseunits/lua/LuaClass.pas:104, :140, :175, :191). Other keys are unchanged, so

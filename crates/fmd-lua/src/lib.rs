@@ -1,6 +1,7 @@
 //! Lua runtime and the full FMD2 Host API that website modules see (the core of FMD2r).
 
 mod class;
+pub mod xquery;
 
 pub use class::LuaClass;
 pub use mlua;
@@ -31,6 +32,8 @@ impl Runtime {
         // need C modules (`pb`), which the safe mode forbids.
         let lua =
             unsafe { mlua::Lua::unsafe_new_with(mlua::StdLib::ALL, mlua::LuaOptions::default()) };
+        #[cfg(feature = "xpath-fpc")]
+        xquery::register(&lua, std::rc::Rc::new(fmd_xpath::fpc::FpcEngine))?;
         Ok(Runtime { lua })
     }
 
