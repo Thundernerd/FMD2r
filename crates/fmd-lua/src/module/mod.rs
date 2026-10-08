@@ -223,6 +223,9 @@ pub struct Module {
     def: RwLock<ModuleDef>,
     storage: Mutex<Storage>,
     guardian: Arc<CriticalSection>,
+    /// `TWebsiteBypass.Guardian`: serialises the module's anti-bot bypasses
+    /// (baseunits/lua/LuaWebsiteBypass.pas:14-20, :161).
+    website_bypass: CriticalSection,
     account: Mutex<Option<Arc<Account>>>,
     http: ModuleHttp,
     active_task_count: AtomicI32,
@@ -236,6 +239,7 @@ impl Module {
             def: RwLock::new(ModuleDef::new(file)),
             storage: Mutex::default(),
             guardian: Arc::default(),
+            website_bypass: CriticalSection::default(),
             account: Mutex::default(),
             http: ModuleHttp::default(),
             active_task_count: AtomicI32::new(0),
@@ -256,6 +260,12 @@ impl Module {
     /// The module's `Guardian` critical section.
     pub fn guardian(&self) -> &Arc<CriticalSection> {
         &self.guardian
+    }
+
+    /// The lock that serialises the module's anti-bot bypasses (`TWebsiteBypass.Guardian`,
+    /// baseunits/lua/LuaWebsiteBypass.pas:14-20, taken at :161).
+    pub(crate) fn website_bypass_guard(&self) -> &CriticalSection {
+        &self.website_bypass
     }
 
     /// The module's account, present while `AccountSupport` is true.

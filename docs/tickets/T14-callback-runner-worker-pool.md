@@ -14,7 +14,7 @@ In:
   - Download: `task_start`, `get_page_number(chapter_url)` (global `URL` = chapter URL; `TASK` with `PageLinks`, `PageContainerLinks`, `FileNames`, `ChapterLinks`, `ChapterNames`, `CurrentDownloadChapterPtr`, `PageNumber`, `CurrentMaxFileNameLength`, `Link`), `get_image_url(work_id, url)` (`WORKID`, `URL` set), `before_download_image`, `download_image`, `save_image(path, name)`, `after_image_saved(filename)` (with `WORKID`).
   - Accounts: `login`, `account_state`, `check_site`, with globals `no_error`, `net_problem`, `information_not_found` and the `as*` account-status constants set as in FMD2.
   - Return value conventions (boolean/number/nil) mapped exactly as each `Do*` function in `LuaWebsiteModules.pas` does.
-- `HTTP` global per callback bound to a session for that module and job (T10), with cancellation wired to the job.
+- `HTTP` global per callback bound to a session for that module and job (T10), with cancellation wired to the job. Build it with `LuaHttp::with_website_bypass(session, module, settings)` (T30; settings from `fmd_core::settings::StoredModuleHttpSettings`) so the anti-bot hook runs; `LuaHttp::new` has no hook. Set the runtime's working dir to the data dir so `cloudflare.lua`'s relative paths resolve.
 - Full GC (twice, as FMD2 does) every 16 callback invocations per state.
 - Module limits exposed to callers: effective `MaxTaskLimit`, `MaxThreadPerTaskLimit`, `MaxConnectionLimit` (module values overridable by settings).
 - Hot-reload hook: `pool.invalidate(module_id | all)` marks cached bytecode stale; workers rebuild on next use when idle (used by T29).

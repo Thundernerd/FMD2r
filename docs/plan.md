@@ -93,7 +93,7 @@ web/           SvelteKit (Svelte 5, adapter-static SPA), API client generated fr
 
 **XPath** (`CreateTXQuery`, `IXQValue`): delegate to `fmd-xpath`. The FPC shim exports parse, eval and value-handle functions. Configure it exactly like `XQueryEngineHTML.pas:384-400`: HTML repair, trimText=false, no comments, and errors yield an empty value. `XPathStringAll` trims items, skips empty ones, and joins with `', '` by default.
 
-**Windows assumptions in upstream modules:** `lua/utils/nodejs.lua` runs `cmd.exe /c node`, and `cloudflare.lua` runs `python lua\websitebypass\cloudflare.py`. `fmd.subprocess` translates these on Linux: `cmd.exe /c X` becomes a direct exec of X, and backslashes become slashes. The Docker image ships `python3` and `node`, and compose adds a FlareSolverr sidecar with `websitebypass_config.json` pointing at it.
+**Windows assumptions in upstream modules:** `lua/utils/nodejs.lua` runs `cmd.exe /c node`, and `cloudflare.lua` runs `python lua\websitebypass\cloudflare.py`. `fmd.subprocess` translates these on Linux: `cmd.exe /c X` becomes a direct exec of X, and backslashes become slashes. The Docker image ships `python3` and `node`, and compose adds a FlareSolverr sidecar with `websitebypass_config.json` pointing at it. Upstream's `cloudflare.py` cannot run on Linux (`Path(__file__) / '..'` on a file), so FMD2r answers `python … websitebypass/cloudflare.py` with a built-in FlareSolverr client that prints the script's JSON (T30). `io.open` translates Windows paths the same way, against the working dir.
 
 ## Data (fmd-store)
 

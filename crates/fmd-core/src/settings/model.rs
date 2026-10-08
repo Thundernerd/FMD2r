@@ -100,6 +100,11 @@ pub struct ConnectionSettings {
     pub user_agent: String,
     /// Global proxy (mangadownloader/forms/frmMain.pas:5874-5879).
     pub proxy: ProxySettings,
+    /// FlareSolverr's URL, e.g. `http://flaresolverr:8191`, for Cloudflare challenges; empty
+    /// for none. No FMD2 setting: FMD2r writes it into upstream's
+    /// `lua/websitebypass/websitebypass_config.json` at startup
+    /// ([`write_websitebypass_config`](super::write_websitebypass_config)).
+    pub flaresolverr_url: String,
 }
 
 impl Default for ConnectionSettings {
@@ -115,6 +120,7 @@ impl Default for ConnectionSettings {
             timeout_secs: 30,
             user_agent: DEFAULT_USER_AGENT.into(),
             proxy: ProxySettings::default(),
+            flaresolverr_url: String::new(),
         }
     }
 }

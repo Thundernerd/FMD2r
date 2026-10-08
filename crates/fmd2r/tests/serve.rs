@@ -15,10 +15,16 @@ struct Server {
 
 /// Starts `fmd2r serve` on a free port and waits for its "listening on" line.
 fn start() -> Server {
+    start_with(&[])
+}
+
+/// [`start`] with extra arguments.
+fn start_with(args: &[&str]) -> Server {
     let dir = tempfile::tempdir().unwrap();
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("fmd2r"))
         .args(["serve", "--bind", "127.0.0.1:0", "--data-dir"])
         .arg(dir.path().join("data"))
+        .args(args)
         .env("RUST_LOG", "info")
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -97,5 +103,21 @@ fn serve_answers_health_and_stops_on_sigint_with_an_sse_client_connected() {
 #[test]
 fn serve_stops_on_sigterm() {
     let server = start();
+    signal_and_wait(server, "TERM");
+}
+
+#[test]
+fn startup_points_the_cloudflare_bypass_at_flaresolverr() {
+    let server = start_with(&["--flaresolverr-url", "http://flaresolverr:8191"]);
+    let config = server
+        ._dir
+        .path()
+        .join("data/lua/websitebypass/websitebypass_config.json");
+    let config: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(config).unwrap()).unwrap();
+    // The keys lua/websitebypass/cloudflare.lua:309-322 reads.
+    assert_eq!(config["use_webdriver"], true);
+    assert_eq!(config["flaresolverr_ip"], "flaresolverr");
+    assert_eq!(config["flaresolverr_port"], 8191);
     signal_and_wait(server, "TERM");
 }

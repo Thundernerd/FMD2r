@@ -744,6 +744,8 @@ dependencies = [
 name = "fmd-core"
 version = "0.1.0"
 dependencies = [
+ "fmd-http",
+ "fmd-lua",
  "fmd-store",
  "serde",
  "serde_json",
@@ -751,6 +753,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tracing",
  "utoipa",
 ]
 

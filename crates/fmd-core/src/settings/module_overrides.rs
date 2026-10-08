@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use utoipa::ToSchema;
 
-use fmd_store::{ModuleSettings, ModuleSettingsRepo};
+use fmd_http::{Proxy, ProxyKind};
+use fmd_lua::{ModuleHttpOverrides, ModuleHttpSettings, SettingsStoreError};
+use fmd_store::{AppDb, ModuleSettings, ModuleSettingsRepo};
 
 use super::model::ConnectionSettings;
 use super::service::{SettingsError, merge};
@@ -62,6 +64,64 @@ impl ModuleOverrides {
     }
 }
 
+/// One module's HTTP settings in `app.db`, as its `HTTP` objects read them before every request
+/// and the anti-bot hook writes them (`TModuleContainer.Settings.HTTP`,
+/// baseunits/WebsiteModules.pas:278-283, :353-379; baseunits/lua/LuaWebsiteBypass.pas:178-184).
+pub struct StoredModuleHttpSettings {
+    db: AppDb,
+    module_id: String,
+}
+
+impl StoredModuleHttpSettings {
+    pub fn new(db: AppDb, module_id: impl Into<String>) -> Self {
+        Self {
+            db,
+            module_id: module_id.into(),
+        }
+    }
+
+    /// Loads the module's overrides, changes them with `change` and stores them.
+    fn update(&self, change: impl FnOnce(&mut ModuleOverrides)) -> Result<(), SettingsStoreError> {
+        let repo = self.db.module_settings();
+        let mut overrides =
+            ModuleOverrides::load(&repo, &self.module_id).map_err(SettingsStoreError::new)?;
+        change(&mut overrides);
+        overrides
+            .save(&repo, &self.module_id)
+            .map_err(SettingsStoreError::new)
+    }
+}
+
+impl ModuleHttpSettings for StoredModuleHttpSettings {
+    fn http_overrides(&self) -> Option<ModuleHttpOverrides> {
+        let overrides = match ModuleOverrides::load(&self.db.module_settings(), &self.module_id) {
+            Ok(overrides) => overrides,
+            Err(e) => {
+                tracing::error!(target: "fmd_core", "settings of module {}: {e}", self.module_id);
+                return None;
+            }
+        };
+        let http = overrides.http;
+        overrides.enabled.then(|| ModuleHttpOverrides {
+            user_agent: http.user_agent,
+            cookies: http.cookies,
+            proxy: http.proxy.to_lua(),
+        })
+    }
+
+    fn clear_cookies(&self) -> Result<(), SettingsStoreError> {
+        self.update(|overrides| overrides.http.cookies.clear())
+    }
+
+    fn store_bypass(&self, cookies: &str, user_agent: &str) -> Result<(), SettingsStoreError> {
+        self.update(|overrides| {
+            overrides.enabled = true;
+            overrides.http.cookies = cookies.to_owned();
+            overrides.http.user_agent = user_agent.to_owned();
+        })
+    }
+}
+
 /// Limit overrides; 0 means "not overridden" for tasks and threads
 /// (baseunits/WebsiteModulesSettings.pas:81-83).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -95,6 +155,26 @@ pub struct ProxyOverride {
     pub port: String,
     pub username: String,
     pub password: String,
+}
+
+impl ProxyOverride {
+    /// The override as `fmd-lua` applies it to a session (baseunits/WebsiteModules.pas:364-379).
+    fn to_lua(&self) -> fmd_lua::ProxyOverride {
+        let kind = match self.kind {
+            ProxyOverrideType::Default => return fmd_lua::ProxyOverride::Default,
+            ProxyOverrideType::Direct => return fmd_lua::ProxyOverride::Direct,
+            ProxyOverrideType::Http => ProxyKind::Http,
+            ProxyOverrideType::Socks4 => ProxyKind::Socks4,
+            ProxyOverrideType::Socks5 => ProxyKind::Socks5,
+        };
+        fmd_lua::ProxyOverride::Proxy(Proxy {
+            kind,
+            host: self.host.clone(),
+            port: self.port.clone(),
+            user: self.username.clone(),
+            pass: self.password.clone(),
+        })
+    }
 }
 
 /// `TProxyType` (baseunits/WebsiteModulesSettings.pas:11).
