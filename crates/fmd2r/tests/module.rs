@@ -457,3 +457,86 @@ fn pages_leaves_page_links_to_resolve_for_a_dynamic_page_link_module() {
     // module resolves them while downloading.
     assert_eq!(out["page_links"], json!(["W", "W"]));
 }
+
+#[test]
+fn replay_names_an_unrecorded_request_even_when_the_callback_then_raises() {
+    let server = Server::start(site);
+    let module = format!(
+        "{}\n{}",
+        fixture_module(&server.url("")),
+        r#"
+function GetInfo()
+  if not HTTP.GET(MANGAINFO.URL) then error('no page') end
+  return no_error
+end
+"#
+    );
+    let lua = lua_dir(&[("Fixture.lua", &module)]);
+    let fixtures = tempfile::tempdir().unwrap();
+    let mut cmd = module_cmd(lua.path(), &["info", &server.url("/manga/1"), "--record"]);
+    cmd.arg(fixtures.path());
+    stdout_json(&mut cmd);
+    let unrecorded = server.url("/manga/2");
+    drop(server);
+
+    let mut cmd = module_cmd(lua.path(), &["info", &unrecorded, "--replay"]);
+    let output = cmd.arg(fixtures.path()).output().unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(&format!("no recorded exchange for GET {unrecorded}")),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn info_without_on_get_info_reports_information_not_found() {
+    let module = r#"
+function Init()
+  local m = NewWebsiteModule()
+  m.ID = 'bare'
+  m.Name = 'Bare'
+  m.RootURL = 'https://bare.org'
+end
+"#;
+    let lua = lua_dir(&[("Bare.lua", module)]);
+    let out = stdout_json(&mut module_cmd(
+        lua.path(),
+        &["info", "https://bare.org/manga/1"],
+    ));
+    // `GetInfoFromURL` without `OnGetInfo` (baseunits/uData.pas:103-109).
+    assert_eq!(out["status"], 2);
+}
+
+#[test]
+fn pages_skips_on_get_page_number_when_task_start_found_the_pages() {
+    let module = r#"
+function Init()
+  local m = NewWebsiteModule()
+  m.ID = 'pre'
+  m.Name = 'Pre'
+  m.RootURL = 'https://pre.org'
+  m.OnTaskStart = 'TaskStart'
+  m.OnGetPageNumber = 'GetPageNumber'
+  m.OnGetImageURL = 'GetImageURL'
+end
+function TaskStart()
+  TASK.PageLinks.Add(' /a.jpg ')
+  TASK.PageLinks.Add('')
+  return true
+end
+function GetPageNumber() error('must not run') end
+function GetImageURL()
+  TASK.PageLinks[WORKID] = ' '
+  return true
+end
+"#;
+    let lua = lua_dir(&[("Pre.lua", module)]);
+    let out = stdout_json(&mut module_cmd(
+        lua.path(),
+        &["pages", "https://pre.org/chapter/1"],
+    ));
+    // `DoGetPageNumber` only runs without page links (baseunits/uDownloadsManager.pas:1181);
+    // a page link a module left blank is unresolved again (:1236-1246).
+    assert_eq!(out["page_links"], json!([" /a.jpg ", "W"]));
+}

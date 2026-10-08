@@ -9,8 +9,8 @@ use fmd_http::{
     HttpClient, RecordingTransport, ReplayOptions, ReplayTransport, ReqwestTransport, Transport,
 };
 use fmd_lua::{
-    Callback, LoadReport, Module, ModuleDef, ModuleOption, ModuleRegistry, OptionKind, PoolConfig,
-    Task, WorkerPool,
+    Callback, InfoReply, JobError, LoadReport, MangaInfo, Module, ModuleDef, ModuleOption,
+    ModuleRegistry, OptionKind, PoolConfig, Task, WorkerPool,
 };
 use serde_json::{Value, json};
 
@@ -19,9 +19,9 @@ pub enum ModuleCommand {
     /// Load the Lua website modules and report them.
     Init(InitArgs),
     /// Run `OnGetInfo` for a manga URL and print the result.
-    Info(InfoArgs),
+    Info(RunArgs),
     /// Run the page callbacks for a chapter URL and print the page links.
-    Pages(PagesArgs),
+    Pages(RunArgs),
     /// Download a chapter.
     Download(DownloadArgs),
 }
@@ -33,7 +33,7 @@ pub struct LoadArgs {
     #[arg(long, default_value = "lua")]
     lua_dir: PathBuf,
     /// Only the module with this ID.
-    #[arg(long, value_name = "ID")]
+    #[arg(long, value_name = "ID", conflicts_with = "file")]
     module: Option<String>,
     /// Load only this module file instead of every file in `<lua-dir>/modules`.
     #[arg(long, value_name = "PATH")]
@@ -71,19 +71,10 @@ pub struct InitArgs {
     json: bool,
 }
 
+/// What `info` and `pages` run a module's callbacks on.
 #[derive(Args)]
-pub struct InfoArgs {
-    /// The manga's URL.
-    url: String,
-    #[command(flatten)]
-    load: LoadArgs,
-    #[command(flatten)]
-    http: HttpArgs,
-}
-
-#[derive(Args)]
-pub struct PagesArgs {
-    /// The chapter's URL.
+pub struct RunArgs {
+    /// The manga's URL for `info`, the chapter's for `pages`.
     url: String,
     #[command(flatten)]
     load: LoadArgs,
@@ -117,13 +108,13 @@ pub struct HttpArgs {
 }
 
 /// The HTTP client of a command, and the replay transport behind it, if any.
-struct Http {
+struct CommandHttp {
     client: HttpClient,
     replay: Option<Arc<ReplayTransport>>,
 }
 
 impl HttpArgs {
-    fn client(&self) -> anyhow::Result<Http> {
+    fn client(&self) -> anyhow::Result<CommandHttp> {
         let mut replay = None;
         let transport: Arc<dyn Transport> = match (&self.record, &self.replay) {
             (Some(dir), _) => Arc::new(
@@ -142,11 +133,11 @@ impl HttpArgs {
             (None, None) => Arc::new(ReqwestTransport::new()),
         };
         let client = HttpClient::with_transport(transport).context("starting the HTTP client")?;
-        Ok(Http { client, replay })
+        Ok(CommandHttp { client, replay })
     }
 }
 
-impl Http {
+impl CommandHttp {
     /// Fails, naming each request, when a replay met requests it had no exchange for.
     fn check_replay(&self) -> anyhow::Result<()> {
         let Some(replay) = &self.replay else {
@@ -197,16 +188,47 @@ fn init(args: InitArgs) -> anyhow::Result<()> {
     fail_on_load_errors(&report)
 }
 
-fn info(args: InfoArgs) -> anyhow::Result<()> {
-    let target = Target::resolve(&args.load, &args.url)?;
-    let http = args.http.client()?;
-    let pool = pool(&args.load, &http)?;
-    let reply = pool.on(&target.module).get_info(&target.link).wait()?;
-    http.check_replay()?;
-    let info = reply.value.info;
+/// One module run: the module and link a URL resolves to, and the worker running it.
+struct ModuleRun {
+    target: Target,
+    http: CommandHttp,
+    pool: WorkerPool,
+}
+
+impl ModuleRun {
+    fn start(args: &RunArgs) -> anyhow::Result<ModuleRun> {
+        let target = Target::resolve(&args.load, &args.url)?;
+        let http = args.http.client()?;
+        let pool = pool(&args.load, &http)?;
+        Ok(ModuleRun { target, http, pool })
+    }
+
+    /// The callbacks' `result`, after failing on any request a replay had no exchange for, which
+    /// is what usually made a callback fail.
+    fn finish<T>(&self, result: Result<T, JobError>) -> anyhow::Result<T> {
+        self.http.check_replay()?;
+        Ok(result?)
+    }
+}
+
+/// `GetInfoFromURL` (baseunits/uData.pas:85-109) up to `OnGetInfo`: the info as the callback
+/// left it, without FMD2's cleanup of the fields afterwards (:111-206).
+fn info(args: RunArgs) -> anyhow::Result<()> {
+    let run = ModuleRun::start(&args)?;
+    let module = &run.target.module;
+    let reply = if module.def().on_get_info.is_some() {
+        let result = run.pool.on(module).get_info(&run.target.link).wait();
+        run.finish(result)?.value
+    } else {
+        InfoReply {
+            status: INFORMATION_NOT_FOUND,
+            info: MangaInfo::default(),
+        }
+    };
+    let info = reply.info;
     let out = json!({
-        "module": target.module.def().id,
-        "status": reply.value.status,
+        "module": module.def().id,
+        "status": reply.status,
         "info": {
             "url": info.url,
             "title": info.title,
@@ -226,73 +248,98 @@ fn info(args: InfoArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// `INFORMATION_NOT_FOUND` (baseunits/uBaseUnit.pas), the `information_not_found` of Lua.
+const INFORMATION_NOT_FOUND: u8 = 2;
+
 /// What an unresolved page link holds (baseunits/uDownloadsManager.pas:845-849, :1208-1211).
 const UNRESOLVED_PAGE: &str = "W";
 
-/// Prepares one chapter as FMD2's task thread does before downloading
-/// (`TTaskThread.Execute`, baseunits/uDownloadsManager.pas:1185-1240): `OnTaskStart`, then
-/// `DoGetPageNumber` (:829-881), then, unless the module sets `DynamicPageLink`, `OnGetImageURL`
-/// for every page still unresolved (`DoPageLink`, :421-433, with `GetLinkPageFromURL`,
-/// :327-333). All run on one worker, in order, each with a fresh `HTTP` session.
-fn pages(args: PagesArgs) -> anyhow::Result<()> {
-    let target = Target::resolve(&args.load, &args.url)?;
-    let http = args.http.client()?;
-    let pool = pool(&args.load, &http)?;
-    let def = target.module.def();
-    let affinity = pool.affinity();
-    let on = || pool.on(&target.module).with_affinity(affinity);
-    let mut task = Task {
-        chapter_links: vec![target.link.clone()],
-        chapter_names: vec![String::new()],
-        ..Task::default()
-    };
-    if def.on_task_start.is_some() {
-        task = on().task_start(task).wait()?.value.task;
-    }
-    task.page_number = 0;
-    if def.on_get_page_number.is_some() {
-        task = on().get_page_number(task, &target.link).wait()?.value.task;
-    }
-    // `TrimStrings` (baseunits/uBaseUnit.pas:1396-1410): FPC's `Trim`, dropping empty items.
-    task.page_links = task
-        .page_links
-        .iter()
-        .map(|link| link.trim_matches(|c: char| c <= ' ').to_owned())
-        .filter(|link| !link.is_empty())
-        .collect();
-    let wanted = usize::try_from(task.page_number).unwrap_or(0);
-    while task.page_links.len() < wanted {
-        task.page_links.push(UNRESOLVED_PAGE.to_owned());
-    }
-    if task.page_links.is_empty() {
-        task.page_links.push(UNRESOLVED_PAGE.to_owned());
-    }
-    task.page_number = i32::try_from(task.page_links.len()).unwrap_or(i32::MAX);
-    if !def.dynamic_page_link && def.on_get_image_url.is_some() {
-        // Like `InternalGetPageLinkWorkId` (baseunits/uDownloadsManager.pas:928-945), against
-        // the page links as the previous callback left them.
-        let mut work_id = 0;
-        while let Some(link) = task.page_links.get(work_id) {
-            if link == UNRESOLVED_PAGE {
-                let id = i32::try_from(work_id).unwrap_or(i32::MAX);
-                task = on()
-                    .get_image_url(task, id, &target.link)
-                    .wait()?
-                    .value
-                    .task;
-            }
-            work_id += 1;
-        }
-    }
-    http.check_replay()?;
+/// Prepares one chapter as FMD2's task thread does before downloading (`TTaskThread.Execute`,
+/// baseunits/uDownloadsManager.pas:975-1250, the part at :1167-1246): `OnTaskStart`; then, when
+/// it left no page links, `DoGetPageNumber` (:829-881); then, unless the module sets
+/// `DynamicPageLink`, `OnGetImageURL` for every page still unresolved (`DoPageLink`, :421-433,
+/// with `GetLinkPageFromURL`, :327-333). All run on one worker, in order, each with a fresh
+/// `HTTP` session.
+fn pages(args: RunArgs) -> anyhow::Result<()> {
+    let run = ModuleRun::start(&args)?;
+    let result = prepare_chapter(&run);
+    let task = run.finish(result)?;
     let out = json!({
-        "module": def.id,
+        "module": run.target.module.def().id,
         "page_number": task.page_number,
         "page_links": task.page_links,
         "page_container_links": task.page_container_links,
     });
     println!("{}", serde_json::to_string_pretty(&out)?);
     Ok(())
+}
+
+/// The callbacks of [`pages`], returning the task as they left it.
+fn prepare_chapter(run: &ModuleRun) -> Result<Task, JobError> {
+    let def = run.target.module.def();
+    let link = &run.target.link;
+    let affinity = run.pool.affinity();
+    let on_module = || run.pool.on(&run.target.module).with_affinity(affinity);
+    let mut task = Task {
+        chapter_links: vec![link.clone()],
+        chapter_names: vec![String::new()],
+        ..Task::default()
+    };
+    if def.on_task_start.is_some() {
+        task = on_module().task_start(task).wait()?.value.task;
+    }
+    if task.page_links.is_empty() {
+        task.page_number = 0;
+        if def.on_get_page_number.is_some() {
+            task = on_module().get_page_number(task, link).wait()?.value.task;
+        }
+        // `TrimStrings` (baseunits/uBaseUnit.pas:1396-1410): FPC's `Trim`, dropping empty items.
+        task.page_links = task
+            .page_links
+            .iter()
+            .map(|link| fpc_trim(link).to_owned())
+            .filter(|link| !link.is_empty())
+            .collect();
+        let wanted = usize::try_from(task.page_number).unwrap_or(0);
+        while task.page_links.len() < wanted {
+            task.page_links.push(UNRESOLVED_PAGE.to_owned());
+        }
+    }
+    if task.page_links.is_empty() {
+        task.page_links.push(UNRESOLVED_PAGE.to_owned());
+    }
+    task.page_number = i32::try_from(task.page_links.len()).unwrap_or(i32::MAX);
+    // `CheckForPrepare` (baseunits/uDownloadsManager.pas:980-1001): a page is unresolved or empty.
+    let to_prepare = task
+        .page_links
+        .iter()
+        .any(|l| l == UNRESOLVED_PAGE || l.is_empty());
+    if !def.dynamic_page_link && to_prepare {
+        if def.on_get_image_url.is_some() {
+            // Like `InternalGetPageLinkWorkId` (baseunits/uDownloadsManager.pas:927-945), against
+            // the page links as the previous callback left them.
+            let mut work_id = 0;
+            while let Some(page) = task.page_links.get(work_id) {
+                if page == UNRESOLVED_PAGE {
+                    let id = i32::try_from(work_id).unwrap_or(i32::MAX);
+                    task = on_module().get_image_url(task, id, link).wait()?.value.task;
+                }
+                work_id += 1;
+            }
+        }
+        // A page link left blank is unresolved again (baseunits/uDownloadsManager.pas:1236-1246).
+        for page in &mut task.page_links {
+            if fpc_trim(page).is_empty() {
+                *page = UNRESOLVED_PAGE.to_owned();
+            }
+        }
+    }
+    Ok(task)
+}
+
+/// FPC's `Trim`: strips characters up to `' '` at both ends.
+fn fpc_trim(text: &str) -> &str {
+    text.trim_matches(|c: char| c <= ' ')
 }
 
 /// The module a URL is run on, and the link (the URL's path) its callback gets.
@@ -326,7 +373,7 @@ impl Target {
 }
 
 /// A one-thread worker pool over `load`'s `lua/` dir, sending HTTP through `http`.
-fn pool(load: &LoadArgs, http: &Http) -> anyhow::Result<WorkerPool> {
+fn pool(load: &LoadArgs, http: &CommandHttp) -> anyhow::Result<WorkerPool> {
     let mut config = PoolConfig::new(http.client.clone());
     config.threads = 1;
     config.lua_dir = load.lua_dir.clone();

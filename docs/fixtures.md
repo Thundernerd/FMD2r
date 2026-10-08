@@ -99,7 +99,8 @@ each such request.
 ## Output
 
 `module info` prints the `OnGetInfo` status and `MANGAINFO` fields as the callback left them, as
-JSON. `module pages` prints the page number, page links and page container links after
+JSON. FMD2's later cleanup of those fields (`GetInfoFromURL`, `baseunits/uData.pas:111-206`) is
+not applied. `module pages` prints the page number, page links and page container links after
 `OnTaskStart`, `OnGetPageNumber` and `OnGetImageURL`, as JSON. `module init --json` lists the
 modules sorted by ID and the load failures sorted by file. The output contains no timestamps
 or other run-dependent values, so a replayed run prints exactly what the recorded run printed

@@ -230,20 +230,21 @@ impl Recorder {
 }
 
 fn write_json(path: &Path, value: &impl Serialize) -> Result<(), FixtureError> {
-    let mut json = serde_json::to_vec_pretty(value).map_err(|source| FixtureError::Json {
-        path: path.to_path_buf(),
-        source,
-    })?;
+    let mut json = serde_json::to_vec_pretty(value).map_err(json_error(path))?;
     json.push(b'\n');
     std::fs::write(path, json).map_err(io_error(path))
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, FixtureError> {
     let bytes = std::fs::read(path).map_err(io_error(path))?;
-    serde_json::from_slice(&bytes).map_err(|source| FixtureError::Json {
+    serde_json::from_slice(&bytes).map_err(json_error(path))
+}
+
+fn json_error(path: &Path) -> impl FnOnce(serde_json::Error) -> FixtureError + '_ {
+    move |source| FixtureError::Json {
         path: path.to_path_buf(),
         source,
-    })
+    }
 }
 
 impl Transport for RecordingTransport {
@@ -296,6 +297,23 @@ struct Key {
     headers: Vec<Option<String>>,
 }
 
+impl Key {
+    fn new(
+        options: &ReplayOptions,
+        method: &str,
+        url: &str,
+        body: Vec<u8>,
+        headers: &[(String, String)],
+    ) -> Key {
+        Key {
+            method: method.to_owned(),
+            url: url.to_owned(),
+            body,
+            headers: header_values(options, headers),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Replayed {
     Response(WireResponse),
@@ -328,12 +346,13 @@ impl ReplayTransport {
             let path = dir.join(EXCHANGES_DIR).join(format!("{}.json", entry.id));
             let exchange: Exchange = read_json(&path)?;
             let request = &exchange.request;
-            let key = Key {
-                method: request.method.clone(),
-                url: request.url.clone(),
-                body: read_body(&request.body)?,
-                headers: header_values(&options, &request.headers),
-            };
+            let key = Key::new(
+                &options,
+                &request.method,
+                &request.url,
+                read_body(&request.body)?,
+                &request.headers,
+            );
             let replayed = match exchange.outcome {
                 Outcome::Response(response) => {
                     let mut headers = response.headers;
@@ -367,12 +386,13 @@ impl ReplayTransport {
     }
 
     fn answer(&self, request: &WireRequest) -> Result<WireResponse, TransportError> {
-        let key = Key {
-            method: request.method.clone(),
-            url: request.url.clone(),
-            body: request.body.clone(),
-            headers: header_values(&self.options, &request.headers),
-        };
+        let key = Key::new(
+            &self.options,
+            &request.method,
+            &request.url,
+            request.body.clone(),
+            &request.headers,
+        );
         let Some(recorded) = self.exchanges.get(&key) else {
             let miss = format!("{} {}", request.method, request.url);
             lock(&self.misses).push(miss.clone());
