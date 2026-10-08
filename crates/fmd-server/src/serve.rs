@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use fmd_core::settings::{SettingsService, write_websitebypass_config};
+use fmd_core::settings::write_websitebypass_config;
 use fmd_store::AppDb;
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -54,36 +54,32 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         source,
     })?;
     let db_path = config.data_dir.join("app.db");
-    let db = tokio::task::spawn_blocking(move || AppDb::open(db_path))
-        .await
-        .map_err(std::io::Error::other)??;
+    // Opening the store and loading the settings block.
+    let state = tokio::task::spawn_blocking(move || -> Result<AppState, ServeError> {
+        Ok(AppState::new(AppDb::open(db_path)?)?)
+    })
+    .await
+    .map_err(std::io::Error::other)??;
     // Read once: cover cache and FlareSolverr changes apply on the next start.
-    let settings = {
-        let db = db.clone();
-        tokio::task::spawn_blocking(move || SettingsService::load(db))
-            .await
-            .map_err(std::io::Error::other)??
-    };
+    let settings = state.settings.get();
     // Absolute, so `GET /api/about` shows where the data really is.
     let data_dir = std::fs::canonicalize(&config.data_dir).unwrap_or(config.data_dir);
     let lua_dir = data_dir.join("lua");
     // The flag or environment variable wins for this run without replacing the stored setting.
     let flaresolverr_url = config
         .flaresolverr_url
-        .unwrap_or_else(|| settings.get().connections.flaresolverr_url.clone());
+        .unwrap_or_else(|| settings.connections.flaresolverr_url.clone());
     // Where upstream's cloudflare.lua looks for FlareSolverr (lua/websitebypass/cloudflare.lua:271-325).
     if let Err(e) = write_websitebypass_config(&lua_dir, &flaresolverr_url) {
         tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}");
     }
     let bypass_config = lua_dir.join("websitebypass/websitebypass_config.json");
-    let mut state = AppState::new(db)
+    let covers = CoverConfig::from_settings(data_dir.join("covers"), &settings.covers);
+    let mut state = state
         .with_logs(config.logs)
         .with_data_dir(&data_dir)
         .with_tools(SystemTools::new(bypass_config))
-        .with_covers(
-            CoverConfig::from_settings(data_dir.join("covers"), &settings.get().covers),
-            Idle,
-        );
+        .with_covers(covers, Idle);
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }

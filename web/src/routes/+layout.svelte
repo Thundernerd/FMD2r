@@ -24,8 +24,9 @@
 		return () => events.stop();
 	});
 
-	// The Queue page shows the full queue, so the dock would only repeat it.
-	const showDock = $derived(page.url.pathname !== '/queue');
+	// The Queue page shows the full queue, so the dock would only repeat it; the Settings page
+	// puts its save bar where the dock sits.
+	const showDock = $derived(!['/queue', '/settings'].includes(page.url.pathname));
 </script>
 
 <div class="app" class:with-dock={showDock}>

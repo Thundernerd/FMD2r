@@ -28,7 +28,7 @@ fn harness() -> Harness {
     let db = AppDb::open(dir.path().join("app.db")).unwrap();
     Harness {
         dir,
-        state: AppState::new(db),
+        state: AppState::new(db).unwrap(),
     }
 }
 

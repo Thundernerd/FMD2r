@@ -235,6 +235,261 @@
 					"200": { "description": "Event stream", "content": { "text/event-stream": {} } }
 				}
 			}
+		},
+		"/api/settings": {
+			"get": {
+				"tags": [
+					"settings"
+				],
+				"summary": "All settings.",
+				"operationId": "getSettings",
+				"responses": {
+					"200": {
+						"description": "Every setting",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Settings"
+								}
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": [
+					"settings"
+				],
+				"summary": "Update settings with a JSON merge patch (RFC 7396) over [`Settings`]; `null` resets a setting\nto its default. Nothing is stored unless the whole result is valid.",
+				"operationId": "patchSettings",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"additionalProperties": {},
+								"propertyNames": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "The updated settings",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Settings"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The patch is not a JSON object",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "A value is invalid or a setting unknown; `field` names it",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/preview-rename": {
+			"post": {
+				"tags": [
+					"settings"
+				],
+				"summary": "Preview the rename templates of a (possibly unsaved) `saveto` group on a sample series, the\nway downloads will name their folders and files.",
+				"operationId": "previewRename",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SaveToSettings"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "The expanded names",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RenamePreview"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Malformed body",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/modules": {
+			"get": {
+				"tags": [
+					"modules"
+				],
+				"summary": "Every loaded module, sorted by ID.",
+				"operationId": "listModules",
+				"responses": {
+					"200": {
+						"description": "The loaded modules",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/ModuleSummary"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/modules/{id}/settings": {
+			"get": {
+				"tags": [
+					"modules"
+				],
+				"summary": "A module's options, limits and overrides.",
+				"operationId": "getModuleSettings",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"description": "Module ID",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "The module's settings",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ModuleSettingsView"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "No module with that ID is loaded",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": [
+					"modules"
+				],
+				"summary": "Update a module's settings with a JSON merge patch (RFC 7396) over `enabled`, `limits`,\n`http` and `options` (option values keyed by `key`; `null` resets one to its default).\nNothing is stored unless the whole patch is valid.",
+				"operationId": "patchModuleSettings",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"description": "Module ID",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"additionalProperties": {},
+								"propertyNames": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "The updated settings",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ModuleSettingsView"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The patch is not a JSON object",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "No module with that ID is loaded",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "A value is invalid or a setting unknown; `field` names it",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	},
 	"components": {
@@ -408,6 +663,7 @@
 				"required": ["type", "title", "status", "detail"],
 				"properties": {
 					"detail": { "type": "string" },
+					"field": {"type": ["string", "null"], "description": "The setting a validation error (422) is about, as a dotted path such as\n`connections.timeout_secs` or `options.server`."},
 					"status": { "type": "integer", "format": "int32", "minimum": 0 },
 					"title": { "type": "string", "description": "The status code's reason phrase." },
 					"type": {
@@ -422,6 +678,1128 @@
 				"properties": {
 					"module": { "type": "string", "description": "Module ID" },
 					"link": { "type": "string", "description": "Series link relative to the module's RootURL" }
+				}
+			},
+			"ConnectionSettings": {
+				"type": "object",
+				"properties": {
+					"always_start_from_failed_chapters": {
+						"type": "boolean",
+						"description": "Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,\nbaseunits/FMDOptions.pas:137).",
+						"default": true
+					},
+					"auto_retry_failed_tasks": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Times a failed task is restarted automatically (`connections/NumberOfAutoRetryFailedTask`,\n`OptionRetryFailedTask` = 1, baseunits/FMDOptions.pas:136). Range 0..=100, the TSpinEdit default (no bounds\nset, mangadownloader/forms/frmMain.lfm:3669-3681).",
+						"default": 1,
+						"maximum": 100,
+						"minimum": 0
+					},
+					"flaresolverr_url": {
+						"type": "string",
+						"description": "FlareSolverr's URL, e.g. `http://flaresolverr:8191`, for Cloudflare challenges; empty\nfor none. No FMD2 setting: FMD2r writes it into upstream's\n`lua/websitebypass/websitebypass_config.json` at startup\n([`write_websitebypass_config`](super::write_websitebypass_config)).",
+						"default": ""
+					},
+					"max_favorite_threads": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Threads checking favorites (`connections/MaxFavoriteThreads`,\nbaseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).",
+						"default": 1,
+						"maximum": 32,
+						"minimum": 1
+					},
+					"max_parallel_tasks": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Tasks downloading at once, over all modules (`connections/NumberOfTasks`,\n`OptionMaxParallel` = 1, baseunits/FMDOptions.pas:133). Range 1..=64: the Win64\n`MAX_TASKLIMIT` (baseunits/FMDOptions.pas:42), so any FMD2 value imports.",
+						"default": 1,
+						"maximum": 64,
+						"minimum": 1
+					},
+					"max_update_list_threads": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Threads updating manga lists (`connections/MaxUpdateListThreads`,\nbaseunits/FMDOptions.pas:131). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3827-3828).",
+						"default": 1,
+						"maximum": 32,
+						"minimum": 1
+					},
+					"proxy": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ProxySettings",
+								"description": "Global proxy (mangadownloader/forms/frmMain.pas:5874-5879)."
+							}
+						],
+						"default": {
+							"enabled": false,
+							"host": "",
+							"password": "",
+							"port": null,
+							"type": "http",
+							"username": ""
+						}
+					},
+					"retry_count": {
+						"type": "integer",
+						"format": "int32",
+						"description": "HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,\nbaseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;\nmeaning in baseunits/httpsendthread.pas:626).",
+						"default": 5,
+						"maximum": 5,
+						"minimum": -1
+					},
+					"threads_per_task": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Page download threads per task (`connections/NumberOfThreadsPerTask`, `OptionMaxThreads`\n= 1, baseunits/FMDOptions.pas:134). Range 1..=256: the Win64 `MAX_CONNECTIONPERHOSTLIMIT`\n(baseunits/FMDOptions.pas:43).",
+						"default": 1,
+						"maximum": 256,
+						"minimum": 1
+					},
+					"timeout_secs": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Connection timeout in seconds (`connections/ConnectionTimeout`, `OptionConnectionTimeout`\n= 30, baseunits/FMDOptions.pas:129). Range 1..=300\n(mangadownloader/forms/frmMain.lfm:3387-3388).",
+						"default": 30,
+						"maximum": 300,
+						"minimum": 1
+					},
+					"user_agent": {
+						"type": "string",
+						"description": "Default user agent; an empty value resets to [`DEFAULT_USER_AGENT`]\n(`connections/DefaultUserAgent`, mangadownloader/forms/frmMain.pas:5867-5871).",
+						"default": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+					}
+				}
+			},
+			"CoverSettings": {
+				"type": "object",
+				"description": "The cover proxy's disk cache (`/api/covers`). No FMD2 counterpart: FMD2 keeps the one cover it\nshows in memory (baseunits/uGetMangaInfosThread.pas:168-191).",
+				"properties": {
+					"cache_size_mb": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Size cap of the cover cache in MiB; least recently used covers are evicted past it.\nMinimum 1.",
+						"default": 256,
+						"minimum": 1
+					},
+					"revalidate_after_hours": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Hours a cached cover is served before the site is asked whether it changed; 0 asks every\ntime.",
+						"default": 168,
+						"minimum": 0
+					}
+				}
+			},
+			"FavoriteSettings": {
+				"type": "object",
+				"description": "New-chapter checks for the library (mangadownloader/forms/frmMain.pas:5946-5955).",
+				"properties": {
+					"auto_download": {
+						"type": "boolean",
+						"description": "Queue new chapters automatically (`update/AutoCheckFavAutoDownload`, default false).",
+						"default": false
+					},
+					"check_at_startup": {
+						"type": "boolean",
+						"description": "`update/AutoCheckFavStartup`, default true.",
+						"default": true
+					},
+					"check_interval_minutes": {
+						"type": "integer",
+						"format": "int32",
+						"description": "`update/AutoCheckFavIntervalMinutes`, default 60. Range 1..=1440\n(mangadownloader/forms/frmMain.lfm:4648-4649).",
+						"default": 60,
+						"maximum": 1440,
+						"minimum": 1
+					},
+					"check_on_interval": {
+						"type": "boolean",
+						"description": "`update/AutoCheckFavInterval`, default true.",
+						"default": true
+					},
+					"remove_completed": {
+						"type": "boolean",
+						"description": "`update/AutoCheckFavAutoRemoveCompletedManga`, default false.",
+						"default": false
+					}
+				}
+			},
+			"GeneralSettings": {
+				"type": "object",
+				"properties": {
+					"add_as_stopped": {
+						"type": "boolean",
+						"description": "Add new tasks stopped instead of waiting (`general/AddAsStopped`,\nmangadownloader/forms/frmMain.pas:5819).",
+						"default": false
+					},
+					"data_dir": {
+						"type": "string",
+						"description": "Folder for the list databases, relative to the app data directory (`DATA_FOLDER`,\nbaseunits/FMDOptions.pas:285).",
+						"default": "data"
+					},
+					"language": {
+						"type": "string",
+						"description": "UI language code (`languages/Selected`, default `en`,\nmangadownloader/forms/frmMain.pas:6897).",
+						"default": "en"
+					},
+					"load_covers": {
+						"type": "boolean",
+						"description": "Load manga covers (`view/LoadMangaCover`, mangadownloader/forms/frmMain.pas:5831).",
+						"default": true
+					},
+					"lua_dir": {
+						"type": "string",
+						"description": "Folder holding the Lua tree (`LUA_REPO_FOLDER`, baseunits/FMDOptions.pas:297).",
+						"default": "lua"
+					}
+				}
+			},
+			"HttpOverrides": {
+				"type": "object",
+				"description": "HTTP overrides applied in `PrepareHTTP` (baseunits/WebsiteModules.pas:353-379).",
+				"properties": {
+					"cookies": {
+						"type": "string",
+						"description": "Cookies merged into every request (`HTTP.Cookies`,\nbaseunits/WebsiteModulesSettings.pas:41).",
+						"default": ""
+					},
+					"proxy": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ProxyOverride"
+							}
+						],
+						"default": {
+							"host": "",
+							"password": "",
+							"port": "",
+							"type": "default",
+							"username": ""
+						}
+					},
+					"user_agent": {
+						"type": "string",
+						"description": "Replaces the default user agent when non-empty.",
+						"default": ""
+					}
+				}
+			},
+			"ImageMagickSettings": {
+				"type": "object",
+				"description": "Optional ImageMagick conversion (mangadownloader/forms/frmMain.pas:5925-5942).",
+				"properties": {
+					"compression": {
+						"type": "string",
+						"description": "`-compress` type (`imagemagick/ImageMagickCompression`, default `None`).",
+						"default": "None"
+					},
+					"enabled": {
+						"type": "boolean",
+						"description": "`imagemagick/ImageMagickEnabled`, default false.",
+						"default": false
+					},
+					"quality": {
+						"type": "integer",
+						"format": "int32",
+						"description": "`imagemagick/ImageMagickQuality`, default 75. Range 1..=100\n(mangadownloader/forms/frmMain.lfm:4555-4556).",
+						"default": 75,
+						"maximum": 100,
+						"minimum": 1
+					},
+					"save_as": {
+						"type": "string",
+						"description": "Target format (`imagemagick/ImageMagickSaveAs`, default `JPEG`).",
+						"default": "JPEG"
+					}
+				}
+			},
+			"ImageSettings": {
+				"type": "object",
+				"properties": {
+					"imagemagick": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ImageMagickSettings"
+							}
+						],
+						"default": {
+							"compression": "None",
+							"enabled": false,
+							"quality": 75,
+							"save_as": "JPEG"
+						}
+					},
+					"jpeg_quality": {
+						"type": "integer",
+						"format": "int32",
+						"description": "`saveto/JPEGQuality`, `OptionJPEGQuality` = 80 (baseunits/FMDOptions.pas:126). Range\n1..=100 (mangadownloader/forms/frmMain.lfm:4426-4427).",
+						"default": 80,
+						"maximum": 100,
+						"minimum": 1
+					},
+					"png_compression": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/PngCompression",
+								"description": "`saveto/PNGCompressionLevel`, `OptionPNGCompressionLevel` = 1 = Fastest\n(baseunits/FMDOptions.pas:125)."
+							}
+						],
+						"default": "fastest"
+					},
+					"png_to_jpeg": {
+						"type": "boolean",
+						"description": "`saveto/PNGSaveAsJPEG`, `OptionPNGSaveAsJPEG` = false (baseunits/FMDOptions.pas:123).",
+						"default": false
+					},
+					"webp_save_as": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/WebpSaveAs",
+								"description": "`saveto/ConvertWebP`, `OptionWebPSaveAs` = 1 = PNG (baseunits/FMDOptions.pas:124)."
+							}
+						],
+						"default": "png"
+					}
+				}
+			},
+			"LimitOverrides": {
+				"type": "object",
+				"description": "Limit overrides; 0 means \"not overridden\" for tasks and threads\n(baseunits/WebsiteModulesSettings.pas:81-83).",
+				"properties": {
+					"max_connection_limit": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Replaces the module's connection limit while enabled, 0 (unlimited) included\n(baseunits/WebsiteModulesSettings.pas:126-155).",
+						"default": 0,
+						"minimum": 0
+					},
+					"max_task_limit": {
+						"type": "integer",
+						"format": "int32",
+						"default": 0,
+						"minimum": 0
+					},
+					"max_thread_per_task_limit": {
+						"type": "integer",
+						"format": "int32",
+						"default": 0,
+						"minimum": 0
+					}
+				}
+			},
+			"ModuleLimits": {
+				"type": "object",
+				"description": "The limits a module declares (`MaxTaskLimit`, `MaxThreadPerTaskLimit`, `MaxConnectionLimit`\non the Lua `MODULE` object); 0 means unlimited.",
+				"required": [
+					"max_task_limit",
+					"max_thread_per_task_limit",
+					"max_connection_limit"
+				],
+				"properties": {
+					"max_connection_limit": {
+						"type": "integer",
+						"format": "int32",
+						"minimum": 0
+					},
+					"max_task_limit": {
+						"type": "integer",
+						"format": "int32",
+						"minimum": 0
+					},
+					"max_thread_per_task_limit": {
+						"type": "integer",
+						"format": "int32",
+						"minimum": 0
+					}
+				}
+			},
+			"ModuleOptionSetting": {
+				"oneOf": [
+					{
+						"type": "object",
+						"description": "`AddOptionCheckBox`.",
+						"required": [
+							"key",
+							"caption",
+							"default",
+							"value",
+							"kind"
+						],
+						"properties": {
+							"caption": {
+								"type": "string"
+							},
+							"default": {
+								"type": "boolean"
+							},
+							"key": {
+								"type": "string"
+							},
+							"kind": {
+								"type": "string",
+								"enum": [
+									"checkbox"
+								]
+							},
+							"value": {
+								"type": "boolean"
+							}
+						}
+					},
+					{
+						"type": "object",
+						"description": "`AddOptionEdit`.",
+						"required": [
+							"key",
+							"caption",
+							"default",
+							"value",
+							"kind"
+						],
+						"properties": {
+							"caption": {
+								"type": "string"
+							},
+							"default": {
+								"type": "string"
+							},
+							"key": {
+								"type": "string"
+							},
+							"kind": {
+								"type": "string",
+								"enum": [
+									"edit"
+								]
+							},
+							"value": {
+								"type": "string"
+							}
+						}
+					},
+					{
+						"type": "object",
+						"description": "`AddOptionSpinEdit`; FMD2's spin edit spans `min..=max`.",
+						"required": [
+							"key",
+							"caption",
+							"default",
+							"value",
+							"min",
+							"max",
+							"kind"
+						],
+						"properties": {
+							"caption": {
+								"type": "string"
+							},
+							"default": {
+								"type": "integer",
+								"format": "int32"
+							},
+							"key": {
+								"type": "string"
+							},
+							"kind": {
+								"type": "string",
+								"enum": [
+									"spinedit"
+								]
+							},
+							"max": {
+								"type": "integer",
+								"format": "int32"
+							},
+							"min": {
+								"type": "integer",
+								"format": "int32"
+							},
+							"value": {
+								"type": "integer",
+								"format": "int32"
+							}
+						}
+					},
+					{
+						"type": "object",
+						"description": "`AddOptionComboBox`; `default` and `value` index `items`.",
+						"required": [
+							"key",
+							"caption",
+							"items",
+							"default",
+							"value",
+							"kind"
+						],
+						"properties": {
+							"caption": {
+								"type": "string"
+							},
+							"default": {
+								"type": "integer",
+								"format": "int32"
+							},
+							"items": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"key": {
+								"type": "string"
+							},
+							"kind": {
+								"type": "string",
+								"enum": [
+									"combobox"
+								]
+							},
+							"value": {
+								"type": "integer",
+								"format": "int32"
+							}
+						}
+					}
+				],
+				"description": "One declared option, its default and the value `MODULE.GetOption` returns for it.\n\n`key` is the name the value is stored and patched under."
+			},
+			"ModuleSettingsView": {
+				"type": "object",
+				"description": "A module's settings.",
+				"required": [
+					"id",
+					"name",
+					"enabled",
+					"options",
+					"limits",
+					"module_limits",
+					"http"
+				],
+				"properties": {
+					"enabled": {
+						"type": "boolean",
+						"description": "Whether `limits` and `http` apply (`Settings.Enabled`); options always do."
+					},
+					"http": {
+						"$ref": "#/components/schemas/HttpOverrides"
+					},
+					"id": {
+						"type": "string"
+					},
+					"limits": {
+						"$ref": "#/components/schemas/LimitOverrides",
+						"description": "The user's limit overrides."
+					},
+					"module_limits": {
+						"$ref": "#/components/schemas/ModuleLimits",
+						"description": "The limits the module itself declares; 0 means unlimited."
+					},
+					"name": {
+						"type": "string"
+					},
+					"options": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/ModuleOptionSetting"
+						},
+						"description": "The options the module declares with `AddOption*`, in declaration order."
+					}
+				}
+			},
+			"ModuleSummary": {
+				"type": "object",
+				"description": "A loaded module, for the module picker.",
+				"required": [
+					"id",
+					"name",
+					"category",
+					"option_count"
+				],
+				"properties": {
+					"category": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"option_count": {
+						"type": "integer",
+						"description": "How many options the module declares.",
+						"minimum": 0
+					}
+				}
+			},
+			"ModuleUpdaterSettings": {
+				"type": "object",
+				"description": "Lua module sync from GitHub. The repo defaults are FMD2's `GitHub` section\n(dist/config.json:8-15).",
+				"properties": {
+					"auto_update": {
+						"type": "boolean",
+						"description": "Sync at startup and on the interval. No FMD2 counterpart: FMD2 checks when the user\nclicks \"Check update\" (`btCheckUpdateClick`, mangadownloader/forms/frmLuaModulesUpdater.pas:70).",
+						"default": true
+					},
+					"github_token": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Optional GitHub token to raise the API rate limit. No FMD2 counterpart.",
+						"default": null
+					},
+					"interval_minutes": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Minutes between syncs. No FMD2 counterpart. Minimum 1.",
+						"default": 60,
+						"minimum": 1
+					},
+					"keep_last_good": {
+						"type": "boolean",
+						"description": "Keep the previous version of a module that fails to load after an update. No FMD2\ncounterpart.",
+						"default": true
+					},
+					"repo_name": {
+						"type": "string",
+						"default": "FMD2"
+					},
+					"repo_owner": {
+						"type": "string",
+						"default": "dazedcat19"
+					},
+					"repo_path": {
+						"type": "string",
+						"default": "lua"
+					},
+					"repo_ref": {
+						"type": "string",
+						"default": "master"
+					}
+				}
+			},
+			"OutputFormat": {
+				"type": "string",
+				"description": "`rgOptionCompress` items None/ZIP/CBZ/PDF/EPUB (mangadownloader/forms/frmMain.lfm:3912-3918).",
+				"enum": [
+					"folder",
+					"zip",
+					"cbz",
+					"pdf",
+					"epub"
+				]
+			},
+			"OutputSettings": {
+				"type": "object",
+				"properties": {
+					"format": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/OutputFormat",
+								"description": "`saveto/Compress`, default 0 = None (mangadownloader/forms/frmMain.pas:5889)."
+							}
+						],
+						"default": "folder"
+					},
+					"pdf_quality": {
+						"type": "integer",
+						"format": "int32",
+						"description": "JPEG quality of PDF pages (`saveto/PDFQuality`, default 100,\nmangadownloader/forms/frmMain.pas:5888). Range 5..=100\n(mangadownloader/forms/frmMain.lfm:4245-4246).",
+						"default": 100,
+						"maximum": 100,
+						"minimum": 5
+					}
+				}
+			},
+			"PngCompression": {
+				"type": "string",
+				"description": "`cbPNGCompressionLevel` items (mangadownloader/forms/frmMain.lfm:4395-4400).",
+				"enum": [
+					"none",
+					"fastest",
+					"default",
+					"maximum"
+				]
+			},
+			"ProxyOverride": {
+				"type": "object",
+				"properties": {
+					"host": {
+						"type": "string",
+						"default": ""
+					},
+					"password": {
+						"type": "string",
+						"default": ""
+					},
+					"port": {
+						"type": "string",
+						"default": ""
+					},
+					"type": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ProxyOverrideType"
+							}
+						],
+						"default": "default"
+					},
+					"username": {
+						"type": "string",
+						"default": ""
+					}
+				}
+			},
+			"ProxyOverrideType": {
+				"type": "string",
+				"description": "`TProxyType` (baseunits/WebsiteModulesSettings.pas:11).",
+				"enum": [
+					"default",
+					"direct",
+					"http",
+					"socks4",
+					"socks5"
+				]
+			},
+			"ProxySettings": {
+				"type": "object",
+				"description": "Global proxy. Unlike FMD2 (which encrypts `User`/`Pass` with `EncryptString`), the\ncredentials are stored as plain JSON in `app.db`.",
+				"properties": {
+					"enabled": {
+						"type": "boolean",
+						"description": "`connections/UseProxy`, default false.",
+						"default": false
+					},
+					"host": {
+						"type": "string",
+						"default": ""
+					},
+					"password": {
+						"type": "string",
+						"default": ""
+					},
+					"port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"format": "int32",
+						"description": "`connections/Port`, default empty.",
+						"default": null,
+						"maximum": 65535,
+						"minimum": 1
+					},
+					"type": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ProxyType",
+								"description": "`connections/ProxyType`, default `HTTP`."
+							}
+						],
+						"default": "http"
+					},
+					"username": {
+						"type": "string",
+						"default": ""
+					}
+				}
+			},
+			"ProxyType": {
+				"type": "string",
+				"description": "`cbOptionProxyType` items (mangadownloader/forms/frmMain.lfm:3559-3563).",
+				"enum": [
+					"http",
+					"socks4",
+					"socks5"
+				]
+			},
+			"RenamePreview": {
+				"type": "object",
+				"description": "The names the rename templates of a draft produce for a sample series.",
+				"required": [
+					"manga",
+					"chapter",
+					"filename"
+				],
+				"properties": {
+					"chapter": {
+						"type": "string",
+						"description": "The chapter folder or archive name (`chapter_rename`)."
+					},
+					"filename": {
+						"type": "string",
+						"description": "The first page's file name, without extension (`filename_rename`)."
+					},
+					"manga": {
+						"type": "string",
+						"description": "The manga folder name (`manga_rename`)."
+					}
+				}
+			},
+			"SaveToSettings": {
+				"type": "object",
+				"description": "Where and under which names downloads are saved. The templates take the tokens `%MANGA%`,\n`%CHAPTER%`, `%NUMBERING%`, `%WEBSITE%`, `%AUTHOR%`, `%ARTIST%` and `%FILENAME%`\n(baseunits/uBaseUnit.pas:251-257); an empty template resets to its default\n(mangadownloader/forms/frmMain.pas:5894-5917).",
+				"properties": {
+					"chapter_rename": {
+						"type": "string",
+						"description": "`saveto/ChapterCustomRename` (mangadownloader/forms/frmMain.pas:5901).",
+						"default": "%CHAPTER%"
+					},
+					"convert_digit_chapter": {
+						"type": "boolean",
+						"description": "`saveto/ConvertDigitChapter`, default true (mangadownloader/forms/frmMain.pas:5910).",
+						"default": true
+					},
+					"convert_digit_volume": {
+						"type": "boolean",
+						"description": "`saveto/ConvertDigitVolume`, default true (mangadownloader/forms/frmMain.pas:5907).",
+						"default": true
+					},
+					"default_dir": {
+						"type": "string",
+						"description": "Download directory; empty resets to the default (`saveto/SaveTo`, `DEFAULT_PATH`,\nbaseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886).",
+						"default": "downloads"
+					},
+					"digit_chapter_length": {
+						"type": "integer",
+						"format": "int32",
+						"description": "`saveto/DigitChapterLength`, default 3 (mangadownloader/forms/frmMain.pas:5911). Range\n1..=10 (mangadownloader/forms/frmMain.lfm:4138-4139).",
+						"default": 3,
+						"maximum": 10,
+						"minimum": 1
+					},
+					"digit_volume_length": {
+						"type": "integer",
+						"format": "int32",
+						"description": "`saveto/DigitVolumeLength`, default 2 (mangadownloader/forms/frmMain.pas:5908). Range\n1..=10 (mangadownloader/forms/frmMain.lfm:4111-4112).",
+						"default": 2,
+						"maximum": 10,
+						"minimum": 1
+					},
+					"filename_rename": {
+						"type": "string",
+						"description": "`saveto/FilenameCustomRename` (mangadownloader/forms/frmMain.pas:5913).",
+						"default": "%FILENAME%"
+					},
+					"generate_chapter_folder": {
+						"type": "boolean",
+						"description": "`saveto/GenerateChapterFolder`, default true (mangadownloader/forms/frmMain.pas:5900).",
+						"default": true
+					},
+					"generate_manga_folder": {
+						"type": "boolean",
+						"description": "`saveto/GenerateMangaFolder`, default true (mangadownloader/forms/frmMain.pas:5893).",
+						"default": true
+					},
+					"illegal_chars": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/SymbolMode",
+								"description": "Which characters are stripped from names. FMD2 always strips the Windows set\n(`RemoveSymbols`, baseunits/uBaseUnit.pas:1382); FMD2r runs on Linux and defaults to\nPOSIX."
+							}
+						],
+						"default": "posix"
+					},
+					"manga_rename": {
+						"type": "string",
+						"description": "`saveto/MangaCustomRename` (mangadownloader/forms/frmMain.pas:5894).",
+						"default": "%MANGA%"
+					},
+					"remove_manga_name_from_chapter": {
+						"type": "boolean",
+						"description": "`saveto/RemoveMangaNameFromChapter`, default false\n(mangadownloader/forms/frmMain.pas:5892).",
+						"default": false
+					},
+					"replace_unicode": {
+						"type": "boolean",
+						"description": "Replace non-ASCII characters in names (`saveto/ChangeUnicodeCharacter`, default false,\nmangadownloader/forms/frmMain.pas:5890).",
+						"default": false
+					},
+					"replace_unicode_with": {
+						"type": "string",
+						"description": "Replacement for non-ASCII characters (`saveto/ChangeUnicodeCharacterStr`,\n`OptionChangeUnicodeCharacterStr` = `_`, baseunits/FMDOptions.pas:109).",
+						"default": "_"
+					}
+				}
+			},
+			"ServerSettings": {
+				"type": "object",
+				"description": "The HTTP server. No FMD2 counterpart.",
+				"properties": {
+					"auth_token": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Password/bearer token clients must present; `None` disables auth. Stored as plain JSON.",
+						"default": null
+					},
+					"bind": {
+						"type": "string",
+						"description": "Socket address to listen on.",
+						"default": "0.0.0.0:8080"
+					}
+				}
+			},
+			"Settings": {
+				"type": "object",
+				"description": "Every application setting. Stored one group per key in `app.db`'s `settings` table.",
+				"properties": {
+					"connections": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ConnectionSettings"
+							}
+						],
+						"default": {
+							"always_start_from_failed_chapters": true,
+							"auto_retry_failed_tasks": 1,
+							"flaresolverr_url": "",
+							"max_favorite_threads": 1,
+							"max_parallel_tasks": 1,
+							"max_update_list_threads": 1,
+							"proxy": {
+								"enabled": false,
+								"host": "",
+								"password": "",
+								"port": null,
+								"type": "http",
+								"username": ""
+							},
+							"retry_count": 5,
+							"threads_per_task": 1,
+							"timeout_secs": 30,
+							"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+						}
+					},
+					"covers": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/CoverSettings"
+							}
+						],
+						"default": {
+							"cache_size_mb": 256,
+							"revalidate_after_hours": 168
+						}
+					},
+					"favorites": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/FavoriteSettings"
+							}
+						],
+						"default": {
+							"auto_download": false,
+							"check_at_startup": true,
+							"check_interval_minutes": 60,
+							"check_on_interval": true,
+							"remove_completed": false
+						}
+					},
+					"general": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/GeneralSettings"
+							}
+						],
+						"default": {
+							"add_as_stopped": false,
+							"data_dir": "data",
+							"language": "en",
+							"load_covers": true,
+							"lua_dir": "lua"
+						}
+					},
+					"images": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ImageSettings"
+							}
+						],
+						"default": {
+							"imagemagick": {
+								"compression": "None",
+								"enabled": false,
+								"quality": 75,
+								"save_as": "JPEG"
+							},
+							"jpeg_quality": 80,
+							"png_compression": "fastest",
+							"png_to_jpeg": false,
+							"webp_save_as": "png"
+						}
+					},
+					"module_updater": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ModuleUpdaterSettings"
+							}
+						],
+						"default": {
+							"auto_update": true,
+							"github_token": null,
+							"interval_minutes": 60,
+							"keep_last_good": true,
+							"repo_name": "FMD2",
+							"repo_owner": "dazedcat19",
+							"repo_path": "lua",
+							"repo_ref": "master"
+						}
+					},
+					"output": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/OutputSettings"
+							}
+						],
+						"default": {
+							"format": "folder",
+							"pdf_quality": 100
+						}
+					},
+					"saveto": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/SaveToSettings"
+							}
+						],
+						"default": {
+							"chapter_rename": "%CHAPTER%",
+							"convert_digit_chapter": true,
+							"convert_digit_volume": true,
+							"default_dir": "downloads",
+							"digit_chapter_length": 3,
+							"digit_volume_length": 2,
+							"filename_rename": "%FILENAME%",
+							"generate_chapter_folder": true,
+							"generate_manga_folder": true,
+							"illegal_chars": "posix",
+							"manga_rename": "%MANGA%",
+							"remove_manga_name_from_chapter": false,
+							"replace_unicode": false,
+							"replace_unicode_with": "_"
+						}
+					},
+					"server": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/ServerSettings"
+							}
+						],
+						"default": {
+							"auth_token": null,
+							"bind": "0.0.0.0:8080"
+						}
+					},
+					"update_lists": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/UpdateListSettings"
+							}
+						],
+						"default": {
+							"auto_update": false,
+							"db_url": "https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z",
+							"interval_hours": 24,
+							"new_manga_days": 1,
+							"no_manga_info": false,
+							"remove_duplicate_local_data": false
+						}
+					},
+					"xpath": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/XPathSettings"
+							}
+						],
+						"default": {
+							"backend": "fpc"
+						}
+					}
+				}
+			},
+			"SymbolMode": {
+				"type": "string",
+				"description": "How characters that are illegal in file names are handled (mirrors `fmd_pack::SymbolMode`).",
+				"enum": [
+					"posix",
+					"windows"
+				]
+			},
+			"UpdateListSettings": {
+				"type": "object",
+				"properties": {
+					"auto_update": {
+						"type": "boolean",
+						"description": "Update the selected modules' lists on a timer. No FMD2 counterpart (FMD2 only updates\nlists on demand); off by default.",
+						"default": false
+					},
+					"db_url": {
+						"type": "string",
+						"description": "FMD2-DB URL template ([`DEFAULT_DB_URL`]).",
+						"default": "https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z"
+					},
+					"interval_hours": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Hours between automatic list updates. No FMD2 counterpart. Minimum 1.",
+						"default": 24,
+						"minimum": 1
+					},
+					"new_manga_days": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Days a list entry counts as new (`update/NewMangaTime`, default 1,\nmangadownloader/forms/frmMain.pas:5953). Range 1..=365\n(mangadownloader/forms/frmMain.lfm:2950-2951).",
+						"default": 1,
+						"maximum": 365,
+						"minimum": 1
+					},
+					"no_manga_info": {
+						"type": "boolean",
+						"description": "`update/UpdateListNoMangaInfo`, default false (mangadownloader/forms/frmMain.pas:5956).",
+						"default": false
+					},
+					"remove_duplicate_local_data": {
+						"type": "boolean",
+						"description": "`update/UpdateListRemoveDuplicateLocalData`, default false\n(mangadownloader/forms/frmMain.pas:5957).",
+						"default": false
+					}
+				}
+			},
+			"WebpSaveAs": {
+				"type": "string",
+				"description": "`cbWebPSaveAs` items (mangadownloader/forms/frmMain.lfm:4363-4367).",
+				"enum": [
+					"webp",
+					"png",
+					"jpeg"
+				]
+			},
+			"XPathBackend": {
+				"type": "string",
+				"description": "The `fmd-xpath` backends.",
+				"enum": [
+					"fpc",
+					"native"
+				]
+			},
+			"XPathSettings": {
+				"type": "object",
+				"description": "Module XPath evaluation. No FMD2 counterpart: FMD2 always uses its own engine.",
+				"properties": {
+					"backend": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/XPathBackend",
+								"description": "Which `fmd-xpath` backend evaluates module XPath (`fmd_lua::Runtime::set_xpath_backend`)."
+							}
+						],
+						"default": "fpc"
+					}
 				}
 			}
 		}

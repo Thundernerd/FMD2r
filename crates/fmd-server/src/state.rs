@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use fmd_core::jobs::JobRegistry;
+use fmd_core::settings::{SettingsError, SettingsService};
 use fmd_store::{AppDb, NewEvent};
 use tokio::sync::watch;
 
@@ -15,7 +16,6 @@ use crate::events::{EventBus, ServerEvent};
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
 use crate::services::{DownloadEngine, Idle, ModuleCatalog};
-use crate::settings::{SettingsService, StoreSettings};
 use crate::spa::{Assets, EmbeddedAssets};
 use crate::tools::{NoTools, ToolProbe};
 
@@ -30,7 +30,7 @@ pub struct AppState {
     pub(crate) auth: Option<Arc<Auth>>,
     pub(crate) events: EventBus,
     pub(crate) logs: LogBuffer,
-    pub(crate) settings: Arc<dyn SettingsService>,
+    pub(crate) settings: Arc<SettingsService>,
     pub(crate) engine: Arc<dyn DownloadEngine>,
     pub(crate) jobs: JobRegistry,
     pub(crate) modules: Arc<dyn ModuleCatalog>,
@@ -42,13 +42,13 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// State backed by `db`, serving the embedded web UI, with untyped store settings, an idle
-    /// engine, no jobs, modules, covers or tool checks, and no auth configured.
-    pub fn new(db: AppDb) -> Self {
+    /// State backed by `db`, serving the embedded web UI, with the settings stored in `db`, an
+    /// idle engine, no jobs, modules, covers or tool checks, and no auth configured.
+    pub fn new(db: AppDb) -> Result<Self, SettingsError> {
         let events = EventBus::new();
-        Self {
+        Ok(Self {
             logs: LogBuffer::new(DEFAULT_LOG_LINES, events.clone()),
-            settings: Arc::new(StoreSettings::new(db.clone())),
+            settings: Arc::new(SettingsService::load(db.clone())?),
             engine: Arc::new(Idle),
             jobs: JobRegistry::new(),
             modules: Arc::new(Idle),
@@ -61,7 +61,7 @@ impl AppState {
             assets: Arc::new(EmbeddedAssets),
             auth: None,
             events,
-        }
+        })
     }
 
     /// Serves the web UI from `assets` instead of the embedded `web/build`.
@@ -85,9 +85,9 @@ impl AppState {
         self
     }
 
-    /// Serves `/api/settings` from `settings`.
-    pub fn with_settings(mut self, settings: impl SettingsService) -> Self {
-        self.settings = Arc::new(settings);
+    /// Serves `/api/settings` from `settings`, shared with whoever else subscribes to it.
+    pub fn with_settings(mut self, settings: Arc<SettingsService>) -> Self {
+        self.settings = settings;
         self
     }
 

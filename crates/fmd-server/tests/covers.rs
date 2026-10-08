@@ -144,7 +144,7 @@ fn harness(cache: &Path, sites: &[(&str, &str)], config: impl FnOnce(&mut CoverC
     config(&mut cfg);
     Harness {
         _dir: dir,
-        state: AppState::new(db).with_covers(cfg, modules(sites)),
+        state: AppState::new(db).unwrap().with_covers(cfg, modules(sites)),
     }
 }
 

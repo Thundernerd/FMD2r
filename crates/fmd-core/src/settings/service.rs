@@ -168,7 +168,11 @@ fn merge_maps(dst: &mut Map<String, Value>, src: Map<String, Value>) {
 }
 
 /// Rejects patch keys that are not settings, so a typo is an error rather than a silent no-op.
-fn check_known_keys(tree: &Value, patch: &Value, path: &str) -> Result<(), SettingsError> {
+pub(super) fn check_known_keys(
+    tree: &Value,
+    patch: &Value,
+    path: &str,
+) -> Result<(), SettingsError> {
     let (Value::Object(tree), Value::Object(patch)) = (tree, patch) else {
         return Ok(());
     };
@@ -187,7 +191,7 @@ fn check_known_keys(tree: &Value, patch: &Value, path: &str) -> Result<(), Setti
 }
 
 /// RFC 7386 `MergePatch`.
-fn apply_merge_patch(target: &mut Value, patch: Value) {
+pub(super) fn apply_merge_patch(target: &mut Value, patch: Value) {
     let Value::Object(patch) = patch else {
         *target = patch;
         return;

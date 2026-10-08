@@ -1,4 +1,5 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
+import { Invalid, createMockSettings } from './mock-settings';
 import type { paths } from './schema';
 import type {
 	About,
@@ -6,6 +7,7 @@ import type {
 	JobState,
 	LogLevel,
 	LogLine,
+	SaveToSettings,
 	SeriesRef,
 	TaskProgress
 } from './types';
@@ -214,6 +216,25 @@ export function createMockBackend(): MockBackend {
 		return module && link ? { module, link } : null;
 	};
 
+	const settings = createMockSettings();
+	/** Runs a settings update, answering a rejected one the way fmd-server does. */
+	const update = async (req: Request, apply: (patch: Record<string, unknown>) => unknown) => {
+		const patch = (await req.json()) as unknown;
+		if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
+			return json({ status: 400, detail: 'expected a JSON object' }, 400);
+		}
+		try {
+			const result = apply(patch as Record<string, unknown>);
+			return result === null ? new Response(null, { status: 404 }) : json(result);
+		} catch (e) {
+			if (!(e instanceof Invalid)) throw e;
+			return json(
+				{ status: 422, title: 'Unprocessable Entity', detail: e.detail, field: e.field },
+				422
+			);
+		}
+	};
+
 	const fetch = async (req: Request): Promise<Response> => {
 		const { pathname } = new URL(req.url);
 		const route = `${req.method} ${pathname}`;
@@ -222,6 +243,21 @@ export function createMockBackend(): MockBackend {
 		if (route === 'GET /api/tasks') return json(tasks);
 		if (route === 'GET /api/logs') return json(logs);
 		if (route === 'GET /api/jobs') return json(jobs);
+		if (route === 'GET /api/settings') return json(settings.getSettings());
+		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
+		if (route === 'POST /api/preview-rename') {
+			return json(settings.previewRename((await req.json()) as SaveToSettings));
+		}
+		if (route === 'GET /api/modules') return json(settings.listModules());
+		const moduleSettings = /^(GET|PATCH) \/api\/modules\/([^/]+)\/settings$/.exec(route);
+		if (moduleSettings?.[2]) {
+			const id = decodeURIComponent(moduleSettings[2]);
+			if (moduleSettings[1] === 'PATCH') {
+				return update(req, (patch) => settings.patchModule(id, patch));
+			}
+			const view = settings.getModule(id);
+			return view ? json(view) : new Response(null, { status: 404 });
+		}
 		if (route === 'GET /api/about') {
 			return json({
 				...about,

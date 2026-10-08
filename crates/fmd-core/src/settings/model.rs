@@ -69,31 +69,38 @@ pub struct ConnectionSettings {
     /// Tasks downloading at once, over all modules (`connections/NumberOfTasks`,
     /// `OptionMaxParallel` = 1, baseunits/FMDOptions.pas:133). Range 1..=64: the Win64
     /// `MAX_TASKLIMIT` (baseunits/FMDOptions.pas:42), so any FMD2 value imports.
+    #[schema(minimum = 1, maximum = 64)]
     pub max_parallel_tasks: u32,
     /// Page download threads per task (`connections/NumberOfThreadsPerTask`, `OptionMaxThreads`
     /// = 1, baseunits/FMDOptions.pas:134). Range 1..=256: the Win64 `MAX_CONNECTIONPERHOSTLIMIT`
     /// (baseunits/FMDOptions.pas:43).
+    #[schema(minimum = 1, maximum = 256)]
     pub threads_per_task: u32,
     /// HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,
     /// baseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;
     /// meaning in baseunits/httpsendthread.pas:626).
+    #[schema(minimum = -1, maximum = 5)]
     pub retry_count: i32,
     /// Times a failed task is restarted automatically (`connections/NumberOfAutoRetryFailedTask`,
     /// `OptionRetryFailedTask` = 1, baseunits/FMDOptions.pas:136). Range 0..=100, the TSpinEdit default (no bounds
     /// set, mangadownloader/forms/frmMain.lfm:3669-3681).
+    #[schema(minimum = 0, maximum = 100)]
     pub auto_retry_failed_tasks: u32,
     /// Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,
     /// baseunits/FMDOptions.pas:137).
     pub always_start_from_failed_chapters: bool,
     /// Threads checking favorites (`connections/MaxFavoriteThreads`,
     /// baseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).
+    #[schema(minimum = 1, maximum = 32)]
     pub max_favorite_threads: u32,
     /// Threads updating manga lists (`connections/MaxUpdateListThreads`,
     /// baseunits/FMDOptions.pas:131). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3827-3828).
+    #[schema(minimum = 1, maximum = 32)]
     pub max_update_list_threads: u32,
     /// Connection timeout in seconds (`connections/ConnectionTimeout`, `OptionConnectionTimeout`
     /// = 30, baseunits/FMDOptions.pas:129). Range 1..=300
     /// (mangadownloader/forms/frmMain.lfm:3387-3388).
+    #[schema(minimum = 1, maximum = 300)]
     pub timeout_secs: u32,
     /// Default user agent; an empty value resets to [`DEFAULT_USER_AGENT`]
     /// (`connections/DefaultUserAgent`, mangadownloader/forms/frmMain.pas:5867-5871).
@@ -137,6 +144,7 @@ pub struct ProxySettings {
     pub kind: ProxyType,
     pub host: String,
     /// `connections/Port`, default empty.
+    #[schema(minimum = 1, maximum = 65535)]
     pub port: Option<u16>,
     pub username: String,
     pub password: String,
@@ -193,11 +201,13 @@ pub struct SaveToSettings {
     pub convert_digit_volume: bool,
     /// `saveto/DigitVolumeLength`, default 2 (mangadownloader/forms/frmMain.pas:5908). Range
     /// 1..=10 (mangadownloader/forms/frmMain.lfm:4111-4112).
+    #[schema(minimum = 1, maximum = 10)]
     pub digit_volume_length: u32,
     /// `saveto/ConvertDigitChapter`, default true (mangadownloader/forms/frmMain.pas:5910).
     pub convert_digit_chapter: bool,
     /// `saveto/DigitChapterLength`, default 3 (mangadownloader/forms/frmMain.pas:5911). Range
     /// 1..=10 (mangadownloader/forms/frmMain.lfm:4138-4139).
+    #[schema(minimum = 1, maximum = 10)]
     pub digit_chapter_length: u32,
     /// Which characters are stripped from names. FMD2 always strips the Windows set
     /// (`RemoveSymbols`, baseunits/uBaseUnit.pas:1382); FMD2r runs on Linux and defaults to
@@ -245,6 +255,7 @@ pub struct OutputSettings {
     /// JPEG quality of PDF pages (`saveto/PDFQuality`, default 100,
     /// mangadownloader/forms/frmMain.pas:5888). Range 5..=100
     /// (mangadownloader/forms/frmMain.lfm:4245-4246).
+    #[schema(minimum = 5, maximum = 100)]
     pub pdf_quality: u32,
 }
 
@@ -282,6 +293,7 @@ pub struct ImageSettings {
     pub png_compression: PngCompression,
     /// `saveto/JPEGQuality`, `OptionJPEGQuality` = 80 (baseunits/FMDOptions.pas:126). Range
     /// 1..=100 (mangadownloader/forms/frmMain.lfm:4426-4427).
+    #[schema(minimum = 1, maximum = 100)]
     pub jpeg_quality: u32,
     pub imagemagick: ImageMagickSettings,
 }
@@ -332,6 +344,7 @@ pub struct ImageMagickSettings {
     pub compression: String,
     /// `imagemagick/ImageMagickQuality`, default 75. Range 1..=100
     /// (mangadownloader/forms/frmMain.lfm:4555-4556).
+    #[schema(minimum = 1, maximum = 100)]
     pub quality: u32,
 }
 
@@ -356,6 +369,7 @@ pub struct FavoriteSettings {
     pub check_on_interval: bool,
     /// `update/AutoCheckFavIntervalMinutes`, default 60. Range 1..=1440
     /// (mangadownloader/forms/frmMain.lfm:4648-4649).
+    #[schema(minimum = 1, maximum = 1440)]
     pub check_interval_minutes: u32,
     /// Queue new chapters automatically (`update/AutoCheckFavAutoDownload`, default false).
     pub auto_download: bool,
@@ -387,6 +401,7 @@ pub struct UpdateListSettings {
     /// lists on demand); off by default.
     pub auto_update: bool,
     /// Hours between automatic list updates. No FMD2 counterpart. Minimum 1.
+    #[schema(minimum = 1)]
     pub interval_hours: u32,
     /// `update/UpdateListNoMangaInfo`, default false (mangadownloader/forms/frmMain.pas:5956).
     pub no_manga_info: bool,
@@ -396,6 +411,7 @@ pub struct UpdateListSettings {
     /// Days a list entry counts as new (`update/NewMangaTime`, default 1,
     /// mangadownloader/forms/frmMain.pas:5953). Range 1..=365
     /// (mangadownloader/forms/frmMain.lfm:2950-2951).
+    #[schema(minimum = 1, maximum = 365)]
     pub new_manga_days: u32,
     /// FMD2-DB URL template ([`DEFAULT_DB_URL`]).
     pub db_url: String,
@@ -423,6 +439,7 @@ pub struct ModuleUpdaterSettings {
     /// clicks "Check update" (`btCheckUpdateClick`, mangadownloader/forms/frmLuaModulesUpdater.pas:70).
     pub auto_update: bool,
     /// Minutes between syncs. No FMD2 counterpart. Minimum 1.
+    #[schema(minimum = 1)]
     pub interval_minutes: u32,
     pub repo_owner: String,
     pub repo_name: String,
@@ -499,6 +516,7 @@ pub struct CoverSettings {
     pub revalidate_after_hours: u32,
     /// Size cap of the cover cache in MiB; least recently used covers are evicted past it.
     /// Minimum 1.
+    #[schema(minimum = 1)]
     pub cache_size_mb: u32,
 }
 

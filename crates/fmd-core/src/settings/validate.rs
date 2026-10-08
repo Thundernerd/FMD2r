@@ -29,7 +29,8 @@ pub(super) fn normalize(s: &mut Settings) {
 }
 
 /// Checks every numeric setting against the range FMD2's spin edit allows (cited on each field
-/// in `model.rs`) and the FMD2r-only settings against their own constraints.
+/// in `model.rs` and published there as its `#[schema(minimum, maximum)]`) and the FMD2r-only
+/// settings against their own constraints.
 pub(super) fn validate(s: &Settings) -> Result<(), SettingsError> {
     let c = &s.connections;
     check(
