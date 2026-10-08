@@ -19,15 +19,18 @@ The script downloads the pinned internettools revision into `OUT_DIR/vendor` (on
 declared in `fmdxpath.h` and the ones the library exports differ.
 
 This directory is also a Cargo package, kept out of the root workspace because it needs `fpc`. Its `build.rs` runs
-`build.sh` into `OUT_DIR`; `xpath_fpc::LIB_DIR` names that directory. The ABI tests call the library through raw
-FFI:
+`build.sh` into `OUT_DIR`, or, when `FMDXPATH_LIB_DIR` names a directory holding a prebuilt `libfmdxpath.so`,
+links that one and skips the build (outside `target/`, Cargo doesn't add that directory to `LD_LIBRARY_PATH` when
+running other crates' tests and binaries, so set it yourself); `xpath_fpc::LIB_DIR` names the directory in use. `fmd-xpath`'s `fpc` feature
+(and `fmd-lua`'s `xpath-fpc`, which turns it on) depends on it; with the feature off the workspace builds without
+`fpc`. The ABI tests call the library through raw FFI:
 
 ```sh
 cd crates/xpath-fpc && cargo test
 ```
 
-CI (`xpath-fpc` job) installs `fpc`, runs fmt, clippy and the tests, and uploads `libfmdxpath.so` as the
-`libfmdxpath-linux-x86_64` artifact.
+CI (`xpath-fpc` job) installs `fpc`, runs fmt, clippy and the tests, then clippy and the tests of `fmd-xpath` and
+`fmd-lua` with the backend on, and uploads `libfmdxpath.so` as the `libfmdxpath-linux-x86_64` artifact.
 
 ## Pinned internettools revision
 

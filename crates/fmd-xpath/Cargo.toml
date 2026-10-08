@@ -5,5 +5,13 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+# The FFI backend over `libfmdxpath.so`. Building it needs `fpc` (see crates/xpath-fpc/README.md).
+fpc = ["dep:xpath-fpc"]
+
+[dependencies]
+thiserror.workspace = true
+xpath-fpc = { path = "../xpath-fpc", optional = true }
+
 [lints]
 workspace = true
