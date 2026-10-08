@@ -1786,6 +1786,15 @@ export interface operations {
 					'application/json': components['schemas']['Problem'];
 				};
 			};
+			/** @description A login of the account is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
 		};
 	};
 	deleteAccount: {
@@ -1809,6 +1818,15 @@ export interface operations {
 			};
 			/** @description No loaded module with account support has that ID */
 			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A login of the account is running */
+			409: {
 				headers: {
 					[name: string]: unknown;
 				};

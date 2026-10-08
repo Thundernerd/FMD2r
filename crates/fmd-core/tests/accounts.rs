@@ -31,6 +31,7 @@ function Init()
 end
 
 function Login()
+  if MODULE.Account.Username == 'slow' then sleep(500) end
   if MODULE.Account.Username == 'u' and MODULE.Account.Password == 'p' then
     MODULE.Account.Cookies = 'sid=1'; MODULE.Account.Status = asValid; return true
   end
@@ -148,7 +149,10 @@ fn login_with_the_right_credentials_is_valid_and_persists_encrypted_cookies() {
     let h = Harness::new();
     h.set_credentials("u", "p");
 
-    assert_eq!(h.service.login("fixture").unwrap(), AccountStatus::Valid);
+    assert_eq!(
+        h.service.login("fixture").unwrap().status,
+        AccountStatus::Valid
+    );
 
     let stored = h.db.accounts(h.cipher.as_ref()).get("fixture").unwrap();
     let stored = stored.unwrap();
@@ -166,7 +170,10 @@ fn login_with_a_wrong_password_is_invalid() {
     let h = Harness::new();
     h.set_credentials("u", "wrong");
 
-    assert_eq!(h.service.login("fixture").unwrap(), AccountStatus::Invalid);
+    assert_eq!(
+        h.service.login("fixture").unwrap().status,
+        AccountStatus::Invalid
+    );
     assert_eq!(
         h.service.account("fixture").unwrap().status,
         AccountStatus::Invalid
@@ -266,4 +273,26 @@ fn unknown_modules_are_refused() {
         h.service.login("nope"),
         Err(AccountError::UnknownModule(_))
     ));
+}
+
+#[test]
+fn an_edit_while_a_login_runs_is_refused_and_cannot_undo_it() {
+    let h = Harness::new();
+    h.set_credentials("slow", "p");
+    std::thread::scope(|scope| {
+        let login = scope.spawn(|| h.service.login("fixture"));
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        assert!(matches!(
+            h.service.update("fixture", AccountUpdate::default()),
+            Err(AccountError::Checking(_))
+        ));
+        assert!(matches!(
+            h.service.login("fixture"),
+            Err(AccountError::Checking(_))
+        ));
+        assert_eq!(
+            login.join().unwrap().unwrap().status,
+            AccountStatus::Invalid
+        );
+    });
 }

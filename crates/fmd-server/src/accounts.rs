@@ -138,6 +138,7 @@ pub(crate) async fn list(
         (status = 200, body = AccountInfo, description = "The updated account"),
         (status = 404, description = "No loaded module with account support has that ID",
             body = Problem),
+        (status = 409, description = "A login of the account is running", body = Problem),
     ))]
 pub(crate) async fn put(
     State(state): State<AppState>,
@@ -161,6 +162,7 @@ pub(crate) async fn put(
         (status = 204, description = "The account is cleared"),
         (status = 404, description = "No loaded module with account support has that ID",
             body = Problem),
+        (status = 409, description = "A login of the account is running", body = Problem),
     ))]
 pub(crate) async fn delete(
     State(state): State<AppState>,
@@ -186,10 +188,6 @@ pub(crate) async fn login(
     State(state): State<AppState>,
     Path(module): Path<String>,
 ) -> Result<Json<AccountInfo>, ApiError> {
-    let view = with_service(&state, move |s| {
-        s.login(&module)?;
-        s.account(&module)
-    })
-    .await?;
+    let view = with_service(&state, move |s| s.login(&module)).await?;
     Ok(Json(view.into()))
 }

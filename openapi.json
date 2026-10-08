@@ -563,6 +563,16 @@
 									}
 								}
 							}
+						},
+						"409": {
+							"description": "A login of the account is running",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/Problem"
+									}
+								}
+							}
 						}
 					}
 				},
@@ -589,6 +599,16 @@
 						},
 						"404": {
 							"description": "No loaded module with account support has that ID",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/Problem"
+									}
+								}
+							}
+						},
+						"409": {
+							"description": "A login of the account is running",
 							"content": {
 								"application/json": {
 									"schema": {

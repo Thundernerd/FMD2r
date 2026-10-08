@@ -103,8 +103,9 @@ pub enum AccountError {
     /// (baseunits/lua/LuaWebsiteModules.pas:578-579).
     #[error("module {0} has no login callback")]
     NoLogin(String),
-    /// FMD2 ignores a check while one runs (mangadownloader/forms/frmAccountManager.pas:288).
-    #[error("the account of module {0} is already being checked")]
+    /// A login or an edit of the account is running. FMD2 ignores a check while one runs
+    /// (mangadownloader/forms/frmAccountManager.pas:288).
+    #[error("the account of module {0} is busy with a login")]
     Checking(String),
     #[error(transparent)]
     Store(#[from] SettingsStoreError),
@@ -140,7 +141,7 @@ impl AccountService {
     }
 
     /// The accounts of every module with account support, by module ID
-    /// (mangadownloader/forms/frmAccountManager.pas:163-182).
+    /// (mangadownloader/forms/frmAccountManager.pas:168-182).
     pub fn list(&self) -> Vec<AccountView> {
         let mut accounts: Vec<AccountView> = self
             .registry
@@ -162,67 +163,69 @@ impl AccountService {
     /// login; FMD2 checks them right away instead (mangadownloader/forms/frmAccountManager.pas:
     /// 271-277), which here is up to the caller. Turning the account on or off runs
     /// `OnAccountState` when the module has one, as ticking it in FMD2's account list does
-    /// (mangadownloader/forms/frmAccountManager.pas:292-300).
+    /// (mangadownloader/forms/frmAccountManager.pas:292-300). Refused while a login runs, so it
+    /// cannot overwrite what the login stores.
     pub fn update(
         &self,
         module_id: &str,
         update: AccountUpdate,
     ) -> Result<AccountView, AccountError> {
         let module = self.module(module_id)?;
-        let mut state = self.state(&module)?;
-        let was_enabled = state.enabled;
-        let mut credentials_changed = false;
-        if let Some(username) = update.username {
-            credentials_changed |= username != state.username;
-            state.username = username;
-        }
-        if let Some(password) = update.password {
-            credentials_changed |= password != state.password;
-            state.password = password;
-        }
-        if let Some(enabled) = update.enabled {
-            state.enabled = enabled;
-        }
-        if credentials_changed && state.status != AccountState::CHECKING {
-            state.status = AccountState::UNKNOWN;
-        }
-        let enabled_changed = state.enabled != was_enabled;
-        module.set_account_state(state)?;
-        if enabled_changed {
+        let _busy = self.start_check(module_id)?;
+        let was_enabled = self.state(&module)?.enabled;
+        module.update_account(|state| {
+            let mut credentials_changed = false;
+            if let Some(username) = update.username {
+                credentials_changed |= username != state.username;
+                state.username = username;
+            }
+            if let Some(password) = update.password {
+                credentials_changed |= password != state.password;
+                state.password = password;
+            }
+            if let Some(enabled) = update.enabled {
+                state.enabled = enabled;
+            }
+            if credentials_changed {
+                state.status = AccountState::UNKNOWN;
+            }
+        })?;
+        if self.state(&module)?.enabled != was_enabled {
             self.account_state(&module, None);
         }
         self.account(module_id)
     }
 
     /// Clears the account's credentials and cookies and turns it off. FMD2 cannot delete an
-    /// account (the module owns it); this leaves it as a new one is.
+    /// account (the module owns it); this leaves it as a new one is. Refused while a login runs.
     pub fn delete(&self, module_id: &str) -> Result<AccountView, AccountError> {
         let module = self.module(module_id)?;
+        let _busy = self.start_check(module_id)?;
         let was_enabled = self.state(&module)?.enabled;
-        module.set_account_state(AccountState::default())?;
+        module.update_account(|state| *state = AccountState::default())?;
         if was_enabled {
             self.account_state(&module, None);
         }
         self.account(module_id)
     }
 
-    /// Logs in like FMD2's account check (`TAccountCheckThread.Execute`,
-    /// mangadownloader/forms/frmAccountManager.pas:124-134): the status turns `asChecking`, then
-    /// `OnLogin` runs with a new `HTTP` session for the module, then `OnAccountState` when the
-    /// module has one. The status the module leaves is stored and returned. A login whose
-    /// callback fails is logged and leaves the status the module set; one that leaves it
-    /// `asChecking` makes it unknown, as FMD2 does on its next start
-    /// (baseunits/WebsiteModules.pas:612-613).
-    pub fn login(&self, module_id: &str) -> Result<AccountStatus, AccountError> {
+    /// Logs in. Like FMD2's account check (`TAccountCheckThread.Execute`,
+    /// mangadownloader/forms/frmAccountManager.pas:125-136), the status turns `asChecking`, then
+    /// `OnLogin` runs with a new `HTTP` session for the module. Then, as the ticket asks (FMD2's
+    /// check does not), `OnAccountState` runs when the module has one, so a module like
+    /// Madokami loads the new cookies. The status the module leaves is stored, announced and
+    /// returned with the account. A login whose callback fails is logged and leaves the status
+    /// the module set; one that leaves it `asChecking` makes it unknown, as FMD2 does on its next
+    /// start (baseunits/WebsiteModules.pas:612-613).
+    pub fn login(&self, module_id: &str) -> Result<AccountView, AccountError> {
         let module = self.module(module_id)?;
+        // A module without account support is reported as such before a missing login.
+        let credentials = self.state(&module)?;
         if module.def().on_login.is_none() {
-            self.state(&module)?;
             return Err(AccountError::NoLogin(module_id.to_owned()));
         }
         let _checking = self.start_check(module_id)?;
-        let mut state = self.state(&module)?;
-        state.status = AccountState::CHECKING;
-        module.set_account_state(state)?;
+        module.update_account(|state| state.status = AccountState::CHECKING)?;
         self.announce(module_id, AccountStatus::Checking);
 
         let affinity = self.pool.affinity();
@@ -230,7 +233,8 @@ impl AccountService {
         match login {
             Ok(_) => {}
             Err(JobError::Callback(e)) => {
-                tracing::warn!(target: "fmd_core::accounts", "login of module {module_id}: {e}");
+                let error = redact(&e.to_string(), &credentials);
+                tracing::warn!(target: "fmd_core::accounts", "login of module {module_id}: {error}");
             }
             Err(e) => {
                 self.finish_check(&module, module_id)?;
@@ -238,23 +242,20 @@ impl AccountService {
             }
         }
         self.account_state(&module, Some(affinity));
-        self.finish_check(&module, module_id)
+        self.finish_check(&module, module_id)?;
+        self.account(module_id)
     }
 
     /// Ends a check: a status still `asChecking` becomes unknown, and the result is announced.
-    fn finish_check(
-        &self,
-        module: &Arc<Module>,
-        module_id: &str,
-    ) -> Result<AccountStatus, AccountError> {
-        let mut state = self.state(module)?;
-        if state.status == AccountState::CHECKING {
-            state.status = AccountState::UNKNOWN;
-            module.set_account_state(state.clone())?;
-        }
-        let status = status_of(state.status);
+    fn finish_check(&self, module: &Arc<Module>, module_id: &str) -> Result<(), AccountError> {
+        module.update_account(|state| {
+            if state.status == AccountState::CHECKING {
+                state.status = AccountState::UNKNOWN;
+            }
+        })?;
+        let status = status_of(self.state(module)?.status);
         self.announce(module_id, status);
-        Ok(status)
+        Ok(())
     }
 
     /// Runs `OnAccountState` when the module has one (`DoAccountState`,
@@ -270,7 +271,11 @@ impl AccountService {
         }
         if let Err(e) = caller.account_state().wait() {
             let id = module.def().id;
-            tracing::warn!(target: "fmd_core::accounts", "account state of module {id}: {e}");
+            let error = match module.account() {
+                Some(account) => redact(&e.to_string(), &account.state()),
+                None => e.to_string(),
+            };
+            tracing::warn!(target: "fmd_core::accounts", "account state of module {id}: {error}");
         }
     }
 
@@ -282,7 +287,7 @@ impl AccountService {
         });
     }
 
-    /// Marks `module_id` as being checked until the guard drops.
+    /// Marks `module_id` as busy (a login or an edit running) until the guard drops.
     fn start_check(&self, module_id: &str) -> Result<CheckGuard<'_>, AccountError> {
         let mut checking = self.checking.lock().unwrap_or_else(PoisonError::into_inner);
         if !checking.insert(module_id.to_owned()) {
@@ -323,6 +328,18 @@ impl Drop for CheckGuard<'_> {
             .unwrap_or_else(PoisonError::into_inner)
             .remove(&self.module_id);
     }
+}
+
+/// `message` with the account's username, password and cookies masked, for a module error that
+/// quotes them, so credentials never reach the log.
+fn redact(message: &str, account: &AccountState) -> String {
+    let mut message = message.to_owned();
+    for secret in [&account.password, &account.cookies, &account.username] {
+        if !secret.is_empty() {
+            message = message.replace(secret.as_str(), "***");
+        }
+    }
+    message
 }
 
 /// The account of `module`, when it supports accounts.

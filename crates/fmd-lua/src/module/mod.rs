@@ -313,15 +313,18 @@ impl Module {
         lock(&self.account).clone()
     }
 
-    /// Replaces the account's fields and writes them to the settings store. Returns false, and
-    /// changes nothing, when the module has no account.
-    pub fn set_account_state(&self, state: AccountState) -> Result<bool, SettingsStoreError> {
+    /// Changes the account's fields with `change`, under the account's lock so a concurrent
+    /// write from Lua is not lost, and writes them to the settings store. Does nothing when the
+    /// module has no account.
+    pub fn update_account(
+        &self,
+        change: impl FnOnce(&mut AccountState),
+    ) -> Result<(), SettingsStoreError> {
         let Some(account) = self.account() else {
-            return Ok(false);
+            return Ok(());
         };
-        account.set_state(state);
-        self.save_account()?;
-        Ok(true)
+        change(&mut lock(&account.state));
+        self.save_account()
     }
 
     /// Writes the account to the settings store, after a Lua call or the host changed it.
