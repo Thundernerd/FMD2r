@@ -1,0 +1,41 @@
+# FMD2r with a FlareSolverr sidecar for Cloudflare-protected sites.
+#
+#   cp .env.example .env    # optional: port, password, library directory
+#   mkdir -p manga          # the library directory must be writable by uid 1000
+#   docker compose up -d    # then open http://localhost:8080
+#
+# The fmd2r image comes from GHCR; in a source checkout `docker compose up --build` builds it
+# from the Dockerfile instead.
+name: fmd2r
+
+services:
+  fmd2r:
+    image: ${FMD2R_IMAGE:-ghcr.io/thundernerd/fmd2r:latest}
+    build: .
+    environment:
+      # At startup `serve` writes this into lua/websitebypass/websitebypass_config.json
+      # (use_webdriver, flaresolverr_ip, flaresolverr_port), which upstream's cloudflare.lua reads.
+      FMD2R_FLARESOLVERR_URL: http://flaresolverr:8191
+      FMD2R_PASSWORD: ${FMD2R_PASSWORD:-}
+      RUST_LOG: ${RUST_LOG:-info}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${FMD2R_PORT:-8080}:8080"
+    volumes:
+      # app.db, lists.db, lua/, the cover cache.
+      - fmd2r-data:/data
+      # The default save-to directory (`downloads`, relative to /data).
+      - ${MANGA_DIR:-./manga}:/data/downloads
+    depends_on:
+      - flaresolverr
+    restart: unless-stopped
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.3.21
+    environment:
+      LOG_LEVEL: info
+      TZ: ${TZ:-UTC}
+    restart: unless-stopped
+
+volumes:
+  fmd2r-data:

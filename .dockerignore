@@ -1,0 +1,11 @@
+# Keep the build context to what the Dockerfile copies.
+.git
+target
+data
+userdata
+fixtures/local
+web/node_modules
+web/build
+web/.svelte-kit
+crates/xpath-fpc/build
+crates/xpath-fpc/target
