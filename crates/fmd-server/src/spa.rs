@@ -4,11 +4,11 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use axum::extract::State;
-use axum::http::{StatusCode, Uri, header};
+use axum::http::{Method, StatusCode, Uri, header};
 use axum::response::{Html, IntoResponse, Response};
 use rust_embed::Embed;
 
-use crate::AppState;
+use crate::{ApiError, AppState};
 
 /// Where the static web UI files come from.
 pub trait Assets: Send + Sync + 'static {
@@ -42,13 +42,24 @@ and rebuild the server. The API is available under <code>/api</code>.</p></body>
 
 /// Serves the file at the request path, or `index.html` for any other path so client-side routes
 /// work on reload.
-pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
+/// Paths whose last segment has an extension are files: a missing one is a 404, not the app.
+pub(crate) async fn serve(State(state): State<AppState>, method: Method, uri: Uri) -> Response {
+    if method != Method::GET && method != Method::HEAD {
+        return ApiError::MethodNotAllowed.into_response();
+    }
     let path = uri.path().trim_start_matches('/');
     if !path.is_empty()
         && let Some(data) = state.assets.get(path)
     {
         let mime = mime_guess::from_path(path).first_or_octet_stream();
         return ([(header::CONTENT_TYPE, mime.as_ref())], data).into_response();
+    }
+    if path
+        .rsplit('/')
+        .next()
+        .is_some_and(|last| last.contains('.'))
+    {
+        return ApiError::NotFound.into_response();
     }
     match state.assets.get("index.html") {
         Some(index) => (

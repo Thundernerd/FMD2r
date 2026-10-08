@@ -81,8 +81,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn serve(args: ServeArgs) -> anyhow::Result<()> {
-    let events = EventBus::new();
-    let logs = LogBuffer::new(LOG_LINES, events.clone());
+    let logs = LogBuffer::new(LOG_LINES, EventBus::new());
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::registry()
         .with(filter)
@@ -98,14 +97,13 @@ fn serve(args: ServeArgs) -> anyhow::Result<()> {
         bind: args.bind,
         data_dir: args.data_dir,
         auth: args.password.filter(|p| !p.is_empty()),
-        events,
         logs,
     }))?;
     Ok(())
 }
 
 fn openapi(out: Option<PathBuf>) -> anyhow::Result<()> {
-    let json = fmd_server::openapi_json() + "\n";
+    let json = fmd_server::openapi_json().context("serializing the OpenAPI document")? + "\n";
     match out {
         Some(path) => {
             std::fs::write(&path, json).with_context(|| format!("writing {}", path.display()))?

@@ -62,14 +62,10 @@ impl AppState {
         self
     }
 
-    /// Publishes to `bus` instead of a bus of its own (e.g. one a log layer also feeds).
-    pub fn with_event_bus(mut self, bus: EventBus) -> Self {
-        self.events = bus;
-        self
-    }
-
-    /// Serves `GET /api/logs` from `logs` (the buffer installed as a `tracing` layer).
+    /// Serves `GET /api/logs` from `logs` (the buffer installed as a `tracing` layer) and streams
+    /// `GET /api/events` from the bus `logs` publishes to.
     pub fn with_logs(mut self, logs: LogBuffer) -> Self {
+        self.events = logs.events().clone();
         self.logs = logs;
         self
     }

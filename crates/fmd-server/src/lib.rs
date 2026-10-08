@@ -78,6 +78,7 @@ pub fn build_router(state: AppState) -> Router {
             get(move || async move { Json(doc.as_ref().clone()) }),
         )
         .nest("/api", Router::new().fallback(api_not_found))
+        .method_not_allowed_fallback(method_not_allowed)
         .fallback(spa::serve)
         .with_state(state)
 }
@@ -86,12 +87,16 @@ async fn api_not_found() -> ApiError {
     ApiError::NotFound
 }
 
+async fn method_not_allowed() -> ApiError {
+    ApiError::MethodNotAllowed
+}
+
 /// The OpenAPI 3.1 document of the REST API, as served at `/api/openapi.json`.
 pub fn openapi() -> utoipa::openapi::OpenApi {
     api().2
 }
 
 /// [`openapi`] as pretty-printed JSON, for exporting to the web client generator.
-pub fn openapi_json() -> String {
-    openapi().to_pretty_json().unwrap_or_default()
+pub fn openapi_json() -> Result<String, serde_json::Error> {
+    openapi().to_pretty_json()
 }

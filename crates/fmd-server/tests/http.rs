@@ -261,7 +261,8 @@ async fn openapi_document_is_3_1_and_lists_the_api_paths() {
 
 #[test]
 fn exported_openapi_json_matches_the_served_document() {
-    let exported: serde_json::Value = serde_json::from_str(&fmd_server::openapi_json()).unwrap();
+    let exported: serde_json::Value =
+        serde_json::from_str(&fmd_server::openapi_json().unwrap()).unwrap();
     assert_eq!(exported["info"]["title"], "FMD2r");
     assert!(exported["paths"]["/api/inbox"]["get"].is_object());
 }
@@ -362,9 +363,8 @@ fn emit_logs(logs: &LogBuffer, emit: impl FnOnce()) {
 #[tokio::test]
 async fn logs_returns_the_tail_of_traced_lines_since_a_sequence_number() {
     let h = harness();
-    let bus = EventBus::new();
-    let logs = LogBuffer::new(100, bus.clone());
-    let state = h.state.clone().with_event_bus(bus).with_logs(logs.clone());
+    let logs = LogBuffer::new(100, EventBus::new());
+    let state = h.state.clone().with_logs(logs.clone());
     emit_logs(&logs, || {
         tracing::info!(target: "fmd_core::jobs", "favorites check started");
         tracing::warn!(target: "fmd_lua", module = "mangadex", "Init failed");
@@ -388,9 +388,8 @@ async fn logs_returns_the_tail_of_traced_lines_since_a_sequence_number() {
 #[tokio::test]
 async fn log_buffer_keeps_only_the_newest_lines_and_streams_them() {
     let h = harness();
-    let bus = EventBus::new();
-    let logs = LogBuffer::new(2, bus.clone());
-    let state = h.state.clone().with_event_bus(bus).with_logs(logs.clone());
+    let logs = LogBuffer::new(2, EventBus::new());
+    let state = h.state.clone().with_logs(logs.clone());
     let res = send(&state, get("/api/events")).await;
     emit_logs(&logs, || {
         for i in 0..3 {
@@ -466,4 +465,52 @@ async fn malformed_request_bodies_are_400_problems() {
     let res = send(&h.state, get("/api/logs?since=yesterday")).await;
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     assert_eq!(res.headers()["content-type"], "application/problem+json");
+}
+
+#[tokio::test]
+async fn wrong_method_on_an_api_route_is_a_405_problem() {
+    let h = harness();
+    let res = send(
+        &h.state,
+        Request::delete("/api/inbox").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(res.headers()["content-type"], "application/problem+json");
+}
+
+#[tokio::test]
+async fn missing_asset_files_are_404_not_index_html() {
+    let h = harness();
+    let state = h.state.clone().with_assets(built_web());
+    let res = send(&state, get("/_app/missing.js")).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn bearer_scheme_is_case_insensitive_and_401_names_it() {
+    let h = authed_harness();
+    let res = send(&h.state, get("/api/inbox")).await;
+    assert_eq!(res.headers()["www-authenticate"], "Bearer");
+    let req = Request::get("/api/inbox")
+        .header("authorization", format!("bearer {SECRET}"))
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&h.state, req).await.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn debug_lines_are_buffered_but_not_streamed() {
+    let h = harness();
+    let logs = LogBuffer::new(10, EventBus::new());
+    let state = h.state.clone().with_logs(logs.clone());
+    let res = send(&state, get("/api/events")).await;
+    emit_logs(&logs, || {
+        tracing::debug!("chatty");
+        tracing::info!("worth streaming");
+    });
+    let lines = body_json(send(&state, get("/api/logs")).await).await;
+    assert_eq!(lines.as_array().unwrap().len(), 2);
+    let seen = read_sse_until(res, "worth streaming").await;
+    assert!(!seen.contains("chatty"), "{seen}");
 }

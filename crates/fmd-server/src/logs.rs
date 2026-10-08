@@ -17,8 +17,8 @@ use crate::AppState;
 use crate::error::ApiQuery;
 use crate::events::{EventBus, ServerEvent};
 
-/// Severity of a log line.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+/// Severity of a log line, most severe first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, ToSchema)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum LogLevel {
     Error,
@@ -67,6 +67,11 @@ impl LogBuffer {
         }
     }
 
+    /// The bus new lines are published on.
+    pub fn events(&self) -> &EventBus {
+        &self.bus
+    }
+
     /// Buffered lines with a sequence number above `since` (all of them for `None`), oldest first.
     pub fn since(&self, since: Option<u64>) -> Vec<LogLine> {
         let Ok(ring) = self.inner.lock() else {
@@ -99,7 +104,11 @@ impl LogBuffer {
             ring.lines.push_back(line.clone());
             line
         };
-        self.bus.publish(ServerEvent::Log(line));
+        // Debug and trace lines stay in the buffer: streaming them could crowd task and inbox
+        // events out of the bus.
+        if level <= LogLevel::Info {
+            self.bus.publish(ServerEvent::Log(line));
+        }
     }
 }
 

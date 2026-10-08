@@ -32,16 +32,16 @@ impl Auth {
     }
 
     fn is_secret(&self, candidate: &str) -> bool {
-        bool::from(candidate.as_bytes().ct_eq(self.secret.as_bytes()))
+        ct_eq(candidate, &self.secret)
     }
 
     fn is_session(&self, candidate: &str) -> bool {
         let Ok(sessions) = self.sessions.lock() else {
             return false;
         };
-        sessions.iter().fold(false, |hit, s| {
-            hit | bool::from(candidate.as_bytes().ct_eq(s.as_bytes()))
-        })
+        sessions
+            .iter()
+            .fold(false, |hit, s| hit | ct_eq(candidate, s))
     }
 
     fn new_session(&self) -> Result<String, ApiError> {
@@ -59,7 +59,9 @@ impl Auth {
         let bearer = headers
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "));
+            .and_then(|v| v.split_once(' '))
+            .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+            .map(|(_, token)| token.trim());
         if bearer.is_some_and(|t| self.is_secret(t)) {
             return true;
         }
@@ -71,6 +73,11 @@ impl Auth {
             .filter_map(|pair| pair.trim().strip_prefix(COOKIE)?.strip_prefix('='))
             .any(|id| self.is_session(id))
     }
+}
+
+/// Constant-time string comparison (the length itself is not hidden).
+fn ct_eq(a: &str, b: &str) -> bool {
+    bool::from(a.as_bytes().ct_eq(b.as_bytes()))
 }
 
 /// Middleware for protected routes: a no-op unless auth is configured.

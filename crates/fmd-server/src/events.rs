@@ -192,6 +192,13 @@ pub(crate) async fn stream(
         }
         None => Vec::new(),
     };
+    // An item stored between subscribing and reading the backlog arrives on both; drop the live copy.
+    let replayed_up_to = backlog.last().map_or(i64::MIN, |e| e.id.0);
+    let live = live.filter(move |event| {
+        let replayed = matches!(event, ServerEvent::InboxNew(item)
+            if item.id.parse::<i64>().is_ok_and(|id| id <= replayed_up_to));
+        std::future::ready(!replayed)
+    });
     let backlog = backlog
         .into_iter()
         .map(|e| ServerEvent::InboxNew(InboxItem::from(e)));

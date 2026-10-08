@@ -7,7 +7,7 @@ use fmd_store::AppDb;
 use thiserror::Error;
 use tokio::net::TcpListener;
 
-use crate::{AppState, EventBus, LogBuffer, build_router};
+use crate::{AppState, LogBuffer, build_router};
 
 /// What [`serve`] needs.
 pub struct ServeConfig {
@@ -16,9 +16,8 @@ pub struct ServeConfig {
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
     pub auth: Option<String>,
-    /// The bus `logs` publishes to; `GET /api/events` streams it.
-    pub events: EventBus,
-    /// The buffer the `tracing` subscriber feeds; `GET /api/logs` reads it.
+    /// The buffer the `tracing` subscriber feeds; `GET /api/logs` reads it and `GET /api/events`
+    /// streams its bus.
     pub logs: LogBuffer,
 }
 
@@ -52,9 +51,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let db = tokio::task::spawn_blocking(move || AppDb::open(db_path))
         .await
         .map_err(std::io::Error::other)??;
-    let mut state = AppState::new(db)
-        .with_event_bus(config.events)
-        .with_logs(config.logs);
+    let mut state = AppState::new(db).with_logs(config.logs);
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }

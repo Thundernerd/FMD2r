@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::FromRequest;
 use axum::extract::FromRequestParts;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use thiserror::Error;
@@ -17,6 +17,8 @@ pub enum ApiError {
     NotFound,
     #[error("authentication required")]
     Unauthorized,
+    #[error("method not allowed")]
+    MethodNotAllowed,
     #[error("{0}")]
     BadRequest(String),
     /// A request an extractor could not parse (bad JSON body, bad query string, ...).
@@ -45,6 +47,7 @@ impl ApiError {
         match self {
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Rejected(status, _) => *status,
             Self::Store(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -55,21 +58,30 @@ impl ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
-        if status.is_server_error() {
+        // Server errors go to the log in full; clients only learn that something failed.
+        let detail = if status.is_server_error() {
             tracing::error!(target: "fmd_server", "{self}");
-        }
+            "internal server error".to_owned()
+        } else {
+            self.to_string()
+        };
         let problem = Problem {
             kind: "about:blank".into(),
             title: status.canonical_reason().unwrap_or("Error").into(),
             status: status.as_u16(),
-            detail: self.to_string(),
+            detail,
         };
-        (
+        let mut res = (
             status,
             [(header::CONTENT_TYPE, "application/problem+json")],
             Json(problem),
         )
-            .into_response()
+            .into_response();
+        if matches!(self, Self::Unauthorized) {
+            res.headers_mut()
+                .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+        }
+        res
     }
 }
 
