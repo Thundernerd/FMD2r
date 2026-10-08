@@ -1,0 +1,18 @@
+[package]
+name = "xpath-fpc"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-2.0-only"
+publish = false
+build = "build.rs"
+links = "fmdxpath"
+
+# Not a member of the root workspace: building it needs `fpc`, which the main CI job doesn't install.
+[workspace]
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
