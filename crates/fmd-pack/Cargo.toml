@@ -7,3 +7,15 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+thiserror.workspace = true
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
+lopdf = { version = "0.45.0", default-features = false }
+uuid = { version = "1.27.0", features = ["v4"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+lopdf = { version = "0.45.0", default-features = false }
+tempfile = "3.27.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
