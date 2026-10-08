@@ -1,0 +1,2 @@
+# Upstream FMD2 Lua snapshot: keep the bytes exactly as synced, and keep it out of language stats.
+/fixtures/lua/** -text linguist-vendored
