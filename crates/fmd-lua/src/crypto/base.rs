@@ -2,15 +2,11 @@
 
 use sha2::Digest;
 
-use super::Error;
 use super::dcp::{Block, Rijndael};
+use super::{Error, HEX_UPPER, hex_value};
 // FPC's `EncodeStringBase64`/`DecodeStringBase64` are standard padded Base64; decoding
 // reuses Synapse's lenient decoder, which agrees on every valid input.
 use super::synacode::{decode_base64, encode_base64};
-
-fn hex_value(c: u8) -> Option<u8> {
-    char::from(c).to_digit(16).map(|d| d as u8)
-}
 
 /// `HexToStr`: each pair of hex digits becomes one byte; a trailing odd digit is ignored, and
 /// a non-hex pair is an error (`StrToInt` raises) (baseunits/BaseCrypto.pas:56-63).
@@ -25,9 +21,13 @@ pub fn hex_to_str(h: &[u8]) -> Result<Vec<u8>, Error> {
 
 /// `StrToHexStr`: upper-case hex, as FPC's `BinToHex` writes it (baseunits/BaseCrypto.pas:98-102).
 pub fn str_to_hex_str(s: &[u8]) -> Vec<u8> {
-    const DIGITS: &[u8; 16] = b"0123456789ABCDEF";
     s.iter()
-        .flat_map(|&b| [DIGITS[usize::from(b >> 4)], DIGITS[usize::from(b & 15)]])
+        .flat_map(|&b| {
+            [
+                HEX_UPPER[usize::from(b >> 4)],
+                HEX_UPPER[usize::from(b & 15)],
+            ]
+        })
         .collect()
 }
 
@@ -318,7 +318,8 @@ pub fn aes_decrypt_cbc_sha256_base64_pkcs7(s: &[u8], key: &[u8], iv: &[u8]) -> V
     pkcs7_remove_pad(r.decrypt_cbc(&data))
 }
 
-/// `InitStr(key, TDCP_sha256)` then `SetIV(ivb[0])` from `HexToBytes(iv)`. An IV that decodes
+/// `InitStr(key, TDCP_sha256)` then `SetIV(ivb[0])` from `HexToBytes(iv)`
+/// (baseunits/BaseCrypto.pas:132-134, 159-161). An IV that decodes
 /// to nothing faults on `ivb[0]` (''); a short one is zero-padded where the Pascal would read
 /// past it.
 fn sha256_keyed(s: &[u8], key: &[u8], iv: &[u8]) -> Option<Rijndael> {
@@ -342,25 +343,29 @@ pub fn aes_decrypt_cbc_md5_base64_zeros_padding(s: &[u8], key: &[u8], iv: &[u8])
 }
 
 /// `AESDecryptCBCHexBase64ZerosPadding(s, key, iv)`: hex key and IV, Base64 data, trailing
-/// NULs stripped; a bad hex key or IV gives '' (baseunits/BaseCrypto.pas:246-273). An IV that
+/// NULs stripped (baseunits/BaseCrypto.pas:246-273). Bad hex in the key or IV is an error, as
+/// `HexToBytes` runs before the `try` (:254-255); an invalid key size gives ''. An IV that
 /// decodes to nothing passes a nil pointer, so DCPcrypt's default IV applies; a short one is
 /// zero-padded where the Pascal would read past it.
-pub fn aes_decrypt_cbc_hex_base64_zeros_padding(s: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
+pub fn aes_decrypt_cbc_hex_base64_zeros_padding(
+    s: &[u8],
+    key: &[u8],
+    iv: &[u8],
+) -> Result<Vec<u8>, Error> {
     if s.is_empty() || key.is_empty() || iv.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    let (Ok(key), Ok(iv)) = (hex_to_str(key), hex_to_str(iv)) else {
-        return Vec::new();
-    };
+    let key = hex_to_str(key)?;
+    let iv = hex_to_str(iv)?;
     let iv = Some(iv.as_slice()).filter(|b| !b.is_empty());
     let Some(mut r) = Rijndael::new(&key, iv) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
     let mut out = r.decrypt_cbc(&decode_base64(s));
     while out.last() == Some(&0) {
         out.pop();
     }
-    out
+    Ok(out)
 }
 
 /// `RC4(s, key)`: plain RC4 with no keystream drop; empty data or key gives ''
@@ -392,7 +397,7 @@ pub fn rc4(s: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
 
 /// `PBKDF2SHA256(password, salt, iterations, dkLen)`: standard PBKDF2-HMAC-SHA256; an empty
 /// password or salt, or a count below 1, gives '' (baseunits/BaseCrypto.pas:746-780).
-pub fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: i64, dk_len: i64) -> Vec<u8> {
+pub fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: i32, dk_len: i32) -> Vec<u8> {
     if password.is_empty() || salt.is_empty() || iterations < 1 || dk_len < 1 {
         return Vec::new();
     }

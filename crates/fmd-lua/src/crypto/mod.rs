@@ -36,7 +36,7 @@ mod html;
 mod sodium;
 mod synacode;
 
-use mlua::{IntoLuaMulti, Lua, Table};
+use mlua::{FromLua, FromLuaMulti, IntoLuaMulti, Lua, Table};
 
 /// A failure the Pascal reports by raising an exception, surfaced as a Lua error.
 #[derive(Debug, thiserror::Error)]
@@ -81,7 +81,32 @@ pub fn decrypt_string(s: &[u8]) -> Vec<u8> {
     }
 }
 
-/// Reads a Lua string argument as raw bytes, like `GetLuaString`
+/// Upper-case hex digits, as FPC's `IntToHex` and `BinToHex` write them.
+const HEX_UPPER: &[u8; 16] = b"0123456789ABCDEF";
+
+/// The value of one hex digit, either case.
+fn hex_value(c: u8) -> Option<u8> {
+    char::from(c).to_digit(16).map(|d| d as u8)
+}
+
+/// Compares two MACs without an early exit, as the Pascal ors the byte differences
+/// (baseunits/BaseCrypto.pas:1033-1036, 1514-1518).
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0, |d, (x, y)| d | (x ^ y)) == 0
+}
+
+/// A Pascal exception that escapes a crypto function, as a Lua error naming the function.
+fn lua_error(name: &str, e: Error) -> mlua::Error {
+    mlua::Error::runtime(format!("{name}: {e}"))
+}
+
+/// An integer argument as the Pascal receives it: `lua_tointeger` (0 for anything that is not
+/// an integral number) passed to a 32-bit `Integer` parameter, which keeps the low 32 bits.
+fn pascal_integer(lua: &Lua, v: mlua::Value) -> i32 {
+    lua.coerce_integer(v).ok().flatten().unwrap_or(0) as i32
+}
+
+/// A Lua string argument, read as raw bytes like `GetLuaString`
 /// (baseunits/lua/LuaCrypto.pas:15-22).
 type Bytes = mlua::LuaString;
 
@@ -120,8 +145,7 @@ fn add1_try(
     f: fn(&[u8]) -> Result<Vec<u8>, Error>,
 ) -> mlua::Result<()> {
     let func = lua.create_function(move |lua, a: Bytes| {
-        let out = f(&a.as_bytes()).map_err(|e| mlua::Error::runtime(format!("{name}: {e}")))?;
-        lua.create_string(out)
+        lua.create_string(f(&a.as_bytes()).map_err(|e| lua_error(name, e))?)
     })?;
     t.set(name, func)
 }
@@ -132,28 +156,33 @@ fn add_long_hash(
     lua: &Lua,
     t: &Table,
     name: &'static str,
-    f: fn(&[u8], i64) -> Result<Vec<u8>, Error>,
+    f: fn(&[u8], i32) -> Result<Vec<u8>, Error>,
 ) -> mlua::Result<()> {
     let func = lua.create_function(move |lua, (a, len): (Bytes, mlua::Value)| {
-        let len = lua.coerce_integer(len).ok().flatten().unwrap_or(0);
-        let out =
-            f(&a.as_bytes(), len).map_err(|e| mlua::Error::runtime(format!("{name}: {e}")))?;
+        let len = pascal_integer(lua, len);
+        let out = f(&a.as_bytes(), len).map_err(|e| lua_error(name, e))?;
         lua.create_string(out)
     })?;
     t.set(name, func)
 }
 
-/// Registers an AES-GCM function: `(s, key, iv[, aad])`, where a missing `aad` is ''
-/// (baseunits/lua/LuaCrypto.pas:304-328).
+/// Registers an AES-GCM function: `(s, key, iv[, aad])`. Only a missing fourth argument
+/// means an empty AAD; a fourth argument that is present (even `nil`) must be a string, as the
+/// Pascal checks `lua_gettop(L) >= 4` (baseunits/lua/LuaCrypto.pas:304-328).
 fn add_gcm(lua: &Lua, t: &Table, name: &'static str, f: GcmFn) -> mlua::Result<()> {
-    let func = lua.create_function(
-        move |lua, (s, key, iv, aad): (Bytes, Bytes, Bytes, Option<Bytes>)| {
-            let aad = aad.map(|a| a.as_bytes().to_vec()).unwrap_or_default();
-            let out = f(&s.as_bytes(), &key.as_bytes(), &iv.as_bytes(), &aad)
-                .map_err(|e| mlua::Error::runtime(format!("{name}: {e}")))?;
-            lua.create_string(out)
-        },
-    )?;
+    let func = lua.create_function(move |lua, args: mlua::MultiValue| {
+        let has_aad = args.len() >= 4;
+        let (s, key, iv, aad): (Bytes, Bytes, Bytes, mlua::Value) =
+            FromLuaMulti::from_lua_multi(args, lua)?;
+        let aad = if has_aad {
+            Bytes::from_lua(aad, lua)?.as_bytes().to_vec()
+        } else {
+            Vec::new()
+        };
+        let out = f(&s.as_bytes(), &key.as_bytes(), &iv.as_bytes(), &aad)
+            .map_err(|e| lua_error(name, e))?;
+        lua.create_string(out)
+    })?;
     t.set(name, func)
 }
 
@@ -203,25 +232,27 @@ fn open(lua: &Lua) -> mlua::Result<Table> {
         "AESDecryptCBCMD5Base64ZerosPadding",
         base::aes_decrypt_cbc_md5_base64_zeros_padding,
     )?;
-    add3(
-        lua,
-        &t,
-        "AESDecryptCBCHexBase64ZerosPadding",
-        base::aes_decrypt_cbc_hex_base64_zeros_padding,
-    )?;
+    let hex_b64 = lua.create_function(|lua, (s, key, iv): (Bytes, Bytes, Bytes)| {
+        let out = base::aes_decrypt_cbc_hex_base64_zeros_padding(
+            &s.as_bytes(),
+            &key.as_bytes(),
+            &iv.as_bytes(),
+        )
+        .map_err(|e| lua_error("AESDecryptCBCHexBase64ZerosPadding", e))?;
+        lua.create_string(out)
+    })?;
+    t.set("AESDecryptCBCHexBase64ZerosPadding", hex_b64)?;
     add_gcm(lua, &t, "AESEncryptGCM", gcm::encrypt)?;
     add_gcm(lua, &t, "AESDecryptGCM", gcm::decrypt)?;
     let rc4 = lua.create_function(|lua, (s, key): (Bytes, Bytes)| {
-        let out = base::rc4(&s.as_bytes(), &key.as_bytes())
-            .map_err(|e| mlua::Error::runtime(format!("RC4: {e}")))?;
+        let out = base::rc4(&s.as_bytes(), &key.as_bytes()).map_err(|e| lua_error("RC4", e))?;
         lua.create_string(out)
     })?;
     t.set("RC4", rc4)?;
     // Iterations and dkLen are read with `lua_tointeger` (baseunits/lua/LuaCrypto.pas:286-290).
     let pbkdf2 = lua.create_function(
         |lua, (p, s, it, len): (Bytes, Bytes, mlua::Value, mlua::Value)| {
-            let it = lua.coerce_integer(it).ok().flatten().unwrap_or(0);
-            let len = lua.coerce_integer(len).ok().flatten().unwrap_or(0);
+            let (it, len) = (pascal_integer(lua, it), pascal_integer(lua, len));
             lua.create_string(base::pbkdf2_sha256(&p.as_bytes(), &s.as_bytes(), it, len))
         },
     )?;

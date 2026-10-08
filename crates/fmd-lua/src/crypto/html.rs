@@ -18,7 +18,8 @@ pub fn encode(s: &[u8]) -> Vec<u8> {
 }
 
 /// FPC's `Val` for a `LongInt`: optional blanks, sign and `$`/`0x`/`%`/`&` base prefix, then
-/// digits; anything malformed or out of range yields 0.
+/// digits; anything malformed or out of range yields 0. `HTMLDecode` reads `&#N;` with it
+/// (baseunits/uBaseUnit.pas:1358-1365).
 fn fpc_val(s: &[u8]) -> i32 {
     let mut s = s;
     while let [b' ' | b'\t', rest @ ..] = s {

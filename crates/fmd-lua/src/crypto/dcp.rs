@@ -52,7 +52,7 @@ impl Rijndael {
         self.cv[..n].copy_from_slice(&iv[..n]);
     }
 
-    /// `EncryptECB` of one block.
+    /// `EncryptECB` of one block (Ciphers/dcprijndael.pas:219).
     pub fn encrypt_block(&self, b: &Block) -> Block {
         let mut out = GenericArray::clone_from_slice(b);
         match &self.cipher {
@@ -63,7 +63,7 @@ impl Rijndael {
         out.into()
     }
 
-    /// `DecryptECB` of one block.
+    /// `DecryptECB` of one block (Ciphers/dcprijndael.pas:285).
     pub fn decrypt_block(&self, b: &Block) -> Block {
         let mut out = GenericArray::clone_from_slice(b);
         match &self.cipher {

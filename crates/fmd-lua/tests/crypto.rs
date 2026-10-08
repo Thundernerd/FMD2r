@@ -106,9 +106,10 @@ fn digests_return_raw_bytes_and_hex_variants_lower_case() {
 fn long_hashes_hash_the_value_repeated_to_len_bytes() {
     // MD5LongHash / SHA1LongHash (baseunits/synapse/synacode.pas:1142-1160, 1370-1388).
     run(r"
-        assert(c.MD5LongHash('ab', 5) == c.MD5('ababa'))
-        assert(c.SHA1LongHash('xyz', 7) == c.SHA1('xyzxyzx'))
-        assert(c.MD5LongHash('ab', 0) == c.MD5(''))
+        -- digests of 'ababa', 'xyzxyzx' and '' from md5sum/sha1sum
+        assert(c.MD5LongHash('ab', 5) == c.HexToStr('88cbc990f555585c848f265d56bbb85a'))
+        assert(c.SHA1LongHash('xyz', 7) == c.HexToStr('22b36d9633bfa098fed09405add2c535b4eb22ad'))
+        assert(c.MD5LongHash('ab', 0) == c.HexToStr('d41d8cd98f00b204e9800998ecf8427e'))
     ");
 }
 
@@ -304,7 +305,6 @@ fn aes_cbc_base64_zero_padding_helpers() {
         assert(c.AESDecryptCBCMD5Base64ZerosPadding(ct, 'pass', 'iv') == 'zero padded\0\0\0\0\0')
         local hexkey = c.StrToHexStr(c.MD5Hex('pass'))
         assert(c.AESDecryptCBCHexBase64ZerosPadding(ct, hexkey, '69760000000000000000000000000000') == 'zero padded')
-        assert(c.AESDecryptCBCHexBase64ZerosPadding(ct, 'zz', '00') == '')
         assert(c.AESDecryptCBCMD5Base64ZerosPadding('', 'pass', 'iv') == '')
     ");
 }
@@ -490,4 +490,38 @@ fn every_fmd2_function_is_registered() {
         for _ in pairs(c) do registered = registered + 1 end
         assert(n == 54 and registered == n, registered)
     ");
+}
+
+#[test]
+fn hex_base64_helper_raises_on_bad_hex() {
+    // HexToBytes(key/iv) runs before the try/except (baseunits/BaseCrypto.pas:254-255), so
+    // its EConvertError reaches Lua.
+    run(r"
+        local ct = 'y9+h7Rp9cRBy6hPATVkDSQ=='
+        assert(not pcall(c.AESDecryptCBCHexBase64ZerosPadding, ct, 'zz', '00'))
+        assert(not pcall(c.AESDecryptCBCHexBase64ZerosPadding, ct, '00', 'zz'))
+    ");
+}
+
+#[test]
+fn integer_arguments_wrap_to_pascal_integer() {
+    // iterations/dkLen/Len are 32-bit `Integer` parameters fed from lua_tointeger
+    // (baseunits/lua/LuaCrypto.pas:208-212, 286-290), so they keep the low 32 bits.
+    run(r"
+        local dk = c.PBKDF2SHA256('password', 'salt', 1, 32)
+        assert(c.PBKDF2SHA256('password', 'salt', 1, (1 << 32) + 32) == dk)
+        assert(c.PBKDF2SHA256('password', 'salt', 1, 1000000000000) == '')
+        assert(c.MD5LongHash('ab', (1 << 32) + 5) == c.MD5('ababa'))
+    ");
+}
+
+#[test]
+fn gcm_rejects_an_explicit_nil_aad() {
+    // With 4+ arguments the AAD is read with luaL_checklstring (baseunits/lua/LuaCrypto.pas:304-315).
+    run_aes(
+        r"
+        assert(not pcall(c.AESEncryptGCM, P21, K, IV:sub(1, 12), nil))
+        assert(not pcall(c.AESDecryptGCM, P21, K, IV:sub(1, 12), nil))
+    ",
+    );
 }

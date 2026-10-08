@@ -142,8 +142,7 @@ pub fn pull(state: &[u8], chunk: &[u8]) -> Option<Pulled> {
     authenticated.extend_from_slice(&(64 + c.len() as u64).to_le_bytes());
     let mac = poly.compute_unpadded(&authenticated);
 
-    // Constant-time compare, as the Pascal ors the differences (:1514-1518).
-    if mac.iter().zip(stored_mac).fold(0, |d, (a, b)| d | (a ^ b)) != 0 {
+    if !super::ct_eq(&mac, stored_mac) {
         return None;
     }
 

@@ -3,7 +3,7 @@
 
 use sha2::Digest;
 
-use super::Error;
+use super::{Error, HEX_UPPER, hex_value};
 
 /// Synapse's Base64 alphabet, with `=` as the 65th (padding) symbol
 /// (baseunits/synapse/synacode.pas:95-96).
@@ -101,9 +101,6 @@ fn is_url_full_special(c: u8) -> bool {
     )
 }
 
-/// Upper-case hex digits, as `IntToHex` writes them.
-const HEX_UPPER: &[u8; 16] = b"0123456789ABCDEF";
-
 /// Replaces every byte in `specials` by `%XX` (`EncodeTriplet`,
 /// baseunits/synapse/synacode.pas:492-524).
 fn encode_triplet(value: &[u8], specials: impl Fn(u8) -> bool) -> Vec<u8> {
@@ -132,14 +129,6 @@ pub fn encode_url(value: &[u8]) -> Vec<u8> {
     encode_triplet(value, is_url_special)
 }
 
-fn hex_digit(c: u8) -> Option<u8> {
-    match c {
-        b'0'..=b'9' => Some(c - b'0'),
-        b'a'..=b'f' | b'A'..=b'F' => Some((c & 7) + 9),
-        _ => None,
-    }
-}
-
 /// `DecodeURL` = `DecodeTriplet(Value, '%')` (baseunits/synapse/synacode.pas:403-476, 485-488):
 /// a bad escape keeps the `%` and goes on with the next byte, `%` followed by CR/LF (a
 /// soft line break) is dropped with it, and a `%` within the last two bytes ends decoding.
@@ -160,7 +149,7 @@ pub fn decode_url(value: &[u8]) -> Vec<u8> {
         match (value[x], value[x + 1]) {
             (b'\r', b'\n') | (b'\n', b'\r') => x += 2,
             (b'\r' | b'\n', _) => x += 1,
-            (hi, lo) => match (hex_digit(hi), hex_digit(lo)) {
+            (hi, lo) => match (hex_value(hi), hex_value(lo)) {
                 (Some(hi), Some(lo)) => {
                     out.push((hi << 4) | lo);
                     x += 2;
@@ -190,7 +179,7 @@ pub fn sha1(value: &[u8]) -> Vec<u8> {
 /// Hashes `value` repeated to `len` bytes, the body of `MD5LongHash` and `SHA1LongHash`
 /// (baseunits/synapse/synacode.pas:1142-1160, 1370-1388). An empty `value` is an error
 /// (the Pascal divides by its length); `len <= 0` hashes nothing.
-fn long_hash<D: Digest>(value: &[u8], len: i64) -> Result<Vec<u8>, Error> {
+fn long_hash<D: Digest>(value: &[u8], len: i32) -> Result<Vec<u8>, Error> {
     if value.is_empty() {
         return Err(Error::DivisionByZero);
     }
@@ -204,12 +193,12 @@ fn long_hash<D: Digest>(value: &[u8], len: i64) -> Result<Vec<u8>, Error> {
 }
 
 /// `MD5LongHash` (baseunits/synapse/synacode.pas:1142-1160).
-pub fn md5_long_hash(value: &[u8], len: i64) -> Result<Vec<u8>, Error> {
+pub fn md5_long_hash(value: &[u8], len: i32) -> Result<Vec<u8>, Error> {
     long_hash::<md5::Md5>(value, len)
 }
 
 /// `SHA1LongHash` (baseunits/synapse/synacode.pas:1370-1388).
-pub fn sha1_long_hash(value: &[u8], len: i64) -> Result<Vec<u8>, Error> {
+pub fn sha1_long_hash(value: &[u8], len: i32) -> Result<Vec<u8>, Error> {
     long_hash::<sha1::Sha1>(value, len)
 }
 

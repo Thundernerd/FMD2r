@@ -59,7 +59,7 @@ fn inc32(b: &mut Block) {
     b[12..].copy_from_slice(&n.to_be_bytes());
 }
 
-/// CTR keystream from inc32(J0).
+/// GCTR: the CTR keystream from inc32(J0) (baseunits/BaseCrypto.pas:960-979, 1038-1057).
 fn gctr(r: &Rijndael, j0: &Block, data: &[u8]) -> Vec<u8> {
     let mut cb = *j0;
     let mut out = Vec::with_capacity(data.len());
@@ -71,6 +71,7 @@ fn gctr(r: &Rijndael, j0: &Block, data: &[u8]) -> Vec<u8> {
     out
 }
 
+/// The tag: GHASH(AAD, C) xor E(J0) (baseunits/BaseCrypto.pas:981-983, 1029-1031).
 fn tag(r: &Rijndael, h: u128, j0: &Block, aad: &[u8], c: &[u8]) -> Block {
     (ghash(h, aad, c) ^ u128::from_be_bytes(r.encrypt_block(j0))).to_be_bytes()
 }
@@ -97,8 +98,7 @@ pub fn decrypt(s: &[u8], key: &[u8], iv: &[u8], aad: &[u8]) -> Result<Vec<u8>, E
     let (c, expected) = s.split_at(s.len() - 16);
     let (r, h, j0) = setup(key, iv)?;
     let t = tag(&r, h, &j0, aad, c);
-    // Constant-time compare, as the Pascal ors the differences (:1033-1036).
-    if t.iter().zip(expected).fold(0, |d, (a, b)| d | (a ^ b)) != 0 {
+    if !super::ct_eq(&t, expected) {
         return Ok(Vec::new());
     }
     Ok(gctr(&r, &j0, c))
