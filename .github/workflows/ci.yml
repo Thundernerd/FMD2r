@@ -87,3 +87,24 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run test:e2e
+
+  # The container image: compose.yaml validates, the image builds, and scripts/docker-smoke.sh
+  # checks the running container (health, SPA, bundled modules, python3/node/magick).
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose.yaml
+        run: docker compose config -q && docker compose --env-file .env.example config -q
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: fmd2r:smoke
+          build-args: FMD2R_GIT_REVISION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: scripts/docker-smoke.sh fmd2r:smoke
