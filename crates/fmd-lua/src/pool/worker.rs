@@ -14,7 +14,7 @@ use super::{Bytecode, CallbackError, Envelope, Job, JobError, JobResult, Queue, 
 use crate::module::lock;
 use crate::{
     Globals, HttpModule, LuaHttp, Module, ModuleHttpOverrides, ModuleHttpSettings, Runtime,
-    create_http,
+    SettingsStoreError, create_http,
 };
 
 /// Calls a function under `xpcall`, returning the traceback taken where it failed (or `''`),
@@ -242,12 +242,20 @@ pub(super) struct Ctx<'a> {
     terminate: TerminateToken,
 }
 
-/// No HTTP overrides.
+/// No HTTP overrides, and nothing stored.
 struct NoOverrides;
 
 impl ModuleHttpSettings for NoOverrides {
     fn http_overrides(&self) -> Option<ModuleHttpOverrides> {
         None
+    }
+
+    fn clear_cookies(&self) -> Result<(), SettingsStoreError> {
+        Ok(())
+    }
+
+    fn store_bypass(&self, _: &str, _: &str) -> Result<(), SettingsStoreError> {
+        Ok(())
     }
 }
 

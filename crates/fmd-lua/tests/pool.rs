@@ -17,7 +17,7 @@ use std::time::Duration;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{
     Callback, Invalidate, JobError, Module, ModuleHttpOverrides, ModuleHttpSettings, ModuleLimits,
-    ModuleRegistry, PoolConfig, Task, UpdateList, WorkerPool,
+    ModuleRegistry, PoolConfig, SettingsStoreError, Task, UpdateList, WorkerPool,
 };
 
 /// A transport that records every request and answers from a script.
@@ -506,6 +506,14 @@ impl ModuleHttpSettings for UserAgent {
             user_agent: "UA/1".into(),
             ..ModuleHttpOverrides::default()
         })
+    }
+
+    fn clear_cookies(&self) -> Result<(), SettingsStoreError> {
+        Ok(())
+    }
+
+    fn store_bypass(&self, _: &str, _: &str) -> Result<(), SettingsStoreError> {
+        Ok(())
     }
 }
 
