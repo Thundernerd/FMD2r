@@ -37,3 +37,17 @@ fn module_init_is_not_implemented_yet() {
         .stderr(predicate::str::contains("not implemented yet (T15)"))
         .stderr(predicate::str::contains("panicked").not());
 }
+
+#[test]
+fn openapi_exports_the_server_document_to_a_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("openapi.json");
+    fmd2r()
+        .args(["openapi", "--out"])
+        .arg(&out)
+        .assert()
+        .success();
+    let doc: serde_json::Value = serde_json::from_slice(&std::fs::read(&out).unwrap()).unwrap();
+    assert!(doc["openapi"].as_str().unwrap().starts_with("3.1"));
+    assert!(doc["paths"]["/api/events"]["get"].is_object());
+}
