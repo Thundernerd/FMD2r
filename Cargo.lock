@@ -746,6 +746,7 @@ version = "0.1.0"
 dependencies = [
  "fmd-http",
  "fmd-lua",
+ "fmd-pack",
  "fmd-store",
  "serde",
  "serde_json",
@@ -755,6 +756,7 @@ dependencies = [
  "tokio",
  "tracing",
  "utoipa",
+ "zip",
 ]
 
 [[package]]
