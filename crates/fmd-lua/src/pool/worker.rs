@@ -14,7 +14,7 @@ use super::{Bytecode, CallbackError, Envelope, Job, JobError, JobResult, Queue, 
 use crate::module::lock;
 use crate::{
     Globals, HttpModule, LuaHttp, Module, ModuleHttpOverrides, ModuleHttpSettings, Runtime,
-    create_http,
+    SettingsStoreError, create_http,
 };
 
 /// Calls a function under `xpcall`, returning the traceback taken where it failed (or `''`),
@@ -242,7 +242,7 @@ pub(super) struct Ctx<'a> {
     terminate: TerminateToken,
 }
 
-/// No HTTP overrides, and nowhere to store what the anti-bot hook obtains.
+/// No HTTP overrides, and nothing stored.
 struct NoOverrides;
 
 impl ModuleHttpSettings for NoOverrides {
@@ -250,15 +250,11 @@ impl ModuleHttpSettings for NoOverrides {
         None
     }
 
-    fn clear_cookies(&self) -> Result<(), crate::SettingsStoreError> {
+    fn clear_cookies(&self) -> Result<(), SettingsStoreError> {
         Ok(())
     }
 
-    fn store_bypass(
-        &self,
-        _cookies: &str,
-        _user_agent: &str,
-    ) -> Result<(), crate::SettingsStoreError> {
+    fn store_bypass(&self, _: &str, _: &str) -> Result<(), SettingsStoreError> {
         Ok(())
     }
 }
