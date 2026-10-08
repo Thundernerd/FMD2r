@@ -7,3 +7,7 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+mlua.workspace = true
+thiserror.workspace = true
