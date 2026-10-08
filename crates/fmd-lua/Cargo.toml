@@ -9,5 +9,11 @@ publish = false
 workspace = true
 
 [dependencies]
+fmd-http = { path = "../fmd-http" }
 mlua.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+serde_json = "1"
+tracing-subscriber = { workspace = true, features = ["json"] }

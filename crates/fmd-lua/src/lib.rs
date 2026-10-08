@@ -1,8 +1,10 @@
 //! Lua runtime and the full FMD2 Host API that website modules see (the core of FMD2r).
 
 mod class;
+mod globals;
 
 pub use class::LuaClass;
+pub use globals::Globals;
 pub use mlua;
 
 /// Errors raised by the Lua runtime.
@@ -37,6 +39,14 @@ impl Runtime {
     /// The underlying Lua state, for registering Host API objects and globals.
     pub fn lua(&self) -> &mlua::Lua {
         &self.lua
+    }
+
+    /// Installs the global helper functions (`print`, `sleep`, `Trim`, `MaybeFillHost`,
+    /// `MangaInfoStatusIfPos`, `GetBetween`, `SeparateLeft`, `SeparateRight`), like FMD2's
+    /// `LuaBaseRegisterAll` (baseunits/lua/LuaBase.pas:86-92). Installing again replaces them.
+    pub fn install_globals(&self, globals: Globals) -> Result<()> {
+        globals::install(&self.lua, globals)?;
+        Ok(())
     }
 
     /// Runs a chunk of Lua code.
