@@ -45,7 +45,7 @@ fn main() -> anyhow::Result<()> {
         Command::Serve => "T21",
         Command::Module(ModuleCommand::Init | ModuleCommand::Info | ModuleCommand::Pages) => "T15",
         Command::Module(ModuleCommand::Download) => "T20",
-        Command::Xpath(XpathCommand::Eval) => "T08",
+        Command::Xpath(XpathCommand::Eval) => "T35",
     };
     bail!("not implemented yet ({ticket})")
 }
