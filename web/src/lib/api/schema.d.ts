@@ -16,7 +16,7 @@ export interface paths {
 		put?: never;
 		/**
 		 * Add a series to the library (`btAddToFavoritesClick`,
-		 *     mangadownloader/forms/frmMain.pas:2790-2846): its current chapters count as seen, so only
+		 *     mangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only
 		 *     chapters added later are new.
 		 */
 		post: operations['addFavorite'];
@@ -37,7 +37,7 @@ export interface paths {
 		put?: never;
 		/**
 		 * Check enabled favorites for new chapters now (`CheckForNewChapter`,
-		 *     baseunits/uFavoritesManager.pas:845-886). The body is optional.
+		 *     baseunits/uFavoritesManager.pas:832-881). The body is optional.
 		 */
 		post: operations['checkFavorites'];
 		delete?: never;
@@ -78,7 +78,7 @@ export interface paths {
 		put?: never;
 		/**
 		 * Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,
-		 *     baseunits/uFavoritesManager.pas:888-928), to download them again.
+		 *     baseunits/uFavoritesManager.pas:883-928), to download them again.
 		 */
 		post: operations['checkMissingChapters'];
 		delete?: never;
@@ -556,7 +556,9 @@ export interface components {
 			module_id: string;
 			/**
 			 * Format: int32
-			 * @description Chapters on the site at the last check that are not downloaded.
+			 * @description Chapters on the site at the last check that are not downloaded: the chapter count less
+			 *     the downloaded ones, as only the count of the site's list is stored. Downloaded chapters
+			 *     the site no longer lists make it an undercount; a check finds the real ones by link.
 			 */
 			new_chapters: number;
 			save_to: string;

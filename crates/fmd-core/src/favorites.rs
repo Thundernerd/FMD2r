@@ -17,7 +17,7 @@ use fmd_lua::WorkerPool;
 use fmd_store::{AppDb, Event, EventSeverity, Favorite, FavoriteId, NewEvent, StoreError};
 use serde::Serialize;
 use thiserror::Error;
-use tokio::sync::Semaphore;
+use tokio::sync::{Semaphore, watch};
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 use utoipa::ToSchema;
@@ -178,6 +178,20 @@ pub struct FavoritesEvent {
     pub error: Option<String>,
 }
 
+impl FavoritesEvent {
+    fn new(kind: FavoritesEventKind, mode: CheckMode, done: u64, total: u64) -> Self {
+        Self {
+            kind,
+            mode,
+            done,
+            total,
+            favorite_id: None,
+            new_chapters: None,
+            error: None,
+        }
+    }
+}
+
 /// What the checker reports while it runs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CheckerEvent {
@@ -195,6 +209,9 @@ pub enum CheckError {
     NoRuntime,
     #[error("store: {0}")]
     Store(#[from] StoreError),
+    /// Blocking work on the runtime's thread pool panicked or was cancelled.
+    #[error("background work: {0}")]
+    Join(String),
 }
 
 /// Checks favorites for new chapters (`TFavoriteManager`), one run at a time, as the
@@ -210,13 +227,21 @@ struct Inner {
     status: Mutex<JobStatus>,
     /// `Terminated`: set to stop the run going on.
     cancelled: AtomicBool,
+    /// Counts the runs that ended, so a scheduled check can wait for a manual one.
+    ended: watch::Sender<u64>,
+}
+
+/// A completed series with nothing new.
+struct CompletedSeries {
+    id: FavoriteId,
+    title: String,
+    website: String,
 }
 
 /// What checking one favorite found.
 enum Checked {
     Found(FavoriteFound),
-    /// A completed series with nothing new: (id, title, website).
-    Completed(FavoriteId, String, String),
+    Completed(CompletedSeries),
     Nothing,
 }
 
@@ -242,12 +267,13 @@ impl FavoritesChecker {
                     last_error: None,
                 }),
                 cancelled: AtomicBool::new(false),
+                ended: watch::channel(0).0,
             }),
         }
     }
 
     /// Starts checking the favorites in `scope` in the background, unless a run is going
-    /// (`CheckForNewChapter`/`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:845-928).
+    /// (`CheckForNewChapter`/`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:832-928).
     pub fn start(&self, scope: CheckScope, mode: CheckMode) -> Result<(), CheckError> {
         let runtime = tokio::runtime::Handle::try_current().map_err(|_| CheckError::NoRuntime)?;
         self.begin()?;
@@ -277,7 +303,8 @@ impl FavoritesChecker {
     /// `favorites.check_interval_minutes` after the last ended while
     /// `favorites.check_on_interval` is on (`tmCheckFavorites`, :1871-1881, :6335, re-armed when
     /// a check ends, baseunits/uFavoritesManager.pas:597). A check already going when one is due
-    /// counts as that one, so runs never overlap. Never returns.
+    /// counts as that one, and the interval runs from its end, so runs never overlap. Never
+    /// returns.
     pub async fn schedule(self) {
         let settings = self.inner.config.settings.clone();
         let mut changes = settings.subscribe();
@@ -311,11 +338,16 @@ impl FavoritesChecker {
         }
     }
 
-    /// A scheduled check of every favorite (`isAuto`), waiting for it to end.
+    /// A scheduled check of every favorite (`isAuto`), waiting for it to end. A check already
+    /// going (started from the API) counts as this one: it waits for that to end instead.
     async fn scheduled_check(&self) {
-        // A check already going (started from the API) counts as this one, and its failure
-        // has been logged.
-        let _ = self.check(CheckScope::All, CheckMode::New).await;
+        let mut ended = self.inner.ended.subscribe();
+        ended.mark_unchanged();
+        // A failed run has been logged.
+        if let Err(CheckError::AlreadyRunning) = self.check(CheckScope::All, CheckMode::New).await {
+            // The sender lives in `self`, so this only returns once a run ended.
+            let _ = ended.changed().await;
+        }
     }
 
     /// Records when the scheduler runs the job next, in Unix milliseconds.
@@ -365,14 +397,11 @@ impl FavoritesChecker {
             (status.done, status.total)
         };
         self.inner.config.jobs.changed(Self::ID);
+        self.inner.ended.send_modify(|n| *n += 1);
         self.emit(FavoritesEvent {
-            kind,
-            mode,
-            done,
-            total,
-            favorite_id: None,
             new_chapters,
             error,
+            ..FavoritesEvent::new(kind, mode, done, total)
         });
     }
 
@@ -396,15 +425,12 @@ impl FavoritesChecker {
         let favorites = self.favorites(scope).await?;
         let total = favorites.len() as u64;
         self.update(|status| status.total = total);
-        self.emit(FavoritesEvent {
-            kind: FavoritesEventKind::Started,
+        self.emit(FavoritesEvent::new(
+            FavoritesEventKind::Started,
             mode,
-            done: 0,
+            0,
             total,
-            favorite_id: None,
-            new_chapters: None,
-            error: None,
-        });
+        ));
         let threads = self
             .inner
             .config
@@ -431,13 +457,8 @@ impl FavoritesChecker {
                 };
                 this.inner.config.jobs.changed(Self::ID);
                 this.emit(FavoritesEvent {
-                    kind: FavoritesEventKind::Progress,
-                    mode,
-                    done,
-                    total,
                     favorite_id: Some(favorite.id.0),
-                    new_chapters: None,
-                    error: None,
+                    ..FavoritesEvent::new(FavoritesEventKind::Progress, mode, done, total)
                 });
                 (index, checked)
             });
@@ -454,19 +475,24 @@ impl FavoritesChecker {
         let mut report = CheckReport::default();
         let mut completed = Vec::new();
         for (_, result) in results {
-            match result? {
-                None => {}
-                Some(checked) => {
-                    report.checked += 1;
-                    match checked {
-                        Checked::Found(found) => report.found.push(found),
-                        Checked::Completed(id, title, website) => {
-                            report.completed.push(id);
-                            completed.push((id, title, website));
-                        }
-                        Checked::Nothing => {}
-                    }
+            let checked = match result {
+                Ok(Some(checked)) => checked,
+                Ok(None) => continue,
+                // One favorite's failure leaves the others' results standing, as FMD2's
+                // per-favorite `ExceptionHandle` (baseunits/uFavoritesManager.pas:391-394).
+                Err(e) => {
+                    tracing::warn!(target: "fmd_core", "favorites check: {e}");
+                    continue;
                 }
+            };
+            report.checked += 1;
+            match checked {
+                Checked::Found(found) => report.found.push(found),
+                Checked::Completed(series) => {
+                    report.completed.push(series.id);
+                    completed.push(series);
+                }
+                Checked::Nothing => {}
             }
         }
         if self.inner.cancelled.load(Ordering::SeqCst) {
@@ -500,17 +526,22 @@ impl FavoritesChecker {
         if self.inner.cancelled.load(Ordering::SeqCst) {
             return Ok(None);
         }
-        self.store_checked(favorite, &info, !chapters.is_empty())
-            .await?;
+        // The favorite as stored now: it may have been edited, or removed, during the check.
+        let Some(favorite) = self
+            .store_checked(favorite.id, &info, !chapters.is_empty())
+            .await?
+        else {
+            return Ok(None);
+        };
         let website = self.website(&favorite.module_id);
         if !chapters.is_empty() {
             return Ok(Some(Checked::Found(FavoriteFound {
                 favorite: favorite.id,
-                title: favorite.title.clone(),
-                module_id: favorite.module_id.clone(),
+                title: favorite.title,
+                module_id: favorite.module_id,
                 website,
-                link: favorite.link.clone(),
-                save_to: favorite.save_to.clone(),
+                link: favorite.link,
+                save_to: favorite.save_to,
                 authors: info.authors,
                 artists: info.artists,
                 chapters,
@@ -518,8 +549,11 @@ impl FavoritesChecker {
         }
         // Only a new-chapter check keeps a completed series' info (:380-385, :513-517).
         if mode == CheckMode::New && info.status == STATUS_COMPLETED {
-            let completed = Checked::Completed(favorite.id, favorite.title.clone(), website);
-            return Ok(Some(completed));
+            return Ok(Some(Checked::Completed(CompletedSeries {
+                id: favorite.id,
+                title: favorite.title,
+                website,
+            })));
         }
         Ok(Some(Checked::Nothing))
     }
@@ -530,22 +564,19 @@ impl FavoritesChecker {
             .map_or_else(|| module_id.to_owned(), |m| m.def().name)
     }
 
-    /// Removes `completed` (id, title, website) when `favorites.remove_completed` is on, and
+    /// Removes `completed` when `favorites.remove_completed` is on, and
     /// reports it in the inbox in place of FMD2's confirmation dialog (`ShowResult`,
     /// baseunits/uFavoritesManager.pas:997-1043).
-    async fn remove_completed(
-        &self,
-        completed: &[(FavoriteId, String, String)],
-    ) -> Result<(), CheckError> {
+    async fn remove_completed(&self, completed: &[CompletedSeries]) -> Result<(), CheckError> {
         if completed.is_empty() || !self.inner.config.settings.get().favorites.remove_completed {
             return Ok(());
         }
-        let ids: Vec<FavoriteId> = completed.iter().map(|(id, ..)| *id).collect();
+        let ids: Vec<FavoriteId> = completed.iter().map(|c| c.id).collect();
         let db = self.inner.config.db.clone();
         blocking(move || ids.iter().try_for_each(|id| db.favorites().delete(*id))).await?;
         let mut body = format!("{} completed manga(s) removed:", completed.len());
-        for (_, title, website) in completed {
-            body.push_str(&format!("\n- {title} <{website}>"));
+        for c in completed {
+            body.push_str(&format!("\n- {} <{}>", c.title, c.website));
         }
         self.notify(NewEvent {
             kind: "completed".into(),
@@ -639,23 +670,34 @@ impl FavoritesChecker {
 
     /// Stores what a check learned: the chapter count and status at once (`DoCheck`,
     /// baseunits/uFavoritesManager.pas:351-353), the check time, and the update time when it
-    /// found chapters (:373-378).
+    /// found chapters (:373-378). The other fields are left as stored now, so edits made during
+    /// the check stay. Returns the updated favorite, or `None` when it was removed meanwhile.
     async fn store_checked(
         &self,
-        favorite: &Favorite,
+        id: FavoriteId,
         info: &MangaInfo,
         found: bool,
-    ) -> Result<(), CheckError> {
+    ) -> Result<Option<Favorite>, CheckError> {
         let now = now_ms();
-        let mut updated = favorite.clone();
-        updated.current_chapter = u32::try_from(info.chapters.len()).unwrap_or(u32::MAX);
-        updated.status = info.status.clone();
-        updated.date_last_checked = Some(now);
-        if found {
-            updated.date_last_updated = Some(now);
-        }
+        let chapters = u32::try_from(info.chapters.len()).unwrap_or(u32::MAX);
+        let status = info.status.clone();
         let db = self.inner.config.db.clone();
-        blocking(move || db.favorites().update(&updated)).await
+        // The repositories lock the connection per statement; this read-modify-write races
+        // only with another write to the same favorite in between, which a PATCH would redo.
+        blocking(move || {
+            let Some(mut favorite) = db.favorites().get(id)? else {
+                return Ok(None);
+            };
+            favorite.current_chapter = chapters;
+            favorite.status = status;
+            favorite.date_last_checked = Some(now);
+            if found {
+                favorite.date_last_updated = Some(now);
+            }
+            db.favorites().update(&favorite)?;
+            Ok(Some(favorite))
+        })
+        .await
     }
 
     async fn favorites(&self, scope: CheckScope) -> Result<Vec<Favorite>, CheckError> {
@@ -752,7 +794,7 @@ impl FavoritesChecker {
         .await
         {
             Ok(missing) => missing,
-            Err(e) => return Err(CheckError::Store(StoreError::Io(std::io::Error::other(e)))),
+            Err(e) => return Err(CheckError::Join(e.to_string())),
         };
         Ok(info
             .chapters
@@ -928,6 +970,6 @@ async fn blocking<T: Send + 'static>(
 ) -> Result<T, CheckError> {
     match tokio::task::spawn_blocking(f).await {
         Ok(result) => Ok(result?),
-        Err(e) => Err(CheckError::Store(StoreError::Io(std::io::Error::other(e)))),
+        Err(e) => Err(CheckError::Join(e.to_string())),
     }
 }

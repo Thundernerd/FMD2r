@@ -54,3 +54,9 @@ test('a series can be added to the library from its page', async ({ page }) => {
 		page.getByRole('list', { name: 'Favorites' }).getByRole('link', { name: /One Piece/ })
 	).toBeVisible();
 });
+
+test('a series in the library can be checked for missing chapters', async ({ page }) => {
+	await page.goto('/series?module=mangadex&link=%2Ftitle%2Fabc123%2Ffrieren');
+	await page.getByRole('button', { name: 'Check missing chapters' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'missing chapters' })).toBeVisible();
+});

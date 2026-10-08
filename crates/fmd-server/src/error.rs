@@ -137,7 +137,7 @@ impl From<fmd_core::favorites::CheckError> for ApiError {
         match err {
             E::AlreadyRunning => Self::Conflict(err.to_string()),
             E::Store(e) => Self::Store(e),
-            E::NoRuntime => Self::Internal(err.to_string()),
+            E::NoRuntime | E::Join(_) => Self::Internal(err.to_string()),
         }
     }
 }

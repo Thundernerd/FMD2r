@@ -35,7 +35,9 @@ pub struct FavoriteView {
     pub cover_url: Option<String>,
     /// Chapters on the site at the last check (FMD2's `currentchapter`).
     pub current_chapter: u32,
-    /// Chapters on the site at the last check that are not downloaded.
+    /// Chapters on the site at the last check that are not downloaded: the chapter count less
+    /// the downloaded ones, as only the count of the site's list is stored. Downloaded chapters
+    /// the site no longer lists make it an undercount; a check finds the real ones by link.
     pub new_chapters: u32,
     /// RFC 3339.
     pub date_added: String,
@@ -112,7 +114,7 @@ pub struct AddFavorite {
 }
 
 /// Add a series to the library (`btAddToFavoritesClick`,
-/// mangadownloader/forms/frmMain.pas:2790-2846): its current chapters count as seen, so only
+/// mangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only
 /// chapters added later are new.
 #[utoipa::path(post, path = "/api/favorites", tag = "library", operation_id = "addFavorite",
     request_body = AddFavorite,
@@ -244,7 +246,7 @@ pub struct CheckRequest {
 }
 
 /// Check enabled favorites for new chapters now (`CheckForNewChapter`,
-/// baseunits/uFavoritesManager.pas:845-886). The body is optional.
+/// baseunits/uFavoritesManager.pas:832-881). The body is optional.
 #[utoipa::path(post, path = "/api/favorites/check", tag = "library", operation_id = "checkFavorites",
     request_body(content = Option<CheckRequest>),
     responses(
@@ -269,7 +271,7 @@ pub(crate) async fn check(
 }
 
 /// Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,
-/// baseunits/uFavoritesManager.pas:888-928), to download them again.
+/// baseunits/uFavoritesManager.pas:883-928), to download them again.
 #[utoipa::path(post, path = "/api/favorites/{id}/check-missing", tag = "library",
     operation_id = "checkMissingChapters",
     params(("id" = i64, Path, description = "Favorite id")),

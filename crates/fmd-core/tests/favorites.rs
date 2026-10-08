@@ -687,3 +687,67 @@ async fn without_the_startup_check_the_first_check_waits_an_interval() {
     next_finished(&mut events).await;
     assert!(start.elapsed() >= std::time::Duration::from_secs(300));
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_scheduled_check_due_during_a_manual_one_waits_for_it_and_rearms_after() {
+    let fx = Fixture::new(json!({ "favorites": {
+        "check_at_startup": true,
+        "check_interval_minutes": 5,
+    } }));
+    fx.favorite();
+    let (tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let checker = fx.checker_events(None, move |e| {
+        let _ = tx.send(e);
+    });
+    let start = tokio::time::Instant::now();
+    fx.site.close();
+    checker.start(CheckScope::All, CheckMode::New).unwrap();
+
+    tokio::spawn(checker.clone().schedule());
+    tokio::time::sleep(std::time::Duration::from_secs(7 * 60)).await;
+    fx.site.open();
+
+    // The manual check ends at 7 minutes and counts as the startup check; the timer is armed
+    // when it ends (baseunits/uFavoritesManager.pas:597), so the next check is at 12.
+    next_finished(&mut events).await;
+    next_finished(&mut events).await;
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed >= std::time::Duration::from_secs(12 * 60)
+            && elapsed < std::time::Duration::from_secs(13 * 60),
+        "{elapsed:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn edits_made_while_a_check_runs_are_kept() {
+    let fx = Fixture::new(json!({}));
+    let id = fx.favorite();
+    let (tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let checker = fx.checker_events(None, move |e| {
+        let _ = tx.send(e);
+    });
+    fx.site.close();
+    checker.start(CheckScope::All, CheckMode::New).unwrap();
+    until(&mut events, |e| {
+        job_kind(e) == Some(FavoritesEventKind::Started)
+    })
+    .await;
+
+    let mut edited = fx.db.favorites().get(id).unwrap().unwrap();
+    edited.title = "Renamed".into();
+    edited.enabled = false;
+    fx.db.favorites().update(&edited).unwrap();
+    fx.site.open();
+    until(&mut events, |e| {
+        job_kind(e) == Some(FavoritesEventKind::Finished)
+    })
+    .await;
+
+    let after = fx.db.favorites().get(id).unwrap().unwrap();
+    assert_eq!(after.title, "Renamed");
+    assert!(!after.enabled);
+    assert_eq!(after.current_chapter, 3);
+    let events = fx.db.events().list(&EventQuery::default()).unwrap();
+    assert!(events[0].body.as_str().unwrap().contains("Renamed <Site>"));
+}

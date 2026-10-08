@@ -11,6 +11,32 @@
 	let adding = $state(false);
 	let addError = $state<string | null>(null);
 
+	let checking = $state(false);
+	let checkNote = $state<string | null>(null);
+
+	/** Starts a check of this series for chapters missing from its folder. */
+	async function checkMissing() {
+		checking = true;
+		checkNote = null;
+		try {
+			const favorite = (await api.listFavorites()).find(
+				(f) => f.module_id === series.module_id && f.link === series.link
+			);
+			if (!favorite) throw new Error('not in the library');
+			await api.checkMissingChapters(favorite.id);
+			checkNote = 'Checking for missing chapters; the result arrives in the inbox.';
+		} catch (e) {
+			checkNote =
+				e instanceof ApiError && e.status === 409
+					? 'A check is already running.'
+					: e instanceof ApiError && e.status === 503
+						? 'The chapter check is not running on this server.'
+						: 'Could not start the check.';
+		} finally {
+			checking = false;
+		}
+	}
+
 	async function addToLibrary() {
 		adding = true;
 		addError = null;
@@ -93,10 +119,16 @@
 		<div class="actions">
 			{#if series.in_library}
 				<span class="btn in-library">★ In library</span>
+				<button class="btn" type="button" disabled={checking} onclick={checkMissing}>
+					Check missing chapters
+				</button>
 			{:else}
 				<button class="btn" type="button" disabled={adding} onclick={addToLibrary}>
 					{adding ? 'Adding…' : '＋ Add to library'}
 				</button>
+			{/if}
+			{#if checkNote}
+				<span class="small muted note" role="status">{checkNote}</span>
 			{/if}
 			{#if addError}
 				<span class="bad small" role="alert">{addError}</span>
@@ -227,9 +259,12 @@
 		gap: var(--sp-2);
 		flex-wrap: wrap;
 	}
+	.bad,
+	.note {
+		align-self: center;
+	}
 	.bad {
 		color: var(--bad);
-		align-self: center;
 	}
 	.in-library {
 		color: var(--accent);

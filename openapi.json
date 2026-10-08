@@ -69,7 +69,7 @@
 				"tags": [
 					"library"
 				],
-				"summary": "Add a series to the library (`btAddToFavoritesClick`,\nmangadownloader/forms/frmMain.pas:2790-2846): its current chapters count as seen, so only\nchapters added later are new.",
+				"summary": "Add a series to the library (`btAddToFavoritesClick`,\nmangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only\nchapters added later are new.",
 				"operationId": "addFavorite",
 				"requestBody": {
 					"content": {
@@ -130,7 +130,7 @@
 				"tags": [
 					"library"
 				],
-				"summary": "Check enabled favorites for new chapters now (`CheckForNewChapter`,\nbaseunits/uFavoritesManager.pas:845-886). The body is optional.",
+				"summary": "Check enabled favorites for new chapters now (`CheckForNewChapter`,\nbaseunits/uFavoritesManager.pas:832-881). The body is optional.",
 				"operationId": "checkFavorites",
 				"requestBody": {
 					"content": {
@@ -267,7 +267,7 @@
 				"tags": [
 					"library"
 				],
-				"summary": "Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,\nbaseunits/uFavoritesManager.pas:888-928), to download them again.",
+				"summary": "Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,\nbaseunits/uFavoritesManager.pas:883-928), to download them again.",
 				"operationId": "checkMissingChapters",
 				"parameters": [
 					{
@@ -1547,7 +1547,7 @@
 					"new_chapters": {
 						"type": "integer",
 						"format": "int32",
-						"description": "Chapters on the site at the last check that are not downloaded.",
+						"description": "Chapters on the site at the last check that are not downloaded: the chapter count less\nthe downloaded ones, as only the count of the site's list is stored. Downloaded chapters\nthe site no longer lists make it an undercount; a check finds the real ones by link.",
 						"minimum": 0
 					},
 					"save_to": {

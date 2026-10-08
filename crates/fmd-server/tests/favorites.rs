@@ -2,8 +2,8 @@
 //! catalog and a fake favorites job (docs/tickets/T25-library-favorites.md, "Seams under test").
 //!
 //! Expected behaviour comes from FMD2's `TMainForm.btAddToFavoritesClick`
-//! (mangadownloader/forms/frmMain.pas:2790-2846) and `TFavoriteManager`
-//! (baseunits/uFavoritesManager.pas:845-928, :1213-1300).
+//! (mangadownloader/forms/frmMain.pas:2797-2846) and `TFavoriteManager`
+//! (baseunits/uFavoritesManager.pas:832-928, :1213-1300).
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
