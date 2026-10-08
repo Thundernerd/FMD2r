@@ -1,5 +1,5 @@
 //! A running task: the per-chapter pipeline of `TTaskThread.Execute`
-//! (baseunits/uDownloadsManager.pas:975-1375).
+//! (baseunits/uDownloadsManager.pas:975-1374).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -17,7 +17,7 @@ use super::{EngineError, EngineEvent, Progress};
 use crate::settings::{Settings, StoredModuleHttpSettings};
 
 /// The page-list markers FMD2 keeps in `PageLinks`: no link yet, downloaded, and a link to get
-/// at download time (baseunits/uDownloadsManager.pas:353-360, :1046-1058).
+/// at download time (baseunits/uDownloadsManager.pas:349-361, :1048-1061).
 pub(super) const WAITING: &str = "W";
 pub(super) const DONE: &str = "D";
 pub(super) const DYNAMIC: &str = "G";
@@ -59,6 +59,12 @@ pub(super) struct TaskRun<'a> {
     pub(super) settings: Arc<Settings>,
     title: String,
     save_to: PathBuf,
+    /// The chapters as queued. `TASK.ChapterLinks`/`ChapterNames` start as these, but what a
+    /// module does to its copies does not move the task's own chapter list.
+    chapter_links: Vec<String>,
+    chapter_names: Vec<String>,
+    /// The manga's link, as queued, for `downloaded_chapters`.
+    manga_link: String,
     pub(super) container: Mutex<Container>,
     /// The worker running the task thread's own callbacks, its Lua state.
     affinity: Affinity,
@@ -105,7 +111,7 @@ impl<'a> TaskRun<'a> {
             chapter_names: chapters.iter().map(|c| c.name.clone()).collect(),
             current_download_chapter_ptr: i32::try_from(stored.current_chapter).unwrap_or(0),
             // FMD2 subtracts the working directory from this on Windows
-            // (baseunits/uDownloadsManager.pas:768-770); on Linux the limit is per name.
+            // (baseunits/uDownloadsManager.pas:766-770); on Linux the limit is per name.
             current_max_file_name_length: i32::try_from(MAX_IMAGE_FILE_PATH).unwrap_or(0),
             link: stored.link.clone(),
             ..fmd_lua::Task::default()
@@ -119,6 +125,9 @@ impl<'a> TaskRun<'a> {
             settings: inner.settings(),
             title: stored.title,
             save_to: PathBuf::from(stored.save_to),
+            chapter_links: chapters.iter().map(|c| c.link.clone()).collect(),
+            chapter_names: chapters.iter().map(|c| c.name.clone()).collect(),
+            manga_link: stored.link,
             container: Mutex::new(Container {
                 task,
                 chapters_status: chapters.iter().map(|c| c.status).collect(),
@@ -228,20 +237,21 @@ impl<'a> TaskRun<'a> {
         };
         let repo = self.inner.config.db.tasks();
         for (idx, link) in pages {
-            let container_url = self
-                .container()
-                .task
-                .page_container_links
-                .get(idx)
-                .cloned()
-                .unwrap_or_default();
+            let (container_url, filename) = {
+                let c = self.container();
+                let entry = |list: &[String]| list.get(idx).cloned().unwrap_or_default();
+                (
+                    entry(&c.task.page_container_links),
+                    entry(&c.task.file_names),
+                )
+            };
             let page = TaskPage {
                 chapter_idx: u32::try_from(self.chapter).unwrap_or(u32::MAX),
                 idx: u32::try_from(idx).unwrap_or(u32::MAX),
                 status: page_status(&link),
                 url: link,
                 container_url,
-                filename: String::new(),
+                filename,
             };
             if let Err(e) = repo.update_page(self.id, &page) {
                 tracing::warn!(target: "fmd_core", "task {}: saving page {idx}: {e}", self.id.0);
@@ -326,7 +336,7 @@ impl<'a> TaskRun<'a> {
         }
     }
 
-    /// `TTaskThread.Execute` (baseunits/uDownloadsManager.pas:1105-1375).
+    /// `TTaskThread.Execute` (baseunits/uDownloadsManager.pas:1104-1374).
     fn execute(&mut self) -> Result<(), EngineError> {
         let dynamic_page_link = self.def.dynamic_page_link;
         let limits = self.inner.limits(self.module);
@@ -335,7 +345,7 @@ impl<'a> TaskRun<'a> {
             .set_max_connections(limits.max_connections);
         let settings = self.settings.clone();
         let connections = &settings.connections;
-        let chapter_count = self.container().task.chapter_links.len();
+        let chapter_count = self.chapter_links.len();
         let mut failed_retry_count = 0;
 
         if connections.always_start_from_failed_chapters && self.chapter != 0 {
@@ -357,14 +367,14 @@ impl<'a> TaskRun<'a> {
             }
             self.enter_chapter()?;
 
-            let chapter_name = self.container().task.chapter_names[self.chapter].clone();
+            let chapter_name = self.chapter_names[self.chapter].clone();
             self.working_dir = if self.settings.saveto.generate_chapter_folder {
                 self.save_to.join(&chapter_name)
             } else {
                 self.save_to.clone()
             };
             if let Err(e) = std::fs::create_dir_all(&self.working_dir) {
-                // `StatusFailedToCreateDir` (baseunits/uDownloadsManager.pas:722-731).
+                // `StatusFailedToCreateDir` (baseunits/uDownloadsManager.pas:717-725).
                 let error = format!("failed to create {}: {e}", self.working_dir.display());
                 self.inner
                     .set_status(self.id, TaskStatus::Failed, Some(&error))?;
@@ -375,7 +385,7 @@ impl<'a> TaskRun<'a> {
                 self.task_callback(|caller, task| caller.task_start(task));
             }
 
-            // `CurrentCustomFileName` (baseunits/uDownloadsManager.pas:1167-1177).
+            // `CurrentCustomFileName` (baseunits/uDownloadsManager.pas:1168-1178).
             let ctx = RenameContext {
                 website: &self.def.name,
                 manga: &self.title,
@@ -496,8 +506,7 @@ impl<'a> TaskRun<'a> {
 
     /// Records the chapter the task is at.
     fn enter_chapter(&mut self) -> Result<(), EngineError> {
-        let link = self.container().task.chapter_links[self.chapter].clone();
-        self.chapter_link = link;
+        self.chapter_link = self.chapter_links[self.chapter].clone();
         self.container().task.current_download_chapter_ptr =
             i32::try_from(self.chapter).unwrap_or(i32::MAX);
         self.save_chapter_pointer()
@@ -534,9 +543,11 @@ impl<'a> TaskRun<'a> {
         db.tasks().update_chapter(self.id, chapter, status, 0)?;
         db.tasks().set_pages(self.id, chapter, &[])?;
         if !failed {
-            let link = self.container().task.link.clone();
-            db.downloaded_chapters()
-                .mark(&self.def.id, &link, &[self.chapter_link.as_str()])?;
+            db.downloaded_chapters().mark(
+                &self.def.id,
+                &self.manga_link,
+                &[self.chapter_link.as_str()],
+            )?;
         }
         self.inner.emit(EngineEvent::Chapter {
             task: self.id,
@@ -546,7 +557,7 @@ impl<'a> TaskRun<'a> {
         Ok(())
     }
 
-    /// `FirstFailedChapters` (baseunits/uDownloadsManager.pas:733-740).
+    /// `FirstFailedChapters` (baseunits/uDownloadsManager.pas:727-734).
     fn first_failed_chapter(&self) -> Option<usize> {
         self.container()
             .chapters_status
@@ -563,7 +574,7 @@ impl<'a> TaskRun<'a> {
         self.progress(true);
     }
 
-    /// `DoGetPageNumber` (baseunits/uDownloadsManager.pas:829-864).
+    /// `DoGetPageNumber` (baseunits/uDownloadsManager.pas:829-866).
     fn get_page_number(&mut self) {
         self.container().task.page_number = 0;
         if self.def.on_get_page_number.is_some() {
@@ -583,7 +594,7 @@ impl<'a> TaskRun<'a> {
         }
     }
 
-    /// `CheckForExists` (baseunits/uDownloadsManager.pas:1003-1063): marks the pages whose
+    /// `CheckForExists` (baseunits/uDownloadsManager.pas:1003-1064): marks the pages whose
     /// image, or the chapter's archive, is on disk downloaded, and the others not.
     fn check_for_exists(&self, dynamic_page_link: bool) -> usize {
         let pages = self.container().task.page_links.len();
@@ -597,8 +608,7 @@ impl<'a> TaskRun<'a> {
             let base = if self.settings.saveto.generate_chapter_folder {
                 self.working_dir.clone()
             } else {
-                self.working_dir
-                    .join(&self.container().task.chapter_names[self.chapter])
+                self.working_dir.join(&self.chapter_names[self.chapter])
             };
             let mut path = base.into_os_string();
             path.push(format.extension());
@@ -611,17 +621,20 @@ impl<'a> TaskRun<'a> {
                 || find_image_file(&base, "").is_some()
                 || (!magick_ext.is_empty() && find_image_file(&base, &magick_ext).is_some());
             let mut c = self.container();
+            let Some(link) = c.task.page_links.get_mut(i) else {
+                break;
+            };
             if exists {
-                c.task.page_links[i] = DONE.to_owned();
+                *link = DONE.to_owned();
                 found += 1;
-            } else if c.task.page_links[i] == DONE {
-                c.task.page_links[i] = if dynamic_page_link { DYNAMIC } else { WAITING }.to_owned();
+            } else if link == DONE {
+                *link = if dynamic_page_link { DYNAMIC } else { WAITING }.to_owned();
             }
         }
         found
     }
 
-    /// `CheckForPrepare` (baseunits/uDownloadsManager.pas:983-1001): whether a page still
+    /// `CheckForPrepare` (baseunits/uDownloadsManager.pas:980-1001): whether a page still
     /// lacks its link.
     fn check_for_prepare(&self) -> bool {
         let c = self.container();
@@ -632,7 +645,7 @@ impl<'a> TaskRun<'a> {
                 .any(|l| l == WAITING || l.is_empty())
     }
 
-    /// `CheckForFinish` (baseunits/uDownloadsManager.pas:1065-1103): whether every page is on
+    /// `CheckForFinish` (baseunits/uDownloadsManager.pas:1066-1103): whether every page is on
     /// disk.
     fn check_for_finish(&self, dynamic_page_link: bool) -> bool {
         let pages = self.container().task.page_links.len();
@@ -677,23 +690,41 @@ impl<'a> TaskRun<'a> {
         }
     }
 
-    /// `TTaskThread.Compress` (baseunits/uDownloadsManager.pas:553-611): packs the chapter
-    /// into `<save to>/<chapter name>` plus the format's extension.
+    /// `TTaskThread.Compress` (baseunits/uDownloadsManager.pas:553-611): packs the chapter's
+    /// page images (:579-590) into `<save to>/<chapter name>` plus the format's extension.
+    /// `fmd_pack::pack` takes a whole folder, so the pages are first moved into one of their
+    /// own, named after the chapter (the PDF and EPUB title, baseunits/uPacker.pas:186, :225);
+    /// other files in the working directory stay out of the archive.
     fn compress(&self) -> bool {
         let Some(format) = pack_format(self.settings.output.format) else {
             return true;
         };
-        let name = self.container().task.chapter_names[self.chapter].clone();
+        let name = &self.chapter_names[self.chapter];
+        let magick = &self.settings.images.imagemagick;
+        let ext = if magick.enabled {
+            magick.save_as.to_ascii_lowercase()
+        } else {
+            String::new()
+        };
         let options = PackOptions {
             pdf_quality: u8::try_from(self.settings.output.pdf_quality.min(100)).unwrap_or(100),
             remove_sources: true,
         };
-        match fmd_pack::pack(
-            &self.working_dir,
-            format,
-            &self.save_to.join(name),
-            &options,
-        ) {
+        let staging = self.working_dir.join(name);
+        let packed = std::fs::create_dir_all(&staging).and_then(|()| {
+            for file in self.page_files(&ext) {
+                if let Some(file_name) = file.file_name() {
+                    std::fs::rename(&file, staging.join(file_name))?;
+                }
+            }
+            Ok(())
+        });
+        let packed = packed
+            .map_err(fmd_pack::PackError::from)
+            .and_then(|()| fmd_pack::pack(&staging, format, &self.save_to.join(name), &options));
+        // Nothing to pack leaves the folder behind (the archive was already there).
+        let _ = std::fs::remove_dir(&staging);
+        match packed {
             Ok(_) => true,
             Err(e) => {
                 tracing::warn!(target: "fmd_core", "task {}: failed to compress: {e}", self.id.0);

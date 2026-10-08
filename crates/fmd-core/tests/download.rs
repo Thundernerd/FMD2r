@@ -3,8 +3,8 @@
 //! output dir (docs/tickets/T20-download-engine.md, "Seams under test").
 //!
 //! Expected values come from FMD2's `TTaskThread.Execute` and `TDownloadThread.DownloadImage`
-//! (baseunits/uDownloadsManager.pas:334-420, :975-1375) and its `TDownloadManager`
-//! (baseunits/uDownloadsManager.pas:1784-1978).
+//! (baseunits/uDownloadsManager.pas:334-412, :975-1374) and its `TDownloadManager`
+//! (baseunits/uDownloadsManager.pas:1784-1985).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
@@ -233,8 +233,8 @@ async fn a_two_chapter_task_is_downloaded_packed_and_marked_downloaded() {
         .unwrap();
 
     // Each chapter goes Preparing, Downloading, Converting, Compressing
-    // (baseunits/uDownloadsManager.pas:1192, :1263, :1274, :1282); the task ends Finished
-    // (:1350).
+    // (baseunits/uDownloadsManager.pas:1194, :1268, :1280, :1289); the task ends Finished
+    // (:1361).
     use TaskStatus::*;
     assert_eq!(
         statuses(&mut events, id, &[Finished, Failed]).await,
@@ -289,7 +289,7 @@ async fn a_dynamic_page_link_module_gets_each_image_url_right_before_its_downloa
 
     use TaskStatus::*;
     // No page-link phase: straight from Preparing to Downloading
-    // (baseunits/uDownloadsManager.pas:1215).
+    // (baseunits/uDownloadsManager.pas:1214).
     assert_eq!(
         statuses(&mut events, id, &[Finished, Failed]).await,
         [
@@ -382,7 +382,7 @@ async fn with_page_3_failing_twice(retries: u32) -> (Fixture, TaskId, Vec<TaskSt
 #[tokio::test(flavor = "multi_thread")]
 async fn a_failed_chapter_is_retried_until_its_pages_come_through() {
     // The task finishes once the chapter's last retry gets page 3
-    // (baseunits/uDownloadsManager.pas:1325-1337).
+    // (baseunits/uDownloadsManager.pas:1326-1338).
     let (f, id, seen) = with_page_3_failing_twice(2).await;
     use TaskStatus::*;
     let failures = seen.iter().filter(|s| **s == Failed).count();
@@ -414,7 +414,7 @@ async fn without_retries_a_chapter_missing_a_page_fails_the_task() {
     use TaskStatus::*;
     let seen = statuses(&mut events, id, &[Finished, Failed]).await;
     assert_eq!(seen, [Waiting, Preparing, Downloading, Failed]);
-    // The task thread ends after the chapter, with the task Failed (:1342-1349).
+    // The task thread ends after the chapter, with the task Failed (:1346-1355).
     tokio::time::sleep(Duration::from_millis(200)).await;
     let task = f.db.tasks().get(id).unwrap().unwrap();
     assert_eq!(task.status, Failed);
@@ -519,7 +519,7 @@ async fn a_second_task_of_a_module_limited_to_one_task_waits_for_the_first() {
     assert!(!f.transport.requests().iter().any(|r| r.contains("/c/2")));
 
     // Stopping the first frees the module's slot (`TTaskThread.Destroy` runs
-    // `CheckAndActiveTask`, baseunits/uDownloadsManager.pas:504-505, :714-717).
+    // `CheckAndActiveTask`, baseunits/uDownloadsManager.pas:509-517, :712-715).
     manager.stop(first).await.unwrap();
     let mut order = Vec::new();
     let wait = async {
@@ -676,4 +676,30 @@ async fn progress_is_reported_per_chapter_with_pages_and_bytes() {
     assert_eq!(done(0), (2, 2));
     assert_eq!(done(1), (3, 3));
     assert_eq!(last[&1].bytes, 5 * PNG.len() as u64);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_chapter_folders_only_the_chapters_pages_are_packed() {
+    let settings = json!({
+        "output": {"format": "cbz"},
+        "saveto": {"generate_chapter_folder": false},
+    });
+    let f = Fixture::new(&[("T.lua", T)], settings);
+    let manga = f.out().join("Manga");
+    fs::create_dir_all(&manga).unwrap();
+    fs::write(manga.join("cover.png"), PNG).unwrap();
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One")]))
+        .await
+        .unwrap();
+
+    let seen = statuses(&mut events, id, &[TaskStatus::Finished, TaskStatus::Failed]).await;
+    assert_eq!(seen.last(), Some(&TaskStatus::Finished));
+    // `Compress` packs the files of the chapter's pages only
+    // (baseunits/uDownloadsManager.pas:579-590).
+    assert_eq!(entries(&manga.join("One.cbz")), ["001.png", "002.png"]);
+    assert!(manga.join("cover.png").exists());
 }

@@ -15,22 +15,22 @@
 //! | From | To | When | FMD2 |
 //! |---|---|---|---|
 //! | (new) | Waiting, or Stopped when `add_as_stopped` | [`DownloadManager::add_task`] | mangadownloader/forms/frmMain.pas:2754-2763 |
-//! | Stopped, Failed | Waiting | `start`, `start_all` | `SetTaskActive`, `StartAllTasks` (baseunits/uDownloadsManager.pas:1806-1814, :1916-1934) |
-//! | any but Waiting, while not running | Waiting, all chapters pending | `redownload` | `RedownloadTask` (:1816-1828) |
-//! | Waiting | running (Preparing) | a free slot: under `max_parallel_tasks` and the module's `CanCreateTask` | `CheckAndActiveTask` (:1784-1804), baseunits/WebsiteModules.pas:414-420 |
-//! | Preparing | Downloading | page count and page links known | `TTaskThread.Execute` (:1180-1263) |
-//! | Downloading | Converting, then Compressing | every page saved | :1268-1283 |
-//! | Downloading, Converting, Compressing | Failed (the task carries on with the next chapter) | a page missing, conversion or packing failed | :1270-1295 |
-//! | Compressing, Failed | Preparing | next chapter, or a failed one retried | :1137-1150, :1325-1337 |
-//! | last chapter done | Finished, or Failed when a chapter failed | | :1342-1355 |
-//! | Waiting | Stopped | `stop`, `stop_all` | `StopTask` (:1895-1914) |
-//! | running | Stopped | `stop`, `stop_all`: the thread is terminated | `TTaskThread.Destroy` (:477-500) |
+//! | Stopped, Failed | Waiting | `start`, `start_all` | `SetTaskActive`, `StartAllTasks` (baseunits/uDownloadsManager.pas:1835-1844, :1922-1941) |
+//! | any but Waiting, while not running | Waiting, all chapters pending | `redownload` | `RedownloadTask` (:1846-1857) |
+//! | Waiting | running (Preparing) | a free slot: under `max_parallel_tasks` and the module's `CanCreateTask` | `CheckAndActiveTask` (:1784-1833), baseunits/WebsiteModules.pas:414-420 |
+//! | Preparing | Downloading | page count and page links known | `TTaskThread.Execute` (:1180-1268) |
+//! | Downloading | Converting, then Compressing | every page saved | :1276-1294 |
+//! | Downloading, Converting, Compressing | Failed (the task carries on with the next chapter) | a page missing, conversion or packing failed | :1280-1310 |
+//! | Compressing, Failed | Preparing | next chapter, or a failed one retried | :1131-1160, :1324-1338 |
+//! | last chapter done | Finished, or Failed when a chapter failed | | :1346-1362 |
+//! | Waiting | Stopped | `stop`, `stop_all` | `StopTask` (:1900-1920) |
+//! | running | Stopped | `stop`, `stop_all`: the thread is terminated | `TTaskThread.Destroy` (:485-528) |
 //! | any | Disabled / Stopped | `disable` / `enable` | `TTaskContainer.SetEnabled` (:1384-1397) |
 //! | Downloading, Preparing, Waiting at startup | running, or Waiting; Stopped when the module is gone | [`DownloadManager::open`] | `CheckAndActiveTaskAtStartup` (:1859-1893) |
 //!
 //! A task still running when the manager is dropped keeps its status, so the next
-//! [`DownloadManager::open`] resumes it (`StopAllDownloadTasksForExit`, :1950-1970, and
-//! `isReadyForExit` in :484).
+//! [`DownloadManager::open`] resumes it (`StopAllDownloadTasksForExit`, :1957-1977, and
+//! `isReadyForExit` in :494).
 
 mod files;
 mod manager;
@@ -190,7 +190,7 @@ pub struct DownloadManager {
 
 impl DownloadManager {
     /// Loads the queue from `app.db` and resumes the tasks that were running or waiting
-    /// (`Restore` and `CheckAndActiveTaskAtStartup`, baseunits/uDownloadsManager.pas:1638-1692,
+    /// (`Restore` and `CheckAndActiveTaskAtStartup`, baseunits/uDownloadsManager.pas:1638-1691,
     /// :1859-1893).
     pub async fn open(config: EngineConfig) -> Result<DownloadManager, EngineError> {
         let inner = Arc::new(Inner::new(config));
@@ -218,30 +218,30 @@ impl DownloadManager {
     }
 
     /// Sets a stopped or failed task waiting, then starts what can start (`SetTaskActive`,
-    /// baseunits/uDownloadsManager.pas:1806-1814).
+    /// baseunits/uDownloadsManager.pas:1835-1844).
     pub async fn start(&self, id: TaskId) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.start(id)).await
     }
 
-    /// Stops a waiting or running task (`StopTask`, baseunits/uDownloadsManager.pas:1895-1914).
+    /// Stops a waiting or running task (`StopTask`, baseunits/uDownloadsManager.pas:1900-1920).
     /// A running task becomes Stopped once its thread has ended, which terminating its HTTP
     /// requests and Lua waits makes prompt.
     pub async fn stop(&self, id: TaskId) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.stop(id)).await
     }
 
-    /// `StartAllTasks` (baseunits/uDownloadsManager.pas:1916-1934).
+    /// `StartAllTasks` (baseunits/uDownloadsManager.pas:1922-1941).
     pub async fn start_all(&self) -> Result<(), EngineError> {
         self.blocking(Inner::start_all).await
     }
 
-    /// `StopAllTasks` (baseunits/uDownloadsManager.pas:1936-1948).
+    /// `StopAllTasks` (baseunits/uDownloadsManager.pas:1943-1955).
     pub async fn stop_all(&self) -> Result<(), EngineError> {
         self.blocking(Inner::stop_all).await
     }
 
     /// Removes a task, stopping it first; with `delete_files`, also its chapters' folders and
-    /// archives (`Delete`, baseunits/uDownloadsManager.pas:1972-1978).
+    /// archives (`Delete`, baseunits/uDownloadsManager.pas:1979-1985).
     pub async fn delete(&self, id: TaskId, delete_files: bool) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.delete(id, delete_files))
             .await
@@ -260,7 +260,7 @@ impl DownloadManager {
     }
 
     /// Downloads every chapter of a task again (`RedownloadTask`,
-    /// baseunits/uDownloadsManager.pas:1816-1828). Pages and archives already on disk are
+    /// baseunits/uDownloadsManager.pas:1846-1857). Pages and archives already on disk are
     /// still skipped.
     pub async fn redownload(&self, id: TaskId) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.redownload(id)).await
@@ -279,6 +279,17 @@ impl DownloadManager {
     /// The engine's events from now on.
     pub fn subscribe(&self) -> broadcast::Receiver<EngineEvent> {
         self.inner.subscribe()
+    }
+
+    /// Terminates every running task and waits for its thread on a blocking thread, leaving
+    /// statuses as they are, so the next [`DownloadManager::open`] resumes them. Dropping the
+    /// manager does the same but waits on the dropping thread, which blocks a tokio worker.
+    pub async fn shutdown(self) -> Result<(), EngineError> {
+        self.blocking(|inner| {
+            inner.shutdown();
+            Ok(())
+        })
+        .await
     }
 }
 

@@ -212,7 +212,7 @@ impl Inner {
         Ok(task.id)
     }
 
-    /// `CheckAndActiveTask` (baseunits/uDownloadsManager.pas:1784-1804): starts waiting tasks
+    /// `CheckAndActiveTask` (baseunits/uDownloadsManager.pas:1784-1833): starts waiting tasks
     /// in queue order while fewer than `max_parallel_tasks` run and their module can take
     /// another (`CanCreateTask`, baseunits/WebsiteModules.pas:414-420).
     pub(super) fn check_and_active_task(self: &Arc<Self>) -> Result<(), EngineError> {
@@ -250,8 +250,8 @@ impl Inner {
         max == 0 || module.active_task_count() < i32::try_from(max).unwrap_or(i32::MAX)
     }
 
-    /// `StartTask` (baseunits/uDownloadsManager.pas:1890-1893): a new task thread, which counts
-    /// towards its module's active tasks (`TTaskThread.Create`, :461-470).
+    /// `StartTask` (baseunits/uDownloadsManager.pas:1895-1898): a new task thread, which counts
+    /// towards its module's active tasks (`TTaskThread.Create`, :461-483).
     fn start_task(
         self: &Arc<Self>,
         state: &mut State,
@@ -288,7 +288,7 @@ impl Inner {
         Ok(())
     }
 
-    /// `TTaskThread.Destroy` (baseunits/uDownloadsManager.pas:474-512): a task that ended
+    /// `TTaskThread.Destroy` (baseunits/uDownloadsManager.pas:485-528): a task that ended
     /// neither finished nor failed is Stopped (Disabled when it was disabled meanwhile), unless
     /// it is being deleted or the manager is exiting; then waiting tasks get its slot.
     fn task_ended(self: &Arc<Self>, id: TaskId) {
@@ -359,7 +359,7 @@ impl Inner {
         Ok(())
     }
 
-    /// `SetTaskActive` (baseunits/uDownloadsManager.pas:1806-1814), then `CheckAndActiveTask`.
+    /// `SetTaskActive` (baseunits/uDownloadsManager.pas:1835-1844), then `CheckAndActiveTask`.
     pub(super) fn start(self: &Arc<Self>, id: TaskId) -> Result<(), EngineError> {
         {
             let state = lock(&self.state);
@@ -380,7 +380,7 @@ impl Inner {
         self.check_and_active_task()
     }
 
-    /// `StopTask` (baseunits/uDownloadsManager.pas:1895-1914) on one task, with the queue
+    /// `StopTask` (baseunits/uDownloadsManager.pas:1900-1920) on one task, with the queue
     /// locked.
     fn stop_locked(&self, state: &State, id: TaskId) -> Result<(), EngineError> {
         let task = self
@@ -389,10 +389,12 @@ impl Inner {
             .tasks()
             .get(id)?
             .ok_or(EngineError::NoTask(id))?;
-        if task.status == TaskStatus::Waiting {
-            self.set_status(id, TaskStatus::Stopped, None)?;
-        } else if let Some(running) = state.running.get(&id) {
+        // A task thread shows Waiting until its first chapter starts, so a running task is
+        // terminated whatever its status says; FMD2 checks the status first.
+        if let Some(running) = state.running.get(&id) {
             running.terminate.terminate();
+        } else if task.status == TaskStatus::Waiting {
+            self.set_status(id, TaskStatus::Stopped, None)?;
         }
         Ok(())
     }
@@ -405,7 +407,7 @@ impl Inner {
         self.check_and_active_task()
     }
 
-    /// `StartAllTasks` (baseunits/uDownloadsManager.pas:1916-1934).
+    /// `StartAllTasks` (baseunits/uDownloadsManager.pas:1922-1941).
     pub(super) fn start_all(self: &Arc<Self>) -> Result<(), EngineError> {
         {
             let state = lock(&self.state);
@@ -422,7 +424,7 @@ impl Inner {
         self.check_and_active_task()
     }
 
-    /// `StopAllTasks` (baseunits/uDownloadsManager.pas:1936-1948): with the queue locked, so a
+    /// `StopAllTasks` (baseunits/uDownloadsManager.pas:1943-1955): with the queue locked, so a
     /// task that ends meanwhile cannot start one about to be stopped.
     pub(super) fn stop_all(self: &Arc<Self>) -> Result<(), EngineError> {
         let state = lock(&self.state);
@@ -464,7 +466,7 @@ impl Inner {
         self.check_and_active_task()
     }
 
-    /// `RedownloadTask` (baseunits/uDownloadsManager.pas:1816-1828).
+    /// `RedownloadTask` (baseunits/uDownloadsManager.pas:1846-1857).
     pub(super) fn redownload(self: &Arc<Self>, id: TaskId) -> Result<(), EngineError> {
         {
             let state = lock(&self.state);
@@ -504,6 +506,7 @@ impl Inner {
     ) -> Result<(), EngineError> {
         let repo = self.config.db.tasks();
         let task = repo.get(id)?.ok_or(EngineError::NoTask(id))?;
+        let chapters = repo.chapters(id)?;
         let thread = {
             let mut state = lock(&self.state);
             state.running.get_mut(&id).and_then(|running| {
@@ -516,7 +519,7 @@ impl Inner {
             let _ = thread.join();
         }
         if delete_files {
-            delete_task_files(Path::new(&task.save_to), &repo.chapters(id)?);
+            delete_task_files(Path::new(&task.save_to), &chapters);
         }
         repo.delete(id)?;
         self.emit(EngineEvent::Deleted { task: id });
@@ -540,7 +543,7 @@ impl Inner {
             .collect()
     }
 
-    /// `StopAllDownloadTasksForExit` (baseunits/uDownloadsManager.pas:1950-1970): terminates
+    /// `StopAllDownloadTasksForExit` (baseunits/uDownloadsManager.pas:1957-1977): terminates
     /// every task and waits for it, leaving statuses as they are.
     pub(super) fn shutdown(&self) {
         self.exiting.store(true, Ordering::SeqCst);
@@ -563,21 +566,28 @@ impl Inner {
 
 /// Deletes the chapters' folders and archives in `save_to`, then `save_to` when empty
 /// (mangadownloader/forms/frmMain.pas:2264-2285).
+/// Files that cannot be removed are logged and left; the task is deleted anyway, as in FMD2.
 fn delete_task_files(save_to: &Path, chapters: &[fmd_store::TaskChapter]) {
+    let removed = |path: &Path, result: std::io::Result<()>| {
+        if let Err(e) = result {
+            tracing::warn!(target: "fmd_core", "deleting {}: {e}", path.display());
+        }
+    };
     for chapter in chapters {
         let dir = save_to.join(&chapter.name);
         if dir.is_dir() {
-            let _ = std::fs::remove_dir_all(&dir);
+            removed(&dir, std::fs::remove_dir_all(&dir));
         }
         for ext in PACKED_EXTENSIONS {
             let mut file = dir.as_os_str().to_owned();
             file.push(ext);
             let file = PathBuf::from(file);
             if file.is_file() {
-                let _ = std::fs::remove_file(file);
+                removed(&file, std::fs::remove_file(&file));
             }
         }
     }
+    // `RemoveDirUTF8`: only an empty folder goes, so failing here is expected.
     let _ = std::fs::remove_dir(save_to);
 }
 

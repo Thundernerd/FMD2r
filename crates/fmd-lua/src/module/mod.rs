@@ -309,7 +309,7 @@ impl Module {
     }
 
     /// `DecActiveTaskCount`, when a download task ends (baseunits/WebsiteModules.pas:393-396,
-    /// called from baseunits/uDownloadsManager.pas:492).
+    /// called from baseunits/uDownloadsManager.pas:491).
     pub fn dec_active_task_count(&self) {
         self.active_task_count.fetch_sub(1, Ordering::SeqCst);
     }

@@ -1,5 +1,5 @@
-//! The page threads of a task (`TDownloadThread`, baseunits/uDownloadsManager.pas:303-460) and
-//! how the task hands out pages to them (:882-974).
+//! The page threads of a task (`TDownloadThread`, baseunits/uDownloadsManager.pas:303-458) and
+//! how the task hands out pages to them (:902-973).
 
 use std::path::Path;
 
@@ -86,7 +86,7 @@ impl<'r, 'a> PageThread<'r, 'a> {
         }
     }
 
-    /// `DoPageLink` and `DoDownload` (baseunits/uDownloadsManager.pas:423-447).
+    /// `DoPageLink` and `DoDownload` (baseunits/uDownloadsManager.pas:421-445).
     fn run(mut self, phase: Phase) {
         while let Some(work_id) = self.run.work_id(phase) {
             let ok = match phase {
@@ -141,7 +141,7 @@ impl<'r, 'a> PageThread<'r, 'a> {
         ok
     }
 
-    /// `TDownloadThread.DownloadImage` (baseunits/uDownloadsManager.pas:334-420).
+    /// `TDownloadThread.DownloadImage` (baseunits/uDownloadsManager.pas:334-412).
     ///
     /// With `DynamicPageLink`, a page whose link is not known yet gets it from `OnGetImageURL`
     /// right before it downloads (docs/tickets/T20-download-engine.md); FMD2 instead passes
@@ -266,8 +266,10 @@ impl<'r, 'a> PageThread<'r, 'a> {
         ok
     }
 
-    /// `OnSaveImage` with the chapter's directory as `PATH` (with a trailing separator, as
-    /// FMD2 builds `CurrentWorkingDir`) and the file name without extension as `FILENAME`.
+    /// `OnSaveImage` (baseunits/uDownloadsManager.pas:393-394) with the chapter's directory
+    /// as `PATH`, ending in a separator as `Task.CurrentWorkingDir + workFilename` (:388)
+    /// shows, and the file name without extension as `FILENAME`
+    /// (baseunits/lua/LuaWebsiteModules.pas:372-391).
     fn save_image(&mut self, work: i32, dir: &Path, name: &str) -> Option<String> {
         let mut path = dir.to_string_lossy().into_owned();
         if !path.ends_with('/') {
@@ -292,7 +294,11 @@ impl<'r, 'a> PageThread<'r, 'a> {
 }
 
 /// Takes back into `shared` what a callback changed in its copy of `TASK`: whole lists that
-/// changed length, single entries otherwise, and changed numbers and link.
+/// changed length, single entries otherwise, and changed numbers and link. In FMD2 every
+/// download thread's `TASK` is the one shared `TTaskContainer`
+/// (baseunits/lua/LuaWebsiteModules.pas:314, :336, :358), so a change one page's callback
+/// makes is seen by the task; here each callback works on a copy, and merging only what it
+/// changed keeps page threads running at once from undoing each other's pages.
 fn merge(shared: &mut fmd_lua::Task, before: &fmd_lua::Task, after: fmd_lua::Task) {
     fn list(shared: &mut Vec<String>, before: &[String], after: Vec<String>) {
         if after.len() != before.len() {
