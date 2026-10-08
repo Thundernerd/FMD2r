@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use fmd_core::accounts::AccountService;
+use fmd_core::favorites::CheckerEvent;
 use fmd_core::jobs::JobRegistry;
 use fmd_core::lists::ListJobs;
 use fmd_core::settings::{SettingsError, SettingsService};
@@ -18,7 +19,7 @@ use crate::events::{EventBus, ServerEvent};
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
 use crate::series::InfoCache;
-use crate::services::{DownloadEngine, Idle, ModuleCatalog};
+use crate::services::{DownloadEngine, FavoritesJobs, Idle, ModuleCatalog};
 use crate::spa::{Assets, EmbeddedAssets};
 use crate::tools::{NoTools, ToolProbe};
 
@@ -43,6 +44,7 @@ pub struct AppState {
     pub(crate) covers: Option<Arc<Covers>>,
     pub(crate) lists: Option<ListsDb>,
     pub(crate) list_jobs: Option<ListJobs>,
+    pub(crate) favorites: Option<Arc<dyn FavoritesJobs>>,
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) started: Instant,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
@@ -65,6 +67,7 @@ impl AppState {
             covers: None,
             lists: None,
             list_jobs: None,
+            favorites: None,
             data_dir: None,
             started: Instant::now(),
             shutdown: Arc::new(watch::channel(false).0),
@@ -155,6 +158,24 @@ impl AppState {
     pub fn with_list_jobs(mut self, jobs: ListJobs) -> Self {
         self.list_jobs = Some(jobs);
         self
+    }
+
+    /// Starts favorites checks (`POST /api/favorites/check`, `.../check-missing`) with `jobs`.
+    /// Without it they answer 503. A [`fmd_core::favorites::FavoritesChecker`] should send its
+    /// events to [`AppState::favorites_events`].
+    pub fn with_favorites(mut self, jobs: impl FavoritesJobs) -> Self {
+        self.favorites = Some(Arc::new(jobs));
+        self
+    }
+
+    /// Where a [`fmd_core::favorites::FavoritesChecker`] sends its events: its progress goes out
+    /// as `job.favorites.<kind>`, its inbox items as `inbox.new`.
+    pub fn favorites_events(&self) -> impl Fn(CheckerEvent) + Send + Sync + 'static + use<> {
+        let events = self.events.clone();
+        move |event| match event {
+            CheckerEvent::Job(e) => events.publish(ServerEvent::Favorites(e)),
+            CheckerEvent::Inbox(e) => events.publish(ServerEvent::InboxNew(InboxItem::from(e))),
+        }
     }
 
     /// The `lists.db` behind the Discover endpoints, or a 503.

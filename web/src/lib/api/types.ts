@@ -35,3 +35,7 @@ export type ListJobStarted = Schemas['ListJobStarted'];
 export type AccountInfo = Schemas['AccountInfo'];
 export type AccountRequest = Schemas['AccountRequest'];
 export type AccountState = Schemas['AccountState'];
+export type FavoriteView = Schemas['FavoriteView'];
+export type FavoritePatch = Schemas['FavoritePatch'];
+export type FavoritesEvent = Schemas['FavoritesEvent'];
+export type FavoritesEventKind = Schemas['FavoritesEventKind'];

@@ -131,6 +131,17 @@ impl From<fmd_core::jobs::JobError> for ApiError {
     }
 }
 
+impl From<fmd_core::favorites::CheckError> for ApiError {
+    fn from(err: fmd_core::favorites::CheckError) -> Self {
+        use fmd_core::favorites::CheckError as E;
+        match err {
+            E::AlreadyRunning => Self::Conflict(err.to_string()),
+            E::Store(e) => Self::Store(e),
+            E::NoRuntime => Self::Internal(err.to_string()),
+        }
+    }
+}
+
 impl From<fmd_core::lists::ListJobError> for ApiError {
     fn from(err: fmd_core::lists::ListJobError) -> Self {
         use fmd_core::lists::ListJobError as E;

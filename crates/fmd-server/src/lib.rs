@@ -6,6 +6,7 @@ mod auth;
 mod covers;
 mod error;
 mod events;
+mod favorites;
 mod health;
 mod inbox;
 mod jobs;
@@ -34,6 +35,7 @@ pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange
 pub use covers::{CoverConfig, CoverModules, CoverSession, cover_url};
 pub use error::{ApiError, Problem};
 pub use events::{EventBus, JobState, ServerEvent, TaskProgress, TaskState, TaskStatusChange};
+pub use favorites::{AddFavorite, CheckRequest, FavoriteFilter, FavoritePatch, FavoriteView};
 pub use fmd_core::jobs::JobPhase;
 pub use fmd_core::lists::{ListEvent, ListEventKind};
 pub use inbox::{InboxItem, InboxKind};
@@ -42,7 +44,9 @@ pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
 pub use series::{ChapterInfo, ResolveRequest, SeriesInfo, SeriesRef, SeriesStatus};
 pub use serve::{ServeConfig, ServeError, serve};
-pub use services::{DownloadEngine, Idle, LoadFailure, ModuleCatalog, ModulesReport};
+pub use services::{
+    DownloadEngine, FavoritesJobs, Idle, LoadFailure, ModuleCatalog, ModulesReport,
+};
 pub use settings::RenamePreview;
 pub use spa::{Assets, EmbeddedAssets};
 pub use state::AppState;
@@ -58,6 +62,7 @@ pub use tools::{SystemTools, ToolCheck, ToolProbe};
         InboxItem,
         LogLine,
         ListEvent,
+        fmd_core::favorites::FavoritesEvent,
         AccountStateChange
     ))
 )]
@@ -95,6 +100,10 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(lists::update))
         .routes(routes!(lists::import_db))
         .routes(routes!(lists::cancel))
+        .routes(routes!(favorites::list, favorites::add))
+        .routes(routes!(favorites::patch, favorites::delete))
+        .routes(routes!(favorites::check))
+        .routes(routes!(favorites::check_missing))
         .routes(routes!(accounts::list))
         .routes(routes!(accounts::put, accounts::delete))
         .routes(routes!(accounts::login))

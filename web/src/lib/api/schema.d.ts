@@ -4,6 +4,89 @@
  */
 
 export interface paths {
+	'/api/favorites': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** The library in display order. */
+		get: operations['listFavorites'];
+		put?: never;
+		/**
+		 * Add a series to the library (`btAddToFavoritesClick`,
+		 *     mangadownloader/forms/frmMain.pas:2790-2846): its current chapters count as seen, so only
+		 *     chapters added later are new.
+		 */
+		post: operations['addFavorite'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/favorites/check': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Check enabled favorites for new chapters now (`CheckForNewChapter`,
+		 *     baseunits/uFavoritesManager.pas:845-886). The body is optional.
+		 */
+		post: operations['checkFavorites'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/favorites/{id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		post?: never;
+		/** Remove a favorite from the library; its downloaded chapters stay recorded. */
+		delete: operations['deleteFavorite'];
+		options?: never;
+		head?: never;
+		/**
+		 * Change a favorite (`UpdateEnabled`, `UpdateSaveTo`, `UpdateTitle`,
+		 *     baseunits/FavoritesDB.pas:136-160).
+		 */
+		patch: operations['updateFavorite'];
+		trace?: never;
+	};
+	'/api/favorites/{id}/check-missing': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,
+		 *     baseunits/uFavoritesManager.pas:888-928), to download them again.
+		 */
+		post: operations['checkMissingChapters'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/inbox': {
 		parameters: {
 			query?: never;
@@ -422,6 +505,98 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
 	schemas: {
+		/** @description A series to add to the library. */
+		AddFavorite: {
+			/** @description The series link relative to the module's `RootURL`. */
+			link: string;
+			module_id: string;
+			/**
+			 * @description The download directory; the default one when missing. The manga folder is added when
+			 *     generated.
+			 */
+			save_to?: string | null;
+		};
+		/**
+		 * @description What a run looks for.
+		 * @enum {string}
+		 */
+		CheckMode: 'new' | 'missing';
+		/** @description Which favorites to check. */
+		CheckRequest: {
+			/** @description These favorites; every enabled favorite when missing. */
+			ids?: number[] | null;
+		};
+		/** @description Fields of a favorite to change; missing ones stay. */
+		FavoritePatch: {
+			enabled?: boolean | null;
+			save_to?: string | null;
+			title?: string | null;
+		};
+		/** @description A favorite as the Library shows it. */
+		FavoriteView: {
+			/** @description The cover through `/api/covers`. */
+			cover_url?: string | null;
+			/**
+			 * Format: int32
+			 * @description Chapters on the site at the last check (FMD2's `currentchapter`).
+			 */
+			current_chapter: number;
+			/** @description RFC 3339. */
+			date_added: string;
+			/** @description Checked by the new-chapter check. */
+			enabled: boolean;
+			/** Format: int64 */
+			id: number;
+			/** @description RFC 3339. */
+			last_checked?: string | null;
+			/** @description RFC 3339: when a check last found new chapters. */
+			last_updated?: string | null;
+			/** @description The series link relative to the module's `RootURL`. */
+			link: string;
+			module_id: string;
+			/**
+			 * Format: int32
+			 * @description Chapters on the site at the last check that are not downloaded.
+			 */
+			new_chapters: number;
+			save_to: string;
+			status: components['schemas']['SeriesStatus'];
+			title: string;
+			/** @description The module's name; its ID when the module is not loaded. */
+			website: string;
+		};
+		/** @description One step of a check run, for the Library's progress (`job.favorites.<kind>` events). */
+		FavoritesEvent: {
+			/**
+			 * Format: int64
+			 * @description Favorites checked so far.
+			 */
+			done: number;
+			/** @description Why it failed. */
+			error?: string | null;
+			/**
+			 * Format: int64
+			 * @description The favorite just checked (`progress`).
+			 */
+			favorite_id?: number | null;
+			kind: components['schemas']['FavoritesEventKind'];
+			mode: components['schemas']['CheckMode'];
+			/**
+			 * Format: int64
+			 * @description New (or missing) chapters found, once finished.
+			 */
+			new_chapters?: number | null;
+			/**
+			 * Format: int64
+			 * @description Favorites to check.
+			 */
+			total: number;
+		};
+		/**
+		 * @description What happened to a check run.
+		 * @enum {string}
+		 */
+		FavoritesEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
 		InboxItem: {
 			id: string;
 			/** @enum {string} */
@@ -1518,6 +1693,225 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+	listFavorites: {
+		parameters: {
+			query?: {
+				filter?: 'all' | 'new' | 'ongoing' | 'completed' | 'disabled';
+				/** @description Only this module's favorites. */
+				module?: string;
+				/** @description Case-insensitive part of the title. */
+				q?: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['FavoriteView'][];
+				};
+			};
+		};
+	};
+	addFavorite: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['AddFavorite'];
+			};
+		};
+		responses: {
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['FavoriteView'];
+				};
+			};
+			/** @description No such module, or the module found no series there */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The series is in the library already */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The website could not be reached */
+			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	checkFavorites: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: {
+			content: {
+				'application/json': null | components['schemas']['CheckRequest'];
+			};
+		};
+		responses: {
+			/** @description Started; progress follows as `job.favorites.*` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description A check is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The favorites check is not running in this server */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	deleteFavorite: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Favorite id */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Removed */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description No such favorite */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	updateFavorite: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Favorite id */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['FavoritePatch'];
+			};
+		};
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['FavoriteView'];
+				};
+			};
+			/** @description No such favorite */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	checkMissingChapters: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Favorite id */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Started; progress follows as `job.favorites.*` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description A check is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The favorites check is not running in this server */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
 	listInbox: {
 		parameters: {
 			query?: never;

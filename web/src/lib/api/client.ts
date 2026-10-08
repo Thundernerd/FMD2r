@@ -5,6 +5,8 @@ import type {
 	About,
 	AccountInfo,
 	AccountRequest,
+	FavoritePatch,
+	FavoriteView,
 	InboxItem,
 	JobState,
 	ListFacets,
@@ -95,6 +97,23 @@ export interface Api {
 	importListDb(module: string): Promise<ListJobStarted>;
 	/** Stops a module's list job; rejects with status 409 when none runs. */
 	cancelListJob(module: string): Promise<void>;
+	/** The library, in library order. */
+	listFavorites(): Promise<FavoriteView[]>;
+	/**
+	 * Adds a series to the library; its current chapters count as seen. Rejects with an
+	 * {@link ApiError}: 409 when it is in the library already, 404/502 as {@link getSeries}.
+	 */
+	addFavorite(module: string, link: string): Promise<FavoriteView>;
+	/** Changes the given fields of a favorite. */
+	updateFavorite(id: number, patch: FavoritePatch): Promise<FavoriteView>;
+	deleteFavorite(id: number): Promise<void>;
+	/**
+	 * Starts checking the given favorites (every enabled one when omitted) for new chapters;
+	 * progress follows as `job.favorites.*` events. Rejects with status 409 while a check runs.
+	 */
+	checkFavorites(ids?: number[]): Promise<void>;
+	/** Starts checking a favorite for chapters missing from its folder; otherwise like {@link checkFavorites}. */
+	checkMissingChapters(id: number): Promise<void>;
 	/** The accounts of the modules with account support. Passwords are never returned. */
 	listAccounts(): Promise<AccountInfo[]>;
 	/** Changes the given fields of a module's account; omitted fields keep their value. */
@@ -233,6 +252,42 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 				params: { path: { module } }
 			});
 			if (!response.ok) throw new ApiError(response.status, 'cancelListJob');
+		},
+		async listFavorites() {
+			return unwrap('listFavorites', await client.GET('/api/favorites'));
+		},
+		async addFavorite(module, link) {
+			const res = await client.POST('/api/favorites', { body: { module_id: module, link } });
+			if (!res.response.ok || res.data === undefined) {
+				// Every error here is a `Problem`.
+				const problem = res.error as Partial<Problem> | undefined;
+				throw new ApiError(res.response.status, 'addFavorite', problem?.detail ?? null);
+			}
+			return res.data;
+		},
+		async updateFavorite(id, patch) {
+			return validated(
+				'updateFavorite',
+				await client.PATCH('/api/favorites/{id}', { params: { path: { id } }, body: patch })
+			);
+		},
+		async deleteFavorite(id) {
+			const { response } = await client.DELETE('/api/favorites/{id}', {
+				params: { path: { id } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'deleteFavorite');
+		},
+		async checkFavorites(ids) {
+			const { response } = await client.POST('/api/favorites/check', {
+				body: ids ? { ids } : {}
+			});
+			if (!response.ok) throw new ApiError(response.status, 'checkFavorites');
+		},
+		async checkMissingChapters(id) {
+			const { response } = await client.POST('/api/favorites/{id}/check-missing', {
+				params: { path: { id } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'checkMissingChapters');
 		},
 		async listAccounts() {
 			return unwrap('listAccounts', await client.GET('/api/accounts'));

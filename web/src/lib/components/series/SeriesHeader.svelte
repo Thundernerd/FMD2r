@@ -1,7 +1,29 @@
 <script lang="ts">
+	import { ApiError, type Api } from '#lib/api/client.ts';
 	import type { SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
 
-	let { series, website }: { series: SeriesInfo; website: string } = $props();
+	let {
+		api,
+		series = $bindable(),
+		website
+	}: { api: Api; series: SeriesInfo; website: string } = $props();
+
+	let adding = $state(false);
+	let addError = $state<string | null>(null);
+
+	async function addToLibrary() {
+		adding = true;
+		addError = null;
+		try {
+			await api.addFavorite(series.module_id, series.link);
+			series.in_library = true;
+		} catch (e) {
+			if (e instanceof ApiError && e.status === 409) series.in_library = true;
+			else addError = e instanceof ApiError && e.detail ? e.detail : 'Could not add it.';
+		} finally {
+			adding = false;
+		}
+	}
 
 	const STATUS: Record<SeriesStatus, string> = {
 		ongoing: 'Ongoing',
@@ -72,10 +94,12 @@
 			{#if series.in_library}
 				<span class="btn in-library">★ In library</span>
 			{:else}
-				<!-- Favorites arrive with T25. -->
-				<button class="btn" type="button" disabled title="The library arrives in a later update">
-					＋ Add to library
+				<button class="btn" type="button" disabled={adding} onclick={addToLibrary}>
+					{adding ? 'Adding…' : '＋ Add to library'}
 				</button>
+			{/if}
+			{#if addError}
+				<span class="bad small" role="alert">{addError}</span>
 			{/if}
 		</div>
 	</div>
@@ -202,6 +226,10 @@
 		display: flex;
 		gap: var(--sp-2);
 		flex-wrap: wrap;
+	}
+	.bad {
+		color: var(--bad);
+		align-self: center;
 	}
 	.in-library {
 		color: var(--accent);
