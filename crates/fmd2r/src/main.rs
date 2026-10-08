@@ -58,6 +58,9 @@ struct ServeArgs {
     /// the `connections.flaresolverr_url` setting for this run. An empty value turns FlareSolverr off.
     #[arg(long, env = "FMD2R_FLARESOLVERR_URL")]
     flaresolverr_url: Option<String>,
+    /// Don't load the Lua modules or sync them with upstream (no `modules` job).
+    #[arg(long, env = "FMD2R_NO_MODULE_UPDATES")]
+    no_module_updates: bool,
 }
 
 #[derive(Args)]
@@ -119,6 +122,7 @@ fn serve(args: ServeArgs) -> anyhow::Result<()> {
         auth: args.password.filter(|p| !p.is_empty()),
         flaresolverr_url: args.flaresolverr_url,
         logs,
+        module_updates: !args.no_module_updates,
     }))?;
     Ok(())
 }

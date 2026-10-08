@@ -57,21 +57,30 @@ impl ModuleRegistry {
     /// the scan goes on.
     pub fn load_dir_with(lua_dir: &Path, settings: Arc<dyn ModuleSettingsStore>) -> LoadReport {
         let dir = lua_dir.join("modules");
-        let files = match module_files(&dir) {
-            Ok(files) => files,
-            Err(e) => {
-                return LoadReport {
-                    registry: ModuleRegistry::default(),
-                    files: 0,
-                    failures: vec![LoadFailure {
-                        file: dir,
-                        error: e.to_string(),
-                    }],
-                };
-            }
-        };
-        let results = load_files(lua_dir, &files);
-        Self::collect(files, results, &settings)
+        match module_files(&dir) {
+            Ok(files) => Self::load_files_with(lua_dir, &files, settings),
+            Err(e) => LoadReport {
+                registry: ModuleRegistry::default(),
+                files: 0,
+                failures: vec![LoadFailure {
+                    file: dir,
+                    error: e.to_string(),
+                }],
+            },
+        }
+    }
+
+    /// Loads the module files `files` (in `<lua_dir>/modules`) as [`load_dir_with`] loads every
+    /// one, for re-scanning only the files an update changed.
+    ///
+    /// [`load_dir_with`]: ModuleRegistry::load_dir_with
+    pub fn load_files_with(
+        lua_dir: &Path,
+        files: &[PathBuf],
+        settings: Arc<dyn ModuleSettingsStore>,
+    ) -> LoadReport {
+        let results = load_files(lua_dir, files);
+        Self::collect(files.to_vec(), results, &settings)
     }
 
     /// Loads the modules of the one module file `file` as the scan loads each of its files
@@ -107,13 +116,18 @@ impl ModuleRegistry {
                 });
             }
         }
-        // `TModuleContainerCompare` compares IDs with `AnsiCompareStr`; IDs are ASCII.
-        modules.sort_by_key(|m| m.def_read().id.clone());
         LoadReport {
-            registry: ModuleRegistry { modules },
+            registry: ModuleRegistry::from_modules(modules),
             files: files.len(),
             failures,
         }
+    }
+
+    /// A registry of `modules`, sorted by ID.
+    pub fn from_modules(mut modules: Vec<Arc<Module>>) -> ModuleRegistry {
+        // `TModuleContainerCompare` compares IDs with `AnsiCompareStr`; IDs are ASCII.
+        modules.sort_by_key(|m| m.def_read().id.clone());
+        ModuleRegistry { modules }
     }
 
     /// Every module, sorted by ID.

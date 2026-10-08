@@ -23,7 +23,7 @@ end
 return _G[name] ~= nil
 "#;
 
-/// The names among `names` (as `fmd_testkit::scan_host_api_names` lists them) that the state
+/// The names among `names` (as [`scan_host_api_names`](crate::scan_host_api_names) lists them) that the state
 /// a callback runs in does not provide: a state with every global and object any `Do*`
 /// function sets (baseunits/lua/LuaWebsiteModules.pas:154-465), `MODULE` over a module
 /// with account support, and the loader's `NewWebsiteModule`.

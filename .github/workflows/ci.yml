@@ -7,6 +7,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # A clean debug build of every test binary needs over 16 GB with full debug info, more than a
+  # runner's disk: the linker then dies with SIGBUS. Line tables keep file:line in backtraces at
+  # under 5 GB; incremental artifacts are no use on a fresh runner.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_INCREMENTAL: 0
 
 jobs:
   check:

@@ -11,6 +11,7 @@ mod memory_stream;
 mod module;
 mod package;
 mod pool;
+mod scan;
 mod strings;
 pub mod xquery;
 
@@ -38,6 +39,7 @@ pub use pool::{
     Invalidate, Job, JobError, JobResult, ListReply, MangaInfo, NamesAndLinks, PageCount, Pending,
     PoolConfig, Reply, Task, TaskReply, UpdateList, WorkerPool, missing_host_api,
 };
+pub use scan::scan_host_api_names;
 pub use strings::{ListIndexError, LuaStrings, StringList};
 
 /// Errors raised by the Lua runtime.

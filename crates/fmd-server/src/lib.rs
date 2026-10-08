@@ -12,6 +12,7 @@ mod jobs;
 mod lists;
 mod logs;
 mod module_settings;
+mod module_updates;
 mod series;
 mod serve;
 mod services;
@@ -77,6 +78,8 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(inbox::mark_read))
         .routes(routes!(logs::list))
         .routes(routes!(jobs::list))
+        .routes(routes!(jobs::get))
+        .routes(routes!(jobs::update_modules))
         .routes(routes!(jobs::run))
         .routes(routes!(jobs::cancel))
         .routes(routes!(about::about))
