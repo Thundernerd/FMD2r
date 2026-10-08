@@ -198,6 +198,62 @@ fn logger_sends_at_info_warn_and_error_with_the_module_name() {
     );
 }
 
+/// `io.open` with the Windows paths upstream scripts pass, resolved like FMD2 resolves them on
+/// Windows: against its own directory, the runtime's working directory here.
+mod io_open {
+    use fmd_lua::Runtime;
+
+    #[test]
+    fn windows_paths_open_under_the_working_dir_like_cloudflare_lua() {
+        // lua/websitebypass/cloudflare.lua:272, :284, :299
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("lua/websitebypass")).unwrap();
+        let config = dir
+            .path()
+            .join("lua/websitebypass/websitebypass_config.json");
+        std::fs::write(&config, r#"{"flaresolverr_port": 8191}"#).unwrap();
+        let runtime = Runtime::new().unwrap();
+        runtime.set_working_dir(dir.path());
+        runtime
+            .exec(
+                r#"
+                local path = [[lua\websitebypass\websitebypass_config.json]]
+                local f = assert(io.open(path, 'r'))
+                assert(f:read('*a') == '{"flaresolverr_port": 8191}')
+                f:close()
+                f = assert(io.open(path, 'w'))
+                f:write('{}')
+                f:close()
+                "#,
+            )
+            .unwrap();
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), "{}");
+    }
+
+    #[test]
+    fn absolute_paths_and_a_missing_file_behave_as_usual() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("a.txt");
+        std::fs::write(&file, "x").unwrap();
+        let runtime = Runtime::new().unwrap();
+        runtime.set_working_dir(dir.path());
+        runtime
+            .lua()
+            .globals()
+            .set("FILE", file.to_str().unwrap())
+            .unwrap();
+        runtime
+            .exec(
+                r#"
+                assert(io.open(FILE):read('*a') == 'x')
+                local f, err = io.open('missing.txt')
+                assert(f == nil and err:find('missing.txt', 1, true))
+                "#,
+            )
+            .unwrap();
+    }
+}
+
 mod subprocess {
     use std::cell::RefCell;
     use std::path::{Path, PathBuf};

@@ -95,6 +95,14 @@ pub(super) fn validate(s: &Settings) -> Result<(), SettingsError> {
         s.module_updater.interval_minutes,
         1..=u32::MAX,
     )?;
+    if !c.flaresolverr_url.trim().is_empty()
+        && super::websitebypass::flaresolverr_address(&c.flaresolverr_url).is_none()
+    {
+        return Err(invalid(
+            "connections.flaresolverr_url",
+            "must be empty or an http(s) URL such as http://flaresolverr:8191",
+        ));
+    }
     if s.server.bind.parse::<SocketAddr>().is_err() {
         return Err(invalid(
             "server.bind",

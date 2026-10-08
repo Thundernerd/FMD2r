@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+use fmd_core::settings::{SettingsService, write_websitebypass_config};
 use fmd_store::AppDb;
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -16,6 +17,9 @@ pub struct ServeConfig {
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
     pub auth: Option<String>,
+    /// Replaces the stored `connections.flaresolverr_url` setting before startup writes it into
+    /// `lua/websitebypass/websitebypass_config.json`.
+    pub flaresolverr_url: Option<String>,
     /// The buffer the `tracing` subscriber feeds; `GET /api/logs` reads it and `GET /api/events`
     /// streams its bus.
     pub logs: LogBuffer,
@@ -31,6 +35,8 @@ pub enum ServeError {
     },
     #[error("app.db: {0}")]
     Store(#[from] fmd_store::StoreError),
+    #[error("settings: {0}")]
+    Settings(#[from] fmd_core::settings::SettingsError),
     #[error("bind {addr}: {source}")]
     Bind {
         addr: SocketAddr,
@@ -53,7 +59,23 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         .map_err(std::io::Error::other)??;
     // Absolute, so `GET /api/about` shows where the data really is.
     let data_dir = std::fs::canonicalize(&config.data_dir).unwrap_or(config.data_dir);
-    let bypass_config = data_dir.join("lua/websitebypass/websitebypass_config.json");
+    let lua_dir = data_dir.join("lua");
+    let flaresolverr_url = config.flaresolverr_url;
+    let settings_db = db.clone();
+    let flaresolverr_url = tokio::task::spawn_blocking(move || {
+        let settings = SettingsService::load(settings_db)?;
+        if let Some(url) = flaresolverr_url {
+            settings.update(serde_json::json!({"connections": {"flaresolverr_url": url}}))?;
+        }
+        Ok::<_, ServeError>(settings.get().connections.flaresolverr_url.clone())
+    })
+    .await
+    .map_err(std::io::Error::other)??;
+    // Where upstream's cloudflare.lua looks for FlareSolverr (lua/websitebypass/cloudflare.lua:271-325).
+    if let Err(e) = write_websitebypass_config(&lua_dir, &flaresolverr_url) {
+        tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}");
+    }
+    let bypass_config = lua_dir.join("websitebypass/websitebypass_config.json");
     let mut state = AppState::new(db)
         .with_logs(config.logs)
         .with_data_dir(&data_dir)

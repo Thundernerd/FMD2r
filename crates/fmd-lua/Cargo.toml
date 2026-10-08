@@ -25,6 +25,7 @@ mlua.workspace = true
 # Not used directly: depending on it hands build.rs the vendored Lua headers (DEP_LUA_INCLUDE).
 mlua-sys = "0.13"
 poly1305 = "0.8"
+serde_json = "1"
 rquickjs = "0.14"
 sha1 = "0.10"
 sha2 = "0.10"
@@ -38,9 +39,12 @@ cc = "1"
 [dev-dependencies]
 fmd-testkit = { path = "../fmd-testkit" }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
-serde_json = "1"
 tempfile.workspace = true
 tracing-subscriber = { workspace = true, features = ["json"] }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "check_anti_bot"
+harness = false

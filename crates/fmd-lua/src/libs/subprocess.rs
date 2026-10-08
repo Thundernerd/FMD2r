@@ -16,6 +16,11 @@
 //!   so relative paths like `lua\websitebypass\cloudflare.py` resolve against it, as they
 //!   resolve against FMD2's directory on Windows (lua/websitebypass/cloudflare.lua:344).
 //!
+//! - `io.open` gets the same treatment, so upstream scripts find the files they name with
+//!   Windows paths (`lua\websitebypass\websitebypass_config.json`,
+//!   lua/websitebypass/cloudflare.lua:272): a path-like name has its `\` turned into `/`, and a
+//!   relative name resolves against the working directory once one is set.
+//!
 //! [`Runtime::set_working_dir`]: crate::Runtime::set_working_dir
 
 use std::path::PathBuf;
@@ -56,10 +61,17 @@ pub trait Spawner {
 
 /// Runs commands as real child processes, stdin closed and both output pipes captured, like
 /// `RunCommandLoop` with `poUsePipes` (fcl-process processbody.inc:536-589 in FPC 3.2.2).
+///
+/// The one exception is upstream's `websitebypass/cloudflare.py` run with Python, which cannot
+/// work on Linux; FMD2r answers it with a built-in FlareSolverr client printing the script's
+/// JSON (see `flaresolverr.rs`).
 pub struct SystemSpawner;
 
 impl Spawner for SystemSpawner {
     fn run(&self, command: &Command) -> std::io::Result<Output> {
+        if super::flaresolverr::is_cloudflare_py(&command.program, &command.args) {
+            return Ok(super::flaresolverr::run(&command.args));
+        }
         let output = std::process::Command::new(&command.program)
             .args(&command.args)
             .current_dir(&command.current_dir)
@@ -121,6 +133,30 @@ fn to_unix_path(arg: String) -> String {
     } else {
         arg
     }
+}
+
+/// Replaces the standard `io.open` with one that translates its file name like a command's
+/// path arguments (see the module docs), then opens it with the standard function.
+pub(super) fn wrap_io_open(lua: &Lua) -> mlua::Result<()> {
+    let io: Table = lua.globals().get("io")?;
+    let open: mlua::Function = io.get("open")?;
+    let wrapped = lua.create_function(move |lua, mut args: mlua::MultiValue| {
+        // A name that is not UTF-8 goes to the standard function as it is.
+        let name = match args.front() {
+            Some(Value::String(name)) => name.to_str().ok().map(|n| n.to_owned()),
+            _ => None,
+        };
+        if let Some(name) = name {
+            let name = to_unix_path(name);
+            let path = match Config::of(lua).working_dir {
+                Some(dir) if std::path::Path::new(&name).is_relative() => dir.join(name),
+                _ => PathBuf::from(name),
+            };
+            args[0] = Value::String(lua.create_string(path.as_os_str().as_encoded_bytes())?);
+        }
+        open.call::<mlua::MultiValue>(args)
+    })?;
+    io.set("open", wrapped)
 }
 
 /// One step of a translated command line.

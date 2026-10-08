@@ -6,8 +6,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use mlua::{
-    AnyUserData, FromLua, FromLuaMulti, Function, IntoLua, IntoLuaMulti, Lua, MetaMethod, Table,
-    UserData, Value,
+    AnyUserData, FromLua, FromLuaMulti, Function, IntoLua, IntoLuaMulti, Lua, MetaMethod,
+    MultiValue, Table, UserData, Value,
 };
 
 /// Key of an array property's indexable table in its member table. FMD2 returns that table
@@ -44,6 +44,20 @@ return function(...)
     return f(select(2, ...))
   end
   return f(...)
+end
+"#;
+
+/// Registry key of the Lua function that binds a method to its object, passing the object on.
+const BIND_OBJECT_KEY: &str = "fmd.luaclass.bindobject";
+
+/// Like [`BIND_SOURCE`], but `f` gets the object itself as its first argument.
+const BIND_OBJECT_SOURCE: &str = r#"
+local f, u = ...
+return function(...)
+  if select('#', ...) > 0 and rawequal((...), u) then
+    return f(u, select(2, ...))
+  end
+  return f(u, ...)
 end
 "#;
 
@@ -123,6 +137,34 @@ impl<T: 'static> LuaClass<T> {
             .push(Box::new(move |lua, state, object, table| {
                 let func = state_fn(lua, state, f)?;
                 table.raw_set(name, bind(lua, func, object)?)
+            }));
+        self
+    }
+
+    /// Adds a bound method that gets the object itself and its shared state instead of a
+    /// borrow of the state, for a method that runs Lua code which may call the object again
+    /// (the anti-bot hook of the `HTTP` object). It borrows the state only where it needs to.
+    pub fn method_with_object<A, R, F>(mut self, name: &str, f: F) -> Self
+    where
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+        F: Fn(&Lua, &Rc<RefCell<T>>, &AnyUserData, A) -> mlua::Result<R> + 'static,
+    {
+        let name = name.to_owned();
+        self.members
+            .push(Box::new(move |lua, state, object, table| {
+                let state = state.clone();
+                let func = lua.create_function(move |lua, mut args: MultiValue| {
+                    let object = match args.pop_front() {
+                        Some(Value::UserData(object)) => object,
+                        _ => return Err(mlua::Error::runtime("method called without its object")),
+                    };
+                    let args = A::from_lua_multi(args, lua)?;
+                    f(lua, &state, &object, args)
+                })?;
+                let bound: Function =
+                    cached_chunk(lua, BIND_OBJECT_KEY, BIND_OBJECT_SOURCE)?.call((func, object))?;
+                table.raw_set(name, bound)
             }));
         self
     }

@@ -1,0 +1,22 @@
+# Development sidecars for an `fmd2r serve` run from the source tree. T33 ships the full
+# compose.yaml with the fmd2r image.
+#
+#   docker compose -f compose.dev.yaml up -d
+#   cargo run -p fmd2r -- serve --flaresolverr-url http://localhost:8191
+#
+# At startup `serve` saves the URL as the `connections.flaresolverr_url` setting and writes it
+# into upstream's lua/websitebypass/websitebypass_config.json (use_webdriver on, flaresolverr_ip
+# and flaresolverr_port), which lua/websitebypass/cloudflare.lua reads when a site answers with a
+# Cloudflare challenge. Inside a compose network use the service name instead:
+# FMD2R_FLARESOLVERR_URL=http://flaresolverr:8191.
+name: fmd2r-dev
+
+services:
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    environment:
+      LOG_LEVEL: info
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8191:8191"
+    restart: unless-stopped
