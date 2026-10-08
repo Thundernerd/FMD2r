@@ -1,6 +1,7 @@
 //! Lua runtime and the full FMD2 Host API that website modules see (the core of FMD2r).
 
 mod class;
+pub mod crypto;
 mod file;
 mod globals;
 mod memory_stream;
@@ -39,9 +40,9 @@ pub struct Runtime {
 
 impl Runtime {
     /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
-    /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with `fmd.strings` in
-    /// `package.preload`. The other Host API libraries and the package loader it registers next
-    /// (:124-125) come with later tickets.
+    /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with the `fmd.*` Host API libraries
+    /// implemented so far (`fmd.strings`, [`crypto`]) in `package.preload`. FMD2's package
+    /// searcher (:124) comes with T06.
     pub fn new() -> Result<Runtime> {
         // SAFETY: FMD2 opens every standard library, including `debug` (used by e.g.
         // lua/modules/MangaPlus.lua), which mlua only loads in unsafe mode. Later tickets also
@@ -49,6 +50,7 @@ impl Runtime {
         let lua =
             unsafe { mlua::Lua::unsafe_new_with(mlua::StdLib::ALL, mlua::LuaOptions::default()) };
         strings::register(&lua)?;
+        crypto::register(&lua)?;
         // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) needs an XPath backend: without
         // the `xpath-fpc` feature there is none yet (the native one is T34), so the global is
         // missing.
