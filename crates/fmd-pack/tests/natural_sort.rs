@@ -11,7 +11,7 @@ fn sorted(items: &[&str]) -> Vec<String> {
     v
 }
 
-/// naturalsortunit.pas:218-237: digit runs compare by value.
+/// naturalsortunit.pas:246-261: digit runs compare by value.
 #[test]
 fn numbers_compare_by_value() {
     assert_eq!(
@@ -24,7 +24,7 @@ fn numbers_compare_by_value() {
     );
 }
 
-/// naturalsortunit.pas:230-235 and the "Logical sort" note at :74-80: equal values with
+/// naturalsortunit.pas:262-267 and the "Logical sort" note at :74-84: equal values with
 /// more leading zeros sort first.
 #[test]
 fn more_leading_zeros_sort_first() {
@@ -34,26 +34,27 @@ fn more_leading_zeros_sort_first() {
     );
 }
 
-/// naturalsortunit.pas:268-275: equal so far, the shorter string sorts first.
+/// naturalsortunit.pas:300-308: equal so far, the shorter string sorts first.
 #[test]
 fn shorter_string_sorts_first_when_otherwise_equal() {
     assert_eq!(natural_cmp("1", "1a"), Ordering::Less);
     assert_eq!(natural_cmp("abc", "abc"), Ordering::Equal);
 }
 
-/// naturalsortunit.pas:209-218: leading spaces before a chunk are skipped.
+/// naturalsortunit.pas:236-245: leading spaces before a chunk are skipped.
 #[test]
 fn leading_spaces_are_skipped() {
     assert_eq!(natural_cmp(" 2", "10"), Ordering::Less);
 }
 
-/// naturalsortunit.pas:240-258: text runs (up to the next digit) are compared whole,
-/// ignoring case like `StrCmpLogicalW` (:283).
+/// naturalsortunit.pas:271-292: text runs (up to the next digit) are compared whole with
+/// `strcoll` (:282), which FMD2 runs in the C locale on Linux, i.e. bytewise.
 #[test]
-fn text_runs_compare_ignoring_case() {
+fn text_runs_compare_bytewise() {
     assert_eq!(
         sorted(&["b2", "B1", "a10", "A9"]),
-        ["A9", "a10", "B1", "b2"]
+        ["A9", "B1", "a10", "b2"]
     );
+    assert_eq!(natural_cmp("a1.jpg", "A1.jpg"), Ordering::Greater);
     assert_eq!(natural_cmp("a1", "a 1"), Ordering::Less);
 }

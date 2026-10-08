@@ -21,7 +21,7 @@ fn magick(save_as: &str) -> Option<MagickOptions> {
     }
 }
 
-/// uDownloadsManager.pas:613-711 with imagemagickmanager.pas:662-686: files not already in
+/// uDownloadsManager.pas:613-711 with imagemagickmanager.pas:651-682: files not already in
 /// the target format are converted in one `magick @list` call, then the originals deleted.
 #[test]
 fn converts_other_formats_and_removes_originals() {
@@ -45,7 +45,7 @@ fn converts_other_formats_and_removes_originals() {
     assert_eq!(left.len(), 2, "the file list is removed: {left:?}");
 }
 
-/// uDownloadsManager.pas:628-633, imagemagickmanager.pas:678-686: JPEG XL goes through
+/// uDownloadsManager.pas:632-637, imagemagickmanager.pas:670-679: JPEG XL goes through
 /// `magick mogrify -path`.
 #[test]
 fn jxl_uses_mogrify() {

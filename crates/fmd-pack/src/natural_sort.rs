@@ -2,13 +2,13 @@
 
 use std::cmp::Ordering;
 
-/// Compares like `UTF8LogicalCompareText` (baseunits/naturalsortunit.pas:281-290), which FMD2
+/// Compares like `UTF8LogicalCompareText` (baseunits/naturalsortunit.pas:311-321), which FMD2
 /// uses to order the files it packs (baseunits/uPacker.pas:279, baseunits/uBaseUnit.pas:2651).
 ///
 /// Digit runs compare by value, and on a tie the run with more leading characters (zeros or
-/// skipped spaces) sorts first. Text runs compare case-insensitively, standing in for the
-/// `strcoll`/`StrCmpLogicalW` collation FMD2 delegates to (:249-258, :283). When everything
-/// compares equal, the shorter string sorts first (:268-275).
+/// skipped spaces) sorts first. Text runs compare bytewise: on Linux FMD2 calls `strcoll`
+/// (:274-289) without setting a locale, so it collates like `strcmp`. When everything compares
+/// equal, the shorter string sorts first (:300-308).
 pub fn natural_cmp(a: &str, b: &str) -> Ordering {
     let (s1, s2) = (a.as_bytes(), b.as_bytes());
     let (mut p1, mut p2) = (0, 0);
@@ -30,16 +30,14 @@ pub fn natural_cmp(a: &str, b: &str) -> Ordering {
                 let n1 = run(s1, p1, |c| c.is_ascii_digit());
                 let n2 = run(s2, p2, |c| c.is_ascii_digit());
                 result = cmp_digits(&s1[p1..p1 + n1], &s2[p2..p2 + n2])
-                    // `Result := -Sign(Len1 - Len2)` (:230-235).
+                    // `Result := -Sign(Len1 - Len2)` (:262-267).
                     .then_with(|| (len2 + n2).cmp(&(len1 + n1)));
                 p1 += n1;
                 p2 += n2;
             } else {
                 let n1 = run(s1, p1, |c| !c.is_ascii_digit());
                 let n2 = run(s2, p2, |c| !c.is_ascii_digit());
-                let t1 = String::from_utf8_lossy(&s1[p1..p1 + n1]).to_lowercase();
-                let t2 = String::from_utf8_lossy(&s2[p2..p2 + n2]).to_lowercase();
-                result = t1.cmp(&t2);
+                result = s1[p1..p1 + n1].cmp(&s2[p2..p2 + n2]);
                 p1 += n1;
                 p2 += n2;
             }

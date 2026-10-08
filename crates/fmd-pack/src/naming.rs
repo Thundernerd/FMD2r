@@ -110,7 +110,7 @@ fn common_string_filter(s: &str) -> String {
     pas_trim(&html_entities_filter(&filtered)).to_string()
 }
 
-/// `StringFilter` (baseunits/uBaseUnit.pas:2058-2086): the presence check is against the
+/// `StringFilter` (baseunits/uBaseUnit.pas:2056-2086): the presence check is against the
 /// lowercased text, the replacement ignores ASCII case. A second pass decodes entities
 /// that lack their trailing `;`.
 fn string_filter(s: &str) -> String {
@@ -145,7 +145,8 @@ fn entity_filter(s: &str, table: &[(&str, &str)], present: impl Fn(&str, &str) -
     result
 }
 
-/// `StringReplace(..., [rfIgnoreCase, rfReplaceAll])`.
+/// `StringReplace(..., [rfIgnoreCase, rfReplaceAll])` as used by the filters
+/// (baseunits/uBaseUnit.pas:2066, :2099).
 fn replace_ignore_ascii_case(s: &str, from: &str, to: &str) -> String {
     let haystack = s.to_ascii_lowercase();
     let needle = from.to_ascii_lowercase();
@@ -289,7 +290,8 @@ fn remove_symbols(s: &str, mode: SymbolMode) -> String {
     }
 }
 
-/// Pascal `Trim`: strips characters up to and including space from both ends.
+/// Pascal `Trim` (FPC SysUtils, used throughout baseunits/uBaseUnit.pas:1772-1859): strips
+/// characters up to and including space from both ends.
 fn pas_trim(s: &str) -> &str {
     s.trim_matches(|c: char| c <= ' ')
 }
@@ -468,9 +470,18 @@ pub fn page_file_name(template: &str, name: Option<&str>, work_id: usize) -> Str
     template.replace(CR_FILENAME, &name)
 }
 
-/// Shortens `name` to at most `max_len` characters by dropping characters from the front
-/// (baseunits/uDownloadsManager.pas:544-548).
+/// Shortens `name` to at most `max_len` UTF-16 units by dropping characters from the front
+/// (baseunits/uDownloadsManager.pas:544-548). Where Pascal would keep half a surrogate pair,
+/// the whole character is dropped.
 pub fn fit_file_name(name: &str, max_len: usize) -> String {
-    let count = name.chars().count();
-    name.chars().skip(count.saturating_sub(max_len)).collect()
+    let mut units = 0;
+    let start = name
+        .char_indices()
+        .rev()
+        .find(|(_, c)| {
+            units += c.len_utf16();
+            units > max_len
+        })
+        .map_or(0, |(i, c)| i + c.len_utf8());
+    name[start..].to_string()
 }

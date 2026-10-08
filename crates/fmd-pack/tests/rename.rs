@@ -9,6 +9,7 @@ fn posix() -> RenameOptions {
     RenameOptions::default()
 }
 
+/// FMD2r's POSIX mode replaces `RemoveSymbols` at uBaseUnit.pas:1809.
 #[test]
 fn posix_mode_replaces_slash_in_values_with_underscore() {
     let ctx = RenameContext {
@@ -130,6 +131,7 @@ fn leading_and_trailing_path_delimiters_trimmed() {
     );
 }
 
+/// FMD2r's POSIX mode, applied after uBaseUnit.pas:1858.
 #[test]
 fn posix_mode_trims_trailing_dots_and_spaces() {
     let ctx = RenameContext {
@@ -268,4 +270,7 @@ fn fit_file_name_keeps_the_tail() {
     assert_eq!(fit_file_name("abcdef", 4), "cdef");
     assert_eq!(fit_file_name("äbc", 3), "äbc");
     assert_eq!(fit_file_name("äbcd", 3), "bcd");
+    // Pascal counts UTF-16 units; a surrogate pair that would be split is dropped whole.
+    assert_eq!(fit_file_name("😀😀abc", 5), "😀abc");
+    assert_eq!(fit_file_name("😀😀abc", 4), "abc");
 }

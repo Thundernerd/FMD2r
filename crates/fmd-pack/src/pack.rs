@@ -91,10 +91,11 @@ pub fn pack(
         fs::remove_file(&saved)?;
     }
 
+    // The book title is the folder's name (`GetLastDir(Path)`, baseunits/uPacker.pas:186, :225).
     match format {
         PackFormat::Zip | PackFormat::Cbz => write_zip(&files, &saved)?,
-        PackFormat::Epub => write_epub(&files, &folder_title(dir), &saved)?,
-        PackFormat::Pdf => write_pdf(&files, &folder_title(dir), opts.pdf_quality, &saved)?,
+        PackFormat::Epub => write_epub(&files, &file_name(dir), &saved)?,
+        PackFormat::Pdf => write_pdf(&files, &file_name(dir), opts.pdf_quality, &saved)?,
         PackFormat::Folder => {}
     }
 
@@ -127,11 +128,6 @@ fn image_files(dir: &Path) -> io::Result<Vec<PathBuf>> {
     }
     files.sort_by(|a, b| natural_cmp(&file_name(a), &file_name(b)));
     Ok(files)
-}
-
-/// The book title: the folder's name (`GetLastDir(Path)`, baseunits/uPacker.pas:186, :225).
-fn folder_title(dir: &Path) -> String {
-    file_name(dir)
 }
 
 fn file_name(path: &Path) -> String {

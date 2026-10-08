@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::PackError;
 
-/// ImageMagick settings (`TImageMagickManager`, baseunits/imagemagickmanager.pas:14-60).
+/// ImageMagick settings (`TImageMagickManager`, baseunits/imagemagickmanager.pas:13-71).
 #[derive(Debug, Clone)]
 pub struct MagickOptions {
     /// The `magick` executable; a bare name is looked up on PATH.
@@ -36,7 +36,8 @@ impl Default for MagickOptions {
     }
 }
 
-/// Whether the configured `magick` executable runs (`FindMagickBinary`).
+/// Whether the configured `magick` executable runs; stands in for FMD2's Windows registry
+/// and PATH probe (`FindMagickBinary`, baseunits/imagemagickmanager.pas:253).
 pub fn magick_available(opts: &MagickOptions) -> bool {
     Command::new(&opts.executable)
         .arg("-version")
@@ -53,7 +54,7 @@ pub fn magick_available(opts: &MagickOptions) -> bool {
 /// JPEG XL uses `magick mogrify -path <dir> <files>` as FMD2 does; FMD2 first copies the
 /// files to a temporary folder and passes a wildcard, which the explicit file list makes
 /// unnecessary. Other formats pass a quoted file list as `@list` and name the outputs with
-/// `-set filename:name %t` (`ConvertImage`, baseunits/imagemagickmanager.pas:662-686).
+/// `-set filename:name %t` (`ConvertImage`, baseunits/imagemagickmanager.pas:651-682).
 pub fn magick_convert(
     dir: &Path,
     files: &[PathBuf],
@@ -94,10 +95,10 @@ pub fn magick_convert(
         list_file = Some(list);
     }
     let result = run(command, opts.timeout);
-    if let Some(list) = list_file {
-        std::fs::remove_file(list)?;
-    }
+    // Report a failed conversion before a failed clean-up.
+    let cleanup = list_file.map_or(Ok(()), std::fs::remove_file);
     result?;
+    cleanup?;
 
     let mut out = Vec::with_capacity(files.len());
     for file in files {
@@ -118,7 +119,7 @@ pub fn magick_convert(
     Ok(out)
 }
 
-/// `ExecuteMagickCommand` (baseunits/imagemagickmanager.pas:504-646): runs the command with
+/// `ExecuteMagickCommand` (baseunits/imagemagickmanager.pas:504-635): runs the command with
 /// stderr merged into the captured output, killing it after `timeout`.
 fn run(mut command: Command, timeout: Duration) -> Result<(), PackError> {
     let mut log = tempfile_for_output()?;

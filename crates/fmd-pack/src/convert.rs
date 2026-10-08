@@ -109,7 +109,7 @@ pub fn convert_bytes(bytes: &[u8], target: ConvertTarget) -> Result<Option<Vec<u
     Ok(Some(data))
 }
 
-/// Blends transparent pixels over white (`AlphaBlend(CLW, C)`, Img2Pdf.pas:315-318).
+/// Blends transparent pixels over white (`AlphaBlend(CLW, C)`, baseunits/Img2Pdf.pas:319-320).
 pub(crate) fn on_white(image: &DynamicImage) -> RgbImage {
     let rgba = image.to_rgba8();
     RgbImage::from_fn(rgba.width(), rgba.height(), |x, y| {

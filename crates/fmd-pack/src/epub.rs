@@ -20,7 +20,7 @@ const CONTAINER: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 const STYLE: &str = "img {\n  max-width: 100%;\n  max-height: 100%;\n}\n";
 
 /// Writes `images` as an EPUB 2 book titled `title` (`TEpubBuilder.SaveToStream`,
-/// baseunits/uEpub.pas:243-284). `mimetype` is the first entry and stored uncompressed,
+/// baseunits/uEpub.pas:193-240). `mimetype` is the first entry and stored uncompressed,
 /// as the EPUB OCF spec requires; everything else is deflated.
 pub(crate) fn write_epub(images: &[PathBuf], title: &str, saved: &Path) -> Result<(), PackError> {
     let uuid = uuid::Uuid::new_v4().to_string();
@@ -55,7 +55,7 @@ pub(crate) fn write_epub(images: &[PathBuf], title: &str, saved: &Path) -> Resul
     Ok(())
 }
 
-/// `TPage` (baseunits/uEpub.pas:286-326).
+/// `TPage` (baseunits/uEpub.pas:263-312).
 struct Page<'a> {
     index: usize,
     image_path: &'a Path,
@@ -64,7 +64,7 @@ struct Page<'a> {
 }
 
 impl<'a> Page<'a> {
-    /// `TEpubBuilder.AddImage` (baseunits/uEpub.pas:221-228).
+    /// `TEpubBuilder.AddImage` (baseunits/uEpub.pas:183-191).
     fn new(index: usize, image_path: &'a Path, book_title: &str) -> Self {
         let ext = image_path
             .extension()
@@ -82,7 +82,7 @@ impl<'a> Page<'a> {
         format!("{:04}.xhtml", self.index)
     }
 
-    /// `GetContentItem` (baseunits/uEpub.pas:288-292).
+    /// `GetContentItem` (baseunits/uEpub.pas:96-97, :263-267).
     fn content_items(&self) -> String {
         let i = self.index;
         format!(
@@ -94,7 +94,7 @@ impl<'a> Page<'a> {
         )
     }
 
-    /// `GetPage` (baseunits/uEpub.pas:127-138, :314-317).
+    /// `GetPage` (baseunits/uEpub.pas:124-135, :294-297).
     fn xhtml(&self) -> String {
         format!(
             r#"<?xml version="1.0" encoding="utf-8"?>
@@ -114,7 +114,7 @@ impl<'a> Page<'a> {
         )
     }
 
-    /// `GetNavPoint` (baseunits/uEpub.pas:117-123, :325-328).
+    /// `GetNavPoint` (baseunits/uEpub.pas:116-122, :306-309).
     fn nav_point(&self) -> String {
         let i = self.index;
         format!(
@@ -126,7 +126,7 @@ impl<'a> Page<'a> {
     }
 }
 
-/// `CreateContent` (baseunits/uEpub.pas:73-91, :195-207).
+/// `CreateContent` (baseunits/uEpub.pas:76-94, :160-171).
 fn content(pages: &[Page], title: &str, uuid: &str) -> String {
     let items: String = pages.iter().map(Page::content_items).collect();
     let refs: String = pages
@@ -154,7 +154,7 @@ fn content(pages: &[Page], title: &str, uuid: &str) -> String {
     )
 }
 
-/// `CreateToc` (baseunits/uEpub.pas:104-115, :209-218). FMD2 inserts the title unescaped;
+/// `CreateToc` (baseunits/uEpub.pas:102-114, :173-181). FMD2 inserts the title unescaped;
 /// it is escaped here so the NCX stays well-formed.
 fn toc(pages: &[Page], title: &str, uuid: &str) -> String {
     let nav_points: String = pages.iter().map(Page::nav_point).collect();
@@ -176,7 +176,8 @@ fn toc(pages: &[Page], title: &str, uuid: &str) -> String {
     )
 }
 
-/// `GetMimeType` (baseunits/uBaseUnit.pas:2639-2649), matching the extension in any case.
+/// `GetMimeType` (baseunits/uBaseUnit.pas:2639-2649), matching the extension in any case,
+/// plus the ImageMagick outputs that `pack` also accepts.
 pub(crate) fn mime_type(path: &Path) -> &'static str {
     let ext = path
         .extension()
@@ -188,6 +189,8 @@ pub(crate) fn mime_type(path: &Path) -> &'static str {
         "gif" => "image/gif",
         "bmp" => "image/bmp",
         "webp" => "image/webp",
+        "avif" => "image/avif",
+        "jxl" => "image/jxl",
         _ => "",
     }
 }

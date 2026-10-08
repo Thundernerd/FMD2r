@@ -108,7 +108,7 @@ fn read_entry(path: &std::path::Path, name: &str) -> String {
     std::io::read_to_string(zip.by_name(name).unwrap()).unwrap()
 }
 
-/// uEpub.pas:250-283: `mimetype` first and stored, then the container, style, one image
+/// uEpub.pas:193-240: `mimetype` first and stored, then the container, style, one image
 /// plus XHTML page per file, the OPF and the NCX.
 #[test]
 fn epub_structure_matches_fmd2() {
@@ -151,7 +151,7 @@ fn epub_structure_matches_fmd2() {
         read_entry(&out, "META-INF/container.xml").contains(r#"full-path="OEBPS/content.opf""#)
     );
 
-    // uEpub.pas:73-91, :233-237: title is the folder name; every image and page is listed.
+    // uEpub.pas:76-94, :160-171: title is the folder name; every image and page is listed.
     let opf = read_entry(&out, "OEBPS/content.opf");
     assert!(opf.contains("<dc:title>Chapter 1</dc:title>"));
     for (i, (ext, mime)) in [
@@ -172,12 +172,12 @@ fn epub_structure_matches_fmd2() {
         assert!(opf.contains(&format!(r#"<itemref idref="page{n:04}"/>"#)));
     }
 
-    // uEpub.pas:117-125: one navPoint per page.
+    // uEpub.pas:116-122, :173-181: one navPoint per page.
     let ncx = read_entry(&out, "OEBPS/toc.ncx");
     assert!(ncx.contains(r#"<navPoint id="toc_3" playOrder="3">"#));
     assert!(ncx.contains(r#"<content src="0003.xhtml"/>"#));
 
-    // uEpub.pas:127-138, :226: page title is "<title> - <index>".
+    // uEpub.pas:124-135, :189: page title is "<title> - <index>".
     let page = read_entry(&out, "OEBPS/0002.xhtml");
     assert!(page.contains("<title>Chapter 1 - 0002</title>"));
     assert!(page.contains(r#"<img src="images/0002.jpg"/>"#));
@@ -229,8 +229,8 @@ fn pdf_pages(path: &std::path::Path) -> (lopdf::Document, Vec<PdfPage>) {
     (doc, pages)
 }
 
-/// Img2Pdf.pas:575-599: one page per image, sized to the image; with the default quality
-/// (95) JPEGs are embedded as is and other images re-encoded as JPEG (:500-506).
+/// Img2Pdf.pas:578-600: one page per image, sized to the image; with the default quality
+/// (95) JPEGs are embedded as is and other images re-encoded as JPEG (:466-469).
 #[test]
 fn pdf_has_one_page_per_image_at_native_size() {
     let tmp = tempfile::tempdir().unwrap();
@@ -267,7 +267,7 @@ fn pdf_has_one_page_per_image_at_native_size() {
     assert_eq!(title.as_str().unwrap(), b"Chapter 1");
 }
 
-/// Img2Pdf.pas:500-512: at quality 100 non-JPEG images are stored losslessly (Flate RGB).
+/// Img2Pdf.pas:466-476: at quality 100 non-JPEG images are stored losslessly (Flate RGB).
 #[test]
 fn pdf_quality_100_stores_png_losslessly() {
     let tmp = tempfile::tempdir().unwrap();
@@ -283,7 +283,7 @@ fn pdf_quality_100_stores_png_losslessly() {
     assert_eq!(pages[2].color_space, "DeviceRGB");
 }
 
-/// Img2Pdf.pas:500-504: below quality 75 JPEGs are re-encoded too.
+/// Img2Pdf.pas:466-469: below quality 75 JPEGs are re-encoded too.
 #[test]
 fn pdf_low_quality_reencodes_jpeg() {
     let tmp = tempfile::tempdir().unwrap();

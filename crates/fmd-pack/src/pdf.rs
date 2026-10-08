@@ -11,7 +11,7 @@ use crate::PackError;
 use crate::convert::on_white;
 
 /// An image ready to embed: its pixel size, colour space, filter and encoded data
-/// (`TPageInfo`, baseunits/Img2Pdf.pas:40-60).
+/// (`TPageInfo`, baseunits/Img2Pdf.pas:48-66).
 struct PageImage {
     width: u32,
     height: u32,
@@ -21,7 +21,7 @@ struct PageImage {
 }
 
 /// Writes one page per image, each page the image's pixel size (`TImg2PDF.SaveToStream`,
-/// baseunits/Img2Pdf.pas:555-700). Images that cannot be read are skipped, as FMD2 does
+/// baseunits/Img2Pdf.pas:542-713). Images that cannot be read are skipped, as FMD2 does
 /// (baseunits/uPacker.pas:190-195).
 pub(crate) fn write_pdf(
     images: &[PathBuf],
@@ -51,7 +51,7 @@ pub(crate) fn write_pdf(
         );
         xobject.allows_compression = false;
         let image_id = doc.add_object(xobject);
-        // Img2Pdf.pas:582-584: scale the unit square to the page.
+        // baseunits/Img2Pdf.pas:590-594: scale the unit square to the page.
         let content = format!("q {w} 0 0 {h} 0 0 cm /I1 Do Q");
         let content_id = doc.add_object(Stream::new(dictionary! {}, content.into_bytes()));
         let page_id = doc.add_object(dictionary! {
@@ -79,7 +79,7 @@ pub(crate) fn write_pdf(
             "Count" => count,
         }),
     );
-    // Img2Pdf.pas:640-664: info and a catalog that opens on the first page, fit to width.
+    // baseunits/Img2Pdf.pas:666-691: info and a catalog that opens on the first page, fit to width.
     let info_id = doc.add_object(dictionary! {
         "Title" => Object::string_literal(title),
         "Creator" => Object::string_literal("FMD2r"),
@@ -96,7 +96,7 @@ pub(crate) fn write_pdf(
     Ok(())
 }
 
-/// `TPageInfo.LoadImageData` (baseunits/Img2Pdf.pas:495-517): a JPEG is embedded as is when
+/// `TPageInfo.LoadImageData` (baseunits/Img2Pdf.pas:460-484): a JPEG is embedded as is when
 /// the quality is at least 75; otherwise any image below quality 100 is re-encoded as JPEG;
 /// at quality 100 non-JPEG images are stored Flate-compressed.
 fn load_page_image(path: &Path, quality: u8) -> Result<PageImage, PackError> {
@@ -109,7 +109,7 @@ fn load_page_image(path: &Path, quality: u8) -> Result<PageImage, PackError> {
     let (width, height) = (image.width(), image.height());
     let gray = !image.color().has_color();
     if quality < 100 {
-        // JPEGCompressToPageInfo (Img2Pdf.pas:197-233).
+        // JPEGCompressToPageInfo (baseunits/Img2Pdf.pas:197-230).
         let mut data = Vec::new();
         let encoder = JpegEncoder::new_with_quality(Cursor::new(&mut data), quality);
         let (color_space, encoded) = if gray && format == ImageFormat::Jpeg {
@@ -126,7 +126,7 @@ fn load_page_image(path: &Path, quality: u8) -> Result<PageImage, PackError> {
             data,
         });
     }
-    // PNGToPageInfo / ImageToPageInfo (Img2Pdf.pas:235-332, :420-470): grey PNGs stay
+    // PNGToPageInfo / ImageToPageInfo (baseunits/Img2Pdf.pas:232-344, :410-458): grey PNGs stay
     // grey, everything else becomes RGB blended over white. Palette PNGs are expanded
     // to RGB rather than written as an indexed colour space.
     let (color_space, raw) = if gray && format == ImageFormat::Png {
@@ -145,7 +145,7 @@ fn load_page_image(path: &Path, quality: u8) -> Result<PageImage, PackError> {
     })
 }
 
-/// `JPEGToPageInfo` (baseunits/Img2Pdf.pas:166-195): the colour space follows the JPEG's
+/// `JPEGToPageInfo` (baseunits/Img2Pdf.pas:167-195): the colour space follows the JPEG's
 /// component count.
 fn jpeg_passthrough(path: &Path, data: Vec<u8>) -> Result<PageImage, PackError> {
     let (width, height, components) =
