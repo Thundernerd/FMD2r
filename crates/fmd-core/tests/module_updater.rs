@@ -344,6 +344,8 @@ fn a_module_failing_init_after_an_update_is_reported_once_and_its_last_good_vers
     let after = f.modules.current();
     assert!(Arc::ptr_eq(after.get("a").unwrap(), &before));
     assert!(after.get("b").is_some());
+    // The file goes back to the loaded version, so a worker rebuilding its state runs it.
+    assert_eq!(f.read("modules/A.lua"), Some(module("a", "A1")));
 
     // The same broken file in a later commit is not reported again.
     f.github.publish(

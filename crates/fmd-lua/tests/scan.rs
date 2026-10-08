@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use fmd_testkit::scan_host_api_names;
+use fmd_lua::scan_host_api_names;
 
 fn names(list: &[&str]) -> BTreeSet<String> {
     list.iter().map(|s| s.to_string()).collect()

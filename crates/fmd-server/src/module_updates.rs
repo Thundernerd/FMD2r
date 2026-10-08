@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fmd_core::jobs::Job;
-use fmd_core::module_updater::{LiveModules, ModuleUpdater, ModuleUpdaterJob, UpdaterConfig};
+use fmd_core::module_updater::{
+    LiveModules, ModuleUpdater, ModuleUpdaterJob, UpdaterConfig, has_no_modules,
+};
 use fmd_core::modules::StoreModuleSettings;
 use fmd_core::settings::{ModuleUpdaterSettings, write_websitebypass_config};
 use fmd_http::HttpClient;
@@ -45,12 +47,8 @@ pub(crate) async fn start(state: AppState, lua_dir: PathBuf, flaresolverr_url: S
         Ok(ModuleUpdaterJob::new(Arc::new(updater), jobs))
     })
     .await;
-    let job = match job {
-        Ok(Ok(job)) => job,
-        Ok(Err(e)) => {
-            tracing::error!(target: "fmd_server", "module updater: {e}");
-            return;
-        }
+    let job = match job.map_err(|e| e.to_string()).and_then(|built| built) {
+        Ok(job) => job,
         Err(e) => {
             tracing::error!(target: "fmd_server", "module updater: {e}");
             return;
@@ -68,7 +66,7 @@ const WEBSITEBYPASS_CONFIG: &str = "websitebypass/websitebypass_config.json";
 async fn schedule(job: ModuleUpdaterJob, state: AppState, lua_dir: PathBuf) {
     let mut changes = state.settings.subscribe();
     let first = state.settings.get().module_updater.clone();
-    if first.auto_update || no_modules(&lua_dir) {
+    if first.auto_update || has_no_modules(&lua_dir) {
         start_run(&job);
     }
     let mut last = Instant::now();
@@ -103,11 +101,6 @@ fn start_run(job: &ModuleUpdaterJob) {
 
 fn interval(settings: &ModuleUpdaterSettings) -> Duration {
     Duration::from_secs(u64::from(settings.interval_minutes.max(1)) * 60)
-}
-
-/// Whether `<lua_dir>/modules` holds nothing yet.
-fn no_modules(lua_dir: &std::path::Path) -> bool {
-    std::fs::read_dir(lua_dir.join("modules")).map_or(true, |mut e| e.next().is_none())
 }
 
 /// `at` in Unix milliseconds.

@@ -168,6 +168,9 @@ pub enum UpdateError {
     /// GitHub allows no more API requests until `reset` (Unix seconds).
     #[error("GitHub API rate limit exceeded until {reset}")]
     RateLimited { reset: i64 },
+    /// The tree names a path that is absolute or climbs out of the Lua dir.
+    #[error("unsafe path in the tree: {0}")]
+    UnsafePath(String),
     #[error(transparent)]
     Store(#[from] StoreError),
     #[error("{path}: {source}")]
@@ -345,28 +348,18 @@ impl ModuleUpdater {
     /// Cancels the running sync: its requests stop, files not downloaded yet are retried next
     /// run, and it returns [`UpdateError::Cancelled`].
     pub fn cancel(&self) {
-        self.terminate
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .terminate();
+        lock(&self.terminate).terminate();
     }
 
     /// Runs one sync (`TCheckUpdateThread.DoSync`,
     /// mangadownloader/forms/frmLuaModulesUpdater.pas:769-890). Blocking: run it on a thread
     /// of its own, outside any tokio runtime.
     pub fn sync(&self) -> Result<SyncReport, UpdateError> {
-        let _running = self.running.lock().unwrap_or_else(PoisonError::into_inner);
-        let terminate = self
-            .terminate
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone();
+        let _running = lock(&self.running);
+        let terminate = lock(&self.terminate).clone();
         let result = self.sync_with(&terminate);
         // A cancel reaches the sync it was meant for, even one about to start, and no later one.
-        *self
-            .terminate
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = TerminateToken::new();
+        *lock(&self.terminate) = TerminateToken::new();
         result
     }
 
@@ -381,7 +374,7 @@ impl ModuleUpdater {
             .collect();
         let mut state = stored.clone();
         // First run, or the module tree was wiped: read the whole tree again.
-        if rows.is_empty() || is_empty_dir(&self.config.lua_dir.join("modules")) {
+        if rows.is_empty() || has_no_modules(&self.config.lua_dir) {
             state.last_commit_sha.clear();
             state.last_commit_etag.clear();
         }
@@ -436,7 +429,18 @@ impl ModuleUpdater {
             .cloned()
             .collect();
         if !changed.is_empty() {
-            self.reload(&changed, &previous, &mut next, &mut report)?;
+            if let Err(e) = self.reload(&changed, &previous, &mut next, &mut report) {
+                // Keep what was reported so far, and the old commit so the sync is retried.
+                let reported = RepoState {
+                    failed_init: next.failed_init,
+                    unknown_api: next.unknown_api,
+                    ..state
+                };
+                if reported != stored {
+                    self.db.settings().set(STATE_KEY, &reported)?;
+                }
+                return Err(e);
+            }
             if let Some(after_sync) = &self.after_sync {
                 after_sync(&report);
             }
@@ -463,9 +467,11 @@ impl ModuleUpdater {
     /// loads again.
     ///
     /// A file that fails to load is reported to the inbox once per version. With
-    /// keep-last-good, the modules it declared before stay loaded, and a file this sync
-    /// overwrote gets its previous content (and `module_files` row) back, so a rebuilt Lua state
-    /// runs the version that is loaded; it is downloaded again when upstream next changes.
+    /// keep-last-good, a module file this sync overwrote gets its previous content (and
+    /// `module_files` row) back and the modules it declared before stay loaded, so a rebuilt Lua
+    /// state runs the version that is loaded; it is downloaded again when upstream next changes.
+    /// A module that breaks because a file it `require`s changed has no earlier version on disk
+    /// to go back to, so it is dropped.
     fn reload(
         &self,
         changed: &[String],
@@ -500,8 +506,13 @@ impl ModuleUpdater {
             .into_iter()
             .map(|f| (f.file, f.error))
             .collect();
+        // Only a file whose previous content can go back on disk keeps its modules: workers
+        // rebuild states from the file, so a kept module must be what the file holds.
         let keeps = |file: &Path| {
-            self.config.keep_last_good && failed.contains_key(file) && !from(file).is_empty()
+            self.config.keep_last_good
+                && failed.contains_key(file)
+                && previous.contains_key(&relative(lua_dir, file))
+                && !from(file).is_empty()
         };
         let mut modules: Vec<Arc<Module>> = old
             .modules()
@@ -524,13 +535,13 @@ impl ModuleUpdater {
                 self.report_failure(&path, kept.first(), error)?;
                 state.failed_init.insert(path.clone(), sha);
             }
-            if keeps(file) {
-                if let Some((bytes, row)) = previous.get(&path) {
-                    write_atomically(file, bytes)?;
-                    match row {
-                        Some(row) => self.db.module_files().upsert(row)?,
-                        None => self.db.module_files().delete(&path)?,
-                    }
+            if keeps(file)
+                && let Some((bytes, row)) = previous.get(&path)
+            {
+                write_atomically(file, bytes)?;
+                match row {
+                    Some(row) => self.db.module_files().upsert(row)?,
+                    None => self.db.module_files().delete(&path)?,
                 }
                 modules.extend(kept);
             }
@@ -580,7 +591,7 @@ impl ModuleUpdater {
     }
 
     /// Reports each of the module files `paths` that references Host API names a callback's
-    /// Lua state lacks (the T02 scan checked against the T14 state, as `fmd_testkit`'s corpus
+    /// Lua state lacks (the T02 scan checked against the T14 state, as the Host API corpus
     /// report does), once per version. `modules` are the modules they declared.
     fn check_host_api(
         &self,
@@ -594,7 +605,7 @@ impl ModuleUpdater {
             let Ok(source) = std::fs::read(&file) else {
                 continue;
             };
-            let names = fmd_testkit::scan_host_api_names(&String::from_utf8_lossy(&source));
+            let names = fmd_lua::scan_host_api_names(&String::from_utf8_lossy(&source));
             referenced.insert((*path).clone(), (file, names));
         }
         let all: BTreeSet<&str> = referenced
@@ -619,14 +630,12 @@ impl ModuleUpdater {
                 continue;
             }
             let module = modules.iter().find(|m| m.def().file == file);
-            self.db.events().push(&NewEvent {
-                kind: EVENT_KIND.into(),
-                severity: EventSeverity::Warning,
-                module_id: module.map(|m| m.def().id),
-                task_id: None,
-                title: format!("module {} uses unknown Host API names", file_name(&path)),
-                body: serde_json::json!({ "file": path, "names": unknown }),
-            })?;
+            self.push_event(
+                EventSeverity::Warning,
+                module,
+                format!("module {} uses unknown Host API names", file_name(&path)),
+                serde_json::json!({ "file": path, "names": unknown }),
+            )?;
             state.unknown_api.insert(path, sha);
         }
         Ok(())
@@ -640,13 +649,29 @@ impl ModuleUpdater {
         module: Option<&Arc<Module>>,
         error: &str,
     ) -> Result<(), UpdateError> {
+        self.push_event(
+            EventSeverity::Error,
+            module,
+            format!("module {} failed Init", file_name(path)),
+            serde_json::json!({ "file": path, "error": error }),
+        )
+    }
+
+    /// Posts an updater report about `module` to the inbox.
+    fn push_event(
+        &self,
+        severity: EventSeverity,
+        module: Option<&Arc<Module>>,
+        title: String,
+        body: serde_json::Value,
+    ) -> Result<(), UpdateError> {
         self.db.events().push(&NewEvent {
             kind: EVENT_KIND.into(),
-            severity: EventSeverity::Error,
+            severity,
             module_id: module.map(|m| m.def().id),
             task_id: None,
-            title: format!("module {} failed Init", file_name(path)),
-            body: serde_json::json!({ "file": path, "error": error }),
+            title,
+            body,
         })?;
         Ok(())
     }
@@ -677,7 +702,7 @@ impl ModuleUpdater {
         }))
     }
 
-    /// `GetTree` (baseunits/GitHubRepoV3.pas:243-272): every non-tree entry under the path,
+    /// `GetTree` (baseunits/GitHubRepoV3.pas:243-272): every file (blob) under the path,
     /// by path. An empty or truncated tree is refused rather than taken as "everything was
     /// deleted".
     fn tree(&self, sha: &str) -> Result<BTreeMap<String, String>, UpdateError> {
@@ -699,7 +724,8 @@ impl ModuleUpdater {
         let files: BTreeMap<String, String> = tree
             .tree
             .into_iter()
-            .filter(|e| e.kind != "tree")
+            // Submodules (`commit`) have nothing to download; FMD2 keeps every non-`tree` entry.
+            .filter(|e| e.kind == "blob")
             .map(|e| (e.path, e.sha))
             .collect();
         if files.is_empty() {
@@ -719,15 +745,10 @@ impl ModuleUpdater {
     /// `X-RateLimit-Remaining` and `X-RateLimit-Reset` headers of every answer and sends
     /// nothing more once none are left, until the reset.
     fn api_get(&self, url: &str, etag: &str) -> Result<ApiResponse, UpdateError> {
-        let mut reset = self
-            .rate_limit_reset
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        if let Some(at) = *reset {
-            if now_ms() / 1000 < at {
-                return Err(UpdateError::RateLimited { reset: at });
-            }
-            *reset = None;
+        if let Some(at) = *lock(&self.rate_limit_reset)
+            && now_ms() / 1000 < at
+        {
+            return Err(UpdateError::RateLimited { reset: at });
         }
         let mut session = self.session();
         if !etag.is_empty() {
@@ -747,11 +768,12 @@ impl ModuleUpdater {
             .trim()
             .parse::<i64>()
             .ok();
-        if exhausted && let Some(at) = reset_at {
-            *reset = Some(at);
-            if code == 403 || code == 429 {
-                return Err(UpdateError::RateLimited { reset: at });
-            }
+        *lock(&self.rate_limit_reset) = reset_at.filter(|_| exhausted);
+        if exhausted
+            && (code == 403 || code == 429)
+            && let Some(at) = reset_at
+        {
+            return Err(UpdateError::RateLimited { reset: at });
         }
         Ok(ApiResponse {
             code,
@@ -765,12 +787,7 @@ impl ModuleUpdater {
         session.reset_basic();
         session.set_follow_redirection(false);
         session.set_user_agent(USER_AGENT);
-        session.set_terminate_token(
-            self.terminate
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .clone(),
-        );
+        session.set_terminate_token(lock(&self.terminate).clone());
         session
     }
 
@@ -801,10 +818,7 @@ impl ModuleUpdater {
                         let i = next.fetch_add(1, Ordering::SeqCst);
                         let Some(file) = files.get(i) else { break };
                         let result = self.download(commit, &file.path);
-                        results
-                            .lock()
-                            .unwrap_or_else(PoisonError::into_inner)
-                            .push((i, result));
+                        lock(&results).push((i, result));
                     }
                 });
             }
@@ -883,13 +897,7 @@ impl ModuleUpdaterJob {
     }
 
     fn update(&self, change: impl FnOnce(&mut JobStatus)) {
-        change(
-            &mut self
-                .inner
-                .status
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner),
-        );
+        change(&mut lock(&self.inner.status));
         self.inner.jobs.changed(Self::ID);
     }
 }
@@ -904,20 +912,12 @@ impl Job for ModuleUpdaterJob {
     }
 
     fn status(&self) -> JobStatus {
-        self.inner
-            .status
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
+        lock(&self.inner.status).clone()
     }
 
     fn run(&self) -> Result<(), JobError> {
         {
-            let mut status = self
-                .inner
-                .status
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
+            let mut status = lock(&self.inner.status);
             if status.phase == JobPhase::Running {
                 return Err(JobError::AlreadyRunning);
             }
@@ -1054,9 +1054,10 @@ fn file_name(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
-/// Whether `dir` is missing or holds nothing.
-fn is_empty_dir(dir: &Path) -> bool {
-    std::fs::read_dir(dir).map_or(true, |mut entries| entries.next().is_none())
+/// Whether `<lua_dir>/modules` is missing or holds nothing: the tree was never synced, or was
+/// wiped, and a sync reads it all again (the first-run bootstrap).
+pub fn has_no_modules(lua_dir: &Path) -> bool {
+    std::fs::read_dir(lua_dir.join("modules")).map_or(true, |mut entries| entries.next().is_none())
 }
 
 /// `root/path`, refusing a `path` that is absolute or climbs out of `root`.
@@ -1067,10 +1068,7 @@ fn safe_join(root: &Path, path: &str) -> Result<PathBuf, UpdateError> {
         .components()
         .all(|c| matches!(c, Component::Normal(_)));
     if path.is_empty() || !plain {
-        return Err(UpdateError::Io {
-            path: relative.to_owned(),
-            source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "unsafe path"),
-        });
+        return Err(UpdateError::UnsafePath(path.to_owned()));
     }
     Ok(root.join(relative))
 }
@@ -1101,6 +1099,11 @@ fn parse<T: serde::de::DeserializeOwned>(url: &str, body: &[u8]) -> Result<T, Up
         url: url.to_owned(),
         message: e.to_string(),
     })
+}
+
+/// Locks `mutex`; what it guards stays consistent even if a holder panicked.
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// Now, in Unix milliseconds.

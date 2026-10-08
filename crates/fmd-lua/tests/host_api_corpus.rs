@@ -9,7 +9,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
-use fmd_testkit::{check_each, corpus_root, module_files, scan_host_api_names};
+use fmd_lua::scan_host_api_names;
+use fmd_testkit::{check_each, corpus_root, module_files};
 
 /// The module files, then the templates they build on.
 fn corpus_files() -> Vec<PathBuf> {
