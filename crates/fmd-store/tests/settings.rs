@@ -41,6 +41,31 @@ fn settings_round_trip_typed_values() {
 }
 
 #[test]
+fn settings_set_many_writes_every_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let settings = db.settings();
+
+    settings
+        .set("general", &json!({ "language": "en" }))
+        .unwrap();
+    settings
+        .set_many(&[
+            ("general", json!({ "language": "nl" })),
+            ("output", json!({ "format": "cbz" })),
+        ])
+        .unwrap();
+    assert_eq!(
+        settings.get::<serde_json::Value>("general").unwrap(),
+        Some(json!({ "language": "nl" }))
+    );
+    assert_eq!(
+        settings.get::<serde_json::Value>("output").unwrap(),
+        Some(json!({ "format": "cbz" }))
+    );
+}
+
+#[test]
 fn module_settings_store_options_overrides_and_cookie_jar() {
     let dir = tempfile::tempdir().unwrap();
     let db = AppDb::open(dir.path().join("app.db")).unwrap();
