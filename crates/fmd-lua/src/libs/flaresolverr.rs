@@ -9,6 +9,10 @@
 //! [`SystemSpawner`](super::subprocess::SystemSpawner) answers that command itself, speaking
 //! FlareSolverr's protocol the way the script does and printing the same JSON.
 //!
+//! It talks to FlareSolverr over a plain `TcpStream` rather than `fmd-http`, like the separate
+//! process it replaces: a module session would add FMD2's retries, default headers and cookie
+//! handling, and the spawner has no `HttpClient` to hand.
+//!
 //! Not reproduced: the `rookiepy` fallback that reads cookies out of local desktop browsers
 //! (:127-162; reported as not installed, as without the package), the `--testing` re-check of
 //! the cookies (:164-189) and the `--debug` log and screenshot files (:26-33, :99-107).

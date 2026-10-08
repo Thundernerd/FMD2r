@@ -25,5 +25,5 @@ Out: Windows/macOS packaging.
 
 ## FMD2 references
 - `lua/websitebypass/websitebypass_config.json` (FlareSolverr IP/port keys)
-- `lua/utils/nodejs.lua:41`, `lua/websitebypass/cloudflare.lua:344` (node/python requirements)
+- `lua/utils/nodejs.lua:41`, `lua/websitebypass/cloudflare.lua:344` (node/python requirements). Since T30, `python … cloudflare.py` is answered by a built-in FlareSolverr client (upstream's script fails on Linux), so Cloudflare no longer needs python3; FlareSolverr is configured with `FMD2R_FLARESOLVERR_URL` (`serve --flaresolverr-url`).
 - `baseunits/imagemagickmanager.pas:253-334` (`FindMagickBinary`)

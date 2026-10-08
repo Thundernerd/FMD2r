@@ -51,8 +51,8 @@ struct ServeArgs {
     /// Password/token required for the API; leave unset for no auth.
     #[arg(long, env = "FMD2R_PASSWORD", hide_env_values = true)]
     password: Option<String>,
-    /// FlareSolverr's URL (e.g. http://flaresolverr:8191) for Cloudflare-protected sites; saved
-    /// as the `connections.flaresolverr_url` setting. An empty value turns FlareSolverr off.
+    /// FlareSolverr's URL (e.g. http://flaresolverr:8191) for Cloudflare-protected sites; overrides
+    /// the `connections.flaresolverr_url` setting for this run. An empty value turns FlareSolverr off.
     #[arg(long, env = "FMD2R_FLARESOLVERR_URL")]
     flaresolverr_url: Option<String>,
 }

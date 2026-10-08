@@ -14,7 +14,8 @@ const FLARESOLVERR_PORT: u16 = 8191;
 ///
 /// A URL turns the webdriver path on (`use_webdriver`, which is how `cloudflare.lua` reaches
 /// FlareSolverr) with its host and port (8191 when it names none); an empty one writes
-/// upstream's defaults: off, `localhost:8191` (lua/websitebypass/websitebypass_config.json).
+/// upstream's defaults: off, `localhost:8191` (lua/websitebypass/websitebypass_config.json). A
+/// URL that is not `http(s)://host[:port]` is an `InvalidInput` error and writes nothing.
 /// `debug`, `testing` and keys FMD2r does not know keep the values the file has.
 pub fn write_websitebypass_config(lua_dir: &Path, flaresolverr_url: &str) -> std::io::Result<()> {
     let file = lua_dir.join("websitebypass/websitebypass_config.json");
@@ -24,7 +25,15 @@ pub fn write_websitebypass_config(lua_dir: &Path, flaresolverr_url: &str) -> std
         .unwrap_or_default();
     let (enabled, host, port) = match flaresolverr_address(flaresolverr_url) {
         Some((host, port)) => (true, host, port),
-        None => (false, "localhost".to_owned(), FLARESOLVERR_PORT),
+        None if flaresolverr_url.trim().is_empty() => {
+            (false, "localhost".to_owned(), FLARESOLVERR_PORT)
+        }
+        None => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("FlareSolverr URL {flaresolverr_url:?} is not an http(s) URL"),
+            ));
+        }
     };
     config.insert("use_webdriver".into(), enabled.into());
     for flag in ["debug", "testing"] {

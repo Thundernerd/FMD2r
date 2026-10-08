@@ -262,7 +262,8 @@ impl Module {
         &self.guardian
     }
 
-    /// The lock that serialises the module's anti-bot bypasses.
+    /// The lock that serialises the module's anti-bot bypasses (`TWebsiteBypass.Guardian`,
+    /// baseunits/lua/LuaWebsiteBypass.pas:14-20, taken at :161).
     pub(crate) fn website_bypass_guard(&self) -> &CriticalSection {
         &self.website_bypass
     }

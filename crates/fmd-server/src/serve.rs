@@ -17,8 +17,8 @@ pub struct ServeConfig {
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
     pub auth: Option<String>,
-    /// Replaces the stored `connections.flaresolverr_url` setting before startup writes it into
-    /// `lua/websitebypass/websitebypass_config.json`.
+    /// Used instead of the stored `connections.flaresolverr_url` setting when startup writes
+    /// `lua/websitebypass/websitebypass_config.json`; the setting itself is left as it is.
     pub flaresolverr_url: Option<String>,
     /// The buffer the `tracing` subscriber feeds; `GET /api/logs` reads it and `GET /api/events`
     /// streams its bus.
@@ -57,7 +57,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let db = tokio::task::spawn_blocking(move || AppDb::open(db_path))
         .await
         .map_err(std::io::Error::other)??;
-    // Read once: cover cache changes apply on the next start.
+    // Read once: cover cache and FlareSolverr changes apply on the next start.
     let settings = {
         let db = db.clone();
         tokio::task::spawn_blocking(move || SettingsService::load(db))
@@ -67,17 +67,10 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     // Absolute, so `GET /api/about` shows where the data really is.
     let data_dir = std::fs::canonicalize(&config.data_dir).unwrap_or(config.data_dir);
     let lua_dir = data_dir.join("lua");
-    let flaresolverr_url = config.flaresolverr_url;
-    let settings_db = db.clone();
-    let flaresolverr_url = tokio::task::spawn_blocking(move || {
-        let settings = SettingsService::load(settings_db)?;
-        if let Some(url) = flaresolverr_url {
-            settings.update(serde_json::json!({"connections": {"flaresolverr_url": url}}))?;
-        }
-        Ok::<_, ServeError>(settings.get().connections.flaresolverr_url.clone())
-    })
-    .await
-    .map_err(std::io::Error::other)??;
+    // The flag or environment variable wins for this run without replacing the stored setting.
+    let flaresolverr_url = config
+        .flaresolverr_url
+        .unwrap_or_else(|| settings.get().connections.flaresolverr_url.clone());
     // Where upstream's cloudflare.lua looks for FlareSolverr (lua/websitebypass/cloudflare.lua:271-325).
     if let Err(e) = write_websitebypass_config(&lua_dir, &flaresolverr_url) {
         tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}");

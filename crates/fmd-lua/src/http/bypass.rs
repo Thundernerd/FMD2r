@@ -2,7 +2,7 @@
 //! (baseunits/lua/LuaWebsiteBypass.pas:142-212) with upstream's `websitebypass/checkantibot.lua`
 //! and `websitebypass/websitebypass.lua`.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -41,6 +41,8 @@ struct Scripts {
     /// weak, so an object (and the session it holds) lives until the next collection only;
     /// rebuilding it for every check would cost more than the check itself.
     objects: Table,
+    /// Checks since the last full collection (`checkantibot_count`, :44).
+    checks: Cell<u32>,
     websitebypass: PathBuf,
 }
 
@@ -70,12 +72,11 @@ fn load_scripts(dir: &Path) -> Option<Scripts> {
         return None;
     }
     let file = dir.join(CHECKANTIBOT_FILE);
-    let source = std::fs::read(&file).ok()?;
+    if !file.is_file() {
+        return None;
+    }
     let check_lua = Lua::new();
-    let loaded = check_lua
-        .load(source)
-        .set_name(format!("@{}", file.display()))
-        .exec()
+    let loaded = run_file(&check_lua, &file)
         .and_then(|()| check_lua.globals().get::<Value>("____CheckAntiBot"))
         .and_then(|check| Ok((check, weak_values(&check_lua)?)));
     match loaded {
@@ -83,6 +84,7 @@ fn load_scripts(dir: &Path) -> Option<Scripts> {
             check_lua,
             check,
             objects,
+            checks: Cell::new(0),
             websitebypass,
         }),
         Ok(_) => None,
@@ -97,6 +99,15 @@ impl Scripts {
     /// `CheckAntiBotActive` (baseunits/lua/LuaWebsiteBypass.pas:89-117): `____CheckAntiBot(HTTP)`
     /// over the request just made; an error is logged and counts as no challenge.
     fn check_anti_bot(&self, http: &Rc<RefCell<HttpObject>>) -> bool {
+        // A full collection every 32 checks (:101-105), which also lets go of the cached
+        // objects of finished sessions.
+        if self.checks.get() > 31 {
+            if let Err(e) = self.check_lua.gc_collect() {
+                tracing::error!(target: "fmd.lua", "CheckAntiBot: {e}");
+            }
+            self.checks.set(0);
+        }
+        self.checks.set(self.checks.get() + 1);
         let answer = self
             .http_object(http)
             .and_then(|object| self.check.call::<Value>(object));
@@ -132,6 +143,14 @@ fn weak_values(lua: &Lua) -> mlua::Result<Table> {
     metatable.raw_set("__mode", "v")?;
     table.set_metatable(Some(metatable))?;
     Ok(table)
+}
+
+/// Runs the Lua file `file` in `lua` (`LoadChunkExecute`, baseunits/lua/LuaHandler.pas:94).
+fn run_file(lua: &Lua, file: &Path) -> mlua::Result<()> {
+    let source = std::fs::read(file).map_err(mlua::Error::external)?;
+    lua.load(source)
+        .set_name(format!("@{}", file.display()))
+        .exec()
 }
 
 /// `lua_toboolean`: everything but `nil` and `false` is true.
@@ -237,10 +256,7 @@ fn run_bypass(
 /// counts as failure.
 fn website_bypass_answer(lua: &Lua, file: &Path, method: &str, url: &str) -> bool {
     let answer = (|| {
-        let source = std::fs::read(file).map_err(mlua::Error::external)?;
-        lua.load(source)
-            .set_name(format!("@{}", file.display()))
-            .exec()?;
+        run_file(lua, file)?;
         match lua.globals().get::<Value>("____WebsiteBypass")? {
             Value::Function(bypass) => Ok(truthy(&bypass.call::<Value>((method, url))?)),
             _ => Ok(false),

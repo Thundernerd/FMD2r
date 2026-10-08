@@ -120,3 +120,12 @@ fn the_users_debug_flags_survive_a_rewrite() {
     assert_eq!(config["use_webdriver"], true);
     assert_eq!(config["flaresolverr_ip"], "localhost");
 }
+
+#[test]
+fn a_url_that_is_not_http_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let error = fmd_core::settings::write_websitebypass_config(dir.path(), "flaresolverr:8191")
+        .unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(!dir.path().join("websitebypass").exists());
+}
