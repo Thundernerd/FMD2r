@@ -1,6 +1,6 @@
 //! Events: the inbox and history shown in the UI.
 
-use rusqlite::{Row, params};
+use rusqlite::{OptionalExtension, Row, params};
 
 use crate::app::tasks::TaskId;
 use crate::db::Db;
@@ -122,6 +122,33 @@ impl<'a> EventRepo<'a> {
             ))?;
             let limit = query.limit.map_or(-1, i64::from);
             let rows = stmt.query_map(params![query.unread_only, limit], event_from_row)?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        rows.into_iter().map(with_body).collect()
+    }
+
+    /// The event with `id`, if any.
+    pub fn get(&self, id: EventId) -> Result<Option<Event>> {
+        let row = {
+            let conn = self.db.lock();
+            conn.query_row(
+                &format!("SELECT {COLUMNS} FROM events WHERE id = ?1"),
+                [id.0],
+                event_from_row,
+            )
+            .optional()?
+        };
+        row.map(with_body).transpose()
+    }
+
+    /// Events stored after `after` (by id), oldest first; at most `limit` of them.
+    pub fn list_after(&self, after: EventId, limit: u32) -> Result<Vec<Event>> {
+        let rows: Vec<(Event, String)> = {
+            let conn = self.db.lock();
+            let mut stmt = conn.prepare_cached(&format!(
+                "SELECT {COLUMNS} FROM events WHERE id > ?1 ORDER BY id LIMIT ?2"
+            ))?;
+            let rows = stmt.query_map(params![after.0, limit], event_from_row)?;
             rows.collect::<rusqlite::Result<_>>()?
         };
         rows.into_iter().map(with_body).collect()
