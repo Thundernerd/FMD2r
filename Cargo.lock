@@ -901,8 +901,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "brotli",
  "clap",
+ "flate2",
+ "fmd-http",
  "fmd-import",
+ "fmd-lua",
  "fmd-server",
  "fmd-store",
  "predicates",
