@@ -4,7 +4,7 @@
 use std::time::{Duration, Instant};
 
 use fmd_http::TerminateToken;
-use mlua::{Lua, Table, Value, Variadic};
+use mlua::{Lua, LuaString, Table, Value, Variadic};
 
 /// What the global helpers know about the state they are installed in.
 #[derive(Clone, Default)]
@@ -46,42 +46,14 @@ pub(crate) fn install(lua: &Lua, globals: Globals) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
-    g.set(
-        "Trim",
-        lua.create_function(|lua, (s, chars): (Value, Option<Value>)| {
-            let s = to_pascal_string(lua, s);
-            let trimmed = match chars {
-                Some(chars) => {
-                    let chars = to_pascal_string(lua, chars);
-                    trim_by(&s, |b| chars.contains(&b))
-                }
-                None => trim_by(&s, |b| b <= b' '),
-            };
-            lua.create_string(trimmed)
-        })?,
-    )?;
+    g.set("Trim", lua.create_function(trim)?)?;
     // baseunits/lua/LuaBaseUnit.pas:26-30.
     string_fn(lua, &g, "MaybeFillHost", |[host, url]| {
         maybe_fill_host(host, url)
     })?;
     g.set(
         "MangaInfoStatusIfPos",
-        lua.create_function(|lua, args: Variadic<Value>| {
-            // Only 1 to 5 arguments return a value (baseunits/lua/LuaBaseUnit.pas:34-48).
-            if !(1..=5).contains(&args.len()) {
-                return Ok(Variadic::new());
-            }
-            let mut args = args.into_iter().map(|v| to_pascal_string(lua, v));
-            let search = args.next().unwrap_or_default();
-            let mut status = |default: &str| args.next().unwrap_or_else(|| default.into());
-            // Defaults from baseunits/uBaseUnit.pas:626-628.
-            let ongoing = status("ongoing");
-            let completed = status("complete");
-            let hiatus = status("hiatus");
-            let cancelled = status("cancel");
-            let code = manga_info_status_if_pos(&search, [ongoing, completed, hiatus, cancelled]);
-            Ok(Variadic::from_iter([lua.create_string(code)?]))
-        })?,
+        lua.create_function(manga_info_status_if_pos)?,
     )?;
     // baseunits/lua/LuaSynaUtil.pas:17-21.
     string_fn(lua, &g, "GetBetween", |[pair_begin, pair_end, value]| {
@@ -180,25 +152,52 @@ fn separate_right<'a>(value: &'a [u8], delimiter: &[u8]) -> &'a [u8] {
 /// host in `url`, that path prefixed with `host` minus its trailing slashes (`RemoveURLDelim`,
 /// baseunits/uBaseUnit.pas:2003-2006); otherwise `url` unchanged.
 fn maybe_fill_host(host: &[u8], url: &[u8]) -> Vec<u8> {
-    let (url_host, path) = fmd_http::split_url(&String::from_utf8_lossy(url));
+    let (url_host, path) = fmd_http::split_url_bytes(url);
     if url_host.is_empty() && !path.is_empty() {
         let host_end = host.iter().rposition(|&b| b != b'/').map_or(0, |i| i + 1);
-        [&host[..host_end], path.as_bytes()].concat()
+        [&host[..host_end], &path].concat()
     } else {
         url.to_vec()
     }
 }
 
-/// `MangaInfoStatusIfPos` (baseunits/uBaseUnit.pas:2793-2850): `''` for an empty search,
-/// otherwise the code of the first of the ongoing, completed, hiatus and cancelled strings
-/// (codes at baseunits/uBaseUnit.pas:230-233) with an alternative found in the search, all
-/// compared lowercased; `RS_InfoStatus_Unknown` (mangadownloader/forms/frmMain.pas:1010) when
-/// none matches.
-fn manga_info_status_if_pos(search: &[u8], statuses: [Vec<u8>; 4]) -> &'static str {
-    if search.is_empty() {
-        return "";
+/// `lua_trim` (baseunits/lua/LuaBaseUnit.pas:17-24): FPC `Trim` strips bytes `<= ' '` at both
+/// ends; with a second argument (even `nil`, which reads as `''`), `TStringHelper.Trim` strips
+/// the characters it holds instead.
+fn trim(lua: &Lua, args: Variadic<Value>) -> mlua::Result<LuaString> {
+    let mut args = args.into_iter().map(|v| to_pascal_string(lua, v));
+    let s = args.next().unwrap_or_default();
+    let trimmed = match args.next() {
+        Some(chars) => trim_by(&s, |b| chars.contains(&b)),
+        None => trim_by(&s, |b| b <= b' '),
+    };
+    lua.create_string(trimmed)
+}
+
+/// The status codes `MangaInfoStatusIfPos` checks, in order (baseunits/uBaseUnit.pas:230-233),
+/// each with the default string it searches for (baseunits/uBaseUnit.pas:626-628).
+const STATUSES: [(&str, &str); 4] = [
+    ("1", "ongoing"),
+    ("0", "complete"),
+    ("2", "hiatus"),
+    ("3", "cancel"),
+];
+
+/// `lua_mangainfostatusifpos` (baseunits/lua/LuaBaseUnit.pas:32-50) over `MangaInfoStatusIfPos`
+/// (baseunits/uBaseUnit.pas:2793-2850): only 1 to 5 arguments return a value. That is `''` for
+/// an empty search, otherwise the code of the first status with an alternative (`|`-separated)
+/// found in the search, all compared lowercased, or `RS_InfoStatus_Unknown`
+/// (mangadownloader/forms/frmMain.pas:1010) when none matches. Missing status arguments take
+/// their defaults; an explicit `nil` reads as `''`, which never matches.
+fn manga_info_status_if_pos(lua: &Lua, args: Variadic<Value>) -> mlua::Result<Variadic<LuaString>> {
+    if !(1..=5).contains(&args.len()) {
+        return Ok(Variadic::new());
     }
-    let search = search.to_ascii_lowercase();
+    let mut args = args.into_iter().map(|v| to_pascal_string(lua, v));
+    let search = args.next().unwrap_or_default().to_ascii_lowercase();
+    if search.is_empty() {
+        return Ok(Variadic::from_iter([lua.create_string("")?]));
+    }
     // `searchMany`: an empty alternative never matches, since FPC's `Pos('')` is 0.
     let matches = |status: &[u8]| {
         status
@@ -206,11 +205,15 @@ fn manga_info_status_if_pos(search: &[u8], statuses: [Vec<u8>; 4]) -> &'static s
             .split(|&b| b == b'|')
             .any(|alternative| pos(alternative, &search).is_some())
     };
-    ["1", "0", "2", "3"]
-        .into_iter()
-        .zip(statuses)
-        .find(|(_, status)| matches(status))
-        .map_or("Unknown", |(code, _)| code)
+    let mut code = "Unknown";
+    for (status_code, default) in STATUSES {
+        let status = args.next().unwrap_or_else(|| default.into());
+        if matches(&status) {
+            code = status_code;
+            break;
+        }
+    }
+    Ok(Variadic::from_iter([lua.create_string(code)?]))
 }
 
 /// Synapse `GetBetween` (baseunits/synapse/synautil.pas:1671-1723): the text after the first

@@ -32,6 +32,7 @@ fn trim_strips_control_and_space_bytes_at_both_ends() {
             assert(Trim('--a-b--', '-') == 'a-b')
             assert(Trim('-+a+-', '+-') == 'a')
             assert(Trim(' a ', '') == ' a ')
+            assert(Trim(' a ', nil) == ' a ')
             assert(Trim(' a\0b ') == 'a')
             "#,
         )
@@ -115,6 +116,8 @@ fn maybe_fill_host_prefixes_urls_without_a_host() {
             assert(MaybeFillHost('https://h.com', '') == '')
             assert(MaybeFillHost('https://h.com', '/') == '/')
             assert(MaybeFillHost('', '/x') == '/x')
+            assert(MaybeFillHost('https://h.com', '/a\xe9') == 'https://h.com/a\xe9')
+            assert(MaybeFillHost('https://h.com', 'a\xe9/b') == 'https://h.com/a\xe9/b')
             "#,
         )
         .unwrap();

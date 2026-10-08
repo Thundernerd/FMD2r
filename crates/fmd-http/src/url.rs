@@ -66,24 +66,36 @@ fn poschar(c: u8, s: &[u8], offset: usize, escape: &[u8]) -> usize {
 /// splits a URL into `(host, path)` where host is `proto://host[:port]` (`https://` when
 /// the URL has no scheme) and path starts with `/`. Either may be empty. A host is only
 /// recognised when it contains a dot or comes with a scheme or port.
-pub fn split_url(url: &str) -> (String, String) {
+pub(crate) fn split_url(url: &str) -> (String, String) {
+    let (host, path) = split_url_bytes(url.as_bytes());
+    (
+        String::from_utf8_lossy(&host).into_owned(),
+        String::from_utf8_lossy(&path).into_owned(),
+    )
+}
+
+/// [`split_url`] on raw bytes, which it keeps as they are, like Pascal's byte strings.
+pub fn split_url_bytes(url: &[u8]) -> (Vec<u8>, Vec<u8>) {
     fn cleanuri(u: &mut Vec<u8>) {
         while u.first().is_some_and(|b| matches!(b, b'.' | b':' | b'/')) {
             u.remove(0);
         }
     }
-    let mut iurl = url.trim().as_bytes().to_vec();
+    // FPC `Trim`: strips bytes `<= ' '` at both ends.
+    let start = url.iter().position(|&b| b > b' ').unwrap_or(url.len());
+    let end = url.iter().rposition(|&b| b > b' ').map_or(start, |i| i + 1);
+    let mut iurl = url[start..end].to_vec();
     if iurl.is_empty() {
-        return (String::new(), String::new());
+        return (Vec::new(), Vec::new());
     }
     let mut ihost = Vec::new();
     let mut iproto = Vec::new();
     let mut iport = Vec::new();
     if iurl[0] == b'/' {
         if iurl.len() == 1 {
-            return (String::new(), String::new());
+            return (Vec::new(), Vec::new());
         } else if iurl[1] != b'/' {
-            return (String::new(), String::from_utf8_lossy(&iurl).into_owned());
+            return (Vec::new(), iurl);
         }
     }
     let mut p = poschar(b':', &iurl, 1, b"/");
@@ -123,21 +135,18 @@ pub fn split_url(url: &str) -> (String, String) {
     if ihost.is_empty() && !iurl.is_empty() && (!iproto.is_empty() || !iport.is_empty()) {
         ihost = std::mem::take(&mut iurl);
     }
-    let mut host = String::from_utf8_lossy(&ihost).into_owned();
+    let mut host = ihost;
     if !host.is_empty() {
-        host = if iproto.is_empty() {
-            format!("https://{host}")
-        } else {
-            format!("{}://{host}", String::from_utf8_lossy(&iproto))
-        };
+        let proto: &[u8] = if iproto.is_empty() { b"https" } else { &iproto };
+        host = [proto, b"://", &host].concat();
         if !iport.is_empty() {
-            host = format!("{host}:{}", String::from_utf8_lossy(&iport));
+            host = [&host[..], b":", &iport].concat();
         }
     }
     let path = if iurl.is_empty() {
-        String::new()
+        Vec::new()
     } else {
-        format!("/{}", String::from_utf8_lossy(&iurl))
+        [&b"/"[..], &iurl].concat()
     };
     (host, path)
 }
