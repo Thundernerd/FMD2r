@@ -2,6 +2,7 @@
 
 pub mod accounts;
 pub mod download;
+pub mod favorites;
 pub mod info;
 pub mod jobs;
 pub mod lists;

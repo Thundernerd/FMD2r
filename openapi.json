@@ -6,6 +6,308 @@
 		"description": "Seed contract for the web UI skeleton (T22). fmd-server (T21) replaces this file with the document it generates with utoipa."
 	},
 	"paths": {
+		"/api/favorites": {
+			"get": {
+				"tags": [
+					"library"
+				],
+				"summary": "The library in display order.",
+				"operationId": "listFavorites",
+				"parameters": [
+					{
+						"name": "filter",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Which favorites to list.",
+							"enum": [
+								"all",
+								"new",
+								"ongoing",
+								"completed",
+								"disabled"
+							]
+						}
+					},
+					{
+						"name": "module",
+						"in": "query",
+						"description": "Only this module's favorites.",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"description": "Case-insensitive part of the title.",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/FavoriteView"
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"library"
+				],
+				"summary": "Add a series to the library (`btAddToFavoritesClick`,\nmangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only\nchapters added later are new.",
+				"operationId": "addFavorite",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AddFavorite"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FavoriteView"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "No such module, or the module found no series there",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"409": {
+						"description": "The series is in the library already",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"502": {
+						"description": "The website could not be reached",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/favorites/check": {
+			"post": {
+				"tags": [
+					"library"
+				],
+				"summary": "Check enabled favorites for new chapters now (`CheckForNewChapter`,\nbaseunits/uFavoritesManager.pas:832-881). The body is optional.",
+				"operationId": "checkFavorites",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"oneOf": [
+									{
+										"type": "null"
+									},
+									{
+										"$ref": "#/components/schemas/CheckRequest"
+									}
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"202": {
+						"description": "Started; progress follows as `job.favorites.*` events"
+					},
+					"409": {
+						"description": "A check is running",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "The favorites check is not running in this server",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/favorites/{id}": {
+			"delete": {
+				"tags": [
+					"library"
+				],
+				"summary": "Remove a favorite from the library; its downloaded chapters stay recorded.",
+				"operationId": "deleteFavorite",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"description": "Favorite id",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"format": "int64"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Removed"
+					},
+					"404": {
+						"description": "No such favorite",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": [
+					"library"
+				],
+				"summary": "Change a favorite (`UpdateEnabled`, `UpdateSaveTo`, `UpdateTitle`,\nbaseunits/FavoritesDB.pas:136-160).",
+				"operationId": "updateFavorite",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"description": "Favorite id",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"format": "int64"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/FavoritePatch"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FavoriteView"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "No such favorite",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/favorites/{id}/check-missing": {
+			"post": {
+				"tags": [
+					"library"
+				],
+				"summary": "Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,\nbaseunits/uFavoritesManager.pas:883-928), to download them again.",
+				"operationId": "checkMissingChapters",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"description": "Favorite id",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"format": "int64"
+						}
+					}
+				],
+				"responses": {
+					"202": {
+						"description": "Started; progress follows as `job.favorites.*` events"
+					},
+					"409": {
+						"description": "A check is running",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "The favorites check is not running in this server",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/inbox": {
 			"get": {
 				"operationId": "listInbox",
@@ -1106,6 +1408,228 @@
 	},
 	"components": {
 		"schemas": {
+			"AddFavorite": {
+				"type": "object",
+				"description": "A series to add to the library.",
+				"required": [
+					"module_id",
+					"link"
+				],
+				"properties": {
+					"link": {
+						"type": "string",
+						"description": "The series link relative to the module's `RootURL`."
+					},
+					"module_id": {
+						"type": "string"
+					},
+					"save_to": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "The download directory; the default one when missing. The manga folder is added when\ngenerated."
+					}
+				}
+			},
+			"CheckMode": {
+				"type": "string",
+				"description": "What a run looks for.",
+				"enum": [
+					"new",
+					"missing"
+				]
+			},
+			"CheckRequest": {
+				"type": "object",
+				"description": "Which favorites to check.",
+				"properties": {
+					"ids": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "integer",
+							"format": "int64"
+						},
+						"description": "These favorites; every enabled favorite when missing."
+					}
+				}
+			},
+			"FavoritePatch": {
+				"type": "object",
+				"description": "Fields of a favorite to change; missing ones stay.",
+				"properties": {
+					"enabled": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"save_to": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"title": {
+						"type": [
+							"string",
+							"null"
+						]
+					}
+				}
+			},
+			"FavoriteView": {
+				"type": "object",
+				"description": "A favorite as the Library shows it.",
+				"required": [
+					"id",
+					"module_id",
+					"website",
+					"link",
+					"title",
+					"status",
+					"enabled",
+					"save_to",
+					"current_chapter",
+					"new_chapters",
+					"date_added"
+				],
+				"properties": {
+					"cover_url": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "The cover through `/api/covers`."
+					},
+					"current_chapter": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Chapters on the site at the last check (FMD2's `currentchapter`).",
+						"minimum": 0
+					},
+					"date_added": {
+						"type": "string",
+						"description": "RFC 3339."
+					},
+					"enabled": {
+						"type": "boolean",
+						"description": "Checked by the new-chapter check."
+					},
+					"id": {
+						"type": "integer",
+						"format": "int64"
+					},
+					"last_checked": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "RFC 3339."
+					},
+					"last_updated": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "RFC 3339: when a check last found new chapters."
+					},
+					"link": {
+						"type": "string",
+						"description": "The series link relative to the module's `RootURL`."
+					},
+					"module_id": {
+						"type": "string"
+					},
+					"new_chapters": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Chapters on the site at the last check that are not downloaded: the chapter count less\nthe downloaded ones, as only the count of the site's list is stored. Downloaded chapters\nthe site no longer lists make it an undercount; a check finds the real ones by link.",
+						"minimum": 0
+					},
+					"save_to": {
+						"type": "string"
+					},
+					"status": {
+						"$ref": "#/components/schemas/SeriesStatus"
+					},
+					"title": {
+						"type": "string"
+					},
+					"website": {
+						"type": "string",
+						"description": "The module's name; its ID when the module is not loaded."
+					}
+				}
+			},
+			"FavoritesEvent": {
+				"type": "object",
+				"description": "One step of a check run, for the Library's progress (`job.favorites.<kind>` events).",
+				"required": [
+					"kind",
+					"mode",
+					"done",
+					"total"
+				],
+				"properties": {
+					"done": {
+						"type": "integer",
+						"format": "int64",
+						"description": "Favorites checked so far.",
+						"minimum": 0
+					},
+					"error": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Why it failed."
+					},
+					"favorite_id": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"format": "int64",
+						"description": "The favorite just checked (`progress`)."
+					},
+					"kind": {
+						"$ref": "#/components/schemas/FavoritesEventKind"
+					},
+					"mode": {
+						"$ref": "#/components/schemas/CheckMode"
+					},
+					"new_chapters": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"format": "int64",
+						"description": "New (or missing) chapters found, once finished.",
+						"minimum": 0
+					},
+					"total": {
+						"type": "integer",
+						"format": "int64",
+						"description": "Favorites to check.",
+						"minimum": 0
+					}
+				}
+			},
+			"FavoritesEventKind": {
+				"type": "string",
+				"description": "What happened to a check run.",
+				"enum": [
+					"started",
+					"progress",
+					"finished",
+					"cancelled",
+					"failed"
+				]
+			},
 			"InboxItem": {
 				"type": "object",
 				"required": ["id", "kind", "title", "body", "created_at", "read"],

@@ -102,7 +102,7 @@ pub enum SeriesStatus {
 }
 
 impl SeriesStatus {
-    fn from_fmd(status: &str) -> Self {
+    pub(crate) fn from_fmd(status: &str) -> Self {
         match status {
             "0" => Self::Completed,
             "1" => Self::Ongoing,
@@ -124,22 +124,7 @@ pub(crate) async fn get(
     State(state): State<AppState>,
     ApiQuery(query): ApiQuery<SeriesQuery>,
 ) -> Result<Json<SeriesInfo>, ApiError> {
-    let options = InfoOptions {
-        remove_manga_name_from_chapter: state.settings.get().saveto.remove_manga_name_from_chapter,
-    };
-    let key = (query.module.clone(), query.link.clone(), options);
-    let info = match state.series_cache.get(&key) {
-        Some(info) => info,
-        None => {
-            let info = state
-                .modules
-                .get_info(&query.module, &query.link, options)
-                .await
-                .map_err(info_error)?;
-            state.series_cache.put(key, info.clone());
-            info
-        }
-    };
+    let info = fetch_info(&state, &query.module, &query.link).await?;
     // FMD2 looks up the downloaded chapters by the link the module reports
     // (mangadownloader/forms/frmMain.pas:2207).
     let (module, link) = (query.module.clone(), info.link.clone());
@@ -151,6 +136,28 @@ pub(crate) async fn get(
         })
         .await?;
     Ok(Json(view(&query.module, info, &downloaded, favorite)))
+}
+
+/// The info of the series at `link` from module `module`, from the cache when it is recent.
+pub(crate) async fn fetch_info(
+    state: &AppState,
+    module: &str,
+    link: &str,
+) -> Result<MangaInfo, ApiError> {
+    let options = InfoOptions {
+        remove_manga_name_from_chapter: state.settings.get().saveto.remove_manga_name_from_chapter,
+    };
+    let key = (module.to_owned(), link.to_owned(), options);
+    if let Some(info) = state.series_cache.get(&key) {
+        return Ok(info);
+    }
+    let info = state
+        .modules
+        .get_info(module, link, options)
+        .await
+        .map_err(info_error)?;
+    state.series_cache.put(key, info.clone());
+    Ok(info)
 }
 
 /// How long a series' info is served without asking the module again: long enough for going
