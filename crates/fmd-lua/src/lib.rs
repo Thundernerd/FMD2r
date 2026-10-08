@@ -5,6 +5,7 @@ mod file;
 mod globals;
 mod memory_stream;
 mod strings;
+pub mod xquery;
 
 pub use class::LuaClass;
 pub use globals::Globals;
@@ -48,6 +49,11 @@ impl Runtime {
         let lua =
             unsafe { mlua::Lua::unsafe_new_with(mlua::StdLib::ALL, mlua::LuaOptions::default()) };
         strings::register(&lua)?;
+        // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) needs an XPath backend: without
+        // the `xpath-fpc` feature there is none yet (the native one is T34), so the global is
+        // missing.
+        #[cfg(feature = "xpath-fpc")]
+        xquery::register(&lua, std::rc::Rc::new(fmd_xpath::fpc::FpcEngine))?;
         Ok(Runtime { lua })
     }
 
