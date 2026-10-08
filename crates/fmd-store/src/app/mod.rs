@@ -1,12 +1,15 @@
 //! `app.db`: application state (tasks, favorites, settings, accounts, events, module files).
 
+pub(crate) mod accounts;
 pub(crate) mod downloaded_chapters;
 pub(crate) mod tasks;
 
 use std::path::Path;
 
+use crate::crypto::Cipher;
 use crate::db::Db;
 use crate::error::Result;
+use accounts::AccountRepo;
 use downloaded_chapters::DownloadedChaptersRepo;
 use tasks::TaskRepo;
 
@@ -39,5 +42,10 @@ impl AppDb {
     /// Chapters already downloaded, per manga.
     pub fn downloaded_chapters(&self) -> DownloadedChaptersRepo<'_> {
         DownloadedChaptersRepo::new(&self.db)
+    }
+
+    /// Module accounts; credentials are encrypted and decrypted with `cipher`.
+    pub fn accounts<'a>(&'a self, cipher: &'a dyn Cipher) -> AccountRepo<'a> {
+        AccountRepo::new(&self.db, cipher)
     }
 }

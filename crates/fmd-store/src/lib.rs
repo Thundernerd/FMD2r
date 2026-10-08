@@ -9,17 +9,20 @@
 //! busy timeout.
 
 mod app;
+mod crypto;
 mod db;
 mod error;
 mod lists;
 mod sql;
 
 pub use app::AppDb;
+pub use app::accounts::{Account, AccountRepo, AccountStatus};
 pub use app::downloaded_chapters::DownloadedChaptersRepo;
 pub use app::tasks::{
     ChapterStatus, NewChapter, NewTask, PageStatus, Task, TaskChapter, TaskId, TaskPage, TaskRepo,
     TaskStatus,
 };
+pub use crypto::{Cipher, KeyFileCipher};
 pub use error::{Result, StoreError};
 pub use lists::{
     ListsDb, MangaListing, MasterListEntry, MasterListRepo, PageRequest, SearchFilters, SearchResults,
