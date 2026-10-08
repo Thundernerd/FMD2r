@@ -1,4 +1,4 @@
-//! `XPathEngine` trait and its backends: `fpc` (FFI to `libfmdxpath.so`), later `native`.
+//! `XPathEngine` trait and its backends: `fpc` (FFI to `libfmdxpath.so`) and `native` (pure Rust).
 //!
 //! The API is shaped after FMD2's `TXQueryEngineHTML` (baseunits/XQueryEngineHTML.pas) and the
 //! `IXQValue` operations its Lua binding exposes (baseunits/lua/LuaIXQValue.pas:37-160). It is
@@ -9,6 +9,8 @@ use std::rc::Rc;
 
 #[cfg(feature = "fpc")]
 pub mod fpc;
+#[cfg(feature = "native")]
+pub mod native;
 
 /// Errors raised by an XPath backend.
 #[derive(Debug, thiserror::Error)]
