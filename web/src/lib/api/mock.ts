@@ -15,7 +15,10 @@ import type {
 	SaveToSettings,
 	SeriesInfo,
 	SeriesRef,
-	TaskProgress
+	TaskDetail,
+	TaskGroup,
+	TaskState,
+	TaskSummary
 } from './types';
 
 type ResolveBody = paths['/api/resolve']['post']['requestBody']['content']['application/json'];
@@ -58,44 +61,120 @@ const seedInbox = (): InboxItem[] => [
 	}
 ];
 
-const seedTasks = (): TaskProgress[] => [
-	{
-		id: 1,
-		title: 'Kagurabachi',
-		chapters: 'Ch. 97–98',
-		status: 'downloading',
-		done: 22,
-		total: 38,
-		bytes_per_sec: 1_800_000
-	},
-	{
-		id: 2,
-		title: 'Omniscient Reader’s Viewpoint',
-		chapters: 'Ch. 239–241',
-		status: 'downloading',
-		done: 51,
-		total: 120,
-		bytes_per_sec: 2_600_000
-	},
-	{
-		id: 3,
-		title: 'Blue Lock',
-		chapters: 'Ch. 1–40',
-		status: 'queued',
-		done: 0,
-		total: 840,
-		bytes_per_sec: 0
-	},
-	{
-		id: 4,
-		title: 'The Apothecary Diaries',
-		chapters: 'Ch. 61–76',
-		status: 'failed',
-		done: 140,
-		total: 310,
-		bytes_per_sec: 0
-	}
-];
+const DAY_MS = 86_400_000;
+
+/** A queued task as fmd-server lists it; `chapter_count` chapters, `chapters_done` of them done. */
+const mockTask = (
+	over: Partial<TaskSummary> & Pick<TaskSummary, 'id' | 'title' | 'status' | 'chapter_count'>,
+	now: number
+): TaskSummary => ({
+	module_id: 'mangadex',
+	link: `/title/mock-${over.id}`,
+	save_to: `/data/downloads/${over.title}`,
+	enabled: over.status !== 'disabled',
+	running: over.status === 'downloading',
+	error: null,
+	chapters: '',
+	chapters_done: 0,
+	current_chapter: over.chapters_done ?? 0,
+	done: 0,
+	total: 20,
+	bytes_per_sec: 0,
+	date_added: new Date(now - over.id * DAY_MS).toISOString(),
+	date_last_downloaded: null,
+	...over
+});
+
+const seedTasks = (now: number): TaskSummary[] =>
+	[
+		mockTask(
+			{
+				id: 1,
+				title: 'Kagurabachi',
+				status: 'downloading',
+				chapter_count: 2,
+				done: 12,
+				total: 19,
+				bytes_per_sec: 1_800_000
+			},
+			now
+		),
+		mockTask(
+			{
+				id: 2,
+				title: 'Omniscient Reader’s Viewpoint',
+				status: 'downloading',
+				chapter_count: 3,
+				chapters_done: 1,
+				done: 5,
+				total: 40,
+				bytes_per_sec: 2_600_000
+			},
+			now
+		),
+		mockTask({ id: 3, title: 'Blue Lock', status: 'waiting', chapter_count: 40 }, now),
+		mockTask(
+			{
+				id: 4,
+				title: 'The Apothecary Diaries',
+				status: 'failed',
+				chapter_count: 16,
+				chapters_done: 7,
+				done: 14,
+				total: 31,
+				error: 'HTTP 403 from the image host after 3 retries'
+			},
+			now
+		),
+		mockTask({ id: 5, title: 'Sakamoto Days', status: 'stopped', chapter_count: 8 }, now),
+		mockTask(
+			{
+				id: 6,
+				title: 'Frieren',
+				status: 'finished',
+				chapter_count: 4,
+				chapters_done: 4,
+				done: 18,
+				total: 18,
+				date_last_downloaded: new Date(now - 2 * DAY_MS).toISOString()
+			},
+			now
+		),
+		mockTask(
+			{
+				id: 7,
+				title: 'Dandadan',
+				module_id: 'comick',
+				status: 'finished',
+				chapter_count: 1,
+				chapters_done: 1,
+				done: 22,
+				total: 22,
+				date_last_downloaded: new Date(now - 30 * DAY_MS).toISOString()
+			},
+			now
+		)
+	].map((t) => ({ ...t, chapters: chapterLabel(t) }));
+
+/** The chapter a task is at, as fmd-server labels it. */
+const chapterLabel = (task: TaskSummary): string => {
+	const index = Math.min(task.current_chapter, task.chapter_count - 1);
+	const name = `Chapter ${index + 1}`;
+	return task.chapter_count > 1 ? `${name} (${index + 1}/${task.chapter_count})` : name;
+};
+
+/** fmd-server's status groups (crates/fmd-server/src/tasks.rs). */
+const GROUP: Record<TaskState, TaskGroup> = {
+	preparing: 'downloading',
+	downloading: 'downloading',
+	converting: 'downloading',
+	compressing: 'downloading',
+	waiting: 'waiting',
+	stopped: 'stopped',
+	failed: 'stopped',
+	disabled: 'stopped',
+	finished: 'finished'
+};
 
 const HOUR_MS = 3_600_000;
 
@@ -217,11 +296,18 @@ export interface MockBackend {
 	fetch: (input: Request) => Promise<Response>;
 	/** A fake `/api/events` stream that advances tasks and running jobs, logs, and posts one inbox item after 30 s. */
 	eventSource: (url: string) => EventSourceLike;
+	/** A small fake archive for a task's "Get files" link (there is no server to link to). */
+	taskFilesUrl: (id: number) => string;
 }
 
 export function createMockBackend(): MockBackend {
 	const inbox = seedInbox();
-	const tasks = seedTasks();
+	let tasks = seedTasks(Date.now());
+	/** Every open fake event stream, so API calls can announce what they changed. */
+	const streams = new Set<(type: string, payload: unknown) => void>();
+	const broadcast = (type: string, payload: unknown) => {
+		for (const emit of streams) emit(type, payload);
+	};
 	const jobs = seedJobs(Date.now());
 	const about = seedAbout();
 	const logs: LogLine[] = [];
@@ -274,19 +360,100 @@ export function createMockBackend(): MockBackend {
 	};
 
 	let nextTaskId = 100;
-	/** Queues `task` as fmd-server's T23 will: one task named after its chapters. */
-	const createTask = (task: NewTask): TaskProgress => {
-		const queued: TaskProgress = {
-			id: nextTaskId++,
-			title: task.title,
-			chapters: task.chapters.map((c) => c.name).join(', '),
-			status: 'queued',
-			done: 0,
-			total: task.chapters.length * 20,
-			bytes_per_sec: 0
-		};
+	/** Queues `task` as fmd-server does: one waiting task holding the chosen chapters. */
+	const createTask = (task: NewTask): TaskSummary => {
+		const queued = mockTask(
+			{
+				id: nextTaskId++,
+				title: task.title,
+				module_id: task.module_id,
+				link: task.link,
+				status: 'waiting',
+				chapter_count: task.chapters.length,
+				total: 0,
+				date_added: new Date().toISOString()
+			},
+			Date.now()
+		);
+		queued.chapters = `${task.chapters[0]?.name ?? ''}${task.chapters.length > 1 ? ` (1/${task.chapters.length})` : ''}`;
 		tasks.push(queued);
+		broadcast('task.status', { id: queued.id, status: queued.status, error: null });
 		return queued;
+	};
+
+	const setStatus = (task: TaskSummary, status: TaskState, error: string | null = null) => {
+		if (task.status === status) return;
+		task.status = status;
+		task.error = error;
+		task.running = GROUP[status] === 'downloading';
+		if (!task.running) task.bytes_per_sec = 0;
+		broadcast('task.status', { id: task.id, status, error });
+	};
+
+	/** `POST /api/tasks/{id}/<action>`, following FMD2's `TDownloadManager` rules. */
+	const act = (task: TaskSummary, action: string): boolean => {
+		switch (action) {
+			case 'start':
+				if (task.enabled && ['stopped', 'failed'].includes(task.status)) setStatus(task, 'waiting');
+				return true;
+			case 'stop':
+				if (
+					[
+						'waiting',
+						...Object.keys(GROUP).filter((s) => GROUP[s as TaskState] === 'downloading')
+					].includes(task.status)
+				) {
+					setStatus(task, 'stopped');
+				}
+				return true;
+			case 'redownload':
+				if (task.enabled && task.status !== 'waiting' && !task.running) {
+					Object.assign(task, { chapters_done: 0, current_chapter: 0, done: 0 });
+					task.chapters = chapterLabel(task);
+					setStatus(task, 'waiting');
+				}
+				return true;
+			case 'enable':
+				if (!task.enabled) {
+					task.enabled = true;
+					setStatus(task, 'stopped');
+				}
+				return true;
+			case 'disable':
+				if (task.enabled) {
+					task.enabled = false;
+					setStatus(task, 'disabled');
+				}
+				return true;
+			default:
+				return false;
+		}
+	};
+
+	const detail = (task: TaskSummary): TaskDetail => ({
+		task,
+		chapters: Array.from({ length: task.chapter_count }, (_, i) => ({
+			index: i,
+			name: `Chapter ${i + 1}`,
+			link: `${task.link}/chapter/${i + 1}`,
+			status: i < task.chapters_done ? 'downloaded' : 'pending',
+			done: i < task.chapters_done ? 20 : i === task.current_chapter ? task.done : 0,
+			total: i <= task.current_chapter ? 20 : 0
+		}))
+	});
+
+	const remove = (task: TaskSummary) => {
+		tasks = tasks.filter((t) => t.id !== task.id);
+		broadcast('task.removed', { id: task.id });
+	};
+
+	const taskFilesUrl = (id: number) => {
+		const task = tasks.find((t) => t.id === id);
+		const zip = (task?.chapter_count ?? 1) > 1;
+		const blob = new Blob([`mock files of task ${id}`], {
+			type: zip ? 'application/zip' : 'application/vnd.comicbook+zip'
+		});
+		return URL.createObjectURL(blob);
 	};
 
 	const settings = createMockSettings();
@@ -341,7 +508,50 @@ export function createMockBackend(): MockBackend {
 		const route = `${req.method} ${pathname}`;
 
 		if (route === 'GET /api/inbox') return json(inbox);
-		if (route === 'GET /api/tasks') return json(tasks);
+		if (route === 'GET /api/tasks') {
+			const counts = { downloading: 0, waiting: 0, stopped: 0, finished: 0 };
+			for (const task of tasks) counts[GROUP[task.status]]++;
+			const page = Number(searchParams.get('page') ?? 1);
+			const perPage = Number(searchParams.get('per_page') ?? 100);
+			const items = tasks.slice((page - 1) * perPage, page * perPage);
+			return json({ items, total: tasks.length, page, per_page: perPage, counts });
+		}
+		if (route === 'POST /api/tasks/start-all' || route === 'POST /api/tasks/stop-all') {
+			for (const task of tasks) {
+				if (route.endsWith('start-all')) {
+					if (task.status !== 'finished' && task.enabled && !task.running) {
+						setStatus(task, 'waiting');
+					}
+				} else act(task, 'stop');
+			}
+			return new Response(null, { status: 204 });
+		}
+		if (route === 'POST /api/tasks/reorder') {
+			const { ids } = (await req.json()) as { ids: number[] };
+			const first = ids.flatMap((id) => tasks.filter((t) => t.id === id));
+			tasks = [...first, ...tasks.filter((t) => !ids.includes(t.id))];
+			broadcast('task.reordered', {});
+			return new Response(null, { status: 204 });
+		}
+		if (route === 'DELETE /api/tasks') {
+			if (searchParams.get('status') !== 'finished') {
+				return json({ status: 400, detail: 'pass status=finished' }, 400);
+			}
+			for (const task of tasks.filter((t) => t.status === 'finished')) remove(task);
+			return new Response(null, { status: 204 });
+		}
+		const taskRoute = /^(GET|POST|DELETE) \/api\/tasks\/(\d+)(?:\/([a-z]+))?$/.exec(route);
+		if (taskRoute) {
+			const [, method, id, action] = taskRoute;
+			const task = tasks.find((t) => t.id === Number(id));
+			if (!task) return json({ status: 404, title: 'Not Found', detail: 'no such task' }, 404);
+			if (method === 'GET' && !action) return json(detail(task));
+			if (method === 'DELETE' && !action) {
+				remove(task);
+				return new Response(null, { status: 204 });
+			}
+			if (method === 'POST' && action && act(task, action)) return json(task);
+		}
 		if (route === 'POST /api/tasks') {
 			// Untrusted input: check the shape instead of trusting the generated type.
 			const body = (await req.json()) as Partial<NewTask> | null;
@@ -481,13 +691,31 @@ export function createMockBackend(): MockBackend {
 			for (const listener of listeners.get(type) ?? []) listener(ev);
 		};
 
+		streams.add(emit);
+
 		let ticks = 0;
 		const tick = () => {
 			ticks++;
+			// Waiting tasks start while fewer than two download.
+			for (const task of tasks) {
+				const running = tasks.filter((t) => t.status === 'downloading').length;
+				if (task.status === 'waiting' && running < 2) setStatus(task, 'downloading');
+			}
 			for (const task of tasks) {
 				if (task.status !== 'downloading') continue;
-				task.done = task.done >= task.total ? 0 : task.done + 1;
+				task.total ||= 20;
+				task.done = Math.min(task.done + 1, task.total);
 				task.bytes_per_sec = Math.round(1_500_000 + Math.random() * 1_500_000);
+				if (task.done === task.total) {
+					task.chapters_done++;
+					if (task.chapters_done >= task.chapter_count) {
+						task.date_last_downloaded = new Date().toISOString();
+						setStatus(task, 'finished');
+						continue;
+					}
+					Object.assign(task, { current_chapter: task.chapters_done, done: 0 });
+					task.chapters = chapterLabel(task);
+				}
 				emit('task.progress', task);
 				emit(
 					'log',
@@ -531,17 +759,15 @@ export function createMockBackend(): MockBackend {
 				listeners.set(type, [...(listeners.get(type) ?? []), listener]);
 			},
 			close() {
+				streams.delete(emit);
 				clearTimeout(opening);
 				clearInterval(timer);
 			}
 		};
-		const opening = setTimeout(() => {
-			es.onopen?.(new Event('open'));
-			for (const task of tasks) emit('task.progress', task);
-		}, 0);
+		const opening = setTimeout(() => es.onopen?.(new Event('open')), 0);
 		const timer = setInterval(tick, 1000);
 		return es;
 	};
 
-	return { fetch, eventSource };
+	return { fetch, eventSource, taskFilesUrl };
 }

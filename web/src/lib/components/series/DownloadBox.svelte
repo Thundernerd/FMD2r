@@ -1,45 +1,46 @@
 <script lang="ts">
 	import type { Api } from '#lib/api/client.ts';
 	import { ApiError, ValidationError } from '#lib/api/client.ts';
-	import type { OutputFormat, SeriesInfo, TaskProgress } from '#lib/api/types.ts';
+	import type { OutputFormat, SeriesInfo, TaskSummary } from '#lib/api/types.ts';
 
 	let {
 		api,
 		series,
 		selected,
 		saveTo = $bindable(),
-		format = $bindable(),
-		onqueued,
-		onformat
+		format,
+		onqueued
 	}: {
 		api: Api;
 		series: SeriesInfo;
 		selected: Set<number>;
 		saveTo: string;
-		format: OutputFormat;
-		onqueued: (task: TaskProgress) => void;
-		/** The user picked a format. */
-		onformat?: () => void;
+		/** The configured output format; `null` until the settings are loaded. */
+		format: OutputFormat | null;
+		onqueued: (task: TaskSummary) => void;
 	} = $props();
 
-	const FORMATS: { value: OutputFormat; label: string }[] = [
-		{ value: 'folder', label: 'Folder' },
-		{ value: 'zip', label: 'ZIP' },
-		{ value: 'cbz', label: 'CBZ' },
-		{ value: 'pdf', label: 'PDF' },
-		{ value: 'epub', label: 'EPUB' }
-	];
+	// Like FMD2, every download is packed in the one configured format (`rgOptionCompress`).
+	const FORMATS: Record<OutputFormat, string> = {
+		folder: 'Folder',
+		zip: 'ZIP',
+		cbz: 'CBZ',
+		pdf: 'PDF',
+		epub: 'EPUB'
+	};
 
 	let busy = $state(false);
-	let queued = $state<TaskProgress | null>(null);
+	let queued = $state<TaskSummary | null>(null);
 	let error = $state<string | null>(null);
 
-	/** The selected chapters in module order. */
+	/** The selected chapters in module order, with their 1-based number in the series. */
 	const picked = $derived(
 		[...selected]
 			.sort((a, b) => a - b)
-			.map((i) => series.chapters[i])
-			.filter((c) => c !== undefined)
+			.flatMap((i) => {
+				const chapter = series.chapters[i];
+				return chapter ? [{ ...chapter, number: i + 1 }] : [];
+			})
 	);
 	const count = $derived(picked.length);
 	const noun = $derived(count === 1 ? 'chapter' : 'chapters');
@@ -55,9 +56,10 @@
 				module_id: series.module_id,
 				link: series.link,
 				title: series.title,
-				chapters: picked.map(({ name, link }) => ({ name, link })),
-				save_to: saveTo,
-				format
+				authors: series.authors,
+				artists: series.artists,
+				chapters: picked.map(({ name, link, number }) => ({ name, link, number })),
+				save_to: saveTo
 			});
 			queued = task;
 			onqueued(task);
@@ -92,14 +94,13 @@
 			<span class="label">Save to</span>
 			<input class="input mono" type="text" bind:value={saveTo} />
 		</label>
-		<label class="field">
+		<div class="field">
 			<span class="label">Format</span>
-			<select class="input" bind:value={format} onchange={() => onformat?.()}>
-				{#each FORMATS as f (f.value)}
-					<option value={f.value}>{f.label}</option>
-				{/each}
-			</select>
-		</label>
+			<span class="format">
+				<b>{format ? FORMATS[format] : '…'}</b>
+				<a class="small" href="/settings#output">Change</a>
+			</span>
+		</div>
 	</div>
 	<div class="actions">
 		<button class="btn primary" type="button" disabled={count === 0 || busy} onclick={download}>
@@ -108,8 +109,8 @@
 	</div>
 	<div role="status" class="small">
 		{#if queued}
-			Queued: <b>{queued.title}</b>
-			{queued.chapters}. <a href="/queue">Open queue</a>
+			Queued: <b>{queued.title}</b>, {queued.chapter_count}
+			{queued.chapter_count === 1 ? 'chapter' : 'chapters'}. <a href="/queue">Open queue</a>
 		{/if}
 	</div>
 	{#if error}
@@ -139,6 +140,12 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-1);
+	}
+	.format {
+		display: flex;
+		gap: var(--sp-2);
+		align-items: baseline;
+		padding: 7px 0;
 	}
 	.field.grow {
 		flex: 1 1 260px;

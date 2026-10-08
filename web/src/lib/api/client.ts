@@ -20,7 +20,8 @@ import type {
 	SeriesInfo,
 	SeriesRef,
 	Settings,
-	TaskProgress
+	TaskDetail,
+	TaskSummary
 } from './types';
 
 /** A request the server answered with a non-success status. */
@@ -54,7 +55,22 @@ export type MergePatch =
 export interface Api {
 	listInbox(): Promise<InboxItem[]>;
 	markRead(id: string): Promise<void>;
-	listTasks(): Promise<TaskProgress[]>;
+	/** The whole download queue, in queue order. */
+	listTasks(): Promise<TaskSummary[]>;
+	/** A task with its chapters; rejects with status 404 when there is no such task. */
+	getTask(id: number): Promise<TaskDetail>;
+	/** Runs a task action and resolves to the task as it is then. */
+	taskAction(id: number, action: TaskAction): Promise<TaskSummary>;
+	startAllTasks(): Promise<void>;
+	stopAllTasks(): Promise<void>;
+	/** Deletes a task; with `files`, also its chapters' folders and archives. */
+	deleteTask(id: number, files: boolean): Promise<void>;
+	/** Deletes the finished tasks, keeping their files. */
+	removeFinishedTasks(): Promise<void>;
+	/** Puts `ids` first in the queue, in that order. */
+	reorderTasks(ids: number[]): Promise<void>;
+	/** Where a task's files download from (the archive, or a zip of them all). */
+	taskFilesUrl(id: number): string;
 	/** The series a manga URL points at, or `null` when no module handles the URL. */
 	resolveUrl(url: string): Promise<SeriesRef | null>;
 	/**
@@ -63,7 +79,7 @@ export interface Api {
 	 */
 	getSeries(module: string, link: string): Promise<SeriesInfo>;
 	/** Queues a download; resolves to the new task. */
-	createTask(task: NewTask): Promise<TaskProgress>;
+	createTask(task: NewTask): Promise<TaskSummary>;
 	/** The server's buffered log lines, oldest first. */
 	listLogs(): Promise<LogLine[]>;
 	listJobs(): Promise<JobState[]>;
@@ -105,13 +121,21 @@ export interface Api {
 	loginAccount(module: string): Promise<AccountInfo>;
 }
 
+/** What a task's action buttons do (`POST /api/tasks/{id}/<action>`). */
+export type TaskAction = 'start' | 'stop' | 'redownload' | 'enable' | 'disable';
+
+/** Tasks fetched per request when listing the whole queue (the server's maximum). */
+const TASK_PAGE_SIZE = 1000;
+
 export interface ApiOptions {
 	/** Origin of fmd-server; defaults to the page's own origin. */
 	baseUrl?: string;
 	fetch?: (input: Request) => Promise<Response>;
+	/** Overrides where task files download from (mock mode has no server to link to). */
+	taskFilesUrl?: (id: number) => string;
 }
 
-export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
+export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}): Api {
 	const client = createClient<paths>({ baseUrl, ...(fetch ? { fetch } : {}) });
 
 	const unwrap = <T>(what: string, res: { data?: T; response: Response }): T => {
@@ -143,7 +167,63 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 			if (!response.ok) throw new ApiError(response.status, 'markRead');
 		},
 		async listTasks() {
-			return unwrap('listTasks', await client.GET('/api/tasks'));
+			const tasks: TaskSummary[] = [];
+			for (let page = 1; ; page++) {
+				const list = unwrap(
+					'listTasks',
+					await client.GET('/api/tasks', {
+						params: { query: { page, per_page: TASK_PAGE_SIZE } }
+					})
+				);
+				tasks.push(...list.items);
+				if (list.items.length === 0 || tasks.length >= list.total) return tasks;
+			}
+		},
+		async getTask(id) {
+			return unwrap('getTask', await client.GET('/api/tasks/{id}', { params: { path: { id } } }));
+		},
+		async taskAction(id, action) {
+			const params = { params: { path: { id } } };
+			const what = `${action}Task`;
+			switch (action) {
+				case 'start':
+					return unwrap(what, await client.POST('/api/tasks/{id}/start', params));
+				case 'stop':
+					return unwrap(what, await client.POST('/api/tasks/{id}/stop', params));
+				case 'redownload':
+					return unwrap(what, await client.POST('/api/tasks/{id}/redownload', params));
+				case 'enable':
+					return unwrap(what, await client.POST('/api/tasks/{id}/enable', params));
+				case 'disable':
+					return unwrap(what, await client.POST('/api/tasks/{id}/disable', params));
+			}
+		},
+		async startAllTasks() {
+			const { response } = await client.POST('/api/tasks/start-all');
+			if (!response.ok) throw new ApiError(response.status, 'startAllTasks');
+		},
+		async stopAllTasks() {
+			const { response } = await client.POST('/api/tasks/stop-all');
+			if (!response.ok) throw new ApiError(response.status, 'stopAllTasks');
+		},
+		async deleteTask(id, files) {
+			const { response } = await client.DELETE('/api/tasks/{id}', {
+				params: { path: { id }, query: { files } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'deleteTask');
+		},
+		async removeFinishedTasks() {
+			const { response } = await client.DELETE('/api/tasks', {
+				params: { query: { status: 'finished' } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'removeFinishedTasks');
+		},
+		async reorderTasks(ids) {
+			const { response } = await client.POST('/api/tasks/reorder', { body: { ids } });
+			if (!response.ok) throw new ApiError(response.status, 'reorderTasks');
+		},
+		taskFilesUrl(id) {
+			return taskFilesUrl ? taskFilesUrl(id) : `${baseUrl}/api/tasks/${id}/files`;
 		},
 		async resolveUrl(url) {
 			const res = await client.POST('/api/resolve', { body: { url } });

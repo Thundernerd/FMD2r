@@ -66,6 +66,8 @@ pub use tools::{SystemTools, ToolCheck, ToolProbe};
         TaskStatusChange,
         TaskRemoved,
         TasksReordered,
+        TaskGroup,
+        TaskSort,
         JobState,
         InboxItem,
         LogLine,

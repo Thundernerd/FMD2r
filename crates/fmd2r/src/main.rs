@@ -58,7 +58,8 @@ struct ServeArgs {
     /// the `connections.flaresolverr_url` setting for this run. An empty value turns FlareSolverr off.
     #[arg(long, env = "FMD2R_FLARESOLVERR_URL")]
     flaresolverr_url: Option<String>,
-    /// Don't load the Lua modules or sync them with upstream (no `modules` job).
+    /// Don't sync the Lua modules with upstream (no `modules` job); the modules already in
+    /// `<data dir>/lua` are still loaded for downloads.
     #[arg(long, env = "FMD2R_NO_MODULE_UPDATES")]
     no_module_updates: bool,
 }

@@ -12,16 +12,17 @@
 
 	$effect(() => {
 		events.start();
-		// Snapshot what happened before the stream connected.
+		// Snapshot what happened before the stream connected (the queue refetches on connect).
 		api
 			.listInbox()
 			.then((inbox) => events.seed({ inbox }))
 			.catch(() => {});
-		api
-			.listTasks()
-			.then((tasks) => events.seed({ tasks }))
-			.catch(() => {});
-		return () => events.stop();
+		// One speed sample a second for the dock's and the Queue page's graphs.
+		const sampling = setInterval(() => events.queue.sample(), 1000);
+		return () => {
+			clearInterval(sampling);
+			events.stop();
+		};
 	});
 
 	// The Queue page shows the full queue, so the dock would only repeat it; the Settings page
@@ -38,7 +39,7 @@
 		{@render children()}
 	</main>
 	{#if showDock}
-		<QueueDock store={events} />
+		<QueueDock queue={events.queue} />
 	{/if}
 </div>
 

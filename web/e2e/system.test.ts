@@ -5,7 +5,7 @@ test('system logs stream in and can be filtered', async ({ page }) => {
 	const log = page.getByRole('log', { name: 'Server log' });
 	await expect(log).toContainText('favorites check started');
 	// The mock saves a page of each downloading task once a second; follow mode keeps it in view.
-	await expect(log).toContainText('Kagurabachi: page 23/38 saved');
+	await expect(log).toContainText('Kagurabachi: page 13/19 saved');
 
 	await page.getByRole('combobox', { name: 'Level' }).selectOption('ERROR');
 	await expect(log).toContainText('ResolveRedirect');
@@ -24,10 +24,10 @@ test('pausing the log holds new lines back until resumed', async ({ page }) => {
 
 	await page.getByRole('button', { name: 'Pause' }).click();
 	await expect(page.getByRole('button', { name: /Resume \(\d+ new\)/ })).toBeVisible();
-	await expect(log).not.toContainText('Kagurabachi: page 24/38 saved');
+	await expect(log).not.toContainText('Kagurabachi: page 14/19 saved');
 
 	await page.getByRole('button', { name: /Resume/ }).click();
-	await expect(log).toContainText('Kagurabachi: page 24/38 saved');
+	await expect(log).toContainText('Kagurabachi: page 14/19 saved');
 });
 
 test('running a job shows its progress', async ({ page }) => {

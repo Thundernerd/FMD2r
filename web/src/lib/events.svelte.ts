@@ -4,9 +4,12 @@ import type {
 	ListEvent,
 	ListEventKind,
 	LogLine,
-	TaskProgress
+	TaskProgress,
+	TaskRemoved,
+	TaskStatusChange
 } from '#lib/api/types.ts';
 import { LogFeed, MAX_LOG_LINES } from '#lib/logs.svelte.ts';
+import { QueueStore } from '#lib/queue.svelte.ts';
 
 /** The part of the browser's `EventSource` the store uses, so tests and mock mode can supply their own. */
 export interface EventSourceLike {
@@ -21,6 +24,8 @@ export interface EventStoreOptions {
 	connect: (url: string) => EventSourceLike;
 	/** How many log lines to keep; older ones are dropped. */
 	maxLogLines?: number;
+	/** Where `task.*` frames go; a queue that never refetches when omitted. */
+	queue?: QueueStore;
 }
 
 /** The `job.lists.<kind>` events the server sends. */
@@ -38,7 +43,8 @@ const MAX_BACKOFF_MS = 30_000;
 
 /** Live state fed by the server's SSE stream (`/api/events`). */
 export class EventStore {
-	tasks = $state<Record<number, TaskProgress>>({});
+	/** The download queue, fed by `task.*` frames. */
+	readonly queue: QueueStore;
 	/** Inbox items, newest first. */
 	inbox = $state<InboxItem[]>([]);
 	unread = $derived(this.inbox.filter((i) => !i.read).length);
@@ -49,7 +55,7 @@ export class EventStore {
 	logs: LogFeed;
 	connected = $state(false);
 
-	#opts: Required<EventStoreOptions>;
+	#opts: Required<Omit<EventStoreOptions, 'queue'>>;
 	#source: EventSourceLike | null = null;
 	#retry: ReturnType<typeof setTimeout> | null = null;
 	#backoff = INITIAL_BACKOFF_MS;
@@ -57,7 +63,9 @@ export class EventStore {
 	#jobFrames: Record<string, number> = {};
 
 	constructor(opts: EventStoreOptions) {
-		this.#opts = { maxLogLines: MAX_LOG_LINES, ...opts };
+		const { queue, ...rest } = opts;
+		this.#opts = { maxLogLines: MAX_LOG_LINES, ...rest };
+		this.queue = queue ?? new QueueStore();
 		this.logs = new LogFeed({ max: this.#opts.maxLogLines });
 	}
 
@@ -78,10 +86,9 @@ export class EventStore {
 	 * Merges a REST snapshot taken around connect time. Anything a frame already delivered is
 	 * newer than the snapshot, so it wins.
 	 */
-	seed(snapshot: { inbox?: InboxItem[]; tasks?: TaskProgress[]; jobs?: JobState[] }): void {
+	seed(snapshot: { inbox?: InboxItem[]; jobs?: JobState[] }): void {
 		const fresh = (snapshot.inbox ?? []).filter((s) => !this.inbox.some((i) => i.id === s.id));
 		this.inbox = [...this.inbox, ...fresh];
-		for (const task of snapshot.tasks ?? []) this.tasks[task.id] ??= task;
 		for (const job of snapshot.jobs ?? []) this.jobs[job.id] ??= job;
 	}
 
@@ -109,6 +116,8 @@ export class EventStore {
 		es.onopen = () => {
 			this.connected = true;
 			this.#backoff = INITIAL_BACKOFF_MS;
+			// Task frames sent while disconnected are lost; catch up from the API.
+			this.queue.resync();
 		};
 		// EventSource retries on its own for some failures but gives up for others (e.g. a 5xx),
 		// so always close it and reconnect on our own schedule.
@@ -124,8 +133,16 @@ export class EventStore {
 			}, delay);
 		};
 		es.addEventListener('task.progress', (ev) => {
-			const task = JSON.parse(ev.data) as TaskProgress;
-			this.tasks[task.id] = task;
+			this.queue.progress(JSON.parse(ev.data) as TaskProgress);
+		});
+		es.addEventListener('task.status', (ev) => {
+			this.queue.status(JSON.parse(ev.data) as TaskStatusChange);
+		});
+		es.addEventListener('task.removed', (ev) => {
+			this.queue.removed((JSON.parse(ev.data) as TaskRemoved).id);
+		});
+		es.addEventListener('task.reordered', () => {
+			this.queue.reordered();
 		});
 		es.addEventListener('inbox.new', (ev) => {
 			const item = JSON.parse(ev.data) as InboxItem;
