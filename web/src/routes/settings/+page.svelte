@@ -11,6 +11,7 @@
 		SaveToSettings,
 		Settings
 	} from '#lib/api/types.ts';
+	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
@@ -18,7 +19,8 @@
 
 	const TOC = [
 		...SETTINGS_SECTIONS.map(({ id, title }) => ({ id, title })),
-		{ id: 'modules', title: 'Website modules' }
+		{ id: 'modules', title: 'Website modules' },
+		{ id: 'accounts', title: 'Accounts' }
 	];
 
 	let draft = $state<Draft<Settings> | null>(null);
@@ -262,6 +264,15 @@
 						loading={moduleLoading}
 						onselect={selectModule}
 					/>
+				</section>
+
+				<section id="section-accounts" class="card" aria-labelledby="heading-accounts">
+					<h2 id="heading-accounts">Accounts</h2>
+					<p class="small muted">
+						Logins for websites that support them. Changes save right away; passwords are stored
+						encrypted and never shown again.
+					</p>
+					<AccountsPanel />
 				</section>
 			</div>
 		</div>

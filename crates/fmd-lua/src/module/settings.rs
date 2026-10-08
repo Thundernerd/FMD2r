@@ -4,6 +4,8 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use super::AccountState;
+
 /// A stored option value, typed like the option kinds (`TWebsiteOptionType`,
 /// baseunits/WebsiteModules.pas:68).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,7 +30,7 @@ impl SettingsStoreError {
     }
 }
 
-/// Per-module option values and cookies, keyed by module ID. Options are keyed by
+/// Per-module option values, cookies and accounts, keyed by module ID. Options are keyed by
 /// [`ModuleOption::settings_key`](super::ModuleOption::settings_key), as in FMD2's `modules.json`. Cookies are the module's cookie jar as JSON
 /// ([`fmd_http::CookieJar::to_json`]).
 pub trait ModuleSettingsStore: Send + Sync {
@@ -49,6 +51,16 @@ pub trait ModuleSettingsStore: Send + Sync {
     fn cookies(&self, module_id: &str) -> Result<Option<String>, SettingsStoreError>;
     /// Stores the cookie jar.
     fn set_cookies(&self, module_id: &str, cookies: &str) -> Result<(), SettingsStoreError>;
+    /// The stored account, if any. FMD2 keeps it with the module's settings in `modules.json`
+    /// (baseunits/WebsiteModules.pas:600-615).
+    fn account(&self, module_id: &str) -> Result<Option<AccountState>, SettingsStoreError>;
+    /// Stores the account (baseunits/WebsiteModules.pas:665-675). A store should keep the
+    /// credentials and cookies encrypted, as FMD2 does with `EncryptString`.
+    fn set_account(
+        &self,
+        module_id: &str,
+        account: &AccountState,
+    ) -> Result<(), SettingsStoreError>;
 }
 
 /// A [`ModuleSettingsStore`] that keeps everything in memory.
@@ -56,6 +68,7 @@ pub trait ModuleSettingsStore: Send + Sync {
 pub struct MemorySettingsStore {
     options: Mutex<HashMap<(String, String), OptionValue>>,
     cookies: Mutex<HashMap<String, String>>,
+    accounts: Mutex<HashMap<String, AccountState>>,
 }
 
 impl MemorySettingsStore {
@@ -92,6 +105,19 @@ impl ModuleSettingsStore for MemorySettingsStore {
 
     fn set_cookies(&self, module_id: &str, cookies: &str) -> Result<(), SettingsStoreError> {
         super::lock(&self.cookies).insert(module_id.to_owned(), cookies.to_owned());
+        Ok(())
+    }
+
+    fn account(&self, module_id: &str) -> Result<Option<AccountState>, SettingsStoreError> {
+        Ok(super::lock(&self.accounts).get(module_id).cloned())
+    }
+
+    fn set_account(
+        &self,
+        module_id: &str,
+        account: &AccountState,
+    ) -> Result<(), SettingsStoreError> {
+        super::lock(&self.accounts).insert(module_id.to_owned(), account.clone());
         Ok(())
     }
 }

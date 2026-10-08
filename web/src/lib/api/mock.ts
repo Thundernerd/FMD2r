@@ -4,6 +4,8 @@ import { Invalid, createMockSettings } from './mock-settings';
 import type { paths } from './schema';
 import type {
 	About,
+	AccountInfo,
+	AccountRequest,
 	InboxItem,
 	JobState,
 	LogLevel,
@@ -226,6 +228,27 @@ export function createMockBackend(): MockBackend {
 			capabilities: { update_list: true, info: true, download: true, account: false },
 			...lists.summary(m.id)
 		}));
+	// Login succeeds for any non-empty username and password, like a module that accepts them.
+	const accounts: Record<string, AccountInfo> = {
+		ehentai: {
+			module: 'ehentai',
+			name: 'E-Hentai',
+			enabled: true,
+			username: 'reader',
+			has_password: true,
+			status: 'valid'
+		},
+		madokami: {
+			module: 'madokami',
+			name: 'Madokami',
+			enabled: false,
+			username: '',
+			has_password: false,
+			status: 'unknown'
+		}
+	};
+	/** The write-only passwords, kept apart so no answer can carry one. */
+	const passwords: Record<string, string> = { ehentai: 'secret', madokami: '' };
 	/** Runs a settings update, answering a rejected one the way fmd-server does. */
 	const update = async (req: Request, apply: (patch: Record<string, unknown>) => unknown) => {
 		const patch = (await req.json()) as unknown;
@@ -274,6 +297,39 @@ export function createMockBackend(): MockBackend {
 				return json({ status: 409, detail: 'a list job is already running' }, 409);
 			}
 			return json({ module_id: module, job }, 202);
+		}
+		if (route === 'GET /api/accounts') return json(Object.values(accounts));
+		const account =
+			/^(PUT|DELETE) \/api\/accounts\/([^/]+)$|^POST \/api\/accounts\/([^/]+)\/login$/.exec(route);
+		if (account) {
+			const entry = accounts[decodeURIComponent(account[2] ?? account[3] ?? '')];
+			if (!entry) return new Response(null, { status: 404 });
+			if (account[1] === 'PUT') {
+				const body = (await req.json()) as AccountRequest;
+				const password = passwords[entry.module] ?? '';
+				const changed =
+					(body.username != null && body.username !== entry.username) ||
+					(body.password != null && body.password !== password);
+				entry.username = body.username ?? entry.username;
+				passwords[entry.module] = body.password ?? password;
+				entry.has_password = passwords[entry.module] !== '';
+				entry.enabled = body.enabled ?? entry.enabled;
+				if (changed) entry.status = 'unknown';
+				return json(entry);
+			}
+			if (account[1] === 'DELETE') {
+				Object.assign(entry, {
+					enabled: false,
+					username: '',
+					has_password: false,
+					status: 'unknown'
+				});
+				passwords[entry.module] = '';
+				return new Response(null, { status: 204 });
+			}
+			await new Promise((resolve) => setTimeout(resolve, 600));
+			entry.status = entry.username && passwords[entry.module] ? 'valid' : 'invalid';
+			return json(entry);
 		}
 		const moduleSettings = /^(GET|PATCH) \/api\/modules\/([^/]+)\/settings$/.exec(route);
 		if (moduleSettings?.[2]) {

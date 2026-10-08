@@ -15,6 +15,7 @@ use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use utoipa::ToSchema;
 
+use crate::accounts::AccountStateChange;
 use crate::inbox::InboxItem;
 use crate::logs::LogLine;
 use crate::{ApiError, AppState};
@@ -128,6 +129,7 @@ pub enum ServerEvent {
     Log(LogLine),
     /// A list update or FMD2-DB import moved on (`job.lists.<kind>`).
     Lists(ListEvent),
+    Account(AccountStateChange),
 }
 
 impl ServerEvent {
@@ -146,6 +148,7 @@ impl ServerEvent {
                 ListEventKind::Cancelled => "job.lists.cancelled",
                 ListEventKind::Failed => "job.lists.failed",
             },
+            Self::Account(_) => "account.state",
         }
     }
 
@@ -158,6 +161,7 @@ impl ServerEvent {
             Self::InboxNew(item) => event.id(item.id.clone()).json_data(item),
             Self::Log(line) => event.json_data(line),
             Self::Lists(e) => event.json_data(e),
+            Self::Account(change) => event.json_data(change),
         };
         event.ok()
     }
@@ -195,9 +199,10 @@ impl EventBus {
 /// Server-sent event stream.
 #[utoipa::path(get, path = "/api/events", tag = "events", operation_id = "events",
     description = "Named events: `task.progress` (TaskProgress), `task.status` (TaskStatusChange), \
-        `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), and \
-        `job.lists.started|progress|finished|cancelled|failed` (ListEvent). Each frame's data is \
-        the JSON payload. `inbox.new` frames carry the inbox item id as the SSE id; on reconnect, \
+        `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), `account.state` \
+        (AccountStateChange), and `job.lists.started|progress|finished|cancelled|failed` \
+        (ListEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox \
+        item id as the SSE id; on reconnect, \
         `Last-Event-ID` replays the inbox items stored since. Comment frames are heartbeats.",
     params(("Last-Event-ID" = Option<String>, Header, description = "Resume after this inbox item id")),
     responses((status = 200, description = "Event stream", content_type = "text/event-stream")))]
@@ -213,7 +218,20 @@ pub(crate) async fn stream(
         let job = id.ok().and_then(|id| registry.get(&id));
         async move { job.map(|job| ServerEvent::Job(JobState::of(job.as_ref()))) }
     });
-    let live = stream::select(bus, jobs);
+    let accounts = match &state.accounts {
+        Some(accounts) => BroadcastStream::new(accounts.subscribe())
+            .filter_map(|change| async move {
+                change.ok().map(|c| {
+                    ServerEvent::Account(AccountStateChange {
+                        module: c.module_id,
+                        status: c.status.into(),
+                    })
+                })
+            })
+            .boxed(),
+        None => stream::empty().boxed(),
+    };
+    let live = stream::select(stream::select(bus, jobs), accounts);
     let last_id = headers
         .get("last-event-id")
         .and_then(|v| v.to_str().ok())

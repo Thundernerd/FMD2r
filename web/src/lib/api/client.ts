@@ -3,6 +3,8 @@ import type { paths } from './schema';
 import type { FacetQuery, SearchQuery } from '#lib/discover/filters.ts';
 import type {
 	About,
+	AccountInfo,
+	AccountRequest,
 	InboxItem,
 	JobState,
 	ListFacets,
@@ -82,6 +84,14 @@ export interface Api {
 	importListDb(module: string): Promise<ListJobStarted>;
 	/** Stops a module's list job; rejects with status 409 when none runs. */
 	cancelListJob(module: string): Promise<void>;
+	/** The accounts of the modules with account support. Passwords are never returned. */
+	listAccounts(): Promise<AccountInfo[]>;
+	/** Changes the given fields of a module's account; omitted fields keep their value. */
+	putAccount(module: string, account: AccountRequest): Promise<AccountInfo>;
+	/** Clears a module's credentials and cookies and turns its account off. */
+	deleteAccount(module: string): Promise<void>;
+	/** Logs in; resolves once the module's login is done. Rejects with 409 while one runs. */
+	loginAccount(module: string): Promise<AccountInfo>;
 }
 
 export interface ApiOptions {
@@ -200,6 +210,30 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 				params: { path: { module } }
 			});
 			if (!response.ok) throw new ApiError(response.status, 'cancelListJob');
+		},
+		async listAccounts() {
+			return unwrap('listAccounts', await client.GET('/api/accounts'));
+		},
+		async putAccount(module, account) {
+			return unwrap(
+				'putAccount',
+				await client.PUT('/api/accounts/{module}', {
+					params: { path: { module } },
+					body: account
+				})
+			);
+		},
+		async deleteAccount(module) {
+			const { response } = await client.DELETE('/api/accounts/{module}', {
+				params: { path: { module } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'deleteAccount');
+		},
+		async loginAccount(module) {
+			return unwrap(
+				'loginAccount',
+				await client.POST('/api/accounts/{module}/login', { params: { path: { module } } })
+			);
 		}
 	};
 }

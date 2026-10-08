@@ -167,8 +167,9 @@ pub struct Account {
     guardian: Arc<CriticalSection>,
 }
 
-/// The fields of an [`Account`].
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// The fields of an [`Account`]. Its `Debug` output leaves the credentials and cookies out, so
+/// they never reach a log.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct AccountState {
     pub enabled: bool,
     pub username: String,
@@ -176,6 +177,22 @@ pub struct AccountState {
     /// `TAccountStatus` as its ordinal: 0 unknown, 1 checking, 2 valid, 3 invalid.
     pub status: i32,
     pub cookies: String,
+}
+
+impl AccountState {
+    /// `asChecking`, the ordinal of `TAccountStatus.asChecking` (baseunits/WebsiteModules.pas:78).
+    pub const CHECKING: i32 = 1;
+    /// `asUnknown` (baseunits/WebsiteModules.pas:78).
+    pub const UNKNOWN: i32 = 0;
+}
+
+impl std::fmt::Debug for AccountState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccountState")
+            .field("enabled", &self.enabled)
+            .field("status", &self.status)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Account {
@@ -302,6 +319,31 @@ impl Module {
         lock(&self.account).clone()
     }
 
+    /// Changes the account's fields with `change`, under the account's lock so a concurrent
+    /// write from Lua is not lost, and writes them to the settings store. Does nothing when the
+    /// module has no account.
+    pub fn update_account(
+        &self,
+        change: impl FnOnce(&mut AccountState),
+    ) -> Result<(), SettingsStoreError> {
+        let Some(account) = self.account() else {
+            return Ok(());
+        };
+        change(&mut lock(&account.state));
+        self.save_account()
+    }
+
+    /// Writes the account to the settings store, after a Lua call or the host changed it.
+    fn save_account(&self) -> Result<(), SettingsStoreError> {
+        let id = self.def_read().id.clone();
+        match (self.settings(), self.account()) {
+            (Some(store), Some(account)) if !id.is_empty() => {
+                store.set_account(&id, &account.state())
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// The value of `MODULE.Storage[name]`.
     pub fn storage_value(&self, name: &str) -> Vec<u8> {
         lock(&self.storage).values.value(name.as_bytes()).to_vec()
@@ -347,10 +389,20 @@ impl Module {
         self.settings.get()
     }
 
-    /// Attaches the settings store the module's options and cookies live in, loading the saved
-    /// cookies into its jar, as FMD2 loads `modules.json` after the scan.
+    /// Attaches the settings store the module's options, cookies and account live in, loading
+    /// the saved cookies into its jar and the saved account into its `Account`, as FMD2 loads
+    /// `modules.json` after the scan.
     fn attach_settings(&self, store: Arc<dyn ModuleSettingsStore>) -> Result<(), String> {
         let id = self.def_read().id.clone();
+        if let Some(account) = self.account()
+            && let Some(mut saved) = store.account(&id).map_err(|e| e.to_string())?
+        {
+            // A check that never finished is unknown again (baseunits/WebsiteModules.pas:612-613).
+            if saved.status == AccountState::CHECKING {
+                saved.status = AccountState::UNKNOWN;
+            }
+            account.set_state(saved);
+        }
         if let Some(cookies) = store.cookies(&id).map_err(|e| e.to_string())? {
             self.http
                 .cookies()

@@ -230,7 +230,7 @@
 			"get": {
 				"operationId": "events",
 				"summary": "Server-sent event stream",
-				"description": "Named events: `task.progress` (TaskProgress), `inbox.new` (InboxItem), `job.state` (JobState), `log` (LogLine). Each frame's data is the JSON payload.",
+				"description": "Named events: `task.progress` (TaskProgress), `inbox.new` (InboxItem), `job.state` (JobState), `log` (LogLine), `account.state` (AccountStateChange). Each frame's data is the JSON payload.",
 				"responses": {
 					"200": { "description": "Event stream", "content": { "text/event-stream": {} } }
 				}
@@ -491,6 +491,187 @@
 				}
 			}
 		},
+			"/api/accounts": {
+				"get": {
+					"tags": [
+						"accounts"
+					],
+					"summary": "The accounts of every module with account support, by module ID.",
+					"operationId": "listAccounts",
+					"responses": {
+						"200": {
+							"description": "The accounts",
+							"content": {
+								"application/json": {
+									"schema": {
+										"type": "array",
+										"items": {
+											"$ref": "#/components/schemas/AccountInfo"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"/api/accounts/{module}": {
+				"put": {
+					"tags": [
+						"accounts"
+					],
+					"summary": "Change a module's username, password or enabled flag. New credentials make the status\n`unknown` until the next login. Turning the account on or off runs the module's\n`OnAccountState`.",
+					"operationId": "putAccount",
+					"parameters": [
+						{
+							"name": "module",
+							"in": "path",
+							"description": "Module ID",
+							"required": true,
+							"schema": {
+								"type": "string"
+							}
+						}
+					],
+					"requestBody": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AccountRequest"
+								}
+							}
+						},
+						"required": true
+					},
+					"responses": {
+						"200": {
+							"description": "The updated account",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/AccountInfo"
+									}
+								}
+							}
+						},
+						"404": {
+							"description": "No loaded module with account support has that ID",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/Problem"
+									}
+								}
+							}
+						},
+						"409": {
+							"description": "A login of the account is running",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/Problem"
+									}
+								}
+							}
+						}
+					}
+				},
+				"delete": {
+					"tags": [
+						"accounts"
+					],
+					"summary": "Clear a module's credentials and cookies and turn its account off.",
+					"operationId": "deleteAccount",
+					"parameters": [
+						{
+							"name": "module",
+							"in": "path",
+							"description": "Module ID",
+							"required": true,
+							"schema": {
+								"type": "string"
+							}
+						}
+					],
+					"responses": {
+						"204": {
+							"description": "The account is cleared"
+						},
+						"404": {
+							"description": "No loaded module with account support has that ID",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/Problem"
+									}
+								}
+							}
+						},
+						"409": {
+							"description": "A login of the account is running",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/Problem"
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"/api/accounts/{module}/login": {
+				"post": {
+					"tags": [
+						"accounts"
+					],
+					"summary": "Log in with the module's `OnLogin`, then its `OnAccountState`; answers once the login is\ndone, with the status the module set. `account.state` events announce the start and the end.",
+					"operationId": "loginAccount",
+					"parameters": [
+						{
+							"name": "module",
+							"in": "path",
+							"description": "Module ID",
+							"required": true,
+							"schema": {
+								"type": "string"
+							}
+						}
+					],
+					"responses": {
+						"200": {
+							"description": "The account after the login",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/AccountInfo"
+									}
+								}
+							}
+						},
+						"404": {
+							"description": "No loaded module with account support has that ID",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/Problem"
+									}
+								}
+							}
+						},
+						"409": {
+							"description": "The module has no login, or a login is already running",
+							"content": {
+								"application/json": {
+									"schema": {
+										"$ref": "#/components/schemas/Problem"
+									}
+								}
+							}
+						}
+					}
+				}
+			},
 		"/api/lists/facets": {
 			"get": {
 				"tags": [
@@ -2146,6 +2327,92 @@
 					}
 				}
 			},
+				"AccountInfo": {
+					"type": "object",
+					"description": "A module's account. The password is never returned; `has_password` says whether one is set.",
+					"required": [
+						"module",
+						"name",
+						"enabled",
+						"username",
+						"has_password",
+						"status"
+					],
+					"properties": {
+						"enabled": {
+							"type": "boolean"
+						},
+						"has_password": {
+							"type": "boolean"
+						},
+						"module": {
+							"type": "string",
+							"description": "The module ID."
+						},
+						"name": {
+							"type": "string",
+							"description": "The module's name."
+						},
+						"status": {
+							"$ref": "#/components/schemas/AccountState"
+						},
+						"username": {
+							"type": "string"
+						}
+					}
+				},
+				"AccountRequest": {
+					"type": "object",
+					"description": "The fields to change; a missing field keeps its value. Not `Debug`, so the password cannot\nbe logged.",
+					"properties": {
+						"enabled": {
+							"type": [
+								"boolean",
+								"null"
+							]
+						},
+						"password": {
+							"type": [
+								"string",
+								"null"
+							],
+							"format": "password",
+							"description": "Write-only."
+						},
+						"username": {
+							"type": [
+								"string",
+								"null"
+							]
+						}
+					}
+				},
+				"AccountState": {
+					"type": "string",
+					"description": "An account's status (`TAccountStatus`, baseunits/WebsiteModules.pas:78).",
+					"enum": [
+						"unknown",
+						"checking",
+						"valid",
+						"invalid"
+					]
+				},
+				"AccountStateChange": {
+					"type": "object",
+					"description": "An account's status changed (`account.state`): a login started or finished.",
+					"required": [
+						"module",
+						"status"
+					],
+					"properties": {
+						"module": {
+							"type": "string"
+						},
+						"status": {
+							"$ref": "#/components/schemas/AccountState"
+						}
+					}
+				},
 			"FacetValue": {
 				"type": "object",
 				"description": "How many matching titles carry a genre or status.",

@@ -12,7 +12,7 @@ use axum::response::Response;
 use fmd_core::modules::{ModuleInfo, StoreModuleSettings};
 use fmd_lua::ModuleRegistry;
 use fmd_server::{AppState, ModuleCatalog, ModulesReport, build_router};
-use fmd_store::AppDb;
+use fmd_store::{AppDb, KeyFileCipher};
 use http_body_util::BodyExt;
 use serde_json::json;
 use tempfile::TempDir;
@@ -62,8 +62,9 @@ fn harness() -> Harness {
     let lua = dir.path().join("lua");
     std::fs::create_dir_all(lua.join("modules")).unwrap();
     std::fs::write(lua.join("modules/Fixture.lua"), FIXTURE).unwrap();
+    let cipher = Arc::new(KeyFileCipher::open_or_create(dir.path().join("accounts.key")).unwrap());
     let report =
-        ModuleRegistry::load_dir_with(&lua, Arc::new(StoreModuleSettings::new(db.clone())));
+        ModuleRegistry::load_dir_with(&lua, Arc::new(StoreModuleSettings::new(db.clone(), cipher)));
     assert!(report.failures.is_empty(), "{:?}", report.failures);
     let registry = Arc::new(report.registry);
     let state = AppState::new(db)

@@ -1,11 +1,14 @@
 //! What the rest of the app needs to know about a loaded website module: its declared limits and
 //! the options its `Init` declared with `AddOption*`, plus the `app.db`-backed store the Lua
-//! `MODULE` object reads those options and its cookies from.
+//! `MODULE` object reads those options, its cookies and its account from.
 
 use std::ops::RangeInclusive;
+use std::sync::Arc;
 
-use fmd_lua::{ModuleDef, ModuleSettingsStore, OptionKind, OptionValue, SettingsStoreError};
-use fmd_store::AppDb;
+use fmd_lua::{
+    AccountState, ModuleDef, ModuleSettingsStore, OptionKind, OptionValue, SettingsStoreError,
+};
+use fmd_store::{Account, AppDb, Cipher};
 use serde::Serialize;
 use serde_json::Value;
 use utoipa::ToSchema;
@@ -136,16 +139,18 @@ pub fn as_i32(value: &Value) -> Option<i32> {
     value.as_i64().and_then(|n| i32::try_from(n).ok())
 }
 
-/// The [`ModuleSettingsStore`] over `app.db`'s `module_settings` table, so option values the
-/// settings page saves are what `MODULE.GetOption` returns, and cookies survive restarts (FMD2's
-/// `modules.json`, baseunits/WebsiteModules.pas:545-696).
+/// The [`ModuleSettingsStore`] over `app.db`'s `module_settings` and `accounts` tables, so
+/// option values the settings page saves are what `MODULE.GetOption` returns, and cookies and
+/// accounts survive restarts (FMD2's `modules.json`, baseunits/WebsiteModules.pas:545-696).
+/// Account credentials and cookies are encrypted with `cipher`.
 pub struct StoreModuleSettings {
     db: AppDb,
+    cipher: Arc<dyn Cipher>,
 }
 
 impl StoreModuleSettings {
-    pub fn new(db: AppDb) -> Self {
-        Self { db }
+    pub fn new(db: AppDb, cipher: Arc<dyn Cipher>) -> Self {
+        Self { db, cipher }
     }
 }
 
@@ -198,6 +203,39 @@ impl ModuleSettingsStore for StoreModuleSettings {
         self.db
             .module_settings()
             .set_cookie_jar(module_id, Some(cookies.as_bytes()))
+            .map_err(SettingsStoreError::new)
+    }
+
+    fn account(&self, module_id: &str) -> Result<Option<AccountState>, SettingsStoreError> {
+        let stored = self
+            .db
+            .accounts(self.cipher.as_ref())
+            .get(module_id)
+            .map_err(SettingsStoreError::new)?;
+        Ok(stored.map(|a| AccountState {
+            enabled: a.enabled,
+            username: a.username,
+            password: a.password,
+            status: crate::accounts::status_ordinal(a.status),
+            cookies: a.cookies,
+        }))
+    }
+
+    fn set_account(
+        &self,
+        module_id: &str,
+        account: &AccountState,
+    ) -> Result<(), SettingsStoreError> {
+        self.db
+            .accounts(self.cipher.as_ref())
+            .upsert(&Account {
+                module_id: module_id.to_owned(),
+                enabled: account.enabled,
+                username: account.username.clone(),
+                password: account.password.clone(),
+                cookies: account.cookies.clone(),
+                status: crate::accounts::status_of(account.status),
+            })
             .map_err(SettingsStoreError::new)
     }
 }
