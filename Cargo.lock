@@ -330,6 +330,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fmd-testkit"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "fmd-xpath"
 version = "0.1.0"
 
