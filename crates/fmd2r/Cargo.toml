@@ -22,6 +22,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 assert_cmd.workspace = true
 brotli = "8"
 flate2 = "1"
+fmd-smoke = { path = "../fmd-smoke" }
 predicates.workspace = true
 serde_json = "1"
 tempfile.workspace = true

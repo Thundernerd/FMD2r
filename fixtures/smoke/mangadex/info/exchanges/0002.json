@@ -1,0 +1,145 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.mangadex.org/manga/a25e46ec-30f7-4db6-89df-cacbc1d9a900/feed?limit=50&offset=0&translatedLanguage%5B%5D=en&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&contentRating%5B%5D=pornographic&includes%5B%5D=scanlation_group&order%5Bvolume%5D=asc&order%5Bchapter%5D=asc",
+    "headers": [
+      [
+        "User-Agent",
+        "FreeMangaDownloader"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "content-type",
+        "application/json"
+      ],
+      [
+        "cache-control",
+        "max-age=15, public, s-maxage=60, stale-while-revalidate=15"
+      ],
+      [
+        "date",
+        "Thu, 08 Oct 2026 19:55:12 GMT"
+      ],
+      [
+        "content-encoding",
+        "gzip"
+      ],
+      [
+        "x-cache",
+        "MISS"
+      ],
+      [
+        "accept-ranges",
+        "bytes"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "access-control-allow-credentials",
+        "true"
+      ],
+      [
+        "access-control-expose-headers",
+        "*"
+      ],
+      [
+        "vary",
+        "Origin"
+      ],
+      [
+        "md-edge-crs",
+        "Tk9ORQ"
+      ],
+      [
+        "server",
+        "MangaDex"
+      ],
+      [
+        "via",
+        "HTTP/1.1 EU-CENTRAL-N2x1"
+      ],
+      [
+        "x-request-id",
+        "01a11d15-8685-76da-a9f8-c4a8516166cd"
+      ],
+      [
+        "permissions-policy",
+        "fullscreen=(self)"
+      ],
+      [
+        "referrer-policy",
+        "strict-origin"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-xss-protection",
+        "1; mode=block"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ],
+      [
+        "cross-origin-embedder-policy",
+        "unsafe-none"
+      ],
+      [
+        "cross-origin-opener-policy",
+        "same-origin-allow-popups"
+      ],
+      [
+        "cross-origin-resource-policy",
+        "cross-origin"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=63072000; includeSubDomains; preload"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ],
+      [
+        "md-progressive-rollout-bucket",
+        "3007508141"
+      ]
+    ],
+    "body": "bodies/0002.response",
+    "decoded_from": "gzip"
+  }
+}

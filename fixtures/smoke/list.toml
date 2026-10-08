@@ -1,0 +1,10 @@
+# The smoke list: representative upstream modules whose `module info` and `module pages` runs
+# are recorded (fixtures/smoke/<name>/), replayed offline in CI and run live every night.
+# See fixtures/README.md.
+
+[[entry]]
+name = "mangadex"
+module_id = "d07c9c2425764da8ba056505f57cf40c"
+manga_url = "https://mangadex.org/title/a25e46ec-30f7-4db6-89df-cacbc1d9a900/horimiya"
+chapter_url = "https://mangadex.org/2140c24a-cc73-4c01-90a7-7ac0117b28b9"
+notes = "JSON API (api.mangadex.org); fmd.crypto; the plan's end-to-end check"
