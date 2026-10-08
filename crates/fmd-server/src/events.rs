@@ -7,6 +7,7 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use fmd_core::jobs::{Job, JobPhase};
+use fmd_core::lists::{ListEvent, ListEventKind};
 use fmd_store::EventId;
 use futures_util::stream::{self, Stream, StreamExt};
 use serde::Serialize;
@@ -125,6 +126,8 @@ pub enum ServerEvent {
     /// A new inbox item; its SSE id is the `events` row id, so clients can resume.
     InboxNew(InboxItem),
     Log(LogLine),
+    /// A list update or FMD2-DB import moved on (`job.lists.<kind>`).
+    Lists(ListEvent),
 }
 
 impl ServerEvent {
@@ -136,6 +139,13 @@ impl ServerEvent {
             Self::Job(_) => "job.state",
             Self::InboxNew(_) => "inbox.new",
             Self::Log(_) => "log",
+            Self::Lists(e) => match e.kind {
+                ListEventKind::Started => "job.lists.started",
+                ListEventKind::Progress => "job.lists.progress",
+                ListEventKind::Finished => "job.lists.finished",
+                ListEventKind::Cancelled => "job.lists.cancelled",
+                ListEventKind::Failed => "job.lists.failed",
+            },
         }
     }
 
@@ -147,6 +157,7 @@ impl ServerEvent {
             Self::Job(j) => event.json_data(j),
             Self::InboxNew(item) => event.id(item.id.clone()).json_data(item),
             Self::Log(line) => event.json_data(line),
+            Self::Lists(e) => event.json_data(e),
         };
         event.ok()
     }
@@ -184,8 +195,9 @@ impl EventBus {
 /// Server-sent event stream.
 #[utoipa::path(get, path = "/api/events", tag = "events", operation_id = "events",
     description = "Named events: `task.progress` (TaskProgress), `task.status` (TaskStatusChange), \
-        `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine). Each frame's data is the \
-        JSON payload. `inbox.new` frames carry the inbox item id as the SSE id; on reconnect, \
+        `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), and \
+        `job.lists.started|progress|finished|cancelled|failed` (ListEvent). Each frame's data is \
+        the JSON payload. `inbox.new` frames carry the inbox item id as the SSE id; on reconnect, \
         `Last-Event-ID` replays the inbox items stored since. Comment frames are heartbeats.",
     params(("Last-Event-ID" = Option<String>, Header, description = "Resume after this inbox item id")),
     responses((status = 200, description = "Event stream", content_type = "text/event-stream")))]

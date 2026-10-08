@@ -8,6 +8,7 @@ mod events;
 mod health;
 mod inbox;
 mod jobs;
+mod lists;
 mod logs;
 mod module_settings;
 mod serve;
@@ -30,7 +31,9 @@ pub use covers::{CoverConfig, CoverModules, CoverSession, cover_url};
 pub use error::{ApiError, Problem};
 pub use events::{EventBus, JobState, ServerEvent, TaskProgress, TaskState, TaskStatusChange};
 pub use fmd_core::jobs::JobPhase;
+pub use fmd_core::lists::{ListEvent, ListEventKind};
 pub use inbox::{InboxItem, InboxKind};
+pub use lists::{FacetValue, ListFacets, ListItem, ListJobStarted, SearchPage};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
 pub use serve::{ServeConfig, ServeError, serve};
@@ -43,7 +46,14 @@ pub use tools::{SystemTools, ToolCheck, ToolProbe};
 #[derive(OpenApi)]
 #[openapi(
     info(title = "FMD2r"),
-    components(schemas(TaskProgress, TaskStatusChange, JobState, InboxItem, LogLine))
+    components(schemas(
+        TaskProgress,
+        TaskStatusChange,
+        JobState,
+        InboxItem,
+        LogLine,
+        ListEvent
+    ))
 )]
 struct ApiDoc;
 
@@ -70,6 +80,11 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(settings::preview_rename))
         .routes(routes!(module_settings::list))
         .routes(routes!(module_settings::get, module_settings::patch))
+        .routes(routes!(lists::search))
+        .routes(routes!(lists::facets))
+        .routes(routes!(lists::update))
+        .routes(routes!(lists::import_db))
+        .routes(routes!(lists::cancel))
 }
 
 /// The public and protected `/api` routers plus the OpenAPI document describing both.
