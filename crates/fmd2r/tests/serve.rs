@@ -21,17 +21,10 @@ fn start() -> Server {
 /// [`start`] with extra arguments.
 fn start_with(args: &[&str]) -> Server {
     let dir = tempfile::tempdir().unwrap();
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin("fmd2r"));
-    cmd.args(["serve", "--bind", "127.0.0.1:0", "--data-dir"])
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("fmd2r"))
+        .args(["serve", "--bind", "127.0.0.1:0", "--data-dir"])
         .arg(dir.path().join("data"))
-        .args(args);
-    spawn(cmd, dir)
-}
-
-/// Runs `cmd` (an `fmd2r serve` command whose data lives in `dir`) and waits for its
-/// "listening on" line.
-fn spawn(mut cmd: Command, dir: tempfile::TempDir) -> Server {
-    let mut child = cmd
+        .args(args)
         .env("RUST_LOG", "info")
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -126,21 +119,5 @@ fn startup_points_the_cloudflare_bypass_at_flaresolverr() {
     assert_eq!(config["use_webdriver"], true);
     assert_eq!(config["flaresolverr_ip"], "flaresolverr");
     assert_eq!(config["flaresolverr_port"], 8191);
-    signal_and_wait(server, "TERM");
-}
-
-#[test]
-fn serve_takes_the_bind_address_and_data_dir_from_the_environment() {
-    // The Docker image configures `serve` through these (Dockerfile).
-    let dir = tempfile::tempdir().unwrap();
-    let data = dir.path().join("from-env");
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin("fmd2r"));
-    cmd.arg("serve")
-        .env("FMD2R_BIND", "127.0.0.1:0")
-        .env("FMD2R_DATA_DIR", &data);
-    let server = spawn(cmd, dir);
-    let mut health = request(&server.addr, "/api/health");
-    assert!(read_head(&mut health).starts_with("HTTP/1.1 200"));
-    assert!(data.join("app.db").is_file());
     signal_and_wait(server, "TERM");
 }

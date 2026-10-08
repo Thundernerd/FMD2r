@@ -28,10 +28,12 @@ mkdir -p manga          # downloads land here; it must be writable by uid 1000
 docker compose up -d    # in a source checkout, `--build` builds the image locally
 ```
 
-Then open <http://localhost:8080>.
+Then open <http://localhost:8080>. While the repository is private its GHCR package is too: run
+`docker login ghcr.io` first, or build locally with `--build`.
 
 - **Data:** everything lives in `/data` (the `fmd2r-data` volume): `app.db`, `lists.db`, `lua/`, the
   cover cache, and `downloads/`, the default save-to directory, which compose maps to `MANGA_DIR`.
+  (`downloads` is relative to the working directory, `/data`, not to `FMD2R_DATA_DIR`.)
   The container runs as the non-root user `fmd2r` (uid 1000), so bind-mounted directories must be
   writable by that uid.
 - **Lua modules:** on first start, when `/data/lua` has no modules, it is seeded from the upstream
@@ -46,7 +48,7 @@ Then open <http://localhost:8080>.
 
 ### Releases
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`: it builds and smoke-tests the image
+Pushing a version tag (`v1.2.3`, `v1.2.3-rc.1`) runs `.github/workflows/release.yml`: it builds and smoke-tests the image
 (`scripts/docker-smoke.sh`), pushes it to GHCR as `<version>`, `<major>.<minor>` and `latest`
 (pre-release tags skip `latest`), and creates a GitHub release with
 `fmd2r-<tag>-x86_64-linux-gnu.tar.gz` (the binary and `libfmdxpath.so`, built on Ubuntu 22.04 so

@@ -25,6 +25,7 @@ echo "waiting for $base/api/health"
 i=0
 until [ "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/health")" = 200 ]; do
   i=$((i + 1))
+  [ "$(docker inspect -f '{{.State.Running}}' "$name")" = true ] || fail "the container exited"
   [ "$i" -lt 60 ] || fail "/api/health never answered 200"
   sleep 1
 done
@@ -44,12 +45,13 @@ docker exec "$name" magick -version >/dev/null || fail "magick -version"
 docker exec "$name" python3 --version || fail "python3 --version"
 docker exec "$name" node --version || fail "node --version"
 
-# `module init` arrives with T15; until then the binary has no --lua-dir and this step is skipped.
-if docker exec "$name" fmd2r module init --help 2>/dev/null | grep -q -- '--lua-dir'; then
+# `module init` arrives with T15; until then the subcommand is a stub and this step is skipped.
+# Once it is real, the step runs and fails loudly on any error (including a renamed flag).
+if docker exec "$name" fmd2r module init 2>&1 | grep -q 'not implemented yet (T15)'; then
+  echo "::warning::fmd2r module init is not implemented yet (T15); skipped"
+else
   echo "fmd2r module init loads the bundled modules"
   docker exec "$name" fmd2r module init --lua-dir /data/lua >/dev/null || fail "fmd2r module init"
-else
-  echo "::warning::fmd2r module init has no --lua-dir yet (T15); skipped"
 fi
 
 echo "OK"
