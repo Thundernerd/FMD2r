@@ -45,6 +45,15 @@ impl<'a> DownloadedChaptersRepo<'a> {
         Ok(stmt.query_row(params![module_id, manga_link, chapter_link], |r| r.get(0))?)
     }
 
+    /// How many of the manga's chapters are downloaded.
+    pub fn count_for(&self, module_id: &str, manga_link: &str) -> Result<u32> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT COUNT(*) FROM downloaded_chapters WHERE module_id = ?1 AND manga_link = ?2",
+        )?;
+        Ok(stmt.query_row(params![module_id, manga_link], |r| r.get(0))?)
+    }
+
     /// The manga's downloaded chapter links, sorted case-insensitively.
     pub fn list_for(&self, module_id: &str, manga_link: &str) -> Result<Vec<String>> {
         let conn = self.db.lock();

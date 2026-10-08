@@ -598,7 +598,7 @@ fn now_ms() -> i64 {
 }
 
 /// `CustomRename`'s options from the save-to settings.
-pub(super) fn rename_options(saveto: &SaveToSettings) -> fmd_pack::RenameOptions {
+pub(crate) fn rename_options(saveto: &SaveToSettings) -> fmd_pack::RenameOptions {
     fmd_pack::RenameOptions {
         symbols: match saveto.illegal_chars {
             SymbolMode::Posix => fmd_pack::SymbolMode::Posix,
@@ -645,7 +645,7 @@ fn chapter_name(
 /// The task's directory: the given or default download directory, plus the manga folder when
 /// generated and not already part of it, without trailing dots
 /// (mangadownloader/forms/frmMain.pas:2685-2710).
-fn save_to(saveto: &SaveToSettings, website: &str, download: &NewDownload) -> String {
+pub(crate) fn save_to(saveto: &SaveToSettings, website: &str, download: &NewDownload) -> String {
     let mut dir = match download.save_to.trim() {
         "" => saveto.default_dir.clone(),
         dir => dir.to_owned(),

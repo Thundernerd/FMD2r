@@ -45,3 +45,7 @@ export type TaskStatusChange = Schemas['TaskStatusChange'];
 export type TaskRemoved = Schemas['TaskRemoved'];
 export type ChapterState = Schemas['ChapterState'];
 export type TaskOrder = Schemas['TaskOrder'];
+export type FavoriteView = Schemas['FavoriteView'];
+export type FavoritePatch = Schemas['FavoritePatch'];
+export type FavoritesEvent = Schemas['FavoritesEvent'];
+export type FavoritesEventKind = Schemas['FavoritesEventKind'];

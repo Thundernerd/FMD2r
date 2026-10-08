@@ -6,6 +6,7 @@ use std::time::Duration;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+use fmd_core::favorites::{FavoritesEvent, FavoritesEventKind};
 use fmd_core::jobs::{Job, JobPhase};
 use fmd_core::lists::{ListEvent, ListEventKind};
 use fmd_store::EventId;
@@ -143,6 +144,8 @@ pub enum ServerEvent {
     Log(LogLine),
     /// A list update or FMD2-DB import moved on (`job.lists.<kind>`).
     Lists(ListEvent),
+    /// A favorites check moved on (`job.favorites.<kind>`).
+    Favorites(FavoritesEvent),
     Account(AccountStateChange),
 }
 
@@ -164,6 +167,13 @@ impl ServerEvent {
                 ListEventKind::Cancelled => "job.lists.cancelled",
                 ListEventKind::Failed => "job.lists.failed",
             },
+            Self::Favorites(e) => match e.kind {
+                FavoritesEventKind::Started => "job.favorites.started",
+                FavoritesEventKind::Progress => "job.favorites.progress",
+                FavoritesEventKind::Finished => "job.favorites.finished",
+                FavoritesEventKind::Cancelled => "job.favorites.cancelled",
+                FavoritesEventKind::Failed => "job.favorites.failed",
+            },
             Self::Account(_) => "account.state",
         }
     }
@@ -179,6 +189,7 @@ impl ServerEvent {
             Self::InboxNew(item) => event.id(item.id.clone()).json_data(item),
             Self::Log(line) => event.json_data(line),
             Self::Lists(e) => event.json_data(e),
+            Self::Favorites(e) => event.json_data(e),
             Self::Account(change) => event.json_data(change),
         };
         event.ok()
@@ -220,8 +231,9 @@ impl EventBus {
         `task.status` (TaskStatusChange), `task.removed` (TaskRemoved), `task.reordered` \
         (TasksReordered), \
         `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), `account.state` \
-        (AccountStateChange), and `job.lists.started|progress|finished|cancelled|failed` \
-        (ListEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox \
+        (AccountStateChange), `job.lists.started|progress|finished|cancelled|failed` \
+        (ListEvent), and `job.favorites.started|progress|finished|cancelled|failed` \
+        (FavoritesEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox \
         item id as the SSE id; on reconnect, \
         `Last-Event-ID` replays the inbox items stored since. Comment frames are heartbeats.",
     params(("Last-Event-ID" = Option<String>, Header, description = "Resume after this inbox item id")),

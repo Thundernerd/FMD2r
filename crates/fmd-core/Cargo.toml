@@ -17,7 +17,7 @@ serde_path_to_error = "0.1"
 sevenz-rust = { version = "0.6", default-features = false }
 tempfile.workspace = true
 thiserror.workspace = true
-tokio = { version = "1", features = ["rt", "sync"] }
+tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 tracing.workspace = true
 utoipa = "5"
 
@@ -25,7 +25,7 @@ utoipa = "5"
 fmd-lua = { path = "../fmd-lua", default-features = false }
 rusqlite = { version = "0.32", features = ["bundled"] }
 tempfile.workspace = true
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util", "time"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [lints]

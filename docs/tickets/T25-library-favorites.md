@@ -23,6 +23,11 @@ Out: list updates (T26).
 - [ ] Startup + interval scheduling configurable; no overlapping runs.
 - [ ] Auto-download and inbox behaviours both tested.
 
+## Notes
+- `FavoritesChecker` (and its `schedule()`) is built by whoever wires the worker pool, module registry and `DownloadManager` into `serve`, passing `AppState::favorites_events()` as its event sink, registering it as the `favorites` job and handing it to `AppState::with_favorites`; until then the check endpoints answer 503, while listing, adding, editing and removing favorites work from `app.db`.
+- Adding a favorite records its current chapters in `downloaded_chapters`, as FMD2 stores them as the favorite's `downloadedchapterlist` (mangadownloader/forms/frmMain.pas:2829-2836); FMD2r keeps one downloaded list, so the series page shows them as downloaded.
+- FMD2's dialogs become inbox items: new/missing chapters without auto-download, and completed series removed when `favorites.remove_completed` is on (FMD2 asks first; there is no one to ask in the background).
+
 ## FMD2 references
 - `baseunits/uFavoritesManager.pas:302-531` (`TFavoriteThread.Execute`, `DoCheck` :329, `DoCheckMissing` :397), `:607-777` (`TFavoriteTask`: scheduling, thread pool), `:832-928` (`CheckForNewChapter`, `CheckForMissingChapters`), `:954-1178` (`ShowResult`: auto-download vs notify, completed series), `:1213-1300` (add/replace/delete), `:1356` (`AddToDownloadedChaptersList`)
 - `baseunits/FavoritesDB.pas:55-163` (stored fields)
