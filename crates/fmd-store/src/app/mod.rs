@@ -1,11 +1,13 @@
 //! `app.db`: application state (tasks, favorites, settings, accounts, events, module files).
 
+pub(crate) mod downloaded_chapters;
 pub(crate) mod tasks;
 
 use std::path::Path;
 
 use crate::db::Db;
 use crate::error::Result;
+use downloaded_chapters::DownloadedChaptersRepo;
 use tasks::TaskRepo;
 
 const MIGRATIONS: &[&str] = &[include_str!("../migrations/app_v1.sql")];
@@ -32,5 +34,10 @@ impl AppDb {
     /// Download tasks with their chapters and pages.
     pub fn tasks(&self) -> TaskRepo<'_> {
         TaskRepo::new(&self.db)
+    }
+
+    /// Chapters already downloaded, per manga.
+    pub fn downloaded_chapters(&self) -> DownloadedChaptersRepo<'_> {
+        DownloadedChaptersRepo::new(&self.db)
     }
 }
