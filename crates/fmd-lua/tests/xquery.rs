@@ -8,60 +8,18 @@
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use fmd_lua::{LuaMemoryStream, Runtime, mlua};
 
-use fmd_lua::{LuaClass, Runtime, mlua};
-
-/// Stands in for T04's `fmd.strings` until it lands: a list with `Add`, `Count` and the
-/// 0-based default index, which is all TXQuery uses of a TStrings (`Add`,
-/// baseunits/XQueryEngineHTML.pas:381, :523-524, :541-542).
-fn install_strings(runtime: &Runtime) {
-    let lua = runtime.lua();
-    let new = lua
-        .create_function(|lua, ()| {
-            LuaClass::new(Rc::new(RefCell::new(Vec::<String>::new())))
-                .method("Add", |_, list: &mut Vec<String>, s: String| {
-                    list.push(s);
-                    Ok(list.len() - 1)
-                })
-                .read_only_property("Count", |_, list: &mut Vec<String>| Ok(list.len()))
-                .default_array_property(
-                    |lua, list: &mut Vec<String>, key: mlua::Value| {
-                        let i = lua
-                            .coerce_integer(key)?
-                            .and_then(|i| usize::try_from(i).ok());
-                        Ok(i.and_then(|i| list.get(i).cloned()))
-                    },
-                    |_, _: &mut Vec<String>, _: mlua::Value, _: mlua::Value| Ok(()),
-                )
-                .build(lua)
-                .map_err(mlua::Error::external)
-        })
-        .unwrap();
-    let lib = lua.create_table().unwrap();
-    lib.set("New", new).unwrap();
-    let preload: mlua::Table = lua.load("package.preload").eval().unwrap();
-    preload
-        .set(
-            "fmd.strings",
-            lua.create_function(move |_, ()| Ok(lib.clone())).unwrap(),
-        )
-        .unwrap();
-}
-
-/// Stands in for T04's MemoryStream: a global `NewStream(content)` whose object has the
-/// `ToString` method TXQuery reads a stream through.
+/// A global `NewStream(content)` making a MemoryStream (modules get theirs from the Host API,
+/// e.g. `HTTP.Document`). Writing leaves the position at the end, so the stream's own
+/// `ToString` would read nothing.
 fn install_stream(runtime: &Runtime) {
     let lua = runtime.lua();
     let new = lua
         .create_function(|lua, content: mlua::LuaString| {
-            LuaClass::new(Rc::new(RefCell::new(content.as_bytes().to_vec())))
-                .method("ToString", |lua, bytes: &mut Vec<u8>, ()| {
-                    lua.create_string(&*bytes)
-                })
-                .build(lua)
-                .map_err(mlua::Error::external)
+            let stream = LuaMemoryStream::new();
+            stream.stream().borrow_mut().write(&content.as_bytes());
+            stream.build(lua).map_err(mlua::Error::external)
         })
         .unwrap();
     lua.globals().set("NewStream", new).unwrap();
@@ -69,7 +27,6 @@ fn install_stream(runtime: &Runtime) {
 
 fn run(chunk: &str) {
     let runtime = Runtime::new().unwrap();
-    install_strings(&runtime);
     install_stream(&runtime);
     if let Err(e) = runtime.exec(chunk) {
         panic!("{e}");
@@ -178,6 +135,7 @@ fn a_context_value_scopes_the_query() {
         assert(x.XPathCount('//b', div, 'extra') == 3)
         local ok = pcall(x.XPathCount, 'b', 'not a value')
         assert(not ok)
+        assert(not pcall(x.XPathHREFAll, '//a', div, div))
     "#);
 }
 
@@ -276,8 +234,13 @@ fn create_txquery_dispatches_on_its_arguments() {
         assert(CreateTXQuery('<a>1</a>', 'x').XPathCount('//a') == 0)
         -- luaToString goes through a PAnsiChar, so the HTML ends at the first NUL.
         assert(CreateTXQuery('<a>1</a>\0<a>2</a>').XPathCount('//a') == 1)
-        -- A stream is read whole (StreamToString, baseunits/XQueryEngineHTML.pas:118-128).
-        assert(CreateTXQuery(NewStream('<a>1</a>\0<a>2</a>')).XPathCount('//a') == 2)
+        -- A stream is read whole, whatever its position (StreamToString,
+        -- baseunits/XQueryEngineHTML.pas:118-128).
+        local stream = NewStream('<a>1</a>\0<a>2</a>')
+        assert(stream.ToString() == '')
+        assert(CreateTXQuery(stream).XPathCount('//a') == 2)
+        -- A userdata that isn't a MemoryStream is an error (FMD2 would crash).
+        assert(not pcall(CreateTXQuery, require('fmd.strings').New()))
     "#);
 }
 

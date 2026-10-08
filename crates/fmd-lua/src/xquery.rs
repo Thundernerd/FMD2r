@@ -11,7 +11,7 @@ use std::rc::Rc;
 use fmd_xpath::{Document, XPathEngine, XPathValue};
 use mlua::{AnyUserData, Lua, MultiValue, Value, Variadic};
 
-use crate::LuaClass;
+use crate::{LuaClass, LuaMemoryStream, StringList};
 
 /// A TXQuery object: FMD2's `TXQueryEngineHTML` (baseunits/XQueryEngineHTML.pas:14-100).
 struct TXQuery {
@@ -212,19 +212,21 @@ fn eval_in(q: &TXQuery, expr: &str, context: Option<&Value>) -> mlua::Result<Box
     }
 }
 
-/// A TStrings argument. FMD2 reads any userdata as one (`luaToUserData`,
-/// baseunits/lua/LuaUtils.pas:201); here it is any object with an `Add` method.
-fn strings(arg: &Value) -> mlua::Result<AnyUserData> {
+/// A TStrings argument. FMD2 reads any userdata as one and crashes on anything else
+/// (`luaToUserData`, baseunits/lua/LuaUtils.pas:201); here that is a Lua error.
+fn strings(arg: &Value) -> mlua::Result<Rc<RefCell<StringList>>> {
     match arg {
-        Value::UserData(list) => Ok(list.clone()),
-        _ => Err(mlua::Error::runtime("bad argument (TStrings expected)")),
+        Value::UserData(object) => LuaClass::<StringList>::state(object),
+        _ => None,
     }
+    .ok_or_else(|| mlua::Error::runtime("bad argument (TStrings expected)"))
 }
 
-/// `TStrings.Add`, through the list's own Lua method.
-fn add(list: &AnyUserData, s: &str) -> mlua::Result<()> {
-    use mlua::ObjectLike;
-    list.get::<mlua::Function>("Add")?.call::<MultiValue>(s)?;
+/// `TStrings.Add`.
+fn add(list: &RefCell<StringList>, s: &str) -> mlua::Result<()> {
+    list.try_borrow_mut()
+        .map_err(mlua::Error::external)?
+        .add(s.as_bytes());
     Ok(())
 }
 
@@ -357,7 +359,7 @@ fn get_next(lua: &Lua, value: &dyn XPathValue, current: &Cell<u32>) -> mlua::Res
 /// anything else (`luaToUserData`, baseunits/lua/LuaUtils.pas:201); here that is a Lua error.
 fn context(arg: &Value) -> mlua::Result<Rc<RefCell<XQValue>>> {
     match arg {
-        Value::UserData(object) => LuaClass::<XQValue>::state_of(object),
+        Value::UserData(object) => LuaClass::<XQValue>::state(object),
         _ => None,
     }
     .ok_or_else(|| mlua::Error::runtime("bad context argument (IXQValue expected)"))
@@ -410,15 +412,19 @@ fn arg_string(lua: &Lua, args: &[Value], i: usize) -> mlua::Result<String> {
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
-/// The whole content of a memory stream argument, like `StreamToString`
-/// (baseunits/XQueryEngineHTML.pas:118-128), read through its `ToString` method.
+/// The whole content of a memory stream argument whatever its position, like this unit's
+/// `StreamToString` (baseunits/XQueryEngineHTML.pas:118-128). (The MemoryStream's own
+/// `ToString` reads from the position instead.) FMD2 reads any userdata as a stream and crashes
+/// on anything else (`luaToUserData`, baseunits/lua/LuaUtils.pas:201); here that is a Lua error.
 fn stream_bytes(value: &Value) -> mlua::Result<Vec<u8>> {
-    use mlua::ObjectLike;
-    let Value::UserData(stream) = value else {
-        return Err(mlua::Error::runtime(
-            "bad stream argument (MemoryStream expected)",
-        ));
-    };
-    let content: mlua::LuaString = stream.get::<mlua::Function>("ToString")?.call(())?;
-    Ok(content.as_bytes().to_vec())
+    let stream = match value {
+        Value::UserData(object) => LuaMemoryStream::from_lua(object),
+        _ => None,
+    }
+    .ok_or_else(|| mlua::Error::runtime("bad stream argument (MemoryStream expected)"))?;
+    let stream = stream
+        .stream()
+        .try_borrow()
+        .map_err(mlua::Error::external)?;
+    Ok(stream.bytes().to_vec())
 }

@@ -42,6 +42,25 @@ impl<'a> SettingsRepo<'a> {
         Ok(())
     }
 
+    /// Stores every `(key, value)` pair in one transaction: either all are written or none.
+    pub fn set_many<T: Serialize>(&self, entries: &[(&str, T)]) -> Result<()> {
+        let entries = entries
+            .iter()
+            .map(|(key, value)| Ok((*key, serde_json::to_string(value)?)))
+            .collect::<Result<Vec<_>>>()?;
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        for (key, json) in entries {
+            tx.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2)
+                 ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                params![key, json],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn remove(&self, key: &str) -> Result<()> {
         let conn = self.db.lock();
         conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
