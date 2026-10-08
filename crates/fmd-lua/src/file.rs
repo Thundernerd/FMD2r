@@ -25,3 +25,18 @@ pub(crate) fn write_file(path: &Path, bytes: &[u8]) -> mlua::Result<()> {
         mlua::Error::runtime(format!("Unable to create file \"{}\": {e}", path.display()))
     })
 }
+
+/// Reads a Lua file as `luaL_loadfile` hands it to the parser (lauxlib.c `skipcomment` in Lua
+/// 5.4): a leading UTF-8 BOM is dropped, and a first line starting with `#` becomes an empty
+/// line, so line numbers stay right.
+pub(crate) fn read_lua_file(path: &Path) -> std::io::Result<Vec<u8>> {
+    let bytes = std::fs::read(path)?;
+    let source = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes);
+    if source.first() != Some(&b'#') {
+        return Ok(source.to_vec());
+    }
+    Ok(match source.iter().position(|&b| b == b'\n') {
+        Some(end) => source[end..].to_vec(),
+        None => Vec::new(),
+    })
+}

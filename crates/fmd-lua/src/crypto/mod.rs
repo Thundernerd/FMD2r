@@ -307,9 +307,7 @@ fn open(lua: &Lua) -> mlua::Result<Table> {
 }
 
 /// Makes `require 'fmd.crypto'` return the library, as `LuaPackage.AddLib('crypto', ...)`
-/// does (baseunits/lua/LuaCrypto.pas:460, baseunits/lua/LuaPackage.pas:62-79). Registered in
-/// `package.preload` until T06 adds FMD2's package searcher.
+/// does (baseunits/lua/LuaCrypto.pas:460, baseunits/lua/LuaPackage.pas:62-79).
 pub(crate) fn register(lua: &Lua) -> mlua::Result<()> {
-    let preload: Table = lua.globals().get::<Table>("package")?.get("preload")?;
-    preload.set("fmd.crypto", lua.create_function(|lua, ()| open(lua))?)
+    crate::package::add_lib(lua, "crypto", open)
 }

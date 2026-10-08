@@ -27,6 +27,12 @@ impl ModuleHttp {
         self.queue.max_connections()
     }
 
+    /// `ActiveConnections`: requests of this module holding a connection slot right now
+    /// (baseunits/httpsendthread.pas:417-435).
+    pub fn active_connections(&self) -> u32 {
+        self.queue.active_connections()
+    }
+
     /// Sets `MaxConnectionLimit`; waiting requests re-check the new limit.
     pub fn set_max_connections(&self, max: u32) {
         self.queue.set_max_connections(max);

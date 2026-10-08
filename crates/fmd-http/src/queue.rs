@@ -26,6 +26,10 @@ impl ConnectionQueue {
         self.state.lock().map_or(0, |s| s.max)
     }
 
+    pub(crate) fn active_connections(&self) -> u32 {
+        self.state.lock().map_or(0, |s| s.active)
+    }
+
     pub(crate) fn set_max_connections(&self, max: u32) {
         if let Ok(mut s) = self.state.lock() {
             s.max = max;
