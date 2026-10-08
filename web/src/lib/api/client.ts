@@ -1,15 +1,19 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './schema';
+import type { FacetQuery, SearchQuery } from '#lib/discover/filters.ts';
 import type {
 	About,
 	InboxItem,
 	JobState,
+	ListFacets,
+	ListJobStarted,
 	LogLine,
 	ModuleSettingsView,
 	ModuleSummary,
 	Problem,
 	RenamePreview,
 	SaveToSettings,
+	SearchPage,
 	SeriesRef,
 	Settings,
 	TaskProgress
@@ -65,6 +69,19 @@ export interface Api {
 	getModuleSettings(id: string): Promise<ModuleSettingsView>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
 	patchModuleSettings(id: string, patch: MergePatch): Promise<ModuleSettingsView>;
+	/** One page of the manga lists matching `query`. */
+	searchLists(query: SearchQuery): Promise<SearchPage>;
+	/** Genre and status counts of the titles `query` matches. */
+	listFacets(query: FacetQuery): Promise<ListFacets>;
+	/**
+	 * Starts updating a module's list from its website; progress follows as `job.lists.*`
+	 * events. Rejects with status 409 when a list job of the module runs.
+	 */
+	updateList(module: string): Promise<ListJobStarted>;
+	/** Starts replacing a module's list with its FMD2-DB dump; otherwise like {@link updateList}. */
+	importListDb(module: string): Promise<ListJobStarted>;
+	/** Stops a module's list job; rejects with status 409 when none runs. */
+	cancelListJob(module: string): Promise<void>;
 }
 
 export interface ApiOptions {
@@ -159,6 +176,30 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 					body: patch
 				})
 			);
+		},
+		async searchLists(query) {
+			return unwrap('searchLists', await client.GET('/api/lists/search', { params: { query } }));
+		},
+		async listFacets(query) {
+			return unwrap('listFacets', await client.GET('/api/lists/facets', { params: { query } }));
+		},
+		async updateList(module) {
+			return unwrap(
+				'updateList',
+				await client.POST('/api/lists/{module}/update', { params: { path: { module } } })
+			);
+		},
+		async importListDb(module) {
+			return unwrap(
+				'importListDb',
+				await client.POST('/api/lists/{module}/import-db', { params: { path: { module } } })
+			);
+		},
+		async cancelListJob(module) {
+			const { response } = await client.POST('/api/lists/{module}/cancel', {
+				params: { path: { module } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'cancelListJob');
 		}
 	};
 }
