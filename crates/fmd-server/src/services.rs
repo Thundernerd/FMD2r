@@ -1,5 +1,6 @@
 //! Services later tickets plug into [`crate::AppState`], kept behind traits so the server does
-//! not depend on the engine crates.
+//! not drive the Lua runtime or the download engine itself; it only sees `fmd-core`'s view of
+//! them.
 
 use fmd_core::modules::ModuleInfo;
 use serde::Serialize;

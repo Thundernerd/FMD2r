@@ -1,3 +1,4 @@
+import { getPath, isObject } from '#lib/settings/draft.svelte.ts';
 import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 import type {
 	ModuleOptionSetting,
@@ -185,8 +186,6 @@ const defaultOverrides = (): Overrides => ({
 });
 
 type JsonObject = Record<string, unknown>;
-const isObject = (v: unknown): v is JsonObject =>
-	typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** A 422 the way fmd-server reports it. */
 export class Invalid extends Error {
@@ -218,9 +217,7 @@ function mergePatch(target: JsonObject, patch: JsonObject, defaults: JsonObject,
 /** The server's range checks, as the settings page's own field definitions state them. */
 function validateSettings(settings: Settings) {
 	for (const field of SETTINGS_SECTIONS.flatMap((s) => s.fields)) {
-		const value = field.path
-			.split('.')
-			.reduce<unknown>((node, key) => (isObject(node) ? node[key] : undefined), settings);
+		const value = getPath(settings, field.path);
 		const control = field.control;
 		if (control.kind === 'number') {
 			if (value === null && control.nullable) continue;

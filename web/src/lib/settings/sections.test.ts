@@ -49,6 +49,38 @@ describe('settings sections', () => {
 		expect(values('xpath.backend')).toEqual(schemas['XPathBackend']?.enum);
 	});
 
+	it('bound every number by the range the server validates', () => {
+		type Schema = {
+			$ref?: string;
+			oneOf?: Schema[];
+			properties?: Record<string, Schema>;
+			minimum?: number;
+			maximum?: number;
+		};
+		const schemas = openapi.components.schemas as unknown as Record<string, Schema>;
+		const resolve = (schema: Schema | undefined): Schema | undefined => {
+			const ref = schema?.$ref ?? schema?.oneOf?.[0]?.$ref;
+			return ref ? schemas[ref.split('/').pop() ?? ''] : schema;
+		};
+		const property = (path: string) =>
+			path
+				.split('.')
+				.reduce<Schema | undefined>((s, key) => resolve(s)?.properties?.[key], schemas['Settings']);
+		const numbers = SETTINGS_SECTIONS.flatMap((s) => s.fields).flatMap((f) =>
+			f.control.kind === 'number' ? [{ path: f.path, min: f.control.min, max: f.control.max }] : []
+		);
+		expect(numbers.length).toBeGreaterThan(0);
+		for (const { path, min, max } of numbers) {
+			const schema = property(path);
+			// Unbounded above: the largest value the server's u32 holds.
+			expect({ path, min, max }).toEqual({
+				path,
+				min: schema?.minimum,
+				max: schema?.maximum ?? 4_294_967_295
+			});
+		}
+	});
+
 	it('the mock backend starts from the same defaults as the server', async () => {
 		const api = createApi({ baseUrl: 'http://fmd2r.test', fetch: createMockBackend().fetch });
 		expect(await api.getSettings()).toEqual(DEFAULTS);

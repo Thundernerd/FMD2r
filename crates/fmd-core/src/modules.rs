@@ -110,7 +110,7 @@ fn text_lines(text: &str) -> Vec<String> {
 }
 
 /// A stored option value as the integer a spin edit or combo box holds, if it is one.
-pub(crate) fn as_i32(value: &Value) -> Option<i32> {
+pub fn as_i32(value: &Value) -> Option<i32> {
     value.as_i64().and_then(|n| i32::try_from(n).ok())
 }
 

@@ -33,35 +33,24 @@
 	const options = $derived(view ? optionFields(view.options) : []);
 	const enabled = $derived(draft?.get('enabled') === true);
 
-	const LIMITS = [
-		{ key: 'max_task_limit', label: 'Max downloads at once' },
-		{ key: 'max_thread_per_task_limit', label: 'Threads per download' },
-		{ key: 'max_connection_limit', label: 'Max connections' }
-	] as const;
-
 	/**
-	 * Tasks and threads use the module's limit while the override is 0; the connection override
-	 * always replaces it (0 is unlimited), so "module default" copies the module's value.
+	 * Tasks and threads fall back to the module's limit while the override is 0
+	 * (baseunits/WebsiteModules.pas:398-412). The connection override has no such state: while
+	 * overrides are on it replaces the module's limit, 0 meaning unlimited
+	 * (baseunits/WebsiteModulesSettings.pas:126-155).
 	 */
-	const usesDefault = (key: (typeof LIMITS)[number]['key']): boolean => {
-		const value = draft?.get(`limits.${key}`);
-		return key === 'max_connection_limit' ? value === view?.module_limits[key] : value === 0;
-	};
-	function setDefault(key: (typeof LIMITS)[number]['key'], on: boolean) {
+	const LIMITS = [
+		{ key: 'max_task_limit', label: 'Max downloads at once', fallsBack: true },
+		{ key: 'max_thread_per_task_limit', label: 'Threads per download', fallsBack: true },
+		{ key: 'max_connection_limit', label: 'Max connections', fallsBack: false }
+	] as const;
+	type LimitKey = (typeof LIMITS)[number]['key'];
+
+	const usesDefault = (key: LimitKey): boolean => draft?.get(`limits.${key}`) === 0;
+	function setDefault(key: LimitKey, on: boolean) {
 		if (!draft || !view) return;
-		const declared = view.module_limits[key];
-		// Turning the default off starts from a value that differs from it.
-		const value =
-			key === 'max_connection_limit'
-				? on
-					? declared
-					: declared === 0
-						? 1
-						: 0
-				: on
-					? 0
-					: declared || 1;
-		draft.set(`limits.${key}`, value);
+		// Turning the default off starts from the module's own limit.
+		draft.set(`limits.${key}`, on ? 0 : view.module_limits[key] || 1);
 	}
 	const limitText = (n: number | undefined) => (n ? String(n) : 'unlimited');
 
@@ -170,25 +159,30 @@
 				<legend class="label">Limits</legend>
 				{#each LIMITS as limit (limit.key)}
 					{@const path = `limits.${limit.key}`}
-					{@const isDefault = usesDefault(limit.key)}
+					{@const declared = limitText(view.module_limits[limit.key])}
 					<div class="limit">
 						<SettingField
 							field={{
 								path,
 								label: limit.label,
+								help: limit.fallsBack
+									? undefined
+									: `Replaces the module's limit (${declared}); 0 is unlimited.`,
 								control: { kind: 'number', min: 0, max: 4294967295 }
 							}}
 							{draft}
 							idPrefix="module"
 						/>
-						<label class="check small">
-							<input
-								type="checkbox"
-								checked={isDefault}
-								onchange={(e) => setDefault(limit.key, e.currentTarget.checked)}
-							/>
-							Use module default ({limitText(view.module_limits[limit.key])})
-						</label>
+						{#if limit.fallsBack}
+							<label class="check small">
+								<input
+									type="checkbox"
+									checked={usesDefault(limit.key)}
+									onchange={(e) => setDefault(limit.key, e.currentTarget.checked)}
+								/>
+								Use module default ({declared})
+							</label>
+						{/if}
 					</div>
 				{/each}
 			</fieldset>

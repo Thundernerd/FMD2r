@@ -4,7 +4,7 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use fmd_core::modules::{ModuleInfo, OptionDefKind, SPIN_EDIT_RANGE};
+use fmd_core::modules::{ModuleInfo, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
 use fmd_core::settings::{HttpOverrides, LimitOverrides, ModuleLimits, ModuleOverrides};
 use serde::Serialize;
 use serde_json::Value;
@@ -83,13 +83,7 @@ impl ModuleSettingsView {
     /// type, else the default (`fmd_lua::Module::option_value`,
     /// baseunits/lua/LuaWebsiteModules.pas:921-949).
     fn new(module: ModuleInfo, overrides: ModuleOverrides) -> Self {
-        let int = |key: &str| {
-            overrides
-                .options
-                .get(key)
-                .and_then(Value::as_i64)
-                .and_then(|n| i32::try_from(n).ok())
-        };
+        let int = |key: &str| overrides.options.get(key).and_then(as_i32);
         let options = module
             .options
             .into_iter()

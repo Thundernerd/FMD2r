@@ -1,13 +1,14 @@
 /** A JSON value as the settings API sends it. */
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
-type JsonObject = { [key: string]: Json };
+export type JsonObject = { [key: string]: Json };
 
-const isObject = (v: unknown): v is JsonObject =>
+export const isObject = (v: unknown): v is JsonObject =>
 	typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The value at `path` (dot-separated) of `root`, or `undefined` when there is none. */
-export function getPath(root: Json, path: string): Json | undefined {
-	let node: Json | undefined = root;
+export function getPath(root: unknown, path: string): Json | undefined {
+	// `root` is any JSON tree; typed settings objects are JSON too.
+	let node = root as Json | undefined;
 	for (const key of path.split('.')) {
 		if (!isObject(node)) return undefined;
 		node = node[key];

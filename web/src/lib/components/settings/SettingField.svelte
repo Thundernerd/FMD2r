@@ -22,8 +22,16 @@
 		draft.set(field.path, control.kind === 'text' && control.nullable && raw === '' ? null : raw);
 	}
 
-	/** An empty number box is `null`: the server resets a nullable setting and rejects the rest. */
+	/**
+	 * An empty box clears a nullable number. Any other number needs a value: `null` would reset
+	 * it to its default, so the field keeps its value and reports the error instead.
+	 */
 	function onNumber(raw: string) {
+		const control = field.control;
+		if (raw === '' && !(control.kind === 'number' && control.nullable)) {
+			draft.errors[field.path] = 'Enter a number.';
+			return;
+		}
 		draft.set(field.path, raw === '' ? null : Number(raw));
 	}
 

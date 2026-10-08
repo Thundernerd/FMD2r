@@ -34,6 +34,10 @@
 	let saveError = $state<string | null>(null);
 	let saved = $state(false);
 	const dirty = $derived(!!draft?.dirty || !!moduleDraft?.dirty);
+	/** An error is cleared by editing its field; until then there is nothing valid to save. */
+	const hasErrors = $derived(
+		Object.keys(draft?.errors ?? {}).length + Object.keys(moduleDraft?.errors ?? {}).length > 0
+	);
 
 	let active = $state(TOC[0]?.id ?? '');
 	let preview = $state<RenamePreview | null>(null);
@@ -263,20 +267,22 @@
 		</div>
 	{/if}
 
-	{#if dirty || saveError || saved}
+	{#if dirty || hasErrors || saveError || saved}
 		<div class="save-bar" role="region" aria-label="Save changes">
 			<span class="status small" role="status">
 				{#if saveError}
 					<span class="error">{saveError}</span>
+				{:else if hasErrors}
+					Fix the highlighted settings to save
 				{:else if dirty}
 					Unsaved changes
 				{:else}
 					Saved
 				{/if}
 			</span>
-			{#if dirty}
+			{#if dirty || hasErrors}
 				<button class="btn" type="button" disabled={saving} onclick={discard}>Discard</button>
-				<button class="btn primary" type="button" disabled={saving} onclick={save}>
+				<button class="btn primary" type="button" disabled={saving || hasErrors} onclick={save}>
 					{saving ? 'Saving…' : 'Save'}
 				</button>
 			{/if}

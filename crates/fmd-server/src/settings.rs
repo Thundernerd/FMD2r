@@ -115,7 +115,8 @@ pub(crate) async fn preview_rename(
         numbering: SAMPLE_NUMBERING,
         ..series.clone()
     };
-    // A blank template saves as its default (mangadownloader/forms/frmMain.pas:5894-5917).
+    // A blank template loads as its default (mangadownloader/forms/frmMain.pas:5894-5917), and
+    // the settings service stores it that way.
     let template = |t: &str, default: &'static str| -> String {
         if t.trim().is_empty() { default } else { t }.to_owned()
     };

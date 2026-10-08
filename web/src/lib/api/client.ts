@@ -37,7 +37,8 @@ export class ValidationError extends ApiError {
 }
 
 /** A JSON merge patch (RFC 7396): changed values, `null` to reset one to its default. */
-export type MergePatch = { [key: string]: unknown };
+export type MergePatch =
+	paths['/api/settings']['patch']['requestBody']['content']['application/json'];
 
 /** Everything the UI asks of fmd-server. Pages talk to this, never to `fetch` directly. */
 export interface Api {

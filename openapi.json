@@ -693,6 +693,7 @@
 						"format": "int32",
 						"description": "Times a failed task is restarted automatically (`connections/NumberOfAutoRetryFailedTask`,\n`OptionRetryFailedTask` = 1, baseunits/FMDOptions.pas:136). Range 0..=100, the TSpinEdit default (no bounds\nset, mangadownloader/forms/frmMain.lfm:3669-3681).",
 						"default": 1,
+						"maximum": 100,
 						"minimum": 0
 					},
 					"max_favorite_threads": {
@@ -700,21 +701,24 @@
 						"format": "int32",
 						"description": "Threads checking favorites (`connections/MaxFavoriteThreads`,\nbaseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).",
 						"default": 1,
-						"minimum": 0
+						"maximum": 32,
+						"minimum": 1
 					},
 					"max_parallel_tasks": {
 						"type": "integer",
 						"format": "int32",
 						"description": "Tasks downloading at once, over all modules (`connections/NumberOfTasks`,\n`OptionMaxParallel` = 1, baseunits/FMDOptions.pas:133). Range 1..=64: the Win64\n`MAX_TASKLIMIT` (baseunits/FMDOptions.pas:42), so any FMD2 value imports.",
 						"default": 1,
-						"minimum": 0
+						"maximum": 64,
+						"minimum": 1
 					},
 					"max_update_list_threads": {
 						"type": "integer",
 						"format": "int32",
 						"description": "Threads updating manga lists (`connections/MaxUpdateListThreads`,\nbaseunits/FMDOptions.pas:131). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3827-3828).",
 						"default": 1,
-						"minimum": 0
+						"maximum": 32,
+						"minimum": 1
 					},
 					"proxy": {
 						"oneOf": [
@@ -736,21 +740,25 @@
 						"type": "integer",
 						"format": "int32",
 						"description": "HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,\nbaseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;\nmeaning in baseunits/httpsendthread.pas:626).",
-						"default": 5
+						"default": 5,
+						"maximum": 5,
+						"minimum": -1
 					},
 					"threads_per_task": {
 						"type": "integer",
 						"format": "int32",
 						"description": "Page download threads per task (`connections/NumberOfThreadsPerTask`, `OptionMaxThreads`\n= 1, baseunits/FMDOptions.pas:134). Range 1..=256: the Win64 `MAX_CONNECTIONPERHOSTLIMIT`\n(baseunits/FMDOptions.pas:43).",
 						"default": 1,
-						"minimum": 0
+						"maximum": 256,
+						"minimum": 1
 					},
 					"timeout_secs": {
 						"type": "integer",
 						"format": "int32",
 						"description": "Connection timeout in seconds (`connections/ConnectionTimeout`, `OptionConnectionTimeout`\n= 30, baseunits/FMDOptions.pas:129). Range 1..=300\n(mangadownloader/forms/frmMain.lfm:3387-3388).",
 						"default": 30,
-						"minimum": 0
+						"maximum": 300,
+						"minimum": 1
 					},
 					"user_agent": {
 						"type": "string",
@@ -778,7 +786,8 @@
 						"format": "int32",
 						"description": "`update/AutoCheckFavIntervalMinutes`, default 60. Range 1..=1440\n(mangadownloader/forms/frmMain.lfm:4648-4649).",
 						"default": 60,
-						"minimum": 0
+						"maximum": 1440,
+						"minimum": 1
 					},
 					"check_on_interval": {
 						"type": "boolean",
@@ -871,7 +880,8 @@
 						"format": "int32",
 						"description": "`imagemagick/ImageMagickQuality`, default 75. Range 1..=100\n(mangadownloader/forms/frmMain.lfm:4555-4556).",
 						"default": 75,
-						"minimum": 0
+						"maximum": 100,
+						"minimum": 1
 					},
 					"save_as": {
 						"type": "string",
@@ -901,7 +911,8 @@
 						"format": "int32",
 						"description": "`saveto/JPEGQuality`, `OptionJPEGQuality` = 80 (baseunits/FMDOptions.pas:126). Range\n1..=100 (mangadownloader/forms/frmMain.lfm:4426-4427).",
 						"default": 80,
-						"minimum": 0
+						"maximum": 100,
+						"minimum": 1
 					},
 					"png_compression": {
 						"oneOf": [
@@ -1220,7 +1231,7 @@
 						"format": "int32",
 						"description": "Minutes between syncs. No FMD2 counterpart. Minimum 1.",
 						"default": 60,
-						"minimum": 0
+						"minimum": 1
 					},
 					"keep_last_good": {
 						"type": "boolean",
@@ -1273,7 +1284,8 @@
 						"format": "int32",
 						"description": "JPEG quality of PDF pages (`saveto/PDFQuality`, default 100,\nmangadownloader/forms/frmMain.pas:5888). Range 5..=100\n(mangadownloader/forms/frmMain.lfm:4245-4246).",
 						"default": 100,
-						"minimum": 0
+						"maximum": 100,
+						"minimum": 5
 					}
 				}
 			},
@@ -1352,7 +1364,8 @@
 						"format": "int32",
 						"description": "`connections/Port`, default empty.",
 						"default": null,
-						"minimum": 0
+						"maximum": 65535,
+						"minimum": 1
 					},
 					"type": {
 						"oneOf": [
@@ -1430,14 +1443,16 @@
 						"format": "int32",
 						"description": "`saveto/DigitChapterLength`, default 3 (mangadownloader/forms/frmMain.pas:5911). Range\n1..=10 (mangadownloader/forms/frmMain.lfm:4138-4139).",
 						"default": 3,
-						"minimum": 0
+						"maximum": 10,
+						"minimum": 1
 					},
 					"digit_volume_length": {
 						"type": "integer",
 						"format": "int32",
 						"description": "`saveto/DigitVolumeLength`, default 2 (mangadownloader/forms/frmMain.pas:5908). Range\n1..=10 (mangadownloader/forms/frmMain.lfm:4111-4112).",
 						"default": 2,
-						"minimum": 0
+						"maximum": 10,
+						"minimum": 1
 					},
 					"filename_rename": {
 						"type": "string",
@@ -1696,14 +1711,15 @@
 						"format": "int32",
 						"description": "Hours between automatic list updates. No FMD2 counterpart. Minimum 1.",
 						"default": 24,
-						"minimum": 0
+						"minimum": 1
 					},
 					"new_manga_days": {
 						"type": "integer",
 						"format": "int32",
 						"description": "Days a list entry counts as new (`update/NewMangaTime`, default 1,\nmangadownloader/forms/frmMain.pas:5953). Range 1..=365\n(mangadownloader/forms/frmMain.lfm:2950-2951).",
 						"default": 1,
-						"minimum": 0
+						"maximum": 365,
+						"minimum": 1
 					},
 					"no_manga_info": {
 						"type": "boolean",

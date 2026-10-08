@@ -79,3 +79,23 @@ test('the table of contents is a sticky list on a wide screen', async ({ page })
 	await expect(page.getByRole('heading', { name: 'Website modules' })).toBeInViewport();
 	await expect(nav).toBeInViewport();
 });
+
+test('clearing a required number asks for one instead of resetting it', async ({ page }) => {
+	await page.goto('/settings');
+	const timeout = page.getByRole('spinbutton', { name: 'Connection timeout (seconds)' });
+	await timeout.fill('45');
+	await timeout.fill('');
+
+	await expect(timeout).toHaveAttribute('aria-invalid', 'true');
+	await expect(timeout).toHaveAccessibleDescription(/Enter a number/);
+	const bar = page.getByRole('region', { name: 'Save changes' });
+	await expect(bar.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+	await timeout.fill('60');
+	await bar.getByRole('button', { name: 'Save' }).click();
+	await expect(bar).toContainText('Saved');
+	await page.reload();
+	await expect(page.getByRole('spinbutton', { name: 'Connection timeout (seconds)' })).toHaveValue(
+		'60'
+	);
+});
