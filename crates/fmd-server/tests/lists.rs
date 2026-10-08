@@ -44,6 +44,7 @@ impl ModuleCatalog for Modules {
             .map(|id| ModuleInfo {
                 id: id.into(),
                 name: id.to_uppercase(),
+                root_url: format!("https://{id}.example"),
                 category: "English".into(),
                 limits: Default::default(),
                 options: Vec::new(),

@@ -20,7 +20,7 @@
 	// A series page belongs to the Library section.
 	const isCurrent = (href: string): boolean => {
 		const path = page.url.pathname;
-		if (href === '/') return path === '/' || path.startsWith('/series/');
+		if (href === '/') return path === '/' || path === '/series';
 		return path === href || path.startsWith(`${href}/`);
 	};
 </script>

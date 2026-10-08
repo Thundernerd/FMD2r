@@ -47,32 +47,142 @@
 						}
 					}
 				}
-			}
-		},
-		"/api/resolve": {
+			},
 			"post": {
-				"operationId": "resolveUrl",
-				"summary": "Find the module that handles a manga URL",
+				"operationId": "createTask",
+				"summary": "Queue a download of chapters of a series (seed contract until T23 implements it)",
 				"requestBody": {
 					"required": true,
 					"content": {
 						"application/json": {
 							"schema": {
-								"type": "object",
-								"required": ["url"],
-								"properties": { "url": { "type": "string" } }
+								"$ref": "#/components/schemas/NewTask"
 							}
 						}
 					}
 				},
 				"responses": {
+					"201": {
+						"description": "The queued task",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TaskProgress"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "The request is invalid (e.g. no chapters)",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/resolve": {
+			"post": {
+				"tags": [
+					"series"
+				],
+				"summary": "Find the module that handles a manga URL.",
+				"operationId": "resolveUrl",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ResolveRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
 					"200": {
 						"description": "The module and the module-relative link of the series",
 						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/SeriesRef" } }
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SeriesRef"
+								}
+							}
 						}
 					},
-					"404": { "description": "No module handles this URL" }
+					"404": {
+						"description": "No module handles this URL",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/series": {
+			"get": {
+				"tags": [
+					"series"
+				],
+				"operationId": "getSeries",
+				"parameters": [
+					{
+						"name": "module",
+						"in": "query",
+						"description": "Module ID.",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "link",
+						"in": "query",
+						"description": "The series link relative to the module's `RootURL`.",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "The series' info and chapters",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SeriesInfo"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "No such module, or the module found no series there",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"502": {
+						"description": "The website could not be reached",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
 				}
 			}
 		},
@@ -1174,13 +1284,188 @@
 					}
 				}
 			},
+			"ChapterInfo": {
+				"type": "object",
+				"description": "One chapter of a series.",
+				"required": [
+					"name",
+					"link",
+					"downloaded"
+				],
+				"properties": {
+					"downloaded": {
+						"type": "boolean",
+						"description": "Whether the chapter was downloaded before."
+					},
+					"link": {
+						"type": "string",
+						"description": "Relative to the module's `RootURL`."
+					},
+					"name": {
+						"type": "string"
+					}
+				}
+			},
+			"NewTask": {
+				"type": "object",
+				"description": "A download to queue: chapters of one series, where to save them and how to pack them.",
+				"required": [
+					"module_id",
+					"link",
+					"title",
+					"chapters",
+					"save_to",
+					"format"
+				],
+				"properties": {
+					"module_id": {
+						"type": "string"
+					},
+					"link": {
+						"type": "string",
+						"description": "Series link relative to the module's RootURL"
+					},
+					"title": {
+						"type": "string"
+					},
+					"chapters": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/NewTaskChapter"
+						},
+						"description": "In module order"
+					},
+					"save_to": {
+						"type": "string",
+						"description": "Folder the series folder goes in"
+					},
+					"format": {
+						"$ref": "#/components/schemas/OutputFormat"
+					}
+				}
+			},
+			"NewTaskChapter": {
+				"type": "object",
+				"required": [
+					"name",
+					"link"
+				],
+				"properties": {
+					"name": {
+						"type": "string"
+					},
+					"link": {
+						"type": "string"
+					}
+				}
+			},
+			"ResolveRequest": {
+				"type": "object",
+				"description": "A manga URL to resolve.",
+				"required": [
+					"url"
+				],
+				"properties": {
+					"url": {
+						"type": "string"
+					}
+				}
+			},
+			"SeriesInfo": {
+				"type": "object",
+				"description": "A series as FMD2's info panel shows it.",
+				"required": [
+					"module_id",
+					"link",
+					"title",
+					"alt_titles",
+					"authors",
+					"artists",
+					"genres",
+					"status",
+					"summary",
+					"chapters",
+					"in_library"
+				],
+				"properties": {
+					"alt_titles": {
+						"type": "string"
+					},
+					"artists": {
+						"type": "string"
+					},
+					"authors": {
+						"type": "string"
+					},
+					"chapters": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/ChapterInfo"
+						},
+						"description": "In module order."
+					},
+					"cover_url": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "The cover through `/api/covers`; `None` when the module reports none."
+					},
+					"genres": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The module's comma-separated genres, split."
+					},
+					"in_library": {
+						"type": "boolean",
+						"description": "Whether the series is a favorite."
+					},
+					"link": {
+						"type": "string",
+						"description": "The series link relative to the module's `RootURL`, as the module reports it."
+					},
+					"module_id": {
+						"type": "string"
+					},
+					"status": {
+						"$ref": "#/components/schemas/SeriesStatus"
+					},
+					"summary": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					}
+				}
+			},
 			"SeriesRef": {
 				"type": "object",
-				"required": ["module", "link"],
+				"description": "A series: its module and its link relative to the module's `RootURL`.",
+				"required": [
+					"module_id",
+					"link"
+				],
 				"properties": {
-					"module": { "type": "string", "description": "Module ID" },
-					"link": { "type": "string", "description": "Series link relative to the module's RootURL" }
+					"link": {
+						"type": "string"
+					},
+					"module_id": {
+						"type": "string"
+					}
 				}
+			},
+			"SeriesStatus": {
+				"type": "string",
+				"description": "`MangaInfo.Status` (`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).",
+				"enum": [
+					"completed",
+					"ongoing",
+					"hiatus",
+					"cancelled",
+					"unknown"
+				]
 			},
 			"ConnectionSettings": {
 				"type": "object",

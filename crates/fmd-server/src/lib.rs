@@ -12,6 +12,7 @@ mod jobs;
 mod lists;
 mod logs;
 mod module_settings;
+mod series;
 mod serve;
 mod services;
 mod settings;
@@ -38,6 +39,7 @@ pub use inbox::{InboxItem, InboxKind};
 pub use lists::{FacetValue, ListFacets, ListItem, ListJobStarted, SearchPage};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
+pub use series::{ChapterInfo, ResolveRequest, SeriesInfo, SeriesRef, SeriesStatus};
 pub use serve::{ServeConfig, ServeError, serve};
 pub use services::{DownloadEngine, Idle, LoadFailure, ModuleCatalog, ModulesReport};
 pub use settings::RenamePreview;
@@ -83,6 +85,8 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(settings::preview_rename))
         .routes(routes!(module_settings::list))
         .routes(routes!(module_settings::get, module_settings::patch))
+        .routes(routes!(series::resolve))
+        .routes(routes!(series::get))
         .routes(routes!(lists::search))
         .routes(routes!(lists::facets))
         .routes(routes!(lists::update))

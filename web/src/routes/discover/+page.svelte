@@ -4,6 +4,7 @@
 	import GenreChips from '#lib/components/discover/GenreChips.svelte';
 	import ListActions from '#lib/components/discover/ListActions.svelte';
 	import WebsitePicker from '#lib/components/discover/WebsitePicker.svelte';
+	import { seriesHref } from '#lib/series/href.ts';
 	import {
 		emptyFilters,
 		facetQuery,
@@ -107,11 +108,6 @@
 		});
 		observer.observe(node);
 		return { destroy: () => observer.disconnect() };
-	}
-
-	function seriesHref(item: ListItem): string {
-		const link = item.link.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
-		return `/series/${encodeURIComponent(item.module_id)}/${link}`;
 	}
 
 	/** The website and status under a title. */

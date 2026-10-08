@@ -48,7 +48,8 @@ export interface paths {
 		/** Download tasks with their progress */
 		get: operations['listTasks'];
 		put?: never;
-		post?: never;
+		/** Queue a download of chapters of a series (seed contract until T23 implements it) */
+		post: operations['createTask'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -64,8 +65,24 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Find the module that handles a manga URL */
+		/** Find the module that handles a manga URL. */
 		post: operations['resolveUrl'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/series': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get: operations['getSeries'];
+		put?: never;
+		post?: never;
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -545,12 +562,64 @@ export interface components {
 			/** @description Always `about:blank`: the status code says it all. */
 			type: string;
 		};
-		SeriesRef: {
-			/** @description Module ID */
-			module: string;
+		/** @description One chapter of a series. */
+		ChapterInfo: {
+			/** @description Whether the chapter was downloaded before. */
+			downloaded: boolean;
+			/** @description Relative to the module's `RootURL`. */
+			link: string;
+			name: string;
+		};
+		/** @description A download to queue: chapters of one series, where to save them and how to pack them. */
+		NewTask: {
+			module_id: string;
 			/** @description Series link relative to the module's RootURL */
 			link: string;
+			title: string;
+			/** @description In module order */
+			chapters: components['schemas']['NewTaskChapter'][];
+			/** @description Folder the series folder goes in */
+			save_to: string;
+			format: components['schemas']['OutputFormat'];
 		};
+		NewTaskChapter: {
+			name: string;
+			link: string;
+		};
+		/** @description A manga URL to resolve. */
+		ResolveRequest: {
+			url: string;
+		};
+		/** @description A series as FMD2's info panel shows it. */
+		SeriesInfo: {
+			alt_titles: string;
+			artists: string;
+			authors: string;
+			/** @description In module order. */
+			chapters: components['schemas']['ChapterInfo'][];
+			/** @description The cover through `/api/covers`; `None` when the module reports none. */
+			cover_url?: string | null;
+			/** @description The module's comma-separated genres, split. */
+			genres: string[];
+			/** @description Whether the series is a favorite. */
+			in_library: boolean;
+			/** @description The series link relative to the module's `RootURL`, as the module reports it. */
+			link: string;
+			module_id: string;
+			status: components['schemas']['SeriesStatus'];
+			summary: string;
+			title: string;
+		};
+		/** @description A series: its module and its link relative to the module's `RootURL`. */
+		SeriesRef: {
+			link: string;
+			module_id: string;
+		};
+		/**
+		 * @description `MangaInfo.Status` (`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).
+		 * @enum {string}
+		 */
+		SeriesStatus: 'completed' | 'ongoing' | 'hiatus' | 'cancelled' | 'unknown';
 		ConnectionSettings: {
 			/**
 			 * @description Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,
@@ -1516,6 +1585,39 @@ export interface operations {
 			};
 		};
 	};
+	createTask: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['NewTask'];
+			};
+		};
+		responses: {
+			/** @description The queued task */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TaskProgress'];
+				};
+			};
+			/** @description The request is invalid (e.g. no chapters) */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
 	resolveUrl: {
 		parameters: {
 			query?: never;
@@ -1525,9 +1627,7 @@ export interface operations {
 		};
 		requestBody: {
 			content: {
-				'application/json': {
-					url: string;
-				};
+				'application/json': components['schemas']['ResolveRequest'];
 			};
 		};
 		responses: {
@@ -1545,7 +1645,52 @@ export interface operations {
 				headers: {
 					[name: string]: unknown;
 				};
-				content?: never;
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	getSeries: {
+		parameters: {
+			query: {
+				/** @description Module ID. */
+				module: string;
+				/** @description The series link relative to the module's `RootURL`. */
+				link: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The series' info and chapters */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SeriesInfo'];
+				};
+			};
+			/** @description No such module, or the module found no series there */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The website could not be reached */
+			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
 			};
 		};
 	};

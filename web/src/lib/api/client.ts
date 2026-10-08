@@ -12,10 +12,12 @@ import type {
 	LogLine,
 	ModuleSettingsView,
 	ModuleSummary,
+	NewTask,
 	Problem,
 	RenamePreview,
 	SaveToSettings,
 	SearchPage,
+	SeriesInfo,
 	SeriesRef,
 	Settings,
 	TaskProgress
@@ -25,7 +27,9 @@ import type {
 export class ApiError extends Error {
 	constructor(
 		readonly status: number,
-		what: string
+		what: string,
+		/** The problem's `detail`, when the server said why. */
+		readonly detail: string | null = null
 	) {
 		super(`${what} failed: HTTP ${status}`);
 	}
@@ -38,7 +42,7 @@ export class ValidationError extends ApiError {
 		readonly detail: string,
 		what: string
 	) {
-		super(422, what);
+		super(422, what, detail);
 	}
 }
 
@@ -53,6 +57,13 @@ export interface Api {
 	listTasks(): Promise<TaskProgress[]>;
 	/** The series a manga URL points at, or `null` when no module handles the URL. */
 	resolveUrl(url: string): Promise<SeriesRef | null>;
+	/**
+	 * A series' info and chapters; rejects with an {@link ApiError} carrying the server's reason:
+	 * 404 when the module finds no series there, 502 when the website cannot be reached.
+	 */
+	getSeries(module: string, link: string): Promise<SeriesInfo>;
+	/** Queues a download; resolves to the new task. */
+	createTask(task: NewTask): Promise<TaskProgress>;
 	/** The server's buffered log lines, oldest first. */
 	listLogs(): Promise<LogLine[]>;
 	listJobs(): Promise<JobState[]>;
@@ -138,6 +149,18 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 			const res = await client.POST('/api/resolve', { body: { url } });
 			if (res.response.status === 404) return null;
 			return unwrap('resolveUrl', res);
+		},
+		async getSeries(module, link) {
+			const res = await client.GET('/api/series', { params: { query: { module, link } } });
+			if (!res.response.ok || res.data === undefined) {
+				// Every error here is a `Problem`.
+				const problem = res.error as Partial<Problem> | undefined;
+				throw new ApiError(res.response.status, 'getSeries', problem?.detail ?? null);
+			}
+			return res.data;
+		},
+		async createTask(task) {
+			return validated('createTask', await client.POST('/api/tasks', { body: task }));
 		},
 		async listLogs() {
 			return unwrap('listLogs', await client.GET('/api/logs'));

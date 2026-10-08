@@ -17,6 +17,7 @@ use crate::covers::{CoverConfig, CoverModules, Covers};
 use crate::events::{EventBus, ServerEvent};
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
+use crate::series::InfoCache;
 use crate::services::{DownloadEngine, Idle, ModuleCatalog};
 use crate::spa::{Assets, EmbeddedAssets};
 use crate::tools::{NoTools, ToolProbe};
@@ -36,6 +37,7 @@ pub struct AppState {
     pub(crate) engine: Arc<dyn DownloadEngine>,
     pub(crate) jobs: JobRegistry,
     pub(crate) modules: Arc<dyn ModuleCatalog>,
+    pub(crate) series_cache: Arc<InfoCache>,
     pub(crate) accounts: Option<Arc<AccountService>>,
     pub(crate) tools: Arc<dyn ToolProbe>,
     pub(crate) covers: Option<Arc<Covers>>,
@@ -57,6 +59,7 @@ impl AppState {
             engine: Arc::new(Idle),
             jobs: JobRegistry::new(),
             modules: Arc::new(Idle),
+            series_cache: Arc::default(),
             accounts: None,
             tools: Arc::new(NoTools),
             covers: None,
@@ -111,9 +114,11 @@ impl AppState {
         self
     }
 
-    /// Reports the Lua modules from `modules` in `GET /api/about`.
+    /// Reports the Lua modules from `modules` in `GET /api/about`, and serves `/api/resolve` and
+    /// `/api/series` from them.
     pub fn with_modules(mut self, modules: impl ModuleCatalog) -> Self {
         self.modules = Arc::new(modules);
+        self.series_cache = Arc::default();
         self
     }
 

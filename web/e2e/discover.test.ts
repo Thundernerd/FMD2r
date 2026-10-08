@@ -52,7 +52,7 @@ test('more results load as the list scrolls, and a title opens its series page',
 
 	const first = cards.first();
 	const href = await first.getAttribute('href');
-	expect(href).toMatch(/^\/series\/[^/]+\/manga\/[^/]+$/);
+	expect(href).toMatch(/^\/series\?module=[^&]+&link=%2Fmanga%2F[^&]+$/);
 	await first.click();
 	await expect(page).toHaveURL(href ?? '');
 });
