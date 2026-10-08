@@ -1,7 +1,9 @@
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 
-use fmd_store::{AppDb, ChapterStatus, NewChapter, NewTask, PageStatus, TaskPage, TaskStatus};
+use fmd_store::{
+    AppDb, ChapterStatus, NewChapter, NewPage, NewTask, PageStatus, TaskPage, TaskStatus,
+};
 
 fn new_task(title: &str, status: TaskStatus) -> NewTask {
     NewTask {
@@ -14,10 +16,8 @@ fn new_task(title: &str, status: TaskStatus) -> NewTask {
     }
 }
 
-fn page(chapter_idx: u32, idx: u32) -> TaskPage {
-    TaskPage {
-        chapter_idx,
-        idx,
+fn page(chapter_idx: u32, idx: u32) -> NewPage {
+    NewPage {
         url: format!("https://img/{chapter_idx}/{idx}.jpg"),
         container_url: String::new(),
         filename: format!("{idx:03}"),
@@ -48,9 +48,14 @@ fn task_with_chapters_and_pages_survives_reopen() {
         let pages: Vec<_> = (0..count).map(|i| page(chapter, i)).collect();
         tasks.set_pages(task.id, chapter, &pages).unwrap();
     }
-    let mut done = page(1, 2);
-    done.status = PageStatus::Downloaded;
-    done.filename = "002.jpg".into();
+    let done = TaskPage {
+        chapter_idx: 1,
+        idx: 2,
+        url: "https://img/1/2.jpg".into(),
+        container_url: String::new(),
+        filename: "002.jpg".into(),
+        status: PageStatus::Downloaded,
+    };
     tasks.update_page(task.id, &done).unwrap();
     drop(db);
 
@@ -141,4 +146,63 @@ fn reorder_and_delete() {
     assert!(tasks.chapters(b.id).unwrap().is_empty());
     assert!(tasks.pages(b.id, 0).unwrap().is_empty());
     assert_eq!(tasks.list().unwrap().len(), 2);
+}
+
+#[test]
+fn progress_fields_are_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let tasks = db.tasks();
+    let task = tasks
+        .create(&new_task("a", TaskStatus::Downloading))
+        .unwrap();
+    let chapters: Vec<_> = (0..2)
+        .map(|i| NewChapter {
+            link: format!("/ch/{i}"),
+            name: format!("{i}"),
+            custom_filename: None,
+        })
+        .collect();
+    tasks.set_chapters(task.id, &chapters).unwrap();
+
+    tasks
+        .update_chapter(task.id, 0, ChapterStatus::Downloaded, 7)
+        .unwrap();
+    tasks
+        .update_chapter(task.id, 1, ChapterStatus::Failed, 3)
+        .unwrap();
+    tasks
+        .update_progress(task.id, 1, Some(1_700_000_000_000))
+        .unwrap();
+    tasks.set_enabled(task.id, false).unwrap();
+
+    let chapters = tasks.chapters(task.id).unwrap();
+    assert_eq!(
+        chapters
+            .iter()
+            .map(|c| (c.status, c.current_page))
+            .collect::<Vec<_>>(),
+        [(ChapterStatus::Downloaded, 7), (ChapterStatus::Failed, 3)]
+    );
+    let task = tasks.get(task.id).unwrap().unwrap();
+    assert_eq!(task.current_chapter, 1);
+    assert_eq!(task.date_last_downloaded, Some(1_700_000_000_000));
+    assert!(!task.enabled);
+}
+
+#[test]
+fn reorder_ignores_duplicate_ids() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let tasks = db.tasks();
+    let a = tasks.create(&new_task("a", TaskStatus::Stopped)).unwrap();
+    let b = tasks.create(&new_task("b", TaskStatus::Stopped)).unwrap();
+    tasks.reorder(&[b.id, b.id, a.id]).unwrap();
+    let order: Vec<_> = tasks
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|t| (t.id, t.sort_order))
+        .collect();
+    assert_eq!(order, [(b.id, 0), (a.id, 1)]);
 }

@@ -5,7 +5,7 @@ use rusqlite::{OptionalExtension, Row, params};
 
 use crate::db::Db;
 use crate::error::Result;
-use crate::sql::{now_ms, reorder, text_enum};
+use crate::sql::{next_sort_order, now_ms, reorder, text_enum};
 
 text_enum! {
     /// Task status, mirroring FMD2's `TDownloadStatusType` (baseunits/uDownloadsManager.pas:19-31)
@@ -96,7 +96,16 @@ pub struct TaskChapter {
     pub current_page: u32,
 }
 
-/// A page of a task's chapter.
+/// Fields supplied when setting a chapter's pages.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewPage {
+    pub url: String,
+    pub container_url: String,
+    pub filename: String,
+    pub status: PageStatus,
+}
+
+/// A stored page of a task's chapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskPage {
     pub chapter_idx: u32,
@@ -143,8 +152,9 @@ impl<'a> TaskRepo<'a> {
         let task = conn.query_row(
             &format!(
                 "INSERT INTO tasks (module_id, link, title, save_to, status, enabled, sort_order, date_added)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tasks), ?7)
-                 RETURNING {TASK_COLUMNS}"
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, {}, ?7)
+                 RETURNING {TASK_COLUMNS}",
+                next_sort_order("tasks")
             ),
             params![
                 new.module_id,
@@ -227,6 +237,48 @@ impl<'a> TaskRepo<'a> {
         Ok(())
     }
 
+    /// Sets a chapter's status and the page it has reached.
+    pub fn update_chapter(
+        &self,
+        id: TaskId,
+        chapter_idx: u32,
+        status: ChapterStatus,
+        current_page: u32,
+    ) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute(
+            "UPDATE task_chapters SET status = ?3, current_page = ?4 WHERE task_id = ?1 AND idx = ?2",
+            params![id.0, chapter_idx, status, current_page],
+        )?;
+        Ok(())
+    }
+
+    /// Sets the chapter being downloaded and, when given, the time of the last download.
+    pub fn update_progress(
+        &self,
+        id: TaskId,
+        current_chapter: u32,
+        date_last_downloaded: Option<i64>,
+    ) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute(
+            "UPDATE tasks SET current_chapter = ?2,
+                date_last_downloaded = COALESCE(?3, date_last_downloaded)
+             WHERE id = ?1",
+            params![id.0, current_chapter, date_last_downloaded],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_enabled(&self, id: TaskId, enabled: bool) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute(
+            "UPDATE tasks SET enabled = ?2 WHERE id = ?1",
+            params![id.0, enabled],
+        )?;
+        Ok(())
+    }
+
     /// The task's chapters in index order.
     pub fn chapters(&self, id: TaskId) -> Result<Vec<TaskChapter>> {
         let conn = self.db.lock();
@@ -248,9 +300,9 @@ impl<'a> TaskRepo<'a> {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Replaces the pages of chapter `chapter_idx` and sets its page count. Each page's own
-    /// `chapter_idx` is ignored in favour of the argument.
-    pub fn set_pages(&self, id: TaskId, chapter_idx: u32, pages: &[TaskPage]) -> Result<()> {
+    /// Replaces the pages of chapter `chapter_idx` and sets its page count. Page `i` gets
+    /// index `i`.
+    pub fn set_pages(&self, id: TaskId, chapter_idx: u32, pages: &[NewPage]) -> Result<()> {
         let mut conn = self.db.lock();
         let tx = conn.transaction()?;
         tx.execute(
@@ -262,11 +314,11 @@ impl<'a> TaskRepo<'a> {
                 "INSERT INTO task_pages (task_id, chapter_idx, idx, url, container_url, filename, status)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?;
-            for p in pages {
+            for (idx, p) in pages.iter().enumerate() {
                 stmt.execute(params![
                     id.0,
                     chapter_idx,
-                    p.idx,
+                    idx,
                     p.url,
                     p.container_url,
                     p.filename,
@@ -324,8 +376,7 @@ impl<'a> TaskRepo<'a> {
     /// Puts the given tasks first, in the given order; tasks not listed keep their relative order
     /// after them.
     pub fn reorder(&self, ids: &[TaskId]) -> Result<()> {
-        let ids: Vec<i64> = ids.iter().map(|id| id.0).collect();
-        reorder(&mut self.db.lock(), "tasks", &ids)
+        reorder(&mut self.db.lock(), "tasks", ids.iter().map(|id| id.0))
     }
 
     /// Deletes the task with its chapters and pages.

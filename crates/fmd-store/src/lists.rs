@@ -166,7 +166,9 @@ impl MasterListRepo<'_> {
         )?;
         tx.execute("DELETE FROM masterlist WHERE module_id = ?1", [module_id])?;
         {
-            let mut stmt = tx.prepare_cached(INSERT)?;
+            // Duplicate links keep the first row, like FMD2's `INSERT OR IGNORE`
+            // (baseunits/DBDataProcess.pas:1089).
+            let mut stmt = tx.prepare_cached(&format!("{INSERT} ON CONFLICT DO NOTHING"))?;
             for row in rows {
                 execute_insert(&mut stmt, module_id, row.borrow())?;
             }

@@ -20,9 +20,6 @@ macro_rules! text_enum {
         pub enum $name { $( $(#[$vmeta])* $variant ),+ }
 
         impl $name {
-            /// Every variant, in declaration order.
-            pub const ALL: &'static [$name] = &[$($name::$variant),+];
-
             /// The TEXT value stored in the database.
             pub fn as_str(self) -> &'static str {
                 match self { $($name::$variant => $text),+ }
@@ -62,25 +59,41 @@ macro_rules! text_enum {
 }
 pub(crate) use text_enum;
 
-/// Rewrites `sort_order` of `table` so `first` come first in the given order and every other row
-/// keeps its relative order after them. `table` is always a constant from this crate.
+/// SQL expression for the `sort_order` that appends a row to the end of `table`.
+pub(crate) fn next_sort_order(table: &str) -> String {
+    format!("(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM {table})")
+}
+
+/// Rewrites `sort_order` of `table` so `first` come first in the given order (repeats ignored)
+/// and every other row keeps its relative order after them. `table` is always a constant from this
+/// crate.
 pub(crate) fn reorder(
     conn: &mut rusqlite::Connection,
     table: &str,
-    first: &[i64],
+    first: impl IntoIterator<Item = i64>,
 ) -> crate::Result<()> {
+    let mut order: Vec<i64> = Vec::new();
+    for id in first {
+        if !order.contains(&id) {
+            order.push(id);
+        }
+    }
     let tx = conn.transaction()?;
-    let rest: Vec<i64> = {
+    {
         let mut stmt = tx.prepare_cached(&format!("SELECT id FROM {table} ORDER BY sort_order"))?;
-        let all = stmt.query_map([], |r| r.get(0))?;
-        all.filter(|id| !matches!(id, Ok(id) if first.contains(id)))
-            .collect::<rusqlite::Result<_>>()?
-    };
+        let all = stmt.query_map([], |r| r.get::<_, i64>(0))?;
+        for id in all {
+            let id = id?;
+            if !order.contains(&id) {
+                order.push(id);
+            }
+        }
+    }
     {
         let mut stmt =
             tx.prepare_cached(&format!("UPDATE {table} SET sort_order = ?2 WHERE id = ?1"))?;
-        for (order, id) in first.iter().copied().chain(rest).enumerate() {
-            stmt.execute(rusqlite::params![id, order])?;
+        for (position, id) in order.iter().enumerate() {
+            stmt.execute(rusqlite::params![id, position])?;
         }
     }
     tx.commit()?;

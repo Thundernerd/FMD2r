@@ -5,7 +5,7 @@ use rusqlite::{OptionalExtension, Row, params};
 
 use crate::db::Db;
 use crate::error::Result;
-use crate::sql::{now_ms, reorder};
+use crate::sql::{next_sort_order, now_ms, reorder};
 
 /// Primary key of a favorite.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -82,8 +82,9 @@ impl<'a> FavoriteRepo<'a> {
         Ok(conn.query_row(
             &format!(
                 "INSERT INTO favorites (module_id, link, title, save_to, cover_url, sort_order, date_added)
-                 VALUES (?1, ?2, ?3, ?4, ?5, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM favorites), ?6)
-                 RETURNING {COLUMNS}"
+                 VALUES (?1, ?2, ?3, ?4, ?5, {}, ?6)
+                 RETURNING {COLUMNS}",
+                next_sort_order("favorites")
             ),
             params![
                 new.module_id,
@@ -159,8 +160,7 @@ impl<'a> FavoriteRepo<'a> {
     /// Puts the given favorites first, in the given order; the others keep their relative order
     /// after them.
     pub fn reorder(&self, ids: &[FavoriteId]) -> Result<()> {
-        let ids: Vec<i64> = ids.iter().map(|id| id.0).collect();
-        reorder(&mut self.db.lock(), "favorites", &ids)
+        reorder(&mut self.db.lock(), "favorites", ids.iter().map(|id| id.0))
     }
 
     pub fn delete(&self, id: FavoriteId) -> Result<()> {

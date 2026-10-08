@@ -2,7 +2,7 @@
 
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chacha20poly1305::aead::{Aead, AeadCore, KeyInit, OsRng};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
@@ -48,18 +48,27 @@ impl KeyFileCipher {
     }
 }
 
+/// Writes a fresh key to a temporary file next to `path` and publishes it with `hard_link`, which
+/// fails if `path` already exists. Readers therefore never see a partially written key, and a
+/// crash mid-write leaves only the temporary file behind.
 fn create_key_file(path: &Path) -> Result<Vec<u8>> {
     let key = XChaCha20Poly1305::generate_key(&mut OsRng).to_vec();
+    let mut tmp_name = path.as_os_str().to_owned();
+    tmp_name.push(format!(".{}.tmp", std::process::id()));
+    let tmp = PathBuf::from(tmp_name);
+
     let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
+    options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    match options.open(path) {
-        Ok(mut file) => {
-            file.write_all(&key)?;
-            file.sync_all()?;
-            Ok(key)
-        }
+    let written = options.open(&tmp).and_then(|mut file| {
+        file.write_all(&key)?;
+        file.sync_all()
+    });
+    let linked = written.and_then(|()| fs::hard_link(&tmp, path));
+    let _ = fs::remove_file(&tmp);
+    match linked {
+        Ok(()) => Ok(key),
         // Another process created it first: use theirs.
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(fs::read(path)?),
         Err(e) => Err(e.into()),

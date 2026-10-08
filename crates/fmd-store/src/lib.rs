@@ -24,8 +24,8 @@ pub use app::module_files::{ModuleFile, ModuleFileRepo};
 pub use app::module_settings::{ModuleSettings, ModuleSettingsRepo};
 pub use app::settings::SettingsRepo;
 pub use app::tasks::{
-    ChapterStatus, NewChapter, NewTask, PageStatus, Task, TaskChapter, TaskId, TaskPage, TaskRepo,
-    TaskStatus,
+    ChapterStatus, NewChapter, NewPage, NewTask, PageStatus, Task, TaskChapter, TaskId, TaskPage,
+    TaskRepo, TaskStatus,
 };
 pub use crypto::{Cipher, KeyFileCipher};
 pub use error::{Result, StoreError};

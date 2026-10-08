@@ -168,18 +168,21 @@ fn fts_stays_in_sync_on_upsert_and_replace() {
 }
 
 #[test]
-fn failed_replace_leaves_list_and_index_untouched() {
+fn replace_keeps_the_first_of_duplicate_links() {
+    // FMD2 adds list rows with INSERT OR IGNORE (baseunits/DBDataProcess.pas:1089).
     let (_dir, db) = open();
     let repo = db.masterlist();
-    let duplicate = [
+    let rows = [
         listing("/x", "Bleach", "", ""),
-        listing("/x", "Bleach", "", ""),
+        listing("/x", "Other", "", ""),
     ];
-    assert!(repo.replace_module("m", duplicate).is_err());
+    repo.replace_module("m", rows).unwrap();
 
     let none = SearchFilters::default();
-    assert_eq!(links(&db, "one piece", &none), ["/1", "/2"]);
-    assert!(links(&db, "bleach", &none).is_empty());
+    assert_eq!(links(&db, "bleach", &none), ["/x"]);
+    assert!(links(&db, "other", &none).is_empty());
+    assert!(links(&db, "one piece", &none).is_empty());
+    assert_eq!(repo.count(Some("m")).unwrap(), 1);
     repo.upsert("m", &listing("/5", "Dragon Ball", "", ""))
         .unwrap();
     assert_eq!(links(&db, "dragon", &none), ["/5"]);

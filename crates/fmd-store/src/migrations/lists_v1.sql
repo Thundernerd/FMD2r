@@ -18,6 +18,8 @@ CREATE TABLE masterlist (
     UNIQUE (module_id, link)
 );
 CREATE INDEX masterlist_title ON masterlist (module_id, title COLLATE NOCASE);
+-- Matches the search order when results span modules.
+CREATE INDEX masterlist_title_all ON masterlist (title COLLATE NOCASE, module_id, link);
 CREATE INDEX masterlist_added_jdn ON masterlist (module_id, added_jdn);
 
 CREATE VIRTUAL TABLE masterlist_fts USING fts5 (
