@@ -2,7 +2,14 @@
 	import type { Api } from '#lib/api/client.ts';
 	import type { LogLine } from '#lib/api/types.ts';
 	import type { EventStore } from '#lib/events.svelte.ts';
-	import { LEVELS, LogView, atBottom, formatLine, visibleRange } from '#lib/logs.svelte.ts';
+	import {
+		LEVELS,
+		LogView,
+		atBottom,
+		formatLine,
+		indexAtSeq,
+		visibleRange
+	} from '#lib/logs.svelte.ts';
 
 	let { api, store }: { api: Api; store: EventStore } = $props();
 
@@ -18,6 +25,8 @@
 	let height = $state(0);
 	let error = $state<string | null>(null);
 	let copied = $state<string | null>(null);
+	/** The top line in view and how far it is scrolled, while not following. */
+	let anchor: { seq: number; offset: number } | null = null;
 	/** The line shown in full below the list. */
 	let selected = $state<LogLine | null>(null);
 
@@ -35,10 +44,16 @@
 	});
 
 	// In follow mode, stick to the newest line whenever lines arrive or the filter changes.
+	// Otherwise keep the top line in place, even when old lines were trimmed above it.
 	$effect(() => {
-		void view.shown.length;
-		if (!follow || !scroller) return;
-		scroller.scrollTop = scroller.scrollHeight;
+		const shown = view.shown;
+		if (!scroller) return;
+		if (follow) {
+			scroller.scrollTop = scroller.scrollHeight;
+		} else if (anchor) {
+			const top = indexAtSeq(shown, anchor.seq) * ROW_HEIGHT + anchor.offset;
+			if (Math.abs(top - scroller.scrollTop) >= 1) scroller.scrollTop = top;
+		}
 		scrollTop = scroller.scrollTop;
 	});
 
@@ -46,6 +61,9 @@
 		if (!scroller) return;
 		scrollTop = scroller.scrollTop;
 		follow = atBottom(scroller);
+		const index = Math.floor(scrollTop / ROW_HEIGHT);
+		const top = view.shown[index];
+		anchor = follow || !top ? null : { seq: top.seq, offset: scrollTop - index * ROW_HEIGHT };
 	}
 
 	function jumpToLatest() {

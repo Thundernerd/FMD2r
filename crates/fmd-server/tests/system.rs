@@ -19,7 +19,7 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 struct Harness {
-    _dir: TempDir,
+    dir: TempDir,
     state: AppState,
 }
 
@@ -27,7 +27,7 @@ fn harness() -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let db = AppDb::open(dir.path().join("app.db")).unwrap();
     Harness {
-        _dir: dir,
+        dir,
         state: AppState::new(db),
     }
 }
@@ -327,6 +327,19 @@ async fn logs_limit_keeps_the_newest_matching_lines() {
 }
 
 #[tokio::test]
+async fn logs_since_a_sequence_number_page_forward_from_it() {
+    let h = harness();
+    let logs = mixed_logs();
+    let state = h.state.clone().with_logs(logs.clone());
+    let first = logs.since(None)[0].seq;
+
+    // Catching up after line 1, two at a time, must not skip any line.
+    let page =
+        body_json(send(&state, get(&format!("/api/logs?since={first}&limit=2"))).await).await;
+    assert_eq!(messages(&page), ["rate limited", "no pages"]);
+}
+
+#[tokio::test]
 async fn an_unknown_log_level_is_a_400() {
     let h = harness();
     let res = send(&h.state, get("/api/logs?level=loud")).await;
@@ -415,10 +428,10 @@ async fn about_lists_the_data_dir_and_database_sizes() {
         .state
         .clone()
         .with_tools(FakeTools)
-        .with_data_dir(h._dir.path());
+        .with_data_dir(h.dir.path());
 
     let about = body_json(send(&state, get("/api/about")).await).await;
-    assert_eq!(about["data_dir"], h._dir.path().to_str().unwrap());
+    assert_eq!(about["data_dir"], h.dir.path().to_str().unwrap());
     let dbs = about["databases"].as_array().unwrap();
     assert_eq!(dbs[0]["name"], "app.db");
     assert!(dbs[0]["bytes"].as_u64().unwrap() > 0);

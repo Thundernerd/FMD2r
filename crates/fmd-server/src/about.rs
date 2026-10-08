@@ -8,6 +8,7 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::services::LoadFailure;
+use crate::state::off_thread;
 use crate::tools::ToolCheck;
 use crate::{ApiError, AppState};
 
@@ -52,12 +53,11 @@ pub(crate) async fn about(State(state): State<AppState>) -> Result<Json<About>, 
     let modules = state.modules.report();
     let tools = state.tools.clone();
     let data_dir = state.data_dir.clone();
-    let (tools, databases) = tokio::task::spawn_blocking(move || {
+    let (tools, databases) = off_thread(move || {
         let databases = data_dir.as_deref().map(database_sizes).unwrap_or_default();
         (tools.probe(), databases)
     })
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    .await?;
     Ok(Json(About {
         version: env!("CARGO_PKG_VERSION"),
         git_revision: option_env!("FMD2R_GIT_REVISION").filter(|r| !r.is_empty()),

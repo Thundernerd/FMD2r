@@ -6,6 +6,7 @@ import {
 	atBottom,
 	filterLogs,
 	formatLine,
+	indexAtSeq,
 	visibleRange
 } from '#lib/logs.svelte.ts';
 
@@ -171,6 +172,15 @@ describe('log list scrolling', () => {
 		expect(visibleRange({ scrollTop: 199_800, height: 200, rowHeight: 20, count: 10_000 })).toEqual(
 			{ start: 9980, end: 10_000 }
 		);
+	});
+
+	it('finds where a line went after older lines were trimmed', () => {
+		const seqs = [5, 6, 9, 12].map((seq) => line({ seq }));
+		expect(indexAtSeq(seqs, 9)).toBe(2);
+		// A line filtered out or dropped: the next newer one takes its place.
+		expect(indexAtSeq(seqs, 7)).toBe(2);
+		expect(indexAtSeq(seqs, 1)).toBe(0);
+		expect(indexAtSeq(seqs, 13)).toBe(4);
 	});
 
 	it('counts as following only when scrolled to the bottom', () => {

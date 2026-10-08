@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use fmd_core::jobs::{Job, JobError};
 
 use crate::events::JobState;
+use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
 /// Every registered background job with its state, in registration order.
@@ -62,12 +63,11 @@ async fn control(
 ) -> Result<(StatusCode, Json<JobState>), ApiError> {
     let job = state.jobs.get(id).ok_or(ApiError::NotFound)?;
     let registry = state.jobs.clone();
-    let job_state = tokio::task::spawn_blocking(move || {
+    let job_state = off_thread(move || {
         action(job.as_ref())?;
         registry.changed(job.id());
         Ok::<_, JobError>(JobState::of(job.as_ref()))
     })
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))??;
+    .await??;
     Ok((StatusCode::ACCEPTED, Json(job_state)))
 }

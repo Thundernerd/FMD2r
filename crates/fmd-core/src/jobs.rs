@@ -4,7 +4,7 @@
 //! A job registers itself once with [`JobRegistry::register`] and calls
 //! [`JobRegistry::changed`] whenever its [`JobStatus`] moves, so the UI hears about it live.
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard};
 
 use serde::Serialize;
 use thiserror::Error;
@@ -91,9 +91,8 @@ impl JobRegistry {
     /// Adds `job`, replacing a registered job with the same id.
     pub fn register(&self, job: impl Job) {
         let job: Arc<dyn Job> = Arc::new(job);
-        let Ok(mut jobs) = self.jobs.write() else {
-            return;
-        };
+        // The list stays consistent even if a holder panicked, so a poisoned lock is still usable.
+        let mut jobs = self.jobs.write().unwrap_or_else(PoisonError::into_inner);
         match jobs.iter_mut().find(|j| j.id() == job.id()) {
             Some(slot) => *slot = job,
             None => jobs.push(job),
@@ -102,16 +101,15 @@ impl JobRegistry {
 
     /// Every registered job, in registration order.
     pub fn list(&self) -> Vec<Arc<dyn Job>> {
-        self.jobs.read().map(|j| j.clone()).unwrap_or_default()
+        self.read().clone()
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<dyn Job>> {
-        self.jobs
-            .read()
-            .ok()?
-            .iter()
-            .find(|j| j.id() == id)
-            .cloned()
+        self.read().iter().find(|j| j.id() == id).cloned()
+    }
+
+    fn read(&self) -> RwLockReadGuard<'_, Vec<Arc<dyn Job>>> {
+        self.jobs.read().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Announces that the status of job `id` changed.

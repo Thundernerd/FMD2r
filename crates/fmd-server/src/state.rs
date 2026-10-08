@@ -16,7 +16,7 @@ use crate::logs::LogBuffer;
 use crate::services::{DownloadEngine, Idle, ModuleCatalog};
 use crate::settings::{SettingsService, StoreSettings};
 use crate::spa::{Assets, EmbeddedAssets};
-use crate::tools::{SystemTools, ToolProbe};
+use crate::tools::{NoTools, ToolProbe};
 
 /// Log lines kept when no buffer is supplied.
 const DEFAULT_LOG_LINES: usize = 1000;
@@ -41,7 +41,7 @@ pub struct AppState {
 
 impl AppState {
     /// State backed by `db`, serving the embedded web UI, with untyped store settings, an idle
-    /// engine, no jobs or modules, real tool checks and no auth configured.
+    /// engine, no jobs, modules or tool checks, and no auth configured.
     pub fn new(db: AppDb) -> Self {
         let events = EventBus::new();
         Self {
@@ -50,7 +50,7 @@ impl AppState {
             engine: Arc::new(Idle),
             jobs: JobRegistry::new(),
             modules: Arc::new(Idle),
-            tools: Arc::new(SystemTools::default()),
+            tools: Arc::new(NoTools),
             data_dir: None,
             started: Instant::now(),
             shutdown: Arc::new(watch::channel(false).0),
@@ -156,8 +156,15 @@ impl AppState {
         E: Into<ApiError> + Send + 'static,
     {
         let db = self.db.clone();
-        tokio::task::spawn_blocking(move || f(&db).map_err(Into::into))
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
+        off_thread(move || f(&db).map_err(Into::into)).await?
     }
+}
+
+/// Runs blocking work (store calls, job control, tool checks) on the blocking thread pool.
+pub(crate) async fn off_thread<T: Send + 'static>(
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, ApiError> {
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))
 }

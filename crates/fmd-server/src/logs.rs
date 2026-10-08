@@ -89,19 +89,18 @@ impl LogBuffer {
         })
     }
 
-    /// The newest buffered lines matching `filter`, oldest first.
+    /// Buffered lines matching `filter`, oldest first. With `since`, a limit keeps the oldest
+    /// lines after it, so a client can page forward without gaps; otherwise the newest.
     pub fn query(&self, filter: &LogFilter) -> Vec<LogLine> {
         let Ok(ring) = self.inner.lock() else {
             return Vec::new();
         };
-        let mut lines: Vec<LogLine> = ring
-            .lines
-            .iter()
-            .rev()
-            .filter(|l| filter.matches(l))
-            .take(filter.limit.unwrap_or(usize::MAX))
-            .cloned()
-            .collect();
+        let limit = filter.limit.unwrap_or(usize::MAX);
+        let matching = ring.lines.iter().filter(|l| filter.matches(l));
+        if filter.since.is_some() {
+            return matching.take(limit).cloned().collect();
+        }
+        let mut lines: Vec<LogLine> = matching.rev().take(limit).cloned().collect();
         lines.reverse();
         lines
     }
@@ -197,7 +196,7 @@ pub struct LogFilter {
     pub module: Option<String>,
     /// Only lines with a sequence number above this one.
     pub since: Option<u64>,
-    /// At most this many lines: the newest that match.
+    /// At most this many lines: the oldest after `since` when given, else the newest.
     pub limit: Option<usize>,
 }
 

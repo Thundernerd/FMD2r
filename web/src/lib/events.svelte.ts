@@ -1,5 +1,5 @@
 import type { InboxItem, JobState, LogLine, TaskProgress } from '#lib/api/types.ts';
-import { LogFeed } from '#lib/logs.svelte.ts';
+import { LogFeed, MAX_LOG_LINES } from '#lib/logs.svelte.ts';
 
 /** The part of the browser's `EventSource` the store uses, so tests and mock mode can supply their own. */
 export interface EventSourceLike {
@@ -35,9 +35,11 @@ export class EventStore {
 	#source: EventSourceLike | null = null;
 	#retry: ReturnType<typeof setTimeout> | null = null;
 	#backoff = INITIAL_BACKOFF_MS;
+	/** `job.state` frames received per job, to tell whether an API answer is still current. */
+	#jobFrames: Record<string, number> = {};
 
 	constructor(opts: EventStoreOptions) {
-		this.#opts = { maxLogLines: 10_000, ...opts };
+		this.#opts = { maxLogLines: MAX_LOG_LINES, ...opts };
 		this.logs = new LogFeed({ max: this.#opts.maxLogLines });
 	}
 
@@ -65,9 +67,17 @@ export class EventStore {
 		for (const job of snapshot.jobs ?? []) this.jobs[job.id] ??= job;
 	}
 
-	/** Records a job state the API answered with (e.g. after starting the job). */
-	updateJob(job: JobState): void {
-		this.jobs[job.id] = job;
+	/** Marks the current state of job `id`; pass it to {@link updateJob} with a later API answer. */
+	jobVersion(id: string): number {
+		return this.#jobFrames[id] ?? 0;
+	}
+
+	/**
+	 * Records a job state the API answered with (e.g. after starting the job), unless a
+	 * `job.state` frame arrived since `version` was taken: that frame is newer.
+	 */
+	updateJob(job: JobState, version: number): void {
+		if (this.jobVersion(job.id) === version) this.jobs[job.id] = job;
 	}
 
 	markRead(id: string): void {
@@ -105,6 +115,7 @@ export class EventStore {
 		});
 		es.addEventListener('job.state', (ev) => {
 			const job = JSON.parse(ev.data) as JobState;
+			this.#jobFrames[job.id] = this.jobVersion(job.id) + 1;
 			this.jobs[job.id] = job;
 		});
 		es.addEventListener('log', (ev) => {

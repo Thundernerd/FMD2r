@@ -33,6 +33,9 @@ export function formatLine(l: LogLine): string {
 	return `${l.time} ${l.level.padEnd(5)} ${module}${l.target}: ${l.message}`;
 }
 
+/** How many log lines the UI keeps by default. */
+export const MAX_LOG_LINES = 10_000;
+
 export interface LogFeedOptions {
 	/** How many lines to keep; older ones are dropped. */
 	max?: number;
@@ -56,7 +59,7 @@ export class LogFeed {
 	#schedule: (flush: () => void) => void;
 	#queue: LogLine[] = [];
 
-	constructor({ max = 10_000, schedule = nextFrame }: LogFeedOptions = {}) {
+	constructor({ max = MAX_LOG_LINES, schedule = nextFrame }: LogFeedOptions = {}) {
 		this.#max = max;
 		this.#schedule = schedule;
 	}
@@ -159,4 +162,16 @@ export function visibleRange(v: {
 /** Whether a scroll container is (within a few pixels of) scrolled to the bottom. */
 export function atBottom(el: { scrollTop: number; clientHeight: number; scrollHeight: number }) {
 	return el.scrollHeight - el.scrollTop - el.clientHeight <= 4;
+}
+
+/** The index of the first of `lines` (sorted by `seq`) with a sequence number of at least `seq`. */
+export function indexAtSeq(lines: readonly LogLine[], seq: number): number {
+	let lo = 0;
+	let hi = lines.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1;
+		if ((lines[mid]?.seq ?? Infinity) < seq) lo = mid + 1;
+		else hi = mid;
+	}
+	return lo;
 }

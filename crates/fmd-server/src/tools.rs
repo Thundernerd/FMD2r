@@ -4,10 +4,12 @@
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use utoipa::ToSchema;
 
 /// How long one tool check may take before it counts as failed.
@@ -45,6 +47,45 @@ impl SystemTools {
             bypass_config: Some(config.into()),
         }
     }
+
+    /// FlareSolverr's address: the config's `flaresolverr_ip`/`flaresolverr_port`, defaulting to
+    /// `localhost:8191` like upstream (lua/websitebypass/cloudflare.lua:278-279, :315-322).
+    fn flaresolverr_addr(&self) -> (String, u16) {
+        let config = self
+            .bypass_config
+            .as_ref()
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| serde_json::from_slice::<BypassConfig>(&b).ok());
+        let (ip, port) = config.map_or((None, None), |c| (c.flaresolverr_ip, c.flaresolverr_port));
+        (
+            ip.unwrap_or_else(|| "localhost".into()),
+            port.unwrap_or(8191),
+        )
+    }
+
+    /// Asks FlareSolverr whether it runs the way upstream does: `GET /` answers 200 with
+    /// `"msg": "FlareSolverr is ready!"` (lua/websitebypass/cloudflare.lua:346-356).
+    fn flaresolverr_check(&self) -> ToolCheck {
+        let (host, port) = self.flaresolverr_addr();
+        // On its own thread, so a slow name lookup or a trickling answer cannot hold the check
+        // past its deadline; a thread still stuck then ends with its socket timeouts.
+        let (tx, rx) = mpsc::channel();
+        let (h, deadline) = (host.clone(), Instant::now() + PROBE_TIMEOUT);
+        std::thread::spawn(move || {
+            let _ = tx.send(flaresolverr_ready(&h, port, deadline));
+        });
+        let result = rx
+            .recv_timeout(PROBE_TIMEOUT + Duration::from_millis(100))
+            .unwrap_or(Err(ProbeError::Timeout));
+        ToolCheck {
+            name: "FlareSolverr".into(),
+            ok: result.is_ok(),
+            detail: match result {
+                Ok(()) => format!("{host}:{port}"),
+                Err(e) => format!("{host}:{port}: {e}"),
+            },
+        }
+    }
 }
 
 impl ToolProbe for SystemTools {
@@ -72,17 +113,46 @@ impl ToolProbe for SystemTools {
     }
 }
 
+/// Reports no tools: the default for an [`crate::AppState`] that was not given a probe, so
+/// nothing spawns processes or dials out unless asked to.
+pub(crate) struct NoTools;
+
+impl ToolProbe for NoTools {
+    fn probe(&self) -> Vec<ToolCheck> {
+        Vec::new()
+    }
+}
+
+/// Why a tool check failed; shown as the check's detail.
+#[derive(Debug, Error)]
+enum ProbeError {
+    #[error("not found on PATH")]
+    NotFound,
+    #[error("no answer within {}s", PROBE_TIMEOUT.as_secs())]
+    Timeout,
+    #[error("exited with {status}: {output}")]
+    Exited { status: ExitStatus, output: String },
+    #[error("address does not resolve")]
+    Unresolved,
+    #[error("unexpected answer: {0}")]
+    UnexpectedAnswer(String),
+    #[error("not FlareSolverr, or not ready")]
+    NotReady,
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+}
+
 /// Runs `name arg` and reports the first line it prints.
 fn version_check(name: &str, arg: &str) -> ToolCheck {
     let result = run_with_timeout(name, arg);
     ToolCheck {
         name: name.into(),
         ok: result.is_ok(),
-        detail: result.unwrap_or_else(|e| e),
+        detail: result.unwrap_or_else(|e| e.to_string()),
     }
 }
 
-fn run_with_timeout(name: &str, arg: &str) -> Result<String, String> {
+fn run_with_timeout(name: &str, arg: &str) -> Result<String, ProbeError> {
     let mut child = Command::new(name)
         .arg(arg)
         .stdin(Stdio::null())
@@ -90,23 +160,20 @@ fn run_with_timeout(name: &str, arg: &str) -> Result<String, String> {
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => "not found on PATH".to_owned(),
-            _ => e.to_string(),
+            std::io::ErrorKind::NotFound => ProbeError::NotFound,
+            _ => e.into(),
         })?;
     let deadline = Instant::now() + PROBE_TIMEOUT;
-    loop {
-        match child.try_wait().map_err(|e| e.to_string())? {
-            Some(_) => break,
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!("no answer within {}s", PROBE_TIMEOUT.as_secs()));
-            }
-            None => std::thread::sleep(Duration::from_millis(20)),
+    while child.try_wait()?.is_none() {
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(ProbeError::Timeout);
         }
+        std::thread::sleep(Duration::from_millis(20));
     }
     // Version output is a few lines, far below the pipe buffer, so the child never blocked on it.
-    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    let output = child.wait_with_output()?;
     // Older Pythons print their version on stderr.
     let text = [&output.stdout, &output.stderr]
         .into_iter()
@@ -117,7 +184,10 @@ fn run_with_timeout(name: &str, arg: &str) -> Result<String, String> {
     if output.status.success() {
         Ok(first)
     } else {
-        Err(format!("exited with {}: {first}", output.status))
+        Err(ProbeError::Exited {
+            status: output.status,
+            output: first,
+        })
     }
 }
 
@@ -128,65 +198,51 @@ struct BypassConfig {
     flaresolverr_port: Option<u16>,
 }
 
-impl SystemTools {
-    /// FlareSolverr's address: the config's `flaresolverr_ip`/`flaresolverr_port`, defaulting to
-    /// `localhost:8191` like upstream (lua/websitebypass/cloudflare.lua:278-279, :315-322).
-    fn flaresolverr_addr(&self) -> (String, u16) {
-        let config = self
-            .bypass_config
-            .as_ref()
-            .and_then(|p| std::fs::read(p).ok())
-            .and_then(|b| serde_json::from_slice::<BypassConfig>(&b).ok());
-        let (ip, port) = config.map_or((None, None), |c| (c.flaresolverr_ip, c.flaresolverr_port));
-        (
-            ip.unwrap_or_else(|| "localhost".into()),
-            port.unwrap_or(8191),
-        )
-    }
-
-    /// Asks FlareSolverr whether it runs the way upstream does: `GET /` answers 200 with
-    /// `"msg": "FlareSolverr is ready!"` (lua/websitebypass/cloudflare.lua:346-356).
-    fn flaresolverr_check(&self) -> ToolCheck {
-        let (host, port) = self.flaresolverr_addr();
-        let result = flaresolverr_ready(&host, port);
-        ToolCheck {
-            name: "FlareSolverr".into(),
-            ok: result.is_ok(),
-            detail: match result {
-                Ok(()) => format!("{host}:{port}"),
-                Err(e) => format!("{host}:{port}: {e}"),
-            },
+/// Connects to each address `host` resolves to in turn (`localhost` may resolve to `::1` first
+/// while FlareSolverr listens on IPv4 only), all before `deadline`.
+fn connect(host: &str, port: u16, deadline: Instant) -> Result<TcpStream, ProbeError> {
+    let mut last = ProbeError::Unresolved;
+    for addr in (host, port).to_socket_addrs()? {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(ProbeError::Timeout);
+        }
+        match TcpStream::connect_timeout(&addr, left) {
+            Ok(stream) => return Ok(stream),
+            Err(e) => last = e.into(),
         }
     }
+    Err(last)
 }
 
-fn flaresolverr_ready(host: &str, port: u16) -> Result<(), String> {
-    let addr = (host, port)
-        .to_socket_addrs()
-        .map_err(|e| e.to_string())?
-        .next()
-        .ok_or("address does not resolve")?;
-    let mut stream = TcpStream::connect_timeout(&addr, PROBE_TIMEOUT).map_err(|e| e.to_string())?;
-    stream
-        .set_read_timeout(Some(PROBE_TIMEOUT))
-        .and_then(|()| stream.set_write_timeout(Some(PROBE_TIMEOUT)))
-        .map_err(|e| e.to_string())?;
+fn flaresolverr_ready(host: &str, port: u16, deadline: Instant) -> Result<(), ProbeError> {
+    let mut stream = connect(host, port, deadline)?;
+    stream.set_write_timeout(Some(PROBE_TIMEOUT))?;
     write!(
         stream,
         "GET / HTTP/1.0\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n"
-    )
-    .map_err(|e| e.to_string())?;
-    let mut response = String::new();
-    stream
-        .take(MAX_RESPONSE)
-        .read_to_string(&mut response)
-        .map_err(|e| e.to_string())?;
+    )?;
+    // Read with the time left before the deadline, so a trickling answer cannot stretch it.
+    let mut response = Vec::new();
+    let mut chunk = [0u8; 4096];
+    while (response.len() as u64) < MAX_RESPONSE {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(ProbeError::Timeout);
+        }
+        stream.set_read_timeout(Some(left))?;
+        match stream.read(&mut chunk)? {
+            0 => break,
+            n => response.extend_from_slice(&chunk[..n]),
+        }
+    }
+    let response = String::from_utf8_lossy(&response);
     let status = response.lines().next().unwrap_or_default();
     if status.split_whitespace().nth(1) != Some("200") {
-        return Err(format!("unexpected answer: {status}"));
+        return Err(ProbeError::UnexpectedAnswer(status.to_owned()));
     }
     if !response.contains("FlareSolverr is ready!") {
-        return Err("not FlareSolverr, or not ready".into());
+        return Err(ProbeError::NotReady);
     }
     Ok(())
 }

@@ -42,8 +42,11 @@
 	async function control(job: JobState, action: 'run' | 'cancel') {
 		busy[job.id] = true;
 		delete failures[job.id];
+		// A fast job may report its next state on the event stream before the answer arrives.
+		const version = store.jobVersion(job.id);
 		try {
-			store.updateJob(await (action === 'run' ? api.runJob(job.id) : api.cancelJob(job.id)));
+			const state = await (action === 'run' ? api.runJob(job.id) : api.cancelJob(job.id));
+			store.updateJob(state, version);
 		} catch (e) {
 			failures[job.id] =
 				e instanceof ApiError && e.status === 409
