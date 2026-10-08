@@ -12,7 +12,12 @@ mod app;
 mod db;
 mod error;
 mod lists;
+mod sql;
 
 pub use app::AppDb;
+pub use app::tasks::{
+    ChapterStatus, NewChapter, NewTask, PageStatus, Task, TaskChapter, TaskId, TaskPage, TaskRepo,
+    TaskStatus,
+};
 pub use error::{Result, StoreError};
 pub use lists::ListsDb;
