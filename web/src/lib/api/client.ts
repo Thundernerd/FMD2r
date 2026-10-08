@@ -1,6 +1,6 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './schema';
-import type { InboxItem, SeriesRef, TaskProgress } from './types';
+import type { About, InboxItem, JobState, LogLine, SeriesRef, TaskProgress } from './types';
 
 /** A request the server answered with a non-success status. */
 export class ApiError extends Error {
@@ -19,6 +19,15 @@ export interface Api {
 	listTasks(): Promise<TaskProgress[]>;
 	/** The series a manga URL points at, or `null` when no module handles the URL. */
 	resolveUrl(url: string): Promise<SeriesRef | null>;
+	/** The server's buffered log lines, oldest first. */
+	listLogs(): Promise<LogLine[]>;
+	listJobs(): Promise<JobState[]>;
+	/** Starts a job; rejects with status 409 when it already runs. */
+	runJob(id: string): Promise<JobState>;
+	/** Cancels a running job; rejects with status 409 when it does not run. */
+	cancelJob(id: string): Promise<JobState>;
+	/** Server diagnostics; runs the tool checks, so it can take a few seconds. */
+	about(): Promise<About>;
 }
 
 export interface ApiOptions {
@@ -52,6 +61,27 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 			const res = await client.POST('/api/resolve', { body: { url } });
 			if (res.response.status === 404) return null;
 			return unwrap('resolveUrl', res);
+		},
+		async listLogs() {
+			return unwrap('listLogs', await client.GET('/api/logs'));
+		},
+		async listJobs() {
+			return unwrap('listJobs', await client.GET('/api/jobs'));
+		},
+		async runJob(id) {
+			return unwrap(
+				'runJob',
+				await client.POST('/api/jobs/{id}/run', { params: { path: { id } } })
+			);
+		},
+		async cancelJob(id) {
+			return unwrap(
+				'cancelJob',
+				await client.POST('/api/jobs/{id}/cancel', { params: { path: { id } } })
+			);
+		},
+		async about() {
+			return unwrap('about', await client.GET('/api/about'));
 		}
 	};
 }

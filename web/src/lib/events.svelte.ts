@@ -1,4 +1,5 @@
 import type { InboxItem, JobState, LogLine, TaskProgress } from '#lib/api/types.ts';
+import { LogFeed } from '#lib/logs.svelte.ts';
 
 /** The part of the browser's `EventSource` the store uses, so tests and mock mode can supply their own. */
 export interface EventSourceLike {
@@ -27,7 +28,7 @@ export class EventStore {
 	unread = $derived(this.inbox.filter((i) => !i.read).length);
 	jobs = $state<Record<string, JobState>>({});
 	/** Recent log lines, oldest first. */
-	logs = $state<LogLine[]>([]);
+	logs: LogFeed;
 	connected = $state(false);
 
 	#opts: Required<EventStoreOptions>;
@@ -36,7 +37,8 @@ export class EventStore {
 	#backoff = INITIAL_BACKOFF_MS;
 
 	constructor(opts: EventStoreOptions) {
-		this.#opts = { maxLogLines: 500, ...opts };
+		this.#opts = { maxLogLines: 10_000, ...opts };
+		this.logs = new LogFeed({ max: this.#opts.maxLogLines });
 	}
 
 	start(): void {
@@ -56,10 +58,16 @@ export class EventStore {
 	 * Merges a REST snapshot taken around connect time. Anything a frame already delivered is
 	 * newer than the snapshot, so it wins.
 	 */
-	seed(snapshot: { inbox?: InboxItem[]; tasks?: TaskProgress[] }): void {
+	seed(snapshot: { inbox?: InboxItem[]; tasks?: TaskProgress[]; jobs?: JobState[] }): void {
 		const fresh = (snapshot.inbox ?? []).filter((s) => !this.inbox.some((i) => i.id === s.id));
 		this.inbox = [...this.inbox, ...fresh];
 		for (const task of snapshot.tasks ?? []) this.tasks[task.id] ??= task;
+		for (const job of snapshot.jobs ?? []) this.jobs[job.id] ??= job;
+	}
+
+	/** Records a job state the API answered with (e.g. after starting the job). */
+	updateJob(job: JobState): void {
+		this.jobs[job.id] = job;
 	}
 
 	markRead(id: string): void {
@@ -100,8 +108,7 @@ export class EventStore {
 			this.jobs[job.id] = job;
 		});
 		es.addEventListener('log', (ev) => {
-			const line = JSON.parse(ev.data) as LogLine;
-			this.logs = [...this.logs, line].slice(-this.#opts.maxLogLines);
+			this.logs.push(JSON.parse(ev.data) as LogLine);
 		});
 	}
 }

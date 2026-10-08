@@ -29,14 +29,15 @@ VITE_API_MOCK=true npm run build && npm run preview  # production build
 In mock mode `src/lib/api/mock.ts` stands in for fmd-server:
 
 - `/api/*` requests are answered from in-memory data (inbox items, tasks) that resets on reload. Marking an inbox item read sticks until then.
-- `/api/events` is a fake event source. Once a second it advances the downloading tasks (`task.progress`), logs a line per task (`log`) and advances a favorites check (`job.state`). After 30 seconds it posts one `inbox.new` item.
+- `/api/events` is a fake event source. Once a second it advances the downloading tasks (`task.progress`), logs a line per task (`log`) and advances every running job (`job.state`). After 30 seconds it posts one `inbox.new` item.
+- The System page's endpoints are mocked too: `/api/logs` starts with a few dozen lines, `/api/jobs` has three jobs (a running favorites check, an idle list update and a failed module update) that `POST /api/jobs/{id}/run` and `/cancel` control, and `/api/about` reports `magick` missing, FlareSolverr unreachable and one module load failure linked to an inbox item.
 - Add-by-URL accepts a URL with or without `https://`. The mock knows `mangadex.org`, `comick.io`, `bato.to` and `www.webtoons.com`; any other host gets "No module handles this URL".
 
 A mock-mode build goes to `.svelte-kit/build-mock/`, never to `build/`, so it can't be embedded by accident.
 
 ## API layer
 
-- `../openapi.json` is the server contract. fmd-server generates it with utoipa: `scripts/export-openapi.sh` writes it (the server also serves it at `/api/openapi.json`). The committed file is still the hand-written seed, because the client already calls `/api/tasks` and `/api/resolve`, which only exist once T23 and T24 land; switch to the generated file then. Run `npm run gen:api` after it changes and commit the regenerated `src/lib/api/schema.d.ts`. Don't hand-write request or response types.
+- `../openapi.json` is the server contract. fmd-server generates it with utoipa: `scripts/export-openapi.sh` writes it (the server also serves it at `/api/openapi.json`). The committed file is still the hand-written seed, because the client already calls `/api/tasks` and `/api/resolve`, which only exist once T23 and T24 land; switch to the generated file then. Until then, copy the paths and schemas of endpoints the server does serve from the generated document into the seed (T36 did so for `/api/logs`, `/api/jobs*` and `/api/about`). Run `npm run gen:api` after it changes and commit the regenerated `src/lib/api/schema.d.ts`. Don't hand-write request or response types.
 - `src/lib/api/client.ts` wraps the generated `openapi-fetch` client behind the `Api` interface that pages use.
 - `src/lib/events.svelte.ts` holds live state from the SSE stream (`task.progress`, `inbox.new`, `job.state`, `log` frames) and reconnects with exponential backoff (1 s doubling to 30 s).
 - `src/lib/app.ts` wires both to the real server or to the mock.

@@ -200,14 +200,33 @@ describe('event store', () => {
 		store.start();
 		for (const n of [1, 2, 3, 4]) {
 			latest().emit('log', {
+				seq: n,
 				time: '2026-10-08T09:41:07Z',
 				level: 'INFO',
 				target: 'download',
+				module: null,
 				message: `line ${n}`
 			});
 		}
+		vi.runOnlyPendingTimers();
 
-		expect(store.logs.map((l) => l.message)).toEqual(['line 2', 'line 3', 'line 4']);
+		expect(store.logs.lines.map((l) => l.message)).toEqual(['line 2', 'line 3', 'line 4']);
+	});
+
+	it('merges a jobs snapshot under job frames that already arrived', () => {
+		const store = start();
+		const job = {
+			id: 'favorites',
+			title: 'Check favorites',
+			state: 'idle' as const,
+			done: 0,
+			total: 0
+		};
+		latest().emit('job.state', { ...job, state: 'running', done: 3, total: 10 });
+		store.seed({ jobs: [job, { ...job, id: 'lists', title: 'Update lists' }] });
+
+		expect(store.jobs['favorites']?.state).toBe('running');
+		expect(store.jobs['lists']?.state).toBe('idle');
 	});
 
 	it('merges an API snapshot under frames that already arrived', () => {
