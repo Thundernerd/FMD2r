@@ -536,3 +536,18 @@ fn module_proxy_settings_replace_the_default_proxy() {
     assert_eq!(requests[0].proxy, None);
     assert_eq!(requests[1].proxy, Some(proxy));
 }
+
+#[test]
+fn only_requests_rewind_the_document() {
+    let (rt, _) = runtime_with_http(vec![response(200, &[], b"body")]);
+    rt.exec(
+        r#"
+        HTTP.Document.WriteString('abc')
+        HTTP.GetCookies(); HTTP.ClearCookies(); HTTP.ParseServerCookies()
+        assert(HTTP.Document.ToString() == '')  -- still at the end
+        HTTP.GET('example.test/x')
+        assert(HTTP.Document.ToString() == 'body')
+        "#,
+    )
+    .unwrap();
+}

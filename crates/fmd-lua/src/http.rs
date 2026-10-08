@@ -5,19 +5,21 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use fmd_http::{HttpClient, HttpSession, ModuleHttp, NameValueList, Proxy, ProxyKind};
+use fmd_http::{HttpClient, HttpSession, ModuleHttp, NameValueList, Proxy};
 use mlua::{AnyUserData, Lua, Value, Variadic};
 
-use crate::class::to_bytes;
+use crate::class::{borrow, to_bytes};
 use crate::{LuaClass, LuaMemoryStream, LuaStrings, StringList};
 
 /// The state behind one Lua `HTTP` object: the session plus the `Headers`, `Cookies` and
 /// `Document` objects that Lua reads and writes.
 ///
 /// FMD2 hands Lua the session's own `Headers`, `Cookies` and `Document`
-/// (baseunits/lua/LuaHTTPSend.pas:157-159). Here the session keeps its own copies, so every
-/// method copies the Lua-side objects into the session before it runs and back afterwards;
-/// between method calls only Lua can change them, so both sides always agree.
+/// (baseunits/lua/LuaHTTPSend.pas:160-162). Here the session keeps its own copies, so every
+/// method that reads or changes them runs through [`HttpObject::with_session`], which copies
+/// the Lua-side objects into the session before it runs and back afterwards; between method
+/// calls only Lua can change them, so both sides always agree. Methods and properties that
+/// touch none of the three use the session directly.
 struct HttpObject {
     session: HttpSession,
     headers: LuaStrings,
@@ -39,12 +41,10 @@ impl HttpObject {
         let result = f(&mut self.session);
         copy_from(self.session.headers(), &mut *borrow(self.headers.list())?);
         copy_from(self.session.cookies(), &mut *borrow(self.cookies.list())?);
-        let mut document = borrow(self.document.stream())?;
-        // Synapse rewinds `Document` after a response (baseunits/synapse/httpsend.pas:718).
-        document
+        // `load` keeps the position unless it now lies past the end.
+        borrow(self.document.stream())?
             .load(self.session.document())
             .map_err(mlua::Error::external)?;
-        document.set_position(0);
         Ok(result)
     }
 
@@ -54,12 +54,11 @@ impl HttpObject {
         &mut self,
         f: impl FnOnce(&mut HttpSession) -> Result<bool, fmd_http::HttpError>,
     ) -> mlua::Result<bool> {
-        self.with_session(f)?.map_err(mlua::Error::external)
+        let result = self.with_session(f)?.map_err(mlua::Error::external)?;
+        // Synapse rewinds `Document` after an exchange (baseunits/synapse/httpsend.pas:718).
+        borrow(self.document.stream())?.set_position(0);
+        Ok(result)
     }
-}
-
-fn borrow<T>(cell: &RefCell<T>) -> mlua::Result<std::cell::RefMut<'_, T>> {
-    cell.try_borrow_mut().map_err(mlua::Error::external)
 }
 
 /// Replaces `target`'s lines with `source`'s items. Header and cookie lines are text; bytes
@@ -88,7 +87,7 @@ pub struct LuaHttp {
 impl LuaHttp {
     /// Wraps `session`. `Headers` and `Cookies` start as the session's, with FMD2's
     /// separators: `:` for headers, `=` and delimiter `;` for cookies
-    /// (baseunits/httpsendthread.pas:503-508).
+    /// (baseunits/httpsendthread.pas:503-509).
     pub fn new(session: HttpSession) -> LuaHttp {
         let headers = LuaStrings::new();
         {
@@ -103,9 +102,11 @@ impl LuaHttp {
             copy_from(session.cookies(), &mut list);
         }
         let document = LuaMemoryStream::new();
-        // A fresh stream; loading a slice into it cannot fail for want of memory in practice,
-        // and an empty document is what a fresh session holds anyway.
-        let _ = document.stream().borrow_mut().load(session.document());
+        {
+            let mut stream = document.stream().borrow_mut();
+            stream.write(session.document());
+            stream.set_position(0);
+        }
         LuaHttp {
             object: Rc::new(RefCell::new(HttpObject {
                 session,
@@ -117,7 +118,7 @@ impl LuaHttp {
     }
 
     /// Creates the Lua `HTTP` object (`luaHTTPSendThreadAddMetaTable`,
-    /// baseunits/lua/LuaHTTPSend.pas:153-165).
+    /// baseunits/lua/LuaHTTPSend.pas:153-168).
     pub fn build(&self, lua: &Lua) -> crate::Result<AnyUserData> {
         let (headers, cookies, document) = {
             let object = self.object.borrow();
@@ -188,7 +189,7 @@ impl LuaHttp {
             .method("ClearCookiesStorage", |_, http: &mut HttpObject, ()| {
                 http.with_session(HttpSession::clear_cookies_storage)
             })
-            // `http_getcookies` (baseunits/lua/LuaHTTPSend.pas:101-105): `Cookies` joined by
+            // `http_getcookies` (baseunits/lua/LuaHTTPSend.pas:98-102): `Cookies` joined by
             // `; ` (baseunits/httpsendthread.pas:757-767).
             .method("GetCookies", |lua, http: &mut HttpObject, ()| {
                 let cookies = http.with_session(|s| s.get_cookies())?;
@@ -235,32 +236,32 @@ impl LuaHttp {
                     Ok(())
                 },
             )
-            // `http_threadterminated` (baseunits/lua/LuaHTTPSend.pas:107-111, :145): whether
+            // `http_threadterminated` (baseunits/lua/LuaHTTPSend.pas:104-108, :146): whether
             // the owner thread was terminated (baseunits/httpsendthread.pas:810-816).
             .read_only_property("Terminated", |_, http: &mut HttpObject| {
                 Ok(http.session.terminated())
             })
-            // `http_threadlasturl` (baseunits/lua/LuaHTTPSend.pas:113-117, :146): the URL of
+            // `http_threadlasturl` (baseunits/lua/LuaHTTPSend.pas:110-114, :147): the URL of
             // the last request, after normalisation and redirects
             // (baseunits/httpsendthread.pas:613-616, :657).
             .read_only_property("LastURL", |lua, http: &mut HttpObject| {
                 lua.create_string(http.session.last_url())
             })
-            // `http_threadresultcode` (baseunits/lua/LuaHTTPSend.pas:119-123, :147): 500 after
+            // `http_threadresultcode` (baseunits/lua/LuaHTTPSend.pas:116-120, :148): 500 after
             // a transport error (baseunits/synapse/httpsend.pas:436).
             .read_only_property("ResultCode", |_, http: &mut HttpObject| {
                 Ok(http.session.result_code())
             })
-            // `http_threadresultstring` (baseunits/lua/LuaHTTPSend.pas:125-129, :148).
+            // `http_threadresultstring` (baseunits/lua/LuaHTTPSend.pas:122-126, :149).
             .read_only_property("ResultString", |lua, http: &mut HttpObject| {
                 lua.create_string(http.session.result_text())
             })
-            // baseunits/lua/LuaHTTPSend.pas:157-159
+            // baseunits/lua/LuaHTTPSend.pas:160-162
             .object("Headers", headers)
             .object("Cookies", cookies)
             .object("Document", document)
             // `MimeType`: the Content-Type of the body to send, and of the last response
-            // (baseunits/lua/LuaHTTPSend.pas:160, baseunits/synapse/httpsend.pas:473-475,
+            // (baseunits/lua/LuaHTTPSend.pas:163, baseunits/synapse/httpsend.pas:473-475,
             // :669-670).
             .property(
                 "MimeType",
@@ -270,7 +271,7 @@ impl LuaHttp {
                     Ok(())
                 },
             )
-            // `UserAgent`, sent when non-empty (baseunits/lua/LuaHTTPSend.pas:161,
+            // `UserAgent`, sent when non-empty (baseunits/lua/LuaHTTPSend.pas:164,
             // baseunits/synapse/httpsend.pas:478-479).
             .property(
                 "UserAgent",
@@ -281,7 +282,7 @@ impl LuaHttp {
                 },
             )
             // `RetryCount`: extra attempts after a failure, -1 for no limit
-            // (baseunits/lua/LuaHTTPSend.pas:162, baseunits/httpsendthread.pas:624-626).
+            // (baseunits/lua/LuaHTTPSend.pas:165, baseunits/httpsendthread.pas:624-626).
             // Assignment converts like `luaClassAddIntegerProperty`'s `lua_tointeger`
             // (baseunits/lua/LuaClass.pas:476-486).
             .property(
@@ -295,7 +296,7 @@ impl LuaHttp {
                     Ok(())
                 },
             )
-            // `EnabledCookies` (baseunits/lua/LuaHTTPSend.pas:163): when off, the module's jar
+            // `EnabledCookies` (baseunits/lua/LuaHTTPSend.pas:166): when off, the module's jar
             // is neither read nor written and response cookies are dropped
             // (baseunits/httpsendthread.pas:475, :566-569). Assignment converts like
             // `lua_toboolean` (baseunits/lua/LuaClass.pas:488-498).
@@ -313,7 +314,8 @@ impl LuaHttp {
 }
 
 /// `luaToString` (baseunits/lua/LuaUtils.pas:206) as text: strings and numbers convert,
-/// anything else is empty.
+/// anything else is empty. `fmd-http` keeps URLs, header lines and settings as Rust strings, so
+/// bytes that are not UTF-8 are replaced, where FMD2 passes them through.
 fn text(lua: &Lua, value: Value) -> mlua::Result<String> {
     Ok(String::from_utf8_lossy(&to_bytes(lua, value)?).into_owned())
 }
@@ -326,6 +328,7 @@ pub struct ModuleHttpOverrides {
     pub user_agent: String,
     /// `name=value` pairs separated by `;`, merged into the cookies of every request.
     pub cookies: String,
+    /// The proxy to use instead of the default one.
     pub proxy: ProxyOverride,
 }
 
@@ -345,7 +348,7 @@ pub enum ProxyOverride {
 /// Where a module's HTTP overrides come from: the module's stored settings.
 pub trait ModuleHttpSettings: Send + Sync {
     /// The module's HTTP overrides, or `None` while its settings are disabled
-    /// (`Settings.Enabled`, baseunits/WebsiteModules.pas:280, :363). Read when a session is
+    /// (`Settings.Enabled`, baseunits/WebsiteModules.pas:280, :362). Read when a session is
     /// created and again for the cookies of every request.
     fn http_overrides(&self) -> Option<ModuleHttpOverrides>;
 }
@@ -365,7 +368,7 @@ pub struct HttpModule {
 /// merges the cookies of the module's settings (`MergeHTTPCookiesFromSetting`,
 /// baseunits/WebsiteModules.pas:278-283). When the settings are enabled at creation, their
 /// user agent replaces the default when non-empty, and their proxy type `Direct` turns the
-/// proxy off while a proxy server replaces the default one (:363-379).
+/// proxy off while a proxy server replaces the default one (:362-379).
 pub fn create_http(client: &HttpClient, module: Option<&HttpModule>) -> HttpSession {
     let Some(module) = module else {
         return client.session();
@@ -386,15 +389,8 @@ pub fn create_http(client: &HttpClient, module: Option<&HttpModule>) -> HttpSess
         match overrides.proxy {
             ProxyOverride::Default => {}
             // `SetNoProxy` (baseunits/httpsendthread.pas:909-912).
-            ProxyOverride::Direct => session.set_proxy("", "", "", "", ""),
-            ProxyOverride::Proxy(proxy) => {
-                let kind = match proxy.kind {
-                    ProxyKind::Http => "HTTP",
-                    ProxyKind::Socks4 => "SOCKS4",
-                    ProxyKind::Socks5 => "SOCKS5",
-                };
-                session.set_proxy(kind, &proxy.host, &proxy.port, &proxy.user, &proxy.pass);
-            }
+            ProxyOverride::Direct => session.set_proxy_server(None),
+            ProxyOverride::Proxy(proxy) => session.set_proxy_server(Some(proxy)),
         }
     }
     session

@@ -355,7 +355,7 @@ impl HttpSession {
 
     /// Sets `OnAfterSetHTTPCookies` (baseunits/httpsendthread.pas:477-478): a hook run before
     /// every exchange, after the module jar's cookies were added. FMD2 uses it to merge the
-    /// module's settings cookies (baseunits/WebsiteModules.pas:278-282, :359).
+    /// module's settings cookies (baseunits/WebsiteModules.pas:278-282, :360).
     pub fn set_on_after_set_cookies(&mut self, hook: Option<SessionHook>) {
         self.after_set_cookies = hook;
     }
@@ -620,6 +620,12 @@ impl HttpSession {
             user: user.into(),
             pass: pass.into(),
         });
+        self.set_proxy_server(proxy);
+    }
+
+    /// `SetProxy` with a typed proxy; `None` is `SetNoProxy`
+    /// (baseunits/httpsendthread.pas:909-912).
+    pub fn set_proxy_server(&mut self, proxy: Option<Proxy>) {
         self.proxy = self.stamp(proxy);
     }
 
