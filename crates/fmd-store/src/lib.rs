@@ -21,4 +21,6 @@ pub use app::tasks::{
     TaskStatus,
 };
 pub use error::{Result, StoreError};
-pub use lists::ListsDb;
+pub use lists::{
+    ListsDb, MangaListing, MasterListEntry, MasterListRepo, PageRequest, SearchFilters, SearchResults,
+};
