@@ -10,7 +10,9 @@ mod pb;
 mod pcre2;
 pub mod subprocess;
 
-use mlua::{AnyUserData, Function, Lua, LuaString, ObjectLike, Table, Value};
+use mlua::{AnyUserData, Function, Lua, Table, Value};
+
+use crate::LuaMemoryStream;
 
 /// Opens one library, returning its table, like the `luaopen_*` functions FMD2 registers.
 type Opener = fn(&Lua) -> mlua::Result<Table>;
@@ -84,21 +86,11 @@ fn to_string_arg(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
     Ok(bytes[..end].to_vec())
 }
 
-/// Reads the whole content of a stream object (T04's MemoryStream) through its Lua surface
-/// (`ToString`), like the `LoadFromStream` copies FMD2 makes of a `TStream`.
-fn read_stream(stream: &AnyUserData) -> mlua::Result<Vec<u8>> {
-    let content: LuaString = stream.get::<Function>("ToString")?.call(())?;
-    Ok(content.as_bytes().to_vec())
-}
-
-/// Replaces the content of a stream object through its Lua surface (`Clear`, `WriteString`),
-/// like setting `Size := 0` and writing from the start.
-fn write_stream(lua: &Lua, stream: &AnyUserData, data: &[u8]) -> mlua::Result<()> {
-    stream.get::<Function>("Clear")?.call::<()>(())?;
-    if !data.is_empty() {
-        stream
-            .get::<Function>("WriteString")?
-            .call::<()>(lua.create_string(data)?)?;
+/// The MemoryStream behind a Lua argument, like FMD2 casting `luaToUserData` to a `TStream`
+/// (baseunits/lua/LuaUtils.pas:201); anything else is `None`.
+fn memory_stream(value: &Value) -> Option<LuaMemoryStream> {
+    match value {
+        Value::UserData(object) => LuaMemoryStream::from_lua(object),
+        _ => None,
     }
-    Ok(())
 }

@@ -19,32 +19,13 @@ fn fileutil_extracts_names_across_both_separators() {
     "#);
 }
 
-/// A stand-in for T04's TStrings with the surface `SerializeAndMaintainNames` uses, exposed to
-/// the snippet as the global `List`.
+/// A runtime whose global `List` is a `fmd.strings` list holding `items`.
 fn runtime_with_list(items: &[&str]) -> Runtime {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    use fmd_lua::{LuaClass, mlua};
-
     let runtime = Runtime::new().unwrap();
-    let items: Vec<Vec<u8>> = items.iter().map(|s| s.as_bytes().to_vec()).collect();
-    let list = LuaClass::new(Rc::new(RefCell::new(items)))
-        .read_only_property("Count", |_, l: &mut Vec<Vec<u8>>| Ok(l.len()))
-        .method("Get", |lua, l: &mut Vec<Vec<u8>>, i: usize| {
-            lua.create_string(&l[i])
-        })
-        .method("Clear", |_, l: &mut Vec<Vec<u8>>, ()| {
-            l.clear();
-            Ok(())
-        })
-        .method("Add", |_, l: &mut Vec<Vec<u8>>, s: mlua::LuaString| {
-            l.push(s.as_bytes().to_vec());
-            Ok(())
-        })
-        .build(runtime.lua())
-        .unwrap();
-    runtime.lua().globals().set("List", list).unwrap();
+    runtime.exec("List = require('fmd.strings').New()").unwrap();
+    for item in items {
+        runtime.exec(&format!("List.Add([[{item}]])")).unwrap();
+    }
     runtime
 }
 
@@ -447,34 +428,17 @@ mod subprocess {
 }
 
 mod imagepuzzle {
-    use std::cell::RefCell;
     use std::io::Cursor;
-    use std::rc::Rc;
 
-    use fmd_lua::{LuaClass, Runtime, mlua};
+    use fmd_lua::{LuaMemoryStream, Runtime, mlua};
     use image::{ImageFormat, Rgba, RgbaImage};
 
-    /// A stand-in for T04's MemoryStream with the surface `DeScramble` uses.
-    fn stream(runtime: &Runtime, bytes: Vec<u8>) -> (mlua::AnyUserData, Rc<RefCell<Vec<u8>>>) {
-        let state = Rc::new(RefCell::new(bytes));
-        let stream = LuaClass::new(state.clone())
-            .method("ToString", |lua, s: &mut Vec<u8>, ()| {
-                lua.create_string(&*s)
-            })
-            .method("Clear", |_, s: &mut Vec<u8>, ()| {
-                s.clear();
-                Ok(())
-            })
-            .method(
-                "WriteString",
-                |_, s: &mut Vec<u8>, data: mlua::LuaString| {
-                    s.extend_from_slice(&data.as_bytes());
-                    Ok(())
-                },
-            )
-            .build(runtime.lua())
-            .unwrap();
-        (stream, state)
+    /// A MemoryStream holding `bytes`, positioned at its end as after `WriteString`: FMD2 copies
+    /// the whole stream regardless (`TMemoryStream.LoadFromStream` in FPC's classes unit).
+    fn stream(runtime: &Runtime, bytes: Vec<u8>) -> (mlua::AnyUserData, LuaMemoryStream) {
+        let handle = LuaMemoryStream::new();
+        handle.stream().borrow_mut().write(&bytes);
+        (handle.build(runtime.lua()).unwrap(), handle)
     }
 
     /// A `size`×`size` image whose pixel (x, y) is `(50x, 50y, 100, 255)`, so every pixel
@@ -503,7 +467,7 @@ mod imagepuzzle {
         let (doc, state) = stream(&runtime, input);
         runtime.lua().globals().set("Doc", doc).unwrap();
         runtime.exec(chunk).unwrap();
-        state.borrow().clone()
+        state.stream().borrow().bytes().to_vec()
     }
 
     #[test]

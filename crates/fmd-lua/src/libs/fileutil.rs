@@ -2,7 +2,9 @@
 
 use std::cmp::Ordering;
 
-use mlua::{AnyUserData, Function, Lua, LuaString, ObjectLike, Table, Value};
+use mlua::{Lua, Table, Value};
+
+use crate::{LuaClass, StringList};
 
 use super::{lib_table, to_string_arg};
 
@@ -103,25 +105,6 @@ fn serialize_and_maintain_names(names: &[Vec<u8>]) -> Option<Vec<Vec<u8>>> {
     (sorted(&numbered) == numbered).then_some(numbered)
 }
 
-/// Reads the items of a TStrings object through its Lua surface (`Count`, `Get`).
-fn read_strings(list: &AnyUserData) -> mlua::Result<Vec<Vec<u8>>> {
-    let count: usize = list.get("Count")?;
-    let get: Function = list.get("Get")?;
-    (0..count)
-        .map(|i| Ok(get.call::<LuaString>(i)?.as_bytes().to_vec()))
-        .collect()
-}
-
-/// Replaces the items of a TStrings object through its Lua surface (`Clear`, `Add`).
-fn write_strings(lua: &Lua, list: &AnyUserData, items: &[Vec<u8>]) -> mlua::Result<()> {
-    list.get::<Function>("Clear")?.call::<()>(())?;
-    let add: Function = list.get("Add")?;
-    for item in items {
-        add.call::<()>(lua.create_string(item)?)?;
-    }
-    Ok(())
-}
-
 /// Opens the library (baseunits/lua/LuaFileUtil.pas:34-45).
 pub(super) fn open(lua: &Lua) -> mlua::Result<Table> {
     lib_table(
@@ -142,14 +125,22 @@ pub(super) fn open(lua: &Lua) -> mlua::Result<Table> {
                 })?,
             ),
             (
-                // baseunits/lua/LuaFileUtil.pas:26-31: anything but userdata is ignored.
+                // baseunits/lua/LuaFileUtil.pas:26-31: anything but a TStrings object is
+                // ignored.
                 "SerializeAndMaintainNames",
-                lua.create_function(|lua, list: Value| {
+                lua.create_function(|_, list: Value| {
                     let Value::UserData(list) = list else {
                         return Ok(());
                     };
-                    if let Some(names) = serialize_and_maintain_names(&read_strings(&list)?) {
-                        write_strings(lua, &list, &names)?;
+                    let Some(list) = LuaClass::<StringList>::state(&list) else {
+                        return Ok(());
+                    };
+                    let mut list = list.try_borrow_mut().map_err(mlua::Error::external)?;
+                    if let Some(names) = serialize_and_maintain_names(list.items()) {
+                        list.clear();
+                        for name in names {
+                            list.add(name);
+                        }
                     }
                     Ok(())
                 })?,

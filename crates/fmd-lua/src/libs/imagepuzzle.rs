@@ -9,7 +9,7 @@ use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use mlua::{AnyUserData, Lua, Table, Value, Variadic};
 
-use super::{JPEG_QUALITY, build_object, constructors, lib_table, read_stream, write_stream};
+use super::{JPEG_QUALITY, build_object, constructors, lib_table, memory_stream};
 
 /// One puzzle (baseunits/ImagePuzzle.pas:11-26).
 struct Puzzle {
@@ -138,23 +138,26 @@ fn set(lua: &Lua, items: &mut [i32], i: i64, value: Value) -> mlua::Result<()> {
 /// Builds the Lua object (baseunits/lua/LuaImagePuzzle.pas:93-100).
 fn object(lua: &Lua, puzzle: Puzzle) -> mlua::Result<AnyUserData> {
     let class = crate::LuaClass::new(Rc::new(RefCell::new(puzzle)))
-        // baseunits/lua/LuaImagePuzzle.pas:28-34: does nothing unless both are objects; on
-        // failure, logs and empties the output stream (baseunits/ImagePuzzle.pas:151-156).
+        // baseunits/lua/LuaImagePuzzle.pas:28-34: does nothing unless both are streams
+        // (baseunits/ImagePuzzle.pas:159-162). The whole input is read whatever its position
+        // (`memStream.LoadFromStream(input)`, :180); the output is emptied and rewritten from
+        // the start, on failure left empty and the reason logged (:151-156, :294-296).
         .method(
             "DeScramble",
-            |lua, p: &mut Puzzle, (input, output): (Value, Value)| {
-                let (Value::UserData(input), Value::UserData(output)) = (input, output) else {
+            |_, p: &mut Puzzle, (input, output): (Value, Value)| {
+                let (Some(input), Some(output)) = (memory_stream(&input), memory_stream(&output))
+                else {
                     return Ok(());
                 };
-                let data = read_stream(&input)?;
-                let result = p.descramble(&data);
-                match result {
-                    Ok(image) => write_stream(lua, &output, &image),
-                    Err(message) => {
-                        tracing::error!(target: "fmd.imagepuzzle", "TImagePuzzle.DeScramble: {message}");
-                        write_stream(lua, &output, &[])
-                    }
-                }
+                let data = input.stream().try_borrow().map_err(mlua::Error::external)?.bytes().to_vec();
+                let image = p.descramble(&data).unwrap_or_else(|message| {
+                    tracing::error!(target: "fmd.imagepuzzle", "TImagePuzzle.DeScramble: {message}");
+                    Vec::new()
+                });
+                let mut output = output.stream().try_borrow_mut().map_err(mlua::Error::external)?;
+                output.clear();
+                output.write(&image);
+                Ok(())
             },
         )
         // baseunits/lua/LuaImagePuzzle.pas:60-70, :78-81
