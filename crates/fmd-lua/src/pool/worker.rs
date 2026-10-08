@@ -270,7 +270,7 @@ impl Ctx<'_> {
     }
 
     /// Sets the global `HTTP` (`L.LoadObject('HTTP', ...)`) over the job's session, or a new
-    /// one for the module (`CreateHTTP`, baseunits/WebsiteModules.pas:353-387), tied to the
+    /// one for the module (`CreateHTTP` and `PrepareHTTP`, baseunits/WebsiteModules.pas:382-387, :353-380), tied to the
     /// job's termination.
     pub(super) fn set_http(&mut self) -> mlua::Result<()> {
         let mut session = match self.http.take() {
@@ -357,7 +357,7 @@ impl Ctx<'_> {
 
     /// Pushes the value `f` reads onto FMD2's stack, as reading a global with `lua_getglobal`
     /// does, and returns it.
-    pub(super) fn push(
+    pub(super) fn push_global(
         &mut self,
         callback: Callback,
         f: impl FnOnce(&Lua) -> mlua::Result<Value>,

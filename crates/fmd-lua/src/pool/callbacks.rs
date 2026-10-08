@@ -299,7 +299,7 @@ pub(super) fn run(ctx: &mut Ctx<'_>, call: Call) -> Result<Answer, JobError> {
             let top = ctx.call(callback)?;
             let status = to_byte(&lua, top);
             // `lua_getglobal` leaves `PAGENUMBER` on top of the stack.
-            let global = ctx.push(callback, |lua| lua.globals().get("PAGENUMBER"))?;
+            let global = ctx.push_global(callback, |lua| lua.globals().get("PAGENUMBER"))?;
             let page = match global {
                 Value::Nil => page,
                 // Keeping only the low 32 bits of the Pascal `Integer` is the behaviour being
