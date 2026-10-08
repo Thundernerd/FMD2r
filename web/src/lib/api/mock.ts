@@ -1,4 +1,5 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
+import { createMockFavorites } from './mock-favorites';
 import { createMockLists } from './mock-lists';
 import { Invalid, createMockSettings } from './mock-settings';
 import type { paths } from './schema';
@@ -6,6 +7,7 @@ import type {
 	About,
 	AccountInfo,
 	AccountRequest,
+	FavoritePatch,
 	InboxItem,
 	JobState,
 	LogLevel,
@@ -103,9 +105,9 @@ const seedJobs = (now: number): JobState[] => [
 	{
 		id: 'favorites',
 		title: 'Check favorites',
-		state: 'running',
-		done: 31,
-		total: 48,
+		state: 'done',
+		done: 8,
+		total: 8,
 		last_run: new Date(now - 2 * 60_000).toISOString(),
 		next_run: new Date(now + HOUR_MS).toISOString(),
 		last_error: null
@@ -134,7 +136,7 @@ const seedJobs = (now: number): JobState[] => [
 ];
 
 /** How many items a mock job run works through. */
-const JOB_RUN_SIZE: Record<string, number> = { favorites: 48, lists: 40, modules: 665 };
+const JOB_RUN_SIZE: Record<string, number> = { lists: 40, modules: 665 };
 
 const seedAbout = (): About => ({
 	version: '0.1.0',
@@ -224,6 +226,9 @@ export function createMockBackend(): MockBackend {
 	const tasks = seedTasks();
 	const jobs = seedJobs(Date.now());
 	const about = seedAbout();
+	const favoritesJob = jobs.find((j) => j.id === 'favorites');
+	if (!favoritesJob) throw new Error('the mock jobs lack the favorites check');
+	const favorites = createMockFavorites(favoritesJob);
 	const logs: LogLine[] = [];
 	let logSeq = 0;
 	const log = (level: LogLevel, target: string, module: string | null, message: string) => {
@@ -270,7 +275,7 @@ export function createMockBackend(): MockBackend {
 			link: `${link}/chapter/${i + 1}`,
 			downloaded: i < downloaded
 		}));
-		return { ...info, module_id, link, chapters };
+		return { ...info, module_id, link, chapters, in_library: favorites.has(module_id, link) };
 	};
 
 	let nextTaskId = 100;
@@ -359,6 +364,41 @@ export function createMockBackend(): MockBackend {
 				? json(info)
 				: json({ status: 404, title: 'Not Found', detail: 'series not found' }, 404);
 		}
+		if (route === 'GET /api/favorites') return json(favorites.list());
+		if (route === 'POST /api/favorites') {
+			// Untrusted input: check the shape instead of trusting the generated type.
+			const body = (await req.json()) as { module_id?: unknown; link?: unknown } | null;
+			const info =
+				typeof body?.module_id === 'string' && typeof body.link === 'string'
+					? series(body.module_id, body.link)
+					: null;
+			if (!info) return json({ status: 404, detail: 'series not found' }, 404);
+			const website = modules().find((m) => m.id === info.module_id)?.name ?? info.module_id;
+			const { status, body: added } = favorites.add(info, website);
+			return json(added, status);
+		}
+		if (route === 'POST /api/favorites/check') {
+			const body = (await req.json().catch(() => ({}))) as { ids?: number[] } | null;
+			return favorites.start(body?.ids ?? null, 'new')
+				? new Response(null, { status: 202 })
+				: json({ status: 409, detail: 'a favorites check is already running' }, 409);
+		}
+		const favorite =
+			/^(PATCH|DELETE) \/api\/favorites\/(\d+)$|^POST \/api\/favorites\/(\d+)\/check-missing$/.exec(
+				route
+			);
+		if (favorite) {
+			const id = Number(favorite[2] ?? favorite[3]);
+			if (favorite[1] === 'PATCH') {
+				const { status, body } = favorites.patch(id, (await req.json()) as FavoritePatch);
+				return body ? json(body, status) : new Response(null, { status });
+			}
+			if (favorite[1] === 'DELETE')
+				return new Response(null, { status: favorites.remove(id).status });
+			return favorites.start([id], 'missing')
+				? new Response(null, { status: 202 })
+				: json({ status: 409, detail: 'a favorites check is already running' }, 409);
+		}
 		if (route === 'GET /api/logs') return json(logs);
 		if (route === 'GET /api/jobs') return json(jobs);
 		if (route === 'GET /api/settings') return json(settings.getSettings());
@@ -438,6 +478,12 @@ export function createMockBackend(): MockBackend {
 			const job = jobs.find((j) => j.id === decodeURIComponent(control[1] ?? ''));
 			if (!job) return json({ status: 404, title: 'Not Found' }, 404);
 			const running = job.state === 'running';
+			if (job === favoritesJob) {
+				const ok = control[2] === 'run' ? favorites.start(null, 'new') : favorites.cancel();
+				return ok
+					? json(job, 202)
+					: json({ status: 409, detail: `job is ${running ? 'already' : 'not'} running` }, 409);
+			}
 			if (control[2] === 'run') {
 				if (running) return json({ status: 409, detail: 'job is already running' }, 409);
 				Object.assign(job, {
@@ -499,8 +545,13 @@ export function createMockBackend(): MockBackend {
 					)
 				);
 			}
+			const found = favorites.tick(emit);
+			if (found) {
+				inbox.unshift(found);
+				emit('inbox.new', found);
+			}
 			for (const job of jobs) {
-				if (job.state !== 'running') continue;
+				if (job.state !== 'running' || job === favoritesJob) continue;
 				job.done = Math.min(job.done + Math.ceil(job.total / 20), job.total);
 				if (job.done === job.total) {
 					job.state = 'done';

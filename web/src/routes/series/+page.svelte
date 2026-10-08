@@ -78,7 +78,7 @@
 	{:else if !series}
 		<p class="muted" aria-live="polite">Loading series…</p>
 	{:else}
-		<SeriesHeader {series} {website} />
+		<SeriesHeader {api} bind:series {website} />
 		<div class="body">
 			<div class="list">
 				<ChapterList chapters={series.chapters} bind:selected />

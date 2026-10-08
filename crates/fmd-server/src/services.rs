@@ -2,6 +2,7 @@
 //! not drive the Lua runtime or the download engine itself; it only sees `fmd-core`'s view of
 //! them.
 
+use fmd_core::favorites::{CheckError, CheckMode, CheckScope, FavoritesChecker};
 use fmd_core::info::{InfoError, InfoOptions, MangaInfo};
 use fmd_core::modules::ModuleInfo;
 use futures_util::future::BoxFuture;
@@ -39,6 +40,20 @@ pub trait ModuleCatalog: Send + Sync + 'static {
     ) -> BoxFuture<'static, Result<MangaInfo, InfoError>> {
         let _ = (id, link, options);
         Box::pin(std::future::ready(Err(InfoError::UnknownModule)))
+    }
+}
+
+/// The favorites check (`fmd_core::favorites::FavoritesChecker`), for `POST /api/favorites/check`
+/// and `POST /api/favorites/{id}/check-missing`.
+pub trait FavoritesJobs: Send + Sync + 'static {
+    /// Starts checking the favorites in `scope` for `mode` chapters and returns without waiting;
+    /// fails when a check is running.
+    fn check(&self, scope: CheckScope, mode: CheckMode) -> Result<(), CheckError>;
+}
+
+impl FavoritesJobs for FavoritesChecker {
+    fn check(&self, scope: CheckScope, mode: CheckMode) -> Result<(), CheckError> {
+        self.start(scope, mode)
     }
 }
 
