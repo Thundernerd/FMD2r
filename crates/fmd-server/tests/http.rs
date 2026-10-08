@@ -257,6 +257,7 @@ async fn openapi_document_is_3_1_and_lists_the_api_paths() {
         "/api/jobs/{id}/cancel",
         "/api/about",
         "/api/settings",
+        "/api/covers",
     ] {
         assert!(paths.contains_key(path), "missing {path}");
     }
