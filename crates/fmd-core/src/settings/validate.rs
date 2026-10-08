@@ -95,6 +95,7 @@ pub(super) fn validate(s: &Settings) -> Result<(), SettingsError> {
         s.module_updater.interval_minutes,
         1..=u32::MAX,
     )?;
+    check("covers.cache_size_mb", s.covers.cache_size_mb, 1..=u32::MAX)?;
     if s.server.bind.parse::<SocketAddr>().is_err() {
         return Err(invalid(
             "server.bind",

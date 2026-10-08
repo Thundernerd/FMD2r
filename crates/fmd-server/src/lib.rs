@@ -2,6 +2,7 @@
 
 mod about;
 mod auth;
+mod covers;
 mod error;
 mod events;
 mod health;
@@ -24,6 +25,7 @@ use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+pub use covers::{CoverConfig, CoverModules, CoverSession, cover_url};
 pub use error::{ApiError, Problem};
 pub use events::{EventBus, JobState, ServerEvent, TaskProgress, TaskState, TaskStatusChange};
 pub use fmd_core::jobs::JobPhase;
@@ -61,6 +63,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(jobs::run))
         .routes(routes!(jobs::cancel))
         .routes(routes!(about::about))
+        .routes(routes!(covers::get))
         .routes(routes!(settings::get, settings::patch))
 }
 
