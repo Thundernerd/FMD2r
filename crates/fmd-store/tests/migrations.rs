@@ -1,3 +1,6 @@
+// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+#![allow(clippy::unwrap_used)]
+
 use fmd_store::{AppDb, ListsDb};
 
 fn tables(path: &std::path::Path) -> Vec<String> {

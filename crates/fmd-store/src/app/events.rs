@@ -148,8 +148,10 @@ impl<'a> EventRepo<'a> {
 
     pub fn unread_count(&self) -> Result<u64> {
         let conn = self.db.lock();
-        Ok(conn.query_row("SELECT COUNT(*) FROM events WHERE read = 0", [], |r| {
-            r.get(0)
-        })?)
+        Ok(
+            conn.query_row("SELECT COUNT(*) FROM events WHERE read = 0", [], |r| {
+                r.get(0)
+            })?,
+        )
     }
 }

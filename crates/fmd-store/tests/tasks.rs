@@ -1,3 +1,6 @@
+// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+#![allow(clippy::unwrap_used)]
+
 use fmd_store::{AppDb, ChapterStatus, NewChapter, NewTask, PageStatus, TaskPage, TaskStatus};
 
 fn new_task(title: &str, status: TaskStatus) -> NewTask {
@@ -29,7 +32,9 @@ fn task_with_chapters_and_pages_survives_reopen() {
     let db = AppDb::open(&path).unwrap();
     let tasks = db.tasks();
 
-    let task = tasks.create(&new_task("Berserk", TaskStatus::Waiting)).unwrap();
+    let task = tasks
+        .create(&new_task("Berserk", TaskStatus::Waiting))
+        .unwrap();
     let chapters: Vec<NewChapter> = (0..3)
         .map(|i| NewChapter {
             link: format!("/ch/{i}"),
@@ -47,7 +52,6 @@ fn task_with_chapters_and_pages_survives_reopen() {
     done.status = PageStatus::Downloaded;
     done.filename = "002.jpg".into();
     tasks.update_page(task.id, &done).unwrap();
-    drop(tasks);
     drop(db);
 
     let db = AppDb::open(&path).unwrap();
@@ -80,9 +84,13 @@ fn list_by_status_filters_and_update_status_moves_tasks() {
     let dir = tempfile::tempdir().unwrap();
     let db = AppDb::open(dir.path().join("app.db")).unwrap();
     let tasks = db.tasks();
-    let a = tasks.create(&new_task("a", TaskStatus::Downloading)).unwrap();
+    let a = tasks
+        .create(&new_task("a", TaskStatus::Downloading))
+        .unwrap();
     let b = tasks.create(&new_task("b", TaskStatus::Stopped)).unwrap();
-    let c = tasks.create(&new_task("c", TaskStatus::Downloading)).unwrap();
+    let c = tasks
+        .create(&new_task("c", TaskStatus::Downloading))
+        .unwrap();
 
     let ids = |s| {
         tasks
@@ -113,11 +121,14 @@ fn reorder_and_delete() {
     let b = tasks.create(&new_task("b", TaskStatus::Stopped)).unwrap();
     let c = tasks.create(&new_task("c", TaskStatus::Stopped)).unwrap();
     tasks
-        .set_chapters(b.id, &[NewChapter {
-            link: "/x".into(),
-            name: "x".into(),
-            custom_filename: None,
-        }])
+        .set_chapters(
+            b.id,
+            &[NewChapter {
+                link: "/x".into(),
+                name: "x".into(),
+                custom_filename: None,
+            }],
+        )
         .unwrap();
     tasks.set_pages(b.id, 0, &[page(0, 0)]).unwrap();
 

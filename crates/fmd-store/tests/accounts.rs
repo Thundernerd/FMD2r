@@ -1,3 +1,6 @@
+// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+#![allow(clippy::unwrap_used)]
+
 use fmd_store::{Account, AccountStatus, AppDb, KeyFileCipher};
 
 fn account() -> Account {
@@ -35,7 +38,10 @@ fn credentials_are_encrypted_at_rest_and_decrypted_through_the_api() {
         );
     }
 
-    assert_eq!(db.accounts(&cipher).get("mangadex").unwrap(), Some(account()));
+    assert_eq!(
+        db.accounts(&cipher).get("mangadex").unwrap(),
+        Some(account())
+    );
     assert_eq!(db.accounts(&cipher).get("other").unwrap(), None);
 }
 
@@ -46,11 +52,18 @@ fn key_file_is_reused_across_restarts() {
     let path = dir.path().join("app.db");
     {
         let cipher = KeyFileCipher::open_or_create(&key).unwrap();
-        AppDb::open(&path).unwrap().accounts(&cipher).upsert(&account()).unwrap();
+        AppDb::open(&path)
+            .unwrap()
+            .accounts(&cipher)
+            .upsert(&account())
+            .unwrap();
     }
     let cipher = KeyFileCipher::open_or_create(&key).unwrap();
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.accounts(&cipher).get("mangadex").unwrap(), Some(account()));
+    assert_eq!(
+        db.accounts(&cipher).get("mangadex").unwrap(),
+        Some(account())
+    );
 
     let other_dir = tempfile::tempdir().unwrap();
     let wrong = KeyFileCipher::open_or_create(other_dir.path().join("k")).unwrap();
@@ -65,7 +78,9 @@ fn status_updates_and_delete() {
     let accounts = db.accounts(&cipher);
     accounts.upsert(&account()).unwrap();
 
-    accounts.set_status("mangadex", AccountStatus::Invalid).unwrap();
+    accounts
+        .set_status("mangadex", AccountStatus::Invalid)
+        .unwrap();
     let stored = accounts.get("mangadex").unwrap().unwrap();
     assert_eq!(stored.status, AccountStatus::Invalid);
     assert_eq!(stored.password, "hunter2-secret");

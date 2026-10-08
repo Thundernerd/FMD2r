@@ -50,8 +50,9 @@ impl<'a> ModuleFileRepo<'a> {
     /// Every file, ordered by path.
     pub fn list(&self) -> Result<Vec<ModuleFile>> {
         let conn = self.db.lock();
-        let mut stmt = conn
-            .prepare_cached("SELECT path, sha, last_modified, size FROM module_files ORDER BY path")?;
+        let mut stmt = conn.prepare_cached(
+            "SELECT path, sha, last_modified, size FROM module_files ORDER BY path",
+        )?;
         let rows = stmt.query_map([], file_from_row)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }

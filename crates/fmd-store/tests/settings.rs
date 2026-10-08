@@ -1,3 +1,6 @@
+// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+#![allow(clippy::unwrap_used)]
+
 use fmd_store::{AppDb, ModuleFile, ModuleSettings};
 use serde_json::json;
 
@@ -21,10 +24,16 @@ fn settings_round_trip_typed_values() {
     settings.set("connections", &value).unwrap();
     settings.set("language", &"en").unwrap();
     assert_eq!(settings.get("connections").unwrap(), Some(value));
-    assert_eq!(settings.get::<String>("language").unwrap().as_deref(), Some("en"));
+    assert_eq!(
+        settings.get::<String>("language").unwrap().as_deref(),
+        Some("en")
+    );
 
     settings.set("language", &"nl").unwrap();
-    assert_eq!(settings.get::<String>("language").unwrap().as_deref(), Some("nl"));
+    assert_eq!(
+        settings.get::<String>("language").unwrap().as_deref(),
+        Some("nl")
+    );
     assert!(settings.get::<u32>("language").is_err());
 
     settings.remove("language").unwrap();
@@ -84,7 +93,10 @@ fn module_files_upsert_list_and_delete() {
     let all = files.list().unwrap();
     assert_eq!(
         all,
-        [file("lua/utils/json.lua", "bbb"), file("modules/MangaDex.lua", "ccc")]
+        [
+            file("lua/utils/json.lua", "bbb"),
+            file("modules/MangaDex.lua", "ccc")
+        ]
     );
 
     files.delete("lua/utils/json.lua").unwrap();

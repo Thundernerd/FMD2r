@@ -78,7 +78,8 @@ impl<'a> ModuleSettingsRepo<'a> {
     pub fn get(&self, module_id: &str) -> Result<Option<ModuleSettings>> {
         let raw = {
             let conn = self.db.lock();
-            conn.query_row(SELECT, [module_id], raw_from_row).optional()?
+            conn.query_row(SELECT, [module_id], raw_from_row)
+                .optional()?
         };
         raw.map(|raw| {
             Ok(ModuleSettings {

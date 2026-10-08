@@ -1,3 +1,6 @@
+// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+#![allow(clippy::unwrap_used)]
+
 use fmd_store::{ListsDb, MangaListing, PageRequest, SearchFilters};
 
 fn listing(link: &str, title: &str, alttitles: &str, genres: &str) -> MangaListing {
@@ -12,7 +15,14 @@ fn listing(link: &str, title: &str, alttitles: &str, genres: &str) -> MangaListi
 
 fn links(db: &ListsDb, query: &str, filters: &SearchFilters) -> Vec<String> {
     db.masterlist()
-        .search(query, filters, PageRequest { offset: 0, limit: 100 })
+        .search(
+            query,
+            filters,
+            PageRequest {
+                offset: 0,
+                limit: 100,
+            },
+        )
         .unwrap()
         .entries
         .into_iter()
@@ -28,7 +38,12 @@ fn open() -> (tempfile::TempDir, ListsDb) {
             "m",
             [
                 listing("/1", "One Piece", "", "Action, Adventure, Comedy"),
-                listing("/2", "Wan Pisu", "One Piece; ワンピース", "Action, Adventure"),
+                listing(
+                    "/2",
+                    "Wan Pisu",
+                    "One Piece; ワンピース",
+                    "Action, Adventure",
+                ),
                 listing("/3", "Naruto", "", "Action, Romance"),
                 listing("/4", "Piece of Cake", "", "Comedy, Romance"),
             ],
@@ -51,7 +66,10 @@ fn search_finds_by_title_and_alttitle() {
 #[test]
 fn search_supports_prefix_queries() {
     let (_dir, db) = open();
-    assert_eq!(links(&db, "one pi", &SearchFilters::default()), ["/1", "/2"]);
+    assert_eq!(
+        links(&db, "one pi", &SearchFilters::default()),
+        ["/1", "/2"]
+    );
     assert_eq!(links(&db, "naru", &SearchFilters::default()), ["/3"]);
 }
 
@@ -91,8 +109,12 @@ fn pagination_is_stable_and_reports_total() {
     let (_dir, db) = open();
     let repo = db.masterlist();
     let page = |offset| {
-        repo.search("", &SearchFilters::default(), PageRequest { offset, limit: 3 })
-            .unwrap()
+        repo.search(
+            "",
+            &SearchFilters::default(),
+            PageRequest { offset, limit: 3 },
+        )
+        .unwrap()
     };
     let first = page(0);
     let second = page(3);
@@ -114,11 +136,13 @@ fn fts_stays_in_sync_on_upsert_and_replace() {
     let repo = db.masterlist();
     let none = SearchFilters::default();
 
-    repo.upsert("m", &listing("/3", "Boruto", "", "Action")).unwrap();
+    repo.upsert("m", &listing("/3", "Boruto", "", "Action"))
+        .unwrap();
     assert!(links(&db, "naruto", &none).is_empty());
     assert_eq!(links(&db, "boruto", &none), ["/3"]);
 
-    repo.upsert("other", &listing("/9", "Bleach", "", "Action")).unwrap();
+    repo.upsert("other", &listing("/9", "Bleach", "", "Action"))
+        .unwrap();
     assert_eq!(links(&db, "bleach", &none), ["/9"]);
     let only_m = SearchFilters {
         module_ids: vec!["m".into()],
@@ -126,16 +150,19 @@ fn fts_stays_in_sync_on_upsert_and_replace() {
     };
     assert!(links(&db, "bleach", &only_m).is_empty());
 
-    repo.replace_module("m", [listing("/1", "One Piece", "", "")]).unwrap();
+    repo.replace_module("m", [listing("/1", "One Piece", "", "")])
+        .unwrap();
     assert!(links(&db, "boruto", &none).is_empty());
     assert_eq!(links(&db, "piece", &none), ["/1"]);
     assert_eq!(links(&db, "bleach", &none), ["/9"]);
     assert_eq!(repo.count(None).unwrap(), 2);
 
     // The per-row sync still works after a bulk replace.
-    repo.upsert("m", &listing("/5", "Dragon Ball", "", "")).unwrap();
+    repo.upsert("m", &listing("/5", "Dragon Ball", "", ""))
+        .unwrap();
     assert_eq!(links(&db, "dragon", &none), ["/5"]);
-    repo.replace_module("m", Vec::<MangaListing>::new()).unwrap();
+    repo.replace_module("m", Vec::<MangaListing>::new())
+        .unwrap();
     assert!(links(&db, "dragon", &none).is_empty());
     assert_eq!(links(&db, "", &none), ["/9"]);
 }
@@ -144,13 +171,17 @@ fn fts_stays_in_sync_on_upsert_and_replace() {
 fn failed_replace_leaves_list_and_index_untouched() {
     let (_dir, db) = open();
     let repo = db.masterlist();
-    let duplicate = [listing("/x", "Bleach", "", ""), listing("/x", "Bleach", "", "")];
+    let duplicate = [
+        listing("/x", "Bleach", "", ""),
+        listing("/x", "Bleach", "", ""),
+    ];
     assert!(repo.replace_module("m", duplicate).is_err());
 
     let none = SearchFilters::default();
     assert_eq!(links(&db, "one piece", &none), ["/1", "/2"]);
     assert!(links(&db, "bleach", &none).is_empty());
-    repo.upsert("m", &listing("/5", "Dragon Ball", "", "")).unwrap();
+    repo.upsert("m", &listing("/5", "Dragon Ball", "", ""))
+        .unwrap();
     assert_eq!(links(&db, "dragon", &none), ["/5"]);
 }
 
@@ -179,7 +210,14 @@ fn bulk_import_of_100k_rows_is_fast() {
     assert_eq!(db.masterlist().count(Some("bulk")).unwrap(), 100_000);
     let hits = db
         .masterlist()
-        .search("title 99999", &SearchFilters::default(), PageRequest { offset: 0, limit: 10 })
+        .search(
+            "title 99999",
+            &SearchFilters::default(),
+            PageRequest {
+                offset: 0,
+                limit: 10,
+            },
+        )
         .unwrap();
     assert_eq!(hits.entries[0].listing.link, "/manga/99999");
     eprintln!("imported 100k rows in {elapsed:?}");

@@ -61,3 +61,28 @@ macro_rules! text_enum {
     };
 }
 pub(crate) use text_enum;
+
+/// Rewrites `sort_order` of `table` so `first` come first in the given order and every other row
+/// keeps its relative order after them. `table` is always a constant from this crate.
+pub(crate) fn reorder(
+    conn: &mut rusqlite::Connection,
+    table: &str,
+    first: &[i64],
+) -> crate::Result<()> {
+    let tx = conn.transaction()?;
+    let rest: Vec<i64> = {
+        let mut stmt = tx.prepare_cached(&format!("SELECT id FROM {table} ORDER BY sort_order"))?;
+        let all = stmt.query_map([], |r| r.get(0))?;
+        all.filter(|id| !matches!(id, Ok(id) if first.contains(id)))
+            .collect::<rusqlite::Result<_>>()?
+    };
+    {
+        let mut stmt =
+            tx.prepare_cached(&format!("UPDATE {table} SET sort_order = ?2 WHERE id = ?1"))?;
+        for (order, id) in first.iter().copied().chain(rest).enumerate() {
+            stmt.execute(rusqlite::params![id, order])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}

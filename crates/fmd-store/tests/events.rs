@@ -1,3 +1,6 @@
+// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+#![allow(clippy::unwrap_used)]
+
 use fmd_store::{AppDb, EventQuery, EventSeverity, NewEvent};
 use serde_json::json;
 
@@ -35,7 +38,7 @@ fn push_list_and_mark_read() {
             ..EventQuery::default()
         })
         .unwrap();
-    assert_eq!(unread, [second.clone()]);
+    assert_eq!(unread, std::slice::from_ref(&second));
     assert_eq!(events.unread_count().unwrap(), 1);
 
     let limited = events

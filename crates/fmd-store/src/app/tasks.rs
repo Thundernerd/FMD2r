@@ -5,7 +5,7 @@ use rusqlite::{OptionalExtension, Row, params};
 
 use crate::db::Db;
 use crate::error::Result;
-use crate::sql::{now_ms, text_enum};
+use crate::sql::{now_ms, reorder, text_enum};
 
 text_enum! {
     /// Task status, mirroring FMD2's `TDownloadStatusType` (baseunits/uDownloadsManager.pas:19-31)
@@ -174,8 +174,9 @@ impl<'a> TaskRepo<'a> {
     /// Every task in queue order.
     pub fn list(&self) -> Result<Vec<Task>> {
         let conn = self.db.lock();
-        let mut stmt =
-            conn.prepare_cached(&format!("SELECT {TASK_COLUMNS} FROM tasks ORDER BY sort_order"))?;
+        let mut stmt = conn.prepare_cached(&format!(
+            "SELECT {TASK_COLUMNS} FROM tasks ORDER BY sort_order"
+        ))?;
         let rows = stmt.query_map([], task_from_row)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
@@ -323,22 +324,8 @@ impl<'a> TaskRepo<'a> {
     /// Puts the given tasks first, in the given order; tasks not listed keep their relative order
     /// after them.
     pub fn reorder(&self, ids: &[TaskId]) -> Result<()> {
-        let mut conn = self.db.lock();
-        let tx = conn.transaction()?;
-        let rest: Vec<i64> = {
-            let mut stmt = tx.prepare_cached("SELECT id FROM tasks ORDER BY sort_order")?;
-            let all = stmt.query_map([], |r| r.get(0))?;
-            all.filter(|id| !matches!(id, Ok(id) if ids.contains(&TaskId(*id))))
-                .collect::<rusqlite::Result<_>>()?
-        };
-        {
-            let mut stmt = tx.prepare_cached("UPDATE tasks SET sort_order = ?2 WHERE id = ?1")?;
-            for (order, id) in ids.iter().map(|id| id.0).chain(rest).enumerate() {
-                stmt.execute(params![id, order])?;
-            }
-        }
-        tx.commit()?;
-        Ok(())
+        let ids: Vec<i64> = ids.iter().map(|id| id.0).collect();
+        reorder(&mut self.db.lock(), "tasks", &ids)
     }
 
     /// Deletes the task with its chapters and pages.

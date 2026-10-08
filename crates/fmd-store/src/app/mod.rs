@@ -3,6 +3,7 @@
 pub(crate) mod accounts;
 pub(crate) mod downloaded_chapters;
 pub(crate) mod events;
+pub(crate) mod favorites;
 pub(crate) mod module_files;
 pub(crate) mod module_settings;
 pub(crate) mod settings;
@@ -16,6 +17,7 @@ use crate::error::Result;
 use accounts::AccountRepo;
 use downloaded_chapters::DownloadedChaptersRepo;
 use events::EventRepo;
+use favorites::FavoriteRepo;
 use module_files::ModuleFileRepo;
 use module_settings::ModuleSettingsRepo;
 use settings::SettingsRepo;
@@ -75,5 +77,10 @@ impl AppDb {
     /// Lua files synced from upstream.
     pub fn module_files(&self) -> ModuleFileRepo<'_> {
         ModuleFileRepo::new(&self.db)
+    }
+
+    /// Favorites (the library).
+    pub fn favorites(&self) -> FavoriteRepo<'_> {
+        FavoriteRepo::new(&self.db)
     }
 }
