@@ -258,33 +258,16 @@ impl Module {
         self.def_read().clone()
     }
 
-    /// The limits in effect: the module's own, with `overrides` (the user's module settings,
-    /// `None` while disabled) applied as FMD2 does. A non-zero task or thread limit override
-    /// replaces the module's (`GetMaxTaskLimit`, `GetMaxThreadPerTaskLimit`,
-    /// baseunits/WebsiteModules.pas:398-412); the connection limit override replaces it even
-    /// when 0 (`SetEnabled`, `SetMaxConnectionLimit`,
-    /// baseunits/WebsiteModulesSettings.pas:126-155).
-    pub fn limits(&self, overrides: Option<&ModuleLimits>) -> ModuleLimits {
+    /// The limits the module declares, as its `MODULE` object holds them now. The user's
+    /// overrides and the global limits apply on top in `fmd_core::settings::effective_limits`,
+    /// with FMD2's precedence (`GetMaxTaskLimit`, `GetMaxThreadPerTaskLimit`,
+    /// baseunits/WebsiteModules.pas:398-412).
+    pub fn limits(&self) -> ModuleLimits {
         let def = self.def_read();
-        let declared = ModuleLimits {
+        ModuleLimits {
             max_task_limit: def.max_task_limit,
             max_thread_per_task_limit: def.max_thread_per_task_limit,
             max_connection_limit: def.max_connection_limit,
-        };
-        let Some(overrides) = overrides else {
-            return declared;
-        };
-        let pick = |overridden: i32, declared: i32| match overridden {
-            0 => declared,
-            value => value,
-        };
-        ModuleLimits {
-            max_task_limit: pick(overrides.max_task_limit, declared.max_task_limit),
-            max_thread_per_task_limit: pick(
-                overrides.max_thread_per_task_limit,
-                declared.max_thread_per_task_limit,
-            ),
-            max_connection_limit: overrides.max_connection_limit,
         }
     }
 

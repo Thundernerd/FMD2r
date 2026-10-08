@@ -3,15 +3,14 @@
 //! baseunits/lua/LuaHandler.pas:42-151).
 
 use std::panic::AssertUnwindSafe;
-use std::sync::mpsc::Receiver;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use fmd_http::{HttpSession, TerminateToken};
 use mlua::chunk::ChunkMode;
 use mlua::{Function, Lua, MultiValue, Value};
 
 use super::callbacks::{self, Callback};
-use super::{Bytecode, CallbackError, Envelope, Job, JobError, JobResult, Shared};
+use super::{Bytecode, CallbackError, Envelope, Job, JobError, JobResult, Queue, Shared};
 use crate::module::lock;
 use crate::{
     Globals, HttpModule, LuaHttp, Module, ModuleHttpOverrides, ModuleHttpSettings, Runtime,
@@ -34,14 +33,10 @@ end
 /// counter passes 15 (baseunits/lua/LuaHandler.pas:134-144).
 const CALLS_PER_GC: u32 = 16;
 
-/// Takes jobs off `receiver` until the pool shuts down.
-pub(super) fn run(shared: &Shared, receiver: &Mutex<Receiver<Envelope>>) {
+/// Runs worker `index`: takes its jobs off `queue` until the pool shuts down.
+pub(super) fn run(shared: &Shared, queue: &Queue, index: usize) {
     let mut loaded = None;
-    loop {
-        let envelope = lock(receiver).recv();
-        let Ok(Envelope { job, reply }) = envelope else {
-            break;
-        };
+    while let Some(Envelope { job, reply }) = queue.pop(index) {
         let module = job.module.def().id;
         let callback = job.call.callback();
         let result =
@@ -78,6 +73,10 @@ struct Loaded {
     /// The values FMD2 would find at the top and bottom of the state's stack, which it never
     /// clears: a callback that returns nothing reads whatever is on top
     /// (e.g. `lua_toboolean(L.Handle, -1)`, baseunits/lua/LuaWebsiteModules.pas:165).
+    /// Not modelled: FMD2's anti-bot bypass runs in the same state and clears its stack
+    /// afterwards (`L.ClearStack`, baseunits/lua/LuaWebsiteBypass.pas:139), so there a
+    /// callback that went through the bypass and returns nothing reads `nil`. The bypass
+    /// arrives with T30.
     top: Value,
     bottom: Option<Value>,
     runtime: Runtime,
@@ -89,6 +88,7 @@ fn process(shared: &Shared, loaded: &mut Option<Loaded>, job: Job) -> Result<Job
         call,
         http,
         terminate,
+        affinity: _,
     } = job;
     let callback = call.callback();
     let def = module.def();

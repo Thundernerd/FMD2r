@@ -34,9 +34,9 @@ pub use module::{
 };
 pub use package::PackageCache;
 pub use pool::{
-    Answer, Call, Callback, CallbackError, Caller, HttpSettingsSource, InfoReply, Invalidate, Job,
-    JobError, JobResult, ListReply, MangaInfo, NamesAndLinks, PageCount, Pending, PoolConfig,
-    Reply, Task, TaskReply, UpdateList, WorkerPool, missing_host_api,
+    Affinity, Answer, Call, Callback, CallbackError, Caller, HttpSettingsSource, InfoReply,
+    Invalidate, Job, JobError, JobResult, ListReply, MangaInfo, NamesAndLinks, PageCount, Pending,
+    PoolConfig, Reply, Task, TaskReply, UpdateList, WorkerPool, missing_host_api,
 };
 pub use strings::{ListIndexError, LuaStrings, StringList};
 

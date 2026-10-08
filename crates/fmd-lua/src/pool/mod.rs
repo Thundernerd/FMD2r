@@ -7,11 +7,10 @@ mod host_api;
 mod pending;
 mod worker;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 
 use fmd_http::{HttpClient, HttpSession, TerminateToken};
@@ -66,7 +65,15 @@ pub struct Job {
     pub http: Option<HttpSession>,
     /// Terminating it aborts the callback's HTTP requests, `sleep` and `ExecJS`.
     pub terminate: TerminateToken,
+    /// The worker that must run the job; the next idle one when `None`.
+    pub affinity: Option<Affinity>,
 }
+
+/// One worker of a pool, from [`WorkerPool::affinity`]. Jobs given the same affinity run in
+/// order on that worker, in its one Lua state, as one FMD2 task or download thread runs all
+/// its callbacks in its own state (baseunits/lua/LuaWebsiteModuleHandler.pas:56-64).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Affinity(usize);
 
 /// What a [`Job`] produced.
 pub struct JobResult {
@@ -126,20 +133,66 @@ struct Envelope {
     reply: tokio::sync::oneshot::Sender<Result<JobResult, JobError>>,
 }
 
+/// The jobs waiting for a worker, in submission order.
+#[derive(Default)]
+struct Queue {
+    state: Mutex<QueueState>,
+    ready: Condvar,
+}
+
+#[derive(Default)]
+struct QueueState {
+    jobs: VecDeque<Envelope>,
+    closed: bool,
+}
+
+impl Queue {
+    fn push(&self, envelope: Envelope) {
+        lock(&self.state).jobs.push_back(envelope);
+        // A job pinned to one worker must reach that worker, so every waiting one looks.
+        self.ready.notify_all();
+    }
+
+    /// The next job worker `worker` may run (unpinned or pinned to it), waiting for one;
+    /// `None` once the pool shuts down and none is left.
+    fn pop(&self, worker: usize) -> Option<Envelope> {
+        let mut state = lock(&self.state);
+        loop {
+            let eligible = state
+                .jobs
+                .iter()
+                .position(|e| e.job.affinity.is_none_or(|a| a.0 == worker));
+            if let Some(i) = eligible {
+                return state.jobs.remove(i);
+            }
+            if state.closed {
+                return None;
+            }
+            state = self.ready.wait(state).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+
+    fn close(&self) {
+        lock(&self.state).closed = true;
+        self.ready.notify_all();
+    }
+}
+
 /// Runs module callbacks on dedicated OS threads. Each thread owns one Lua state (which, being
 /// `!Send`, never leaves it) and keeps it while its jobs target the same module, so globals
 /// persist between callbacks of that module on that thread.
 pub struct WorkerPool {
     shared: Arc<Shared>,
-    sender: Option<mpsc::Sender<Envelope>>,
+    queue: Arc<Queue>,
     threads: Vec<JoinHandle<()>>,
+    /// The worker the next [`affinity`](WorkerPool::affinity) names.
+    next_affinity: AtomicU64,
 }
 
 impl WorkerPool {
     /// Starts `config.threads` workers (at least one).
     pub fn new(config: PoolConfig) -> std::io::Result<WorkerPool> {
-        let (sender, receiver) = mpsc::channel();
-        let receiver = Arc::new(Mutex::new(receiver));
+        let queue = Arc::new(Queue::default());
         let shared = Arc::new(Shared {
             lua_dir: config.lua_dir,
             http: config.http,
@@ -153,29 +206,33 @@ impl WorkerPool {
         let mut threads = Vec::new();
         for i in 0..config.threads.max(1) {
             let shared = shared.clone();
-            let receiver = receiver.clone();
+            let queue = queue.clone();
             let thread = std::thread::Builder::new()
                 .name(format!("fmd-lua-worker-{i}"))
-                .spawn(move || worker::run(&shared, &receiver))?;
+                .spawn(move || worker::run(&shared, &queue, i))?;
             threads.push(thread);
         }
         Ok(WorkerPool {
             shared,
-            sender: Some(sender),
+            queue,
             threads,
+            next_affinity: AtomicU64::new(0),
         })
     }
 
-    /// Queues `job` for the next idle worker.
+    /// Queues `job` for the next idle worker, or the worker its affinity names.
     pub fn submit(&self, job: Job) -> Pending<JobResult> {
         let (reply, receiver) = tokio::sync::oneshot::channel();
         let terminate = job.terminate.clone();
-        if let Some(sender) = &self.sender {
-            // A send fails only once every worker is gone; the dropped reply then reads as
-            // `Closed`.
-            let _ = sender.send(Envelope { job, reply });
-        }
+        self.queue.push(Envelope { job, reply });
         Pending::new(receiver, terminate, Ok)
+    }
+
+    /// A worker to pin related jobs to, the workers taken in turn.
+    pub fn affinity(&self) -> Affinity {
+        let next = self.next_affinity.fetch_add(1, Ordering::SeqCst);
+        // The pool's thread count fits a `usize`, so the remainder does too.
+        Affinity((next % self.threads.len().max(1) as u64) as usize)
     }
 
     /// The typed callbacks of `module`.
@@ -185,6 +242,7 @@ impl WorkerPool {
             module: module.clone(),
             http: None,
             terminate: TerminateToken::new(),
+            affinity: None,
         }
     }
 
@@ -211,7 +269,7 @@ impl Drop for WorkerPool {
     /// thread, as FMD2 frees the handler when its thread ends
     /// (baseunits/lua/LuaWebsiteModuleHandler.pas:66-70, :88-95).
     fn drop(&mut self) {
-        self.sender = None;
+        self.queue.close();
         for thread in self.threads.drain(..) {
             let _ = thread.join();
         }
@@ -224,9 +282,16 @@ pub struct Caller<'a> {
     module: Arc<Module>,
     http: Option<HttpSession>,
     terminate: TerminateToken,
+    affinity: Option<Affinity>,
 }
 
 impl Caller<'_> {
+    /// Runs the callback on the worker `affinity` names.
+    pub fn with_affinity(mut self, affinity: Affinity) -> Self {
+        self.affinity = Some(affinity);
+        self
+    }
+
     /// Runs the callback's `HTTP` global over `session` instead of a new one.
     pub fn with_http(mut self, session: HttpSession) -> Self {
         self.http = Some(session);
@@ -246,6 +311,7 @@ impl Caller<'_> {
             call,
             http: self.http,
             terminate: self.terminate,
+            affinity: self.affinity,
         };
         self.pool.submit(job).map(move |result| {
             let value = map(result.answer).ok_or(JobError::Mismatch)?;

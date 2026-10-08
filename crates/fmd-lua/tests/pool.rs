@@ -467,12 +467,13 @@ end
 }
 
 #[test]
-fn enabled_overrides_replace_module_limits_except_zero_task_and_thread_limits() {
+fn module_limits_are_what_the_module_object_holds() {
     let limited = r#"
 function Init()
-  local m = NewWebsiteModule(); m.ID='m'; m.Name='M'
+  local m = NewWebsiteModule(); m.ID='m'; m.Name='M'; m.OnTaskStart='Start'
   m.MaxTaskLimit = 2; m.MaxThreadPerTaskLimit = 3; m.MaxConnectionLimit = 4
 end
+function Start() MODULE.MaxTaskLimit = 5; return true end
 "#;
     let f = Fixture::new(1, &[("M.lua", limited)]);
     let module = f.module("m");
@@ -481,32 +482,20 @@ end
         max_thread_per_task_limit: 3,
         max_connection_limit: 4,
     };
+    assert_eq!(module.limits(), declared);
 
-    assert_eq!(module.limits(None), declared);
-    let overrides = ModuleLimits {
+    // A callback may change them, as FMD2's `MODULE` writes the container's fields
+    // (baseunits/lua/LuaWebsiteModules.pas:1001-1003).
+    f.pool
+        .on(module)
+        .task_start(Task::default())
+        .wait()
+        .unwrap();
+    let changed = ModuleLimits {
         max_task_limit: 5,
-        max_thread_per_task_limit: 6,
-        max_connection_limit: 7,
-    };
-    assert_eq!(module.limits(Some(&overrides)), overrides);
-    // `GetMaxTaskLimit`/`GetMaxThreadPerTaskLimit` ignore a 0 override; the connection limit
-    // takes it.
-    let zero = ModuleLimits::default();
-    let expected = ModuleLimits {
-        max_connection_limit: 0,
         ..declared
     };
-    assert_eq!(module.limits(Some(&zero)), expected);
-}
-
-#[test]
-fn the_pool_and_its_jobs_cross_threads_but_lua_states_do_not() {
-    fn send_sync<T: Send + Sync>() {}
-    fn send<T: Send>() {}
-    send_sync::<WorkerPool>();
-    send::<fmd_lua::Pending<fmd_lua::JobResult>>();
-    send::<fmd_lua::Job>();
-    // `Runtime` (one Lua state) is `!Send`: see the `compile_fail` example on its docs.
+    assert_eq!(module.limits(), changed);
 }
 
 struct UserAgent;
@@ -570,4 +559,37 @@ fn jobs_spread_over_every_worker_each_with_its_own_state() {
         };
         assert!(module_title, "{titles:?}");
     }
+}
+
+#[test]
+fn jobs_with_the_same_affinity_share_one_worker_and_its_globals() {
+    // Like one FMD2 task thread running a whole task's callbacks in its own state.
+    let f = Fixture::new(4, &[("T.lua", T)]);
+    let worker = f.pool.affinity();
+
+    let pending: Vec<_> = (0..12)
+        .map(|_| {
+            f.pool
+                .on(f.module("t"))
+                .with_affinity(worker)
+                .get_info("/s")
+        })
+        .collect();
+    let titles: Vec<String> = pending
+        .into_iter()
+        .map(|p| p.wait().unwrap().value.info.title)
+        .collect();
+
+    let expected: Vec<String> = (1..=12).map(|i| format!("X{i}")).collect();
+    assert_eq!(titles, expected);
+}
+
+#[test]
+fn the_pool_and_its_jobs_cross_threads_but_lua_states_do_not() {
+    fn send_sync<T: Send + Sync>() {}
+    fn send<T: Send>() {}
+    send_sync::<WorkerPool>();
+    send::<fmd_lua::Pending<fmd_lua::JobResult>>();
+    send::<fmd_lua::Job>();
+    // `Runtime` (one Lua state) is `!Send`: see the `compile_fail` example on its docs.
 }
