@@ -23,7 +23,8 @@ pub struct Runtime {
 
 impl Runtime {
     /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
-    /// FMD2's base state (baseunits/lua/LuaBase.pas:119).
+    /// FMD2's base state (baseunits/lua/LuaBase.pas:123). The Host API libraries and package
+    /// loader it registers next (:124-125) come with later tickets.
     pub fn new() -> Result<Runtime> {
         // SAFETY: FMD2 opens every standard library, including `debug` (used by e.g.
         // lua/modules/MangaPlus.lua), which mlua only loads in unsafe mode. Later tickets also

@@ -11,7 +11,7 @@ use mlua::{
 
 /// Key of an array property's indexable table in its member table. FMD2 returns that table
 /// from its `__get` lookup instead (baseunits/lua/LuaClass.pas:175).
-const ARRAY: &str = "__array";
+const ARRAY_KEY: &str = "__array";
 
 /// Key of the default array property's getter (baseunits/lua/LuaClass.pas:452).
 const DEFAULT_GET: &str = "__defaultget";
@@ -24,15 +24,18 @@ const GET: &str = "__get";
 const SET: &str = "__set";
 
 /// Adds one member to an object's member table once the object exists.
-type Member<T> = Box<dyn FnOnce(&Lua, &Rc<RefCell<T>>, &AnyUserData, &Table) -> mlua::Result<()>>;
+type MemberInstaller<T> =
+    Box<dyn FnOnce(&Lua, &Rc<RefCell<T>>, &AnyUserData, &Table) -> mlua::Result<()>>;
 
 /// Registry key of the Lua function that binds a method to its object.
 const BIND_KEY: &str = "fmd.luaclass.bind";
 
 /// Binds `f` to object `u`, like FMD2's C closures with the userdata as upvalue
 /// (baseunits/lua/LuaClass.pas:297). A leading argument that is the object itself is dropped,
-/// so `obj:Method(a)` behaves like `obj.Method(a)`, the way `luaClassGetClosure` drops the
-/// object for functions called without it as upvalue (baseunits/lua/LuaClass.pas:303-308).
+/// so `obj:Method(a)` behaves like `obj.Method(a)`. This is a deliberate divergence asked for by
+/// docs/plan.md: FMD2 only drops a leading object for functions that lack the upvalue
+/// (baseunits/lua/LuaClass.pas:303-308), so colon calls on its bound methods see the object as
+/// their first argument.
 const BIND_SOURCE: &str = r#"
 local f, u = ...
 return function(...)
@@ -72,6 +75,19 @@ fn bind(lua: &Lua, f: Function, object: &AnyUserData) -> mlua::Result<Function> 
     cached_chunk(lua, BIND_KEY, BIND_SOURCE)?.call((f, object))
 }
 
+/// Wraps a callback over the object's state as a Lua function; the state is borrowed for the
+/// duration of each call.
+fn state_fn<T, A, R, F>(lua: &Lua, state: &Rc<RefCell<T>>, f: F) -> mlua::Result<Function>
+where
+    T: 'static,
+    A: FromLuaMulti,
+    R: IntoLuaMulti,
+    F: Fn(&Lua, &mut T, A) -> mlua::Result<R> + 'static,
+{
+    let state = state.clone();
+    lua.create_function(move |lua, args: A| f(lua, &mut *borrow(&state)?, args))
+}
+
 /// Builds one Lua object over shared Rust state `T`.
 ///
 /// FMD2 gives every object its own metatable holding its methods and properties
@@ -81,7 +97,7 @@ fn bind(lua: &Lua, f: Function, object: &AnyUserData) -> mlua::Result<Function> 
 /// re-enters the same object from Lua gets a Lua error rather than a panic.
 pub struct LuaClass<T> {
     state: Rc<RefCell<T>>,
-    members: Vec<Member<T>>,
+    members: Vec<MemberInstaller<T>>,
 }
 
 impl<T: 'static> LuaClass<T> {
@@ -104,9 +120,7 @@ impl<T: 'static> LuaClass<T> {
         let name = name.to_owned();
         self.members
             .push(Box::new(move |lua, state, object, table| {
-                let state = state.clone();
-                let func =
-                    lua.create_function(move |lua, args: A| f(lua, &mut *borrow(&state)?, args))?;
+                let func = state_fn(lua, state, f)?;
                 table.raw_set(name, bind(lua, func, object)?)
             }));
         self
@@ -146,19 +160,9 @@ impl<T: 'static> LuaClass<T> {
         let name = name.to_owned();
         self.members.push(Box::new(move |lua, state, _, table| {
             let property = lua.create_table()?;
-            let getter = state.clone();
-            property.raw_set(
-                GET,
-                lua.create_function(move |lua, ()| get(lua, &mut *borrow(&getter)?))?,
-            )?;
+            property.raw_set(GET, state_fn(lua, state, move |lua, s, ()| get(lua, s))?)?;
             if let Some(set) = set {
-                let setter = state.clone();
-                property.raw_set(
-                    SET,
-                    lua.create_function(move |lua, value: V| {
-                        set(lua, &mut *borrow(&setter)?, value)
-                    })?,
-                )?;
+                property.raw_set(SET, state_fn(lua, state, set)?)?;
             }
             table.raw_set(name, property)
         }));
@@ -240,7 +244,8 @@ impl<T: 'static> LuaClass<T> {
 
     /// Adds an array property: `obj.Name` yields a table whose `[key]` reads go to `get` and
     /// writes to `set` (baseunits/lua/LuaClass.pas:399-433, :171, :187). Assigning to
-    /// `obj.Name` itself is silently ignored.
+    /// `obj.Name` itself is silently ignored; FMD2 also calls the getter with key `"__set"`
+    /// then (:146, via :171), a side effect not reproduced.
     pub fn array_property<K, R, V, G, S>(mut self, name: &str, get: G, set: S) -> Self
     where
         K: FromLua,
@@ -251,25 +256,39 @@ impl<T: 'static> LuaClass<T> {
     {
         let name = name.to_owned();
         self.members.push(Box::new(move |lua, state, _, table| {
-            let getter = state.clone();
-            let setter = state.clone();
             let metatable = lua.create_table()?;
+            // `__indexarray` (baseunits/lua/LuaClass.pas:171): the key goes through
+            // `luaToString`, so numbers arrive as strings, and `__get` yields the table itself.
             metatable.raw_set(
                 "__index",
-                lua.create_function(move |lua, (_, key): (Value, K)| {
-                    get(lua, &mut *borrow(&getter)?, key)
+                state_fn(lua, state, move |lua, s, (array, key): (Table, Value)| {
+                    let key = string_key(lua, key)?;
+                    if is_key(&key, GET) {
+                        return Ok(Value::Table(array));
+                    }
+                    get(lua, s, K::from_lua(key, lua)?)?.into_lua(lua)
                 })?,
             )?;
+            // `__newindexarray` (baseunits/lua/LuaClass.pas:187): likewise, and writing `__set`
+            // is ignored.
             metatable.raw_set(
                 "__newindex",
-                lua.create_function(move |lua, (_, key, value): (Value, K, V)| {
-                    set(lua, &mut *borrow(&setter)?, key, value)
-                })?,
+                state_fn(
+                    lua,
+                    state,
+                    move |lua, s, (_, key, value): (Value, Value, V)| {
+                        let key = string_key(lua, key)?;
+                        if is_key(&key, SET) {
+                            return Ok(());
+                        }
+                        set(lua, s, K::from_lua(key, lua)?, value)
+                    },
+                )?,
             )?;
             let array = lua.create_table()?;
             array.set_metatable(Some(metatable))?;
             let property = lua.create_table()?;
-            property.raw_set(ARRAY, array)?;
+            property.raw_set(ARRAY_KEY, array)?;
             table.raw_set(name, property)
         }));
         self
@@ -277,7 +296,8 @@ impl<T: 'static> LuaClass<T> {
 
     /// Adds the default array property: `obj[key]` reads and writes for every key that is not
     /// a member (method, property or sub-object), integer or string alike
-    /// (baseunits/lua/LuaClass.pas:448-455, fallthrough at :115 and :154).
+    /// (baseunits/lua/LuaClass.pas:448-455, fallthrough at :115 and :154). Number keys arrive
+    /// as strings, because FMD2 has already run `lua_tostring` on them (:104, :140).
     pub fn default_array_property<K, R, V, G, S>(mut self, get: G, set: S) -> Self
     where
         K: FromLua,
@@ -287,16 +307,11 @@ impl<T: 'static> LuaClass<T> {
         S: Fn(&Lua, &mut T, K, V) -> mlua::Result<()> + 'static,
     {
         self.members.push(Box::new(move |lua, state, _, table| {
-            let getter = state.clone();
-            table.raw_set(
-                DEFAULT_GET,
-                lua.create_function(move |lua, key: K| get(lua, &mut *borrow(&getter)?, key))?,
-            )?;
-            let setter = state.clone();
+            table.raw_set(DEFAULT_GET, state_fn(lua, state, get)?)?;
             table.raw_set(
                 DEFAULT_SET,
-                lua.create_function(move |lua, (key, value): (K, V)| {
-                    set(lua, &mut *borrow(&setter)?, key, value)
+                state_fn(lua, state, move |lua, s, (key, value): (K, V)| {
+                    set(lua, s, key, value)
                 })?,
             )
         }));
@@ -305,7 +320,7 @@ impl<T: 'static> LuaClass<T> {
 
     /// Creates the Lua object.
     pub fn build(self, lua: &Lua) -> crate::Result<AnyUserData> {
-        let object = lua.create_userdata(Object)?;
+        let object = lua.create_userdata(LuaObject)?;
         let table = lua.create_table()?;
         // Registered first, as in FMD2, so a member named `self` replaces it
         // (baseunits/lua/LuaClass.pas:290).
@@ -334,23 +349,36 @@ fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
 }
 
 /// The userdata behind every `LuaClass` object; its members live in its user value.
-struct Object;
+struct LuaObject;
 
-/// Looks `key` up in the object's members. Like `lua_tostring` on the key, numbers match by
-/// their string form and other non-string keys match nothing (baseunits/lua/LuaClass.pas:104).
-fn member(lua: &Lua, members: &Table, key: &Value) -> mlua::Result<Value> {
+/// Converts a number key to its string form, as `lua_tostring` does in place on the key's
+/// stack slot (baseunits/lua/LuaClass.pas:104, :140, :175, :191). Other keys are unchanged, so
+/// handlers further down see the converted key just as FMD2's do.
+fn string_key(lua: &Lua, key: Value) -> mlua::Result<Value> {
     match key {
-        Value::String(_) | Value::Integer(_) | Value::Number(_) => {
-            match lua.coerce_string(key.clone())? {
-                Some(name) => members.raw_get(name),
-                None => Ok(Value::Nil),
-            }
-        }
+        Value::Integer(_) | Value::Number(_) => Ok(match lua.coerce_string(key.clone())? {
+            Some(s) => Value::String(s),
+            None => key,
+        }),
+        key => Ok(key),
+    }
+}
+
+/// Whether `key` is the string `name`.
+fn is_key(key: &Value, name: &str) -> bool {
+    matches!(key, Value::String(s) if s.as_bytes() == name.as_bytes())
+}
+
+/// Looks `key` up in the object's members; only string keys can match one (a non-string key
+/// becomes a nil lookup in FMD2, baseunits/lua/LuaClass.pas:104).
+fn lookup_member(members: &Table, key: &Value) -> mlua::Result<Value> {
+    match key {
+        Value::String(_) => members.raw_get(key),
         _ => Ok(Value::Nil),
     }
 }
 
-impl UserData for Object {
+impl UserData for LuaObject {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         // `__index` (baseunits/lua/LuaClass.pas:94): a property yields its getter's value, an
         // array property its indexable table, any other member (method, sub-object) yields
@@ -360,10 +388,11 @@ impl UserData for Object {
             MetaMethod::Index,
             |lua, (object, key): (AnyUserData, Value)| {
                 let members: Table = object.user_value()?;
-                match member(lua, &members, &key)? {
+                let key = string_key(lua, key)?;
+                match lookup_member(&members, &key)? {
                     Value::Table(property) => match property.raw_get::<Value>(GET)? {
                         Value::Function(get) => get.call(()),
-                        _ => property.raw_get(ARRAY),
+                        _ => property.raw_get(ARRAY_KEY),
                     },
                     Value::Nil => match members.raw_get::<Value>(DEFAULT_GET)? {
                         Value::Function(get) => get.call(key),
@@ -381,7 +410,8 @@ impl UserData for Object {
             MetaMethod::NewIndex,
             |lua, (object, key, value): (AnyUserData, Value, Value)| {
                 let members: Table = object.user_value()?;
-                match member(lua, &members, &key)? {
+                let key = string_key(lua, key)?;
+                match lookup_member(&members, &key)? {
                     Value::Table(property) => {
                         if let Value::Function(set) = property.raw_get::<Value>(SET)? {
                             set.call::<()>(value)?;

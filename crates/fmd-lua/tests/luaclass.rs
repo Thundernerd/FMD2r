@@ -20,6 +20,19 @@ struct TestObject {
     last_bytes: Vec<u8>,
 }
 
+/// The list index a default-array key names, if it is numeric (keys arrive as strings).
+fn index(lua: &mlua::Lua, key: &mlua::Value) -> Option<usize> {
+    let i = lua.coerce_integer(key.clone()).ok()??;
+    usize::try_from(i).ok()
+}
+
+fn key_bytes(key: &mlua::Value) -> Vec<u8> {
+    match key {
+        mlua::Value::String(s) => s.as_bytes().to_vec(),
+        _ => Vec::new(),
+    }
+}
+
 fn runtime_with_obj() -> (Runtime, Rc<RefCell<TestObject>>) {
     let runtime = Runtime::new().unwrap();
     let storage = LuaClass::new(Rc::new(RefCell::new(())))
@@ -65,23 +78,19 @@ fn runtime_with_obj() -> (Runtime, Rc<RefCell<TestObject>>) {
         )
         .default_array_property(
             |lua, o: &mut TestObject, key: mlua::Value| {
-                let item = match &key {
-                    mlua::Value::Integer(i) => {
-                        usize::try_from(*i).ok().and_then(|i| o.items.get(i))
-                    }
-                    mlua::Value::String(s) => o.named.get(&*s.as_bytes()),
-                    _ => None,
+                let item = match index(lua, &key) {
+                    Some(i) => o.items.get(i),
+                    None => o.named.get(&key_bytes(&key)),
                 };
                 item.map(|item| lua.create_string(item)).transpose()
             },
-            |_, o: &mut TestObject, key: mlua::Value, value: mlua::LuaString| {
+            |lua, o: &mut TestObject, key: mlua::Value, value: mlua::LuaString| {
                 let value = value.as_bytes().to_vec();
-                match key {
-                    mlua::Value::Integer(i) => o.items[i as usize] = value,
-                    mlua::Value::String(s) => {
-                        o.named.insert(s.as_bytes().to_vec(), value);
+                match index(lua, &key) {
+                    Some(i) => o.items[i] = value,
+                    None => {
+                        o.named.insert(key_bytes(&key), value);
                     }
-                    _ => {}
                 }
                 Ok(())
             },
@@ -312,4 +321,44 @@ fn nul_bytes_survive_string_properties() {
             .to_vec(),
         b"\0z"
     );
+}
+
+#[test]
+fn number_keys_reach_array_getters_and_setters_as_strings() {
+    let rt = Runtime::new().unwrap();
+    let seen = Rc::new(RefCell::new(Vec::<String>::new()));
+    let type_name = |key: &mlua::Value| key.type_name().to_owned();
+    let keys = LuaClass::new(seen.clone())
+        .array_property(
+            "Arr",
+            move |_, _, key: mlua::Value| Ok(type_name(&key)),
+            |_, seen: &mut Vec<String>, key: mlua::Value, _: mlua::Value| {
+                seen.push(key.type_name().to_owned());
+                Ok(())
+            },
+        )
+        .default_array_property(
+            move |_, _, key: mlua::Value| Ok(type_name(&key)),
+            |_, seen: &mut Vec<String>, key: mlua::Value, _: mlua::Value| {
+                seen.push(key.type_name().to_owned());
+                Ok(())
+            },
+        )
+        .build(rt.lua())
+        .unwrap();
+    rt.lua().globals().set("keys", keys).unwrap();
+    rt.exec(
+        r#"
+        assert(keys[0] == 'string')
+        assert(keys[1.5] == 'string')
+        assert(keys[true] == 'boolean')
+        assert(keys.Arr[0] == 'string')
+        assert(keys.Arr.__get == keys.Arr)
+        keys[0] = 1
+        keys.Arr[0] = 1
+        keys.Arr.__set = 1
+        "#,
+    )
+    .unwrap();
+    assert_eq!(*seen.borrow(), ["string", "string"]);
 }
