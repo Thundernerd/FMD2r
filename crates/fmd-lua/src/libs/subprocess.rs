@@ -1,4 +1,4 @@
-//! `fmd.subprocess` (baseunits/lua/LuaSubprocess.pas:20-94), with the Windows command lines
+//! `fmd.subprocess` (baseunits/lua/LuaSubprocess.pas:21-93), with the Windows command lines
 //! upstream modules build translated for Linux. Commands never go through a shell.
 //!
 //! Translation rules, applied to `RunCommand(exe, args...)` and `RunCommandHide(exe, args...)`:
@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 use mlua::{Lua, LuaString, Table, Value, Variadic};
 
-use super::{lib_table, to_string_arg};
+use super::{build_object, constructors, lib_table, to_string_arg};
 
 /// One process to start: the translated executable, its arguments and its directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -242,7 +242,7 @@ fn execute(steps: Vec<Step>, mut dir: PathBuf, spawner: &dyn Spawner) -> (bool, 
 
 /// `_runcommand` (baseunits/lua/LuaSubprocess.pas:29-62): runs the command and returns
 /// `(ok, stdout, stderr, exit_status)`, where `ok` is true only when the process ran and exited
-/// with status 0 (:51-55).
+/// with status 0 (:52-56).
 fn run_command(
     lua: &Lua,
     args: Variadic<Value>,
@@ -262,34 +262,33 @@ fn run_command(
         None => std::env::current_dir().map_err(mlua::Error::external)?,
     };
     let (ok, output) = execute(translate(exe, args), dir, config.spawner.as_ref());
+    // lua_pushstring copies the output as C strings, so each ends at its first NUL (:58-59).
+    let c_string = |bytes: &[u8]| {
+        let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+        lua.create_string(&bytes[..end])
+    };
     Ok((
         ok,
-        lua.create_string(output.stdout)?,
-        lua.create_string(output.stderr)?,
+        c_string(&output.stdout)?,
+        c_string(&output.stderr)?,
         output.status,
     ))
 }
 
-/// Opens the library (baseunits/lua/LuaSubprocess.pas:70-92).
+/// Opens the library (baseunits/lua/LuaSubprocess.pas:74-93).
 pub(super) fn open(lua: &Lua) -> mlua::Result<Table> {
-    // baseunits/lua/LuaSubprocess.pas:20-24: a TProcess object without methods
-    // (luaSubprocessAddMetaTable at :78-82 adds none).
-    let create = || {
-        lua.create_function(|lua, _: Variadic<Value>| {
-            crate::LuaClass::new(Rc::new(std::cell::RefCell::new(())))
-                .build(lua)
-                .map_err(|crate::Error::Lua(e)| e)
-        })
+    // baseunits/lua/LuaSubprocess.pas:21-25: a TProcess object without methods
+    // (luaSubprocessAddMetaTable at :83-87 adds none).
+    let create = |lua: &Lua, _: Variadic<Value>| {
+        let class = crate::LuaClass::new(Rc::new(std::cell::RefCell::new(())));
+        Ok(Value::UserData(build_object(lua, class)?))
     };
-    lib_table(
-        lua,
-        vec![
-            ("New", create()?),
-            ("Create", create()?),
-            // baseunits/lua/LuaSubprocess.pas:64-67
-            ("RunCommand", lua.create_function(run_command)?),
-            // baseunits/lua/LuaSubprocess.pas:69-72: hiding the window means nothing on Linux.
-            ("RunCommandHide", lua.create_function(run_command)?),
-        ],
-    )
+    let mut functions = constructors(lua, create)?;
+    functions.extend([
+        // baseunits/lua/LuaSubprocess.pas:64-67 (_runcommand with default options)
+        ("RunCommand", lua.create_function(run_command)?),
+        // baseunits/lua/LuaSubprocess.pas:69-72: hiding the window means nothing on Linux.
+        ("RunCommandHide", lua.create_function(run_command)?),
+    ]);
+    lib_table(lua, functions)
 }

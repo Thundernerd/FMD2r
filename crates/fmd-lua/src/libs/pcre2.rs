@@ -8,7 +8,7 @@ use super::lib_table;
 /// The library's functions (baseunits/lua/LuaPCRE2.pas:237-245).
 const NAMES: [&str; 5] = ["exec", "find", "match", "gmatch", "gsub"];
 
-/// Opens the library (baseunits/lua/LuaPCRE2.pas:246-250).
+/// Opens the library (baseunits/lua/LuaPCRE2.pas:247-251).
 pub(super) fn open(lua: &Lua) -> mlua::Result<Table> {
     let functions = NAMES
         .into_iter()

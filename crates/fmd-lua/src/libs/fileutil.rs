@@ -33,7 +33,8 @@ fn file_name_only(path: &[u8]) -> &[u8] {
 }
 
 /// Compares like `TStringList.Sort`'s default `AnsiCompareText`: case-insensitively. FMD2's
-/// comparison is locale-aware; this one folds ASCII case only and compares bytes.
+/// comparison is locale-aware; this one folds ASCII case only and compares bytes. FMD2's
+/// QuickSort is not stable either, so names equal but for case may order differently.
 fn compare_text(a: &[u8], b: &[u8]) -> Ordering {
     a.iter()
         .map(u8::to_ascii_lowercase)

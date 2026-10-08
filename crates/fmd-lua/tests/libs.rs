@@ -99,7 +99,7 @@ const RAW_HELLO: &str = r"\xcb\x48\xcd\xc9\xc9\x07\x00";
 
 #[test]
 fn gzip_inflates_gzip_zlib_and_raw_deflate() {
-    // unzipStream sniffs the header (baseunits/GZIPUtils.pas:179-244).
+    // unzipStream sniffs the header (baseunits/GZIPUtils.pas:172-235).
     for fixture in [GZIP_HELLO, ZLIB_HELLO, RAW_HELLO] {
         run(&format!(
             "assert(require('fmd.gzip').Inflate('{fixture}') == 'hello')"
@@ -109,7 +109,7 @@ fn gzip_inflates_gzip_zlib_and_raw_deflate() {
 
 #[test]
 fn gzip_returns_nothing_when_a_checksum_fails() {
-    // A wrong CRC32 (gzip) or Adler-32 (zlib) fails unzipStream (baseunits/GZIPUtils.pas:270-280),
+    // A wrong CRC32 (gzip) or Adler-32 (zlib) fails unzipStream (baseunits/GZIPUtils.pas:257-267),
     // and lua_inflate then returns no value (baseunits/lua/LuaGZip.pas:29-36).
     let bad_gzip = GZIP_HELLO.replace(r"\x86\xa6", r"\x00\x00");
     let bad_zlib = ZLIB_HELLO.replace(r"\x06\x2c", r"\x00\x00");
@@ -338,13 +338,27 @@ mod subprocess {
 
     #[test]
     fn a_non_zero_exit_status_is_not_ok() {
-        // `if exitstatus<>0 then presult:=false` (baseunits/lua/LuaSubprocess.pas:55).
+        // `if exitstatus<>0 then presult:=false` (baseunits/lua/LuaSubprocess.pas:56).
         let spawner = fake("partial", "boom", 3);
         runtime(&spawner, Path::new("/"))
             .exec(
                 r#"
                 local ok, out, err, code = require('fmd.subprocess').RunCommand('tool')
                 assert(ok == false and out == 'partial' and err == 'boom' and code == 3)
+            "#,
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn output_ends_at_the_first_nul() {
+        // lua_pushstring copies the output as C strings (baseunits/lua/LuaSubprocess.pas:58-59).
+        let spawner = fake("out\0more", "err\0more", 0);
+        runtime(&spawner, Path::new("/"))
+            .exec(
+                r#"
+                local ok, out, err = require('fmd.subprocess').RunCommand('tool')
+                assert(ok and out == 'out' and err == 'err')
             "#,
             )
             .unwrap();
@@ -363,7 +377,7 @@ mod subprocess {
 
     #[test]
     fn new_and_create_return_a_process_object() {
-        // baseunits/lua/LuaSubprocess.pas:20-24
+        // baseunits/lua/LuaSubprocess.pas:21-25
         crate::run(
             r#"
             local sp = require 'fmd.subprocess'
@@ -568,7 +582,7 @@ mod imagepuzzle {
     #[test]
     fn multiply_is_a_plain_integer_property() {
         // The Pascal `default 1` does not initialise the field, so it starts at 0
-        // (baseunits/ImagePuzzle.pas:23, baseunits/lua/LuaImagePuzzle.pas:98).
+        // (baseunits/ImagePuzzle.pas:23, baseunits/lua/LuaImagePuzzle.pas:99).
         crate::run(
             r#"
             local p = require('fmd.imagepuzzle').New(4, 4)
@@ -645,16 +659,13 @@ mod mangafoxwatermark {
 
         let upstream = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../fixtures/lua/extras/mangafoxtemplate");
-        let mf = |chunk: &str| -> bool {
+        fn call<T: fmd_lua::mlua::FromLua>(runtime: &fmd_lua::Runtime, chunk: &str) -> T {
             runtime
                 .eval(&format!("require('fmd.mangafoxwatermark').{chunk}"))
                 .unwrap()
-        };
-        let count = |chunk: &str| -> i64 {
-            runtime
-                .eval(&format!("require('fmd.mangafoxwatermark').{chunk}"))
-                .unwrap()
-        };
+        }
+        let mf = |chunk: &str| -> bool { call(&runtime, chunk) };
+        let count = |chunk: &str| -> i64 { call(&runtime, chunk) };
 
         // Nothing loaded yet: no template directory to fall back on (:377-382, :303).
         assert!(!mf(&format!("RemoveWatermark([[{}]])", lua_path(&png))));
@@ -780,9 +791,9 @@ fn pcre2_is_a_stub_that_fails_clearly() {
 #[test]
 fn every_lib_exposes_exactly_its_pascal_names() {
     let libs: &[(&str, &[&str])] = &[
-        // baseunits/lua/LuaGZip.pas:46-49
+        // baseunits/lua/LuaGZip.pas:47-51
         ("fmd.gzip", &["Inflate"]),
-        // baseunits/lua/LuaFileUtil.pas:34-39
+        // baseunits/lua/LuaFileUtil.pas:33-39
         (
             "fmd.fileutil",
             &[
@@ -791,14 +802,14 @@ fn every_lib_exposes_exactly_its_pascal_names() {
                 "SerializeAndMaintainNames",
             ],
         ),
-        // baseunits/lua/LuaLogger.pas:33-38
+        // baseunits/lua/LuaLogger.pas:33-39
         ("fmd.logger", &["Send", "SendError", "SendWarning"]),
-        // baseunits/lua/LuaSubprocess.pas:70-76
+        // baseunits/lua/LuaSubprocess.pas:74-81
         (
             "fmd.subprocess",
             &["Create", "New", "RunCommand", "RunCommandHide"],
         ),
-        // baseunits/lua/LuaImagePuzzle.pas:79-83
+        // baseunits/lua/LuaImagePuzzle.pas:72-77
         ("fmd.imagepuzzle", &["Create", "New"]),
         // baseunits/lua/LuaMangaFox.pas:32-37
         (
@@ -818,7 +829,7 @@ fn every_lib_exposes_exactly_its_pascal_names() {
             .unwrap();
         assert_eq!(keys, names.join(","), "{lib}");
     }
-    // The ImagePuzzle object's members (baseunits/lua/LuaImagePuzzle.pas:84-99).
+    // The ImagePuzzle object's members (baseunits/lua/LuaImagePuzzle.pas:78-100).
     runtime
         .exec(
             r#"

@@ -44,17 +44,19 @@ impl Runtime {
 
     /// Makes `fmd.subprocess` start its processes through `spawner` instead of the system.
     pub fn set_spawner(&self, spawner: impl subprocess::Spawner + 'static) {
-        let mut config = subprocess::Config::of(&self.lua);
-        config.spawner = std::rc::Rc::new(spawner);
-        self.lua.set_app_data(config);
+        self.update_subprocess_config(|c| c.spawner = std::rc::Rc::new(spawner));
     }
 
     /// Sets the directory `fmd.subprocess` runs commands in, against which their relative paths
     /// resolve; FMD2 runs them in its own directory, the parent of `lua/`. Defaults to the
     /// process's current directory.
     pub fn set_working_dir(&self, dir: impl Into<std::path::PathBuf>) {
+        self.update_subprocess_config(|c| c.working_dir = Some(dir.into()));
+    }
+
+    fn update_subprocess_config(&self, update: impl FnOnce(&mut subprocess::Config)) {
         let mut config = subprocess::Config::of(&self.lua);
-        config.working_dir = Some(dir.into());
+        update(&mut config);
         self.lua.set_app_data(config);
     }
 

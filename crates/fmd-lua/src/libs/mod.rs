@@ -40,6 +40,28 @@ pub(crate) fn register(lua: &Lua) -> mlua::Result<()> {
     pb::register(lua, &preload)
 }
 
+/// The quality FMD2's JPEG writers save with: Lazarus' `TJPEGImage` and FPC's `TFPWriterJPEG`
+/// both default to 75 (lcl/include/jpegimage.inc:23 in Lazarus, fcl-image fpwritejpeg.pas:216
+/// in FPC 3.2.2).
+const JPEG_QUALITY: u8 = 75;
+
+/// Builds a `LuaClass` object inside a Lua callback, where errors are Lua errors.
+fn build_object<T: 'static>(lua: &Lua, class: crate::LuaClass<T>) -> mlua::Result<AnyUserData> {
+    class.build(lua).map_err(|crate::Error::Lua(e)| e)
+}
+
+/// Registers `create` as both `New` and `Create`, the constructor pair FMD2's object libraries
+/// share (e.g. baseunits/lua/LuaImagePuzzle.pas:73-76).
+fn constructors<F>(lua: &Lua, create: F) -> mlua::Result<Vec<(&'static str, Function)>>
+where
+    F: Fn(&Lua, mlua::Variadic<Value>) -> mlua::Result<Value> + Clone + 'static,
+{
+    Ok(vec![
+        ("New", lua.create_function(create.clone())?),
+        ("Create", lua.create_function(create)?),
+    ])
+}
+
 /// Builds a library table from its functions, like `luaNewLibTable`
 /// (baseunits/lua/LuaUtils.pas:64).
 fn lib_table(lua: &Lua, functions: Vec<(&str, Function)>) -> mlua::Result<Table> {

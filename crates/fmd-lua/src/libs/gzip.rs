@@ -1,12 +1,12 @@
-//! `fmd.gzip` (baseunits/lua/LuaGZip.pas:14-58) over `unzipStream`
-//! (baseunits/GZIPUtils.pas:168-284).
+//! `fmd.gzip` (baseunits/lua/LuaGZip.pas:14-57) over `unzipStream`
+//! (baseunits/GZIPUtils.pas:158-270).
 
 use flate2::{Crc, Decompress, FlushDecompress, Status};
 use mlua::{Lua, MultiValue, Table, Value};
 
 use super::lib_table;
 
-/// The gzip header flag bits unzipStream acts on (baseunits/GZIPUtils.pas:30-36).
+/// The gzip header flag bits unzipStream acts on (baseunits/GZIPUtils.pas:31-37).
 const FHCRC: u8 = 1 << 1;
 const FEXTRA: u8 = 1 << 2;
 const FNAME: u8 = 1 << 3;
@@ -60,7 +60,7 @@ fn u32_at(data: &[u8], pos: usize) -> Option<u32> {
 }
 
 /// Splits `data` into its deflate stream and trailer, sniffing the format like unzipStream
-/// (baseunits/GZIPUtils.pas:179-244). The checks are loose bit masks, reproduced as they are:
+/// (baseunits/GZIPUtils.pas:172-235). The checks are loose bit masks, reproduced as they are:
 /// any first byte with the bits of `0x78` set counts as a zlib header, so a raw stream
 /// starting with such a byte is misread as zlib, as in FMD2.
 ///
@@ -69,7 +69,7 @@ fn split(data: &[u8]) -> Option<(&[u8], Trailer)> {
     let mut reader = Reader { data, pos: 0 };
     let header = reader.u32()?;
     if header & 0x0008_8B1F == 0x0008_8B1F {
-        // :182-215
+        // :173-218
         reader.u32()?; // modification time
         reader.u16()?; // extra flags and operating system
         let flags = (header >> 24) as u8;
@@ -84,7 +84,7 @@ fn split(data: &[u8]) -> Option<(&[u8], Trailer)> {
             reader.skip_zero_terminated()?;
         }
         if flags & FHCRC != 0 {
-            // FMD2 computes the header CRC16 but ignores a mismatch (:209-215).
+            // FMD2 computes the header CRC16 but ignores a mismatch (:206-212).
             reader.u16()?;
         }
         let end = data.len().checked_sub(8)?;
@@ -94,7 +94,7 @@ fn split(data: &[u8]) -> Option<(&[u8], Trailer)> {
         };
         Some((data.get(reader.pos..end)?, trailer))
     } else if header & 0x0000_0078 == 0x0000_0078 {
-        // :222-232: a preset dictionary (FDICT) adds 4 bytes to the header.
+        // :219-229: a preset dictionary (FDICT) adds 4 bytes to the header.
         let start = if header & 0x0000_2000 != 0 { 6 } else { 2 };
         let end = data.len().checked_sub(4)?;
         let adler = u32::from_be_bytes(data.get(end..)?.try_into().ok()?);
@@ -106,9 +106,9 @@ fn split(data: &[u8]) -> Option<(&[u8], Trailer)> {
 
 /// Inflates a raw deflate stream until it ends or fails, keeping what was inflated so far, like
 /// the `while inflate(...) = Z_OK` loop whose result only depends on `inflateEnd`
-/// (baseunits/GZIPUtils.pas:257-266). A corrupt raw stream therefore yields partial output.
+/// (baseunits/GZIPUtils.pas:247-255). A corrupt raw stream therefore yields partial output.
 fn inflate_raw(input: &[u8]) -> Vec<u8> {
-    // The output grows by the input size rounded up to 256 bytes each round (:248-262).
+    // The output grows by the input size rounded up to 256 bytes each round (:240-253).
     let delta = (input.len() + 255) & !255;
     let mut inflater = Decompress::new(false);
     let mut out = Vec::new();
@@ -140,25 +140,33 @@ fn adler32(data: &[u8]) -> u32 {
     (b << 16) | a
 }
 
-/// `unzipStream`: the inflated data, or `None` when it fails (baseunits/GZIPUtils.pas:168-284).
-fn unzip(data: &[u8]) -> Option<Vec<u8>> {
-    let (deflated, trailer) = split(data)?;
+/// Why unzipping failed, as lua_inflate tells the two apart in its log line.
+enum Failure {
+    /// A stream read past the end, which raises in FMD2 (baseunits/lua/LuaGZip.pas:41-44).
+    Truncated,
+    /// unzipStream returned false: a checksum or size mismatch (baseunits/lua/LuaGZip.pas:35-36).
+    Mismatch,
+}
+
+/// `unzipStream`: the inflated data, or why it failed (baseunits/GZIPUtils.pas:158-270).
+fn unzip(data: &[u8]) -> Result<Vec<u8>, Failure> {
+    let (deflated, trailer) = split(data).ok_or(Failure::Truncated)?;
     let out = inflate_raw(deflated);
     let ok = match trailer {
-        // :270-274
+        // :257-261
         Trailer::Gzip { crc, size } => {
             let mut actual = Crc::new();
             actual.update(&out);
             actual.sum() == crc && u32::try_from(out.len()) == Ok(size)
         }
-        // :275-280
+        // :262-267
         Trailer::Zlib { adler } => adler32(&out) == adler,
         Trailer::Raw => true,
     };
-    ok.then_some(out)
+    ok.then_some(out).ok_or(Failure::Mismatch)
 }
 
-/// Opens the library (baseunits/lua/LuaGZip.pas:46-56).
+/// Opens the library (baseunits/lua/LuaGZip.pas:47-57).
 pub(super) fn open(lua: &Lua) -> mlua::Result<Table> {
     lib_table(
         lua,
@@ -171,15 +179,18 @@ pub(super) fn open(lua: &Lua) -> mlua::Result<Table> {
                     Some(s) => s.as_bytes().to_vec(),
                     None => Vec::new(),
                 };
-                match unzip(&data) {
-                    Some(out) => Ok(MultiValue::from_vec(vec![Value::String(
-                        lua.create_string(out)?,
-                    )])),
-                    None => {
-                        tracing::error!(target: "fmd.gzip", "GZip.Inflate() unzipStream failed");
-                        Ok(MultiValue::new())
+                let message = match unzip(&data) {
+                    Ok(out) => {
+                        return Ok(MultiValue::from_vec(vec![Value::String(
+                            lua.create_string(out)?,
+                        )]));
                     }
-                }
+                    Err(Failure::Mismatch) => "unzipStream failed",
+                    // FMD2 appends the stream exception's message here.
+                    Err(Failure::Truncated) => "Stream read error",
+                };
+                tracing::error!(target: "fmd.gzip", "GZip.Inflate() {message}");
+                Ok(MultiValue::new())
             })?,
         )],
     )

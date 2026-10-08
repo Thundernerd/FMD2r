@@ -1,4 +1,4 @@
-//! `fmd.imagepuzzle` (baseunits/lua/LuaImagePuzzle.pas:21-107) over `TImagePuzzle`
+//! `fmd.imagepuzzle` (baseunits/lua/LuaImagePuzzle.pas:21-106) over `TImagePuzzle`
 //! (baseunits/ImagePuzzle.pas:46-306).
 
 use std::cell::RefCell;
@@ -9,10 +9,7 @@ use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use mlua::{AnyUserData, Lua, Table, Value, Variadic};
 
-use super::{lib_table, read_stream, write_stream};
-
-/// The quality Lazarus' `TJPEGImage` saves with by default.
-const JPEG_QUALITY: u8 = 75;
+use super::{JPEG_QUALITY, build_object, constructors, lib_table, read_stream, write_stream};
 
 /// One puzzle (baseunits/ImagePuzzle.pas:11-26).
 struct Puzzle {
@@ -138,10 +135,10 @@ fn set(lua: &Lua, items: &mut [i32], i: i64, value: Value) -> mlua::Result<()> {
     Ok(())
 }
 
-/// Builds the Lua object (baseunits/lua/LuaImagePuzzle.pas:92-99).
+/// Builds the Lua object (baseunits/lua/LuaImagePuzzle.pas:93-100).
 fn object(lua: &Lua, puzzle: Puzzle) -> mlua::Result<AnyUserData> {
-    crate::LuaClass::new(Rc::new(RefCell::new(puzzle)))
-        // baseunits/lua/LuaImagePuzzle.pas:29-35: does nothing unless both are objects; on
+    let class = crate::LuaClass::new(Rc::new(RefCell::new(puzzle)))
+        // baseunits/lua/LuaImagePuzzle.pas:28-34: does nothing unless both are objects; on
         // failure, logs and empties the output stream (baseunits/ImagePuzzle.pas:151-156).
         .method(
             "DeScramble",
@@ -160,10 +157,10 @@ fn object(lua: &Lua, puzzle: Puzzle) -> mlua::Result<AnyUserData> {
                 }
             },
         )
-        // baseunits/lua/LuaImagePuzzle.pas:65-77
+        // baseunits/lua/LuaImagePuzzle.pas:60-70, :78-81
         .read_only_property("HorBlock", |_, p: &mut Puzzle| Ok(p.hor_block))
         .read_only_property("VerBlock", |_, p: &mut Puzzle| Ok(p.ver_block))
-        // baseunits/lua/LuaImagePuzzle.pas:37-63
+        // baseunits/lua/LuaImagePuzzle.pas:36-58, :83-86
         .array_property(
             "Matrix",
             |lua, p: &mut Puzzle, key: Value| Ok(get(&p.matrix, index(lua, key)?)),
@@ -178,24 +175,21 @@ fn object(lua: &Lua, puzzle: Puzzle) -> mlua::Result<AnyUserData> {
                 set(lua, &mut p.flips, index(lua, key)?, value)
             },
         )
-        // baseunits/lua/LuaImagePuzzle.pas:98
-        .integer_property("Multiply", |p: &mut Puzzle| &mut p.multiply)
-        .build(lua)
-        .map_err(|crate::Error::Lua(e)| e)
+        // baseunits/lua/LuaImagePuzzle.pas:99
+        .integer_property("Multiply", |p: &mut Puzzle| &mut p.multiply);
+    build_object(lua, class)
 }
 
-/// Opens the library (baseunits/lua/LuaImagePuzzle.pas:79-83, :101-105).
+/// Opens the library (baseunits/lua/LuaImagePuzzle.pas:73-76, :102-106).
 pub(super) fn open(lua: &Lua) -> mlua::Result<Table> {
-    // baseunits/lua/LuaImagePuzzle.pas:21-27: only exactly two arguments make a puzzle.
-    let create = || {
-        lua.create_function(|lua, args: Variadic<Value>| {
-            if args.len() != 2 {
-                return Ok(Value::Nil);
-            }
-            let hor = lua.coerce_integer(args[0].clone())?.unwrap_or(0) as i32;
-            let ver = lua.coerce_integer(args[1].clone())?.unwrap_or(0) as i32;
-            Ok(Value::UserData(object(lua, Puzzle::new(hor, ver))?))
-        })
+    // baseunits/lua/LuaImagePuzzle.pas:21-26: only exactly two arguments make a puzzle.
+    let create = |lua: &Lua, args: Variadic<Value>| {
+        if args.len() != 2 {
+            return Ok(Value::Nil);
+        }
+        let hor = lua.coerce_integer(args[0].clone())?.unwrap_or(0) as i32;
+        let ver = lua.coerce_integer(args[1].clone())?.unwrap_or(0) as i32;
+        Ok(Value::UserData(object(lua, Puzzle::new(hor, ver))?))
     };
-    lib_table(lua, vec![("New", create()?), ("Create", create()?)])
+    lib_table(lua, constructors(lua, create)?)
 }

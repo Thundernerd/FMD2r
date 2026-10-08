@@ -10,14 +10,12 @@ use image::codecs::png::PngEncoder;
 use image::{DynamicImage, ImageEncoder, ImageFormat};
 use mlua::{Lua, Table, Value, Variadic};
 
-use super::{lib_table, to_string_arg};
+use super::{JPEG_QUALITY, lib_table, to_string_arg};
 
 /// Smallest PSNR at which a page's bottom counts as a template (MangaFoxWatermark.pas:282).
 const MIN_PSNR: f32 = 9.0;
 /// Rows on top of a matched region that must be white (MangaFoxWatermark.pas:283).
 const MIN_WHITE_BORDER: usize = 4;
-/// The quality FPC's `TFPWriterJPEG` saves with by default.
-const JPEG_QUALITY: u8 = 75;
 
 /// A thresholded grayscale image: every byte is 0 or 255 (MangaFoxWatermark.pas:49-55).
 struct OneBitImage {
@@ -42,8 +40,9 @@ static REMOVER: Mutex<Remover> = Mutex::new(Remover {
 });
 
 /// How FMD2 reads and rewrites an image format, picked by sniffing its content
-/// (baseunits/ImgInfos.pas:634-639): GIF is rewritten as PNG; WebP and TIFF are not handled
-/// here (FMD2 has no WebP reader for this; TIFF support is not built in).
+/// (baseunits/ImgInfos.pas:634-639): GIF is rewritten as PNG. WebP has no reader there, so
+/// FMD2 cannot handle it either. TIFF, which FMD2 does handle, is left out here: FMD2r builds
+/// the `image` crate without TIFF support, and the watermarked site serves JPEG.
 fn handler(format: ImageFormat) -> Option<(ImageFormat, &'static str)> {
     match format {
         ImageFormat::Jpeg => Some((ImageFormat::Jpeg, "jpg")),
@@ -254,7 +253,9 @@ impl Remover {
     }
 }
 
-/// Writes `image` like FMD2's writers: a grayscale JPEG stays grayscale (:463-470).
+/// Writes `image` like FMD2's writers: a grayscale JPEG stays grayscale, also when saved as PNG,
+/// where FMD2 writes an indexed (gray palette) PNG (:463-470); other PNGs are RGB without
+/// alpha, as `TFPWriterPNG` writes them by default.
 fn write_image(image: &DynamicImage, path: &Path, format: ImageFormat) -> image::ImageResult<()> {
     let gray = matches!(image, DynamicImage::ImageLuma8(_));
     let file = std::io::BufWriter::new(std::fs::File::create(path)?);
@@ -266,13 +267,22 @@ fn write_image(image: &DynamicImage, path: &Path, format: ImageFormat) -> image:
         ImageFormat::Jpeg => {
             JpegEncoder::new_with_quality(file, JPEG_QUALITY).encode_image(&image.to_rgb8())
         }
-        ImageFormat::Png => {
-            let rgba = image.to_rgba8();
+        ImageFormat::Png if gray => {
+            let luma = image.to_luma8();
             PngEncoder::new(file).write_image(
-                rgba.as_raw(),
-                rgba.width(),
-                rgba.height(),
-                image::ExtendedColorType::Rgba8,
+                luma.as_raw(),
+                luma.width(),
+                luma.height(),
+                image::ExtendedColorType::L8,
+            )
+        }
+        ImageFormat::Png => {
+            let rgb = image.to_rgb8();
+            PngEncoder::new(file).write_image(
+                rgb.as_raw(),
+                rgb.width(),
+                rgb.height(),
+                image::ExtendedColorType::Rgb8,
             )
         }
         _ => {
