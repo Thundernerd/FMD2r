@@ -19,6 +19,7 @@ utoipa = "5"
 
 [dev-dependencies]
 fmd-lua = { path = "../fmd-lua", default-features = false }
+rusqlite = { version = "0.32", features = ["bundled"] }
 tempfile.workspace = true
 
 [lints]

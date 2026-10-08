@@ -1,6 +1,7 @@
 //! axum: REST (OpenAPI via utoipa) + SSE event stream + cover proxy/cache + embedded SPA (rust-embed).
 
 mod about;
+mod accounts;
 mod auth;
 mod covers;
 mod error;
@@ -27,6 +28,7 @@ use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange};
 pub use covers::{CoverConfig, CoverModules, CoverSession, cover_url};
 pub use error::{ApiError, Problem};
 pub use events::{EventBus, JobState, ServerEvent, TaskProgress, TaskState, TaskStatusChange};
@@ -44,7 +46,14 @@ pub use tools::{SystemTools, ToolCheck, ToolProbe};
 #[derive(OpenApi)]
 #[openapi(
     info(title = "FMD2r"),
-    components(schemas(TaskProgress, TaskStatusChange, JobState, InboxItem, LogLine))
+    components(schemas(
+        TaskProgress,
+        TaskStatusChange,
+        JobState,
+        InboxItem,
+        LogLine,
+        AccountStateChange
+    ))
 )]
 struct ApiDoc;
 
@@ -73,6 +82,9 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(settings::preview_rename))
         .routes(routes!(module_settings::list))
         .routes(routes!(module_settings::get, module_settings::patch))
+        .routes(routes!(accounts::list))
+        .routes(routes!(accounts::put, accounts::delete))
+        .routes(routes!(accounts::login))
 }
 
 /// The public and protected `/api` routers plus the OpenAPI document describing both.

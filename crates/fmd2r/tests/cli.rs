@@ -29,12 +29,18 @@ fn version_prints_the_crate_version() {
 }
 
 #[test]
-fn module_init_is_not_implemented_yet() {
+fn module_download_is_not_implemented_yet() {
     fmd2r()
-        .args(["module", "init"])
+        .args([
+            "module",
+            "download",
+            "https://example.com/c/1",
+            "--out",
+            "x",
+        ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("not implemented yet (T15)"))
+        .stderr(predicate::str::contains("not implemented yet (T20)"))
         .stderr(predicate::str::contains("panicked").not());
 }
 

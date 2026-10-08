@@ -11,6 +11,7 @@ use fmd_core::module_updater::{
 use fmd_core::modules::StoreModuleSettings;
 use fmd_core::settings::{ModuleUpdaterSettings, write_websitebypass_config};
 use fmd_http::HttpClient;
+use fmd_store::KeyFileCipher;
 use tokio::time::Instant;
 
 use crate::AppState;
@@ -22,15 +23,25 @@ use crate::AppState;
 /// The repository, token and keep-last-good settings are read once: changes apply on the next
 /// start. `flaresolverr_url` is written back into `websitebypass_config.json` whenever a sync
 /// replaces it with upstream's.
-pub(crate) async fn start(state: AppState, lua_dir: PathBuf, flaresolverr_url: String) {
+///
+/// Module settings (options, cookies, accounts) are read through `app.db`, with credentials and
+/// cookies decrypted by the key in `key_file`.
+pub(crate) async fn start(
+    state: AppState,
+    lua_dir: PathBuf,
+    key_file: PathBuf,
+    flaresolverr_url: String,
+) {
     let settings = state.settings.get().module_updater.clone();
     let db = state.db.clone();
     let jobs = state.jobs.clone();
     let dir = lua_dir.clone();
     let job = tokio::task::spawn_blocking(move || -> Result<ModuleUpdaterJob, String> {
+        let cipher = KeyFileCipher::open_or_create(&key_file)
+            .map_err(|e| format!("{}: {e}", key_file.display()))?;
         let modules = Arc::new(LiveModules::load(
             &dir,
-            Arc::new(StoreModuleSettings::new(db.clone())),
+            Arc::new(StoreModuleSettings::new(db.clone(), Arc::new(cipher))),
         ));
         let http = HttpClient::new().map_err(|e| e.to_string())?;
         let config = UpdaterConfig::from_settings(&settings, &dir);

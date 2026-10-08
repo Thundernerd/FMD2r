@@ -11,6 +11,7 @@
 mod client;
 mod cookies;
 mod decode;
+mod fixtures;
 mod httpdate;
 mod module;
 mod queue;
@@ -23,6 +24,9 @@ mod url;
 
 pub use client::HttpClient;
 pub use cookies::{Cookie, CookieJar};
+pub use fixtures::{
+    FIXTURE_FORMAT, FixtureError, RecordingTransport, ReplayOptions, ReplayTransport,
+};
 pub use module::ModuleHttp;
 pub use reqwest_transport::ReqwestTransport;
 pub use session::{HttpSession, SessionHook, USER_AGENT_DEFAULT, USER_AGENT_SYNAPSE};

@@ -18,3 +18,6 @@ export type ModuleSummary = Schemas['ModuleSummary'];
 export type ModuleSettingsView = Schemas['ModuleSettingsView'];
 export type ModuleOptionSetting = Schemas['ModuleOptionSetting'];
 export type Problem = Schemas['Problem'];
+export type AccountInfo = Schemas['AccountInfo'];
+export type AccountRequest = Schemas['AccountRequest'];
+export type AccountState = Schemas['AccountState'];

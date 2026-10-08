@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use fmd_core::accounts::AccountService;
 use fmd_core::jobs::JobRegistry;
 use fmd_core::settings::{SettingsError, SettingsService};
 use fmd_store::{AppDb, NewEvent};
@@ -34,6 +35,7 @@ pub struct AppState {
     pub(crate) engine: Arc<dyn DownloadEngine>,
     pub(crate) jobs: JobRegistry,
     pub(crate) modules: Arc<dyn ModuleCatalog>,
+    pub(crate) accounts: Option<Arc<AccountService>>,
     pub(crate) tools: Arc<dyn ToolProbe>,
     pub(crate) covers: Option<Arc<Covers>>,
     pub(crate) data_dir: Option<PathBuf>,
@@ -43,7 +45,7 @@ pub struct AppState {
 
 impl AppState {
     /// State backed by `db`, serving the embedded web UI, with the settings stored in `db`, an
-    /// idle engine, no jobs, modules, covers or tool checks, and no auth configured.
+    /// idle engine, no jobs, modules, accounts, covers or tool checks, and no auth configured.
     pub fn new(db: AppDb) -> Result<Self, SettingsError> {
         let events = EventBus::new();
         Ok(Self {
@@ -52,6 +54,7 @@ impl AppState {
             engine: Arc::new(Idle),
             jobs: JobRegistry::new(),
             modules: Arc::new(Idle),
+            accounts: None,
             tools: Arc::new(NoTools),
             covers: None,
             data_dir: None,
@@ -106,6 +109,13 @@ impl AppState {
     /// Reports the Lua modules from `modules` in `GET /api/about`.
     pub fn with_modules(mut self, modules: impl ModuleCatalog) -> Self {
         self.modules = Arc::new(modules);
+        self
+    }
+
+    /// Serves `/api/accounts` from `accounts`, and streams their status changes as
+    /// `account.state` events. Without it no module has an account.
+    pub fn with_accounts(mut self, accounts: Arc<AccountService>) -> Self {
+        self.accounts = Some(accounts);
         self
     }
 

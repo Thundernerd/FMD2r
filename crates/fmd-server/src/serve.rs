@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use fmd_core::settings::write_websitebypass_config;
-use fmd_store::AppDb;
+use fmd_store::{ACCOUNTS_KEY_FILE, AppDb};
 use thiserror::Error;
 use tokio::net::TcpListener;
 
@@ -90,6 +90,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         tokio::spawn(module_updates::start(
             state.clone(),
             lua_dir,
+            data_dir.join(ACCOUNTS_KEY_FILE),
             flaresolverr_url,
         ));
     }

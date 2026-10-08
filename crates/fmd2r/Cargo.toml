@@ -9,14 +9,19 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["env"] }
+fmd-http = { path = "../fmd-http" }
 fmd-import = { path = "../fmd-import" }
+fmd-lua = { path = "../fmd-lua" }
 fmd-server = { path = "../fmd-server" }
 fmd-store = { path = "../fmd-store" }
+serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [dev-dependencies]
 assert_cmd.workspace = true
+brotli = "8"
+flate2 = "1"
 predicates.workspace = true
 serde_json = "1"
 tempfile.workspace = true
