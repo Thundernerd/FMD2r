@@ -1,9 +1,12 @@
 // The globals FMD2 adds to every Duktape heap (baseunits/Duktape.pas:88-90):
 // - `print(...)`, which logs its arguments joined by spaces (baseunits/Duktape.pas:22-30), through
 //   the host's `log(text)`;
-// - CommonJS `require` as Duktape's module loader implements it (duk_module_duktape_init), with
+// - CommonJS `require` as Duktape 2.3's module loader implements it (duk_module_duktape_init,
+//   baseunits/Duktape.Api.pas:1408; extras/module-duktape in the Duktape sources), with
 //   FMD2's `Duktape.modSearch` (baseunits/Duktape.pas:39-75) supplied by the host as
-//   `modSearch(id)`: the module's source, or undefined when no file exists.
+//   `modSearch(id)`: the module's source, or undefined when no file exists. Not reproduced: the
+//   global `Duktape` object (`Duktape.modLoaded`, `Duktape.modSearch`) and `module.filename` /
+//   `module.name`, which none of the JS files under lua/ use.
 (function (modSearch, log) {
   'use strict';
   var geval = eval;

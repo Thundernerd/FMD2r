@@ -8,8 +8,7 @@
 use std::fs;
 use std::time::{Duration, Instant};
 
-use fmd_http::TerminateToken;
-use fmd_lua::{JsLimits, Runtime};
+use fmd_lua::{JsLimits, Runtime, TerminateToken};
 
 fn runtime() -> Runtime {
     let runtime = Runtime::new().unwrap();
@@ -198,7 +197,9 @@ fn terminating_the_worker_interrupts_a_script() {
 
 /// FMD2 hands Duktape the Lua string's bytes as UTF-8 and pushes the result's bytes back
 /// (baseunits/lua/LuaDuktape.pas:18, baseunits/Duktape.pas:92-94). JS strings are UTF-16 in
-/// between, so non-ASCII text round-trips but `length` counts UTF-16 units.
+/// between, so BMP text round-trips byte for byte. Non-BMP characters are where QuickJS may
+/// differ from Duktape's internal extended UTF-8 (docs/plan.md, "JavaScript"); the assertions
+/// on them pin QuickJS's behaviour: a surrogate pair, returned as 4-byte UTF-8.
 #[test]
 fn passes_strings_through_as_utf8() {
     runtime()
@@ -211,7 +212,7 @@ fn passes_strings_through_as_utf8() {
             assert(js.ExecJS('"😀"') == '😀')
             assert(js.ExecJS('"😀".length') == '2')
             assert(js.ExecJS('String.fromCharCode(0x41, 0xff)') == 'A\xc3\xbf')
-            -- A lone surrogate comes back as its 3-byte encoding, as Duktape stores it.
+            -- A lone surrogate comes back as its 3-byte (WTF-8) encoding.
             assert(js.ExecJS('"\\ud800"') == '\xed\xa0\x80')
             -- Both strings cross as C strings, so they end at the first NUL
             -- (luaToString, baseunits/lua/LuaUtils.pas:206-213; lua_pushstring).
@@ -263,6 +264,38 @@ var chapter_data = '{"ct":"6GQLimXyG0wkqO7IuqSY9udUWOP/SFrOIBuAA7Vnyxg3NUtWTcSSF
             local state = ([==[window.__ZEROSCANS__ = {data:{details:{name:"Ñame 漫",genres:[{name:"Action"}],rating:4.50}}};]==]):gsub('window.', '')
             local json = js.ExecJS(state .. ';JSON.stringify(__ZEROSCANS__);')
             assert(json == '{"data":{"details":{"name":"Ñame 漫","genres":[{"name":"Action"}],"rating":4.5}}}', json)
+
+            -- modules/MangaGo.lua:205-228: AES-CBC with zero padding. The data was encrypted with
+            -- `openssl enc -aes-128-cbc -nopad` after zero-padding the plaintext to 48 bytes.
+            local mangago = string.format([[
+		var CryptoJS = require('utils/crypto-js.min.js');
+
+		function decryptData(b64_data, hex_key, hex_iv) {
+			var key = CryptoJS.enc.Hex.parse(hex_key);
+			var iv = CryptoJS.enc.Hex.parse(hex_iv);
+
+			var decrypted = CryptoJS.AES.decrypt(
+				b64_data,
+				key,
+				{
+					iv: iv,
+					mode: CryptoJS.mode.CBC,
+					padding: CryptoJS.pad.ZeroPadding
+				}
+			);
+
+			return decrypted.toString(CryptoJS.enc.Utf8);
+		}
+
+		decryptData('%s', '%s', '%s');
+	]], 'BXZ+J/y5iFXuL+K7YTjLxQdjZ3tGC3/ZPYbR9LhHBW2INk83Py6cCp22k68rcpTL', 'e11adc3949ba59abbe56e057f20f883e', '1234567890abcdef1234567890abcdef')
+            local list = js.ExecJS(mangago)
+            assert(list == 'https://a.example/1.jpg,https://a.example/2.jpg', list)
+
+            -- modules/DigitalTeam.lua:32-33: reader globals re-serialized as JSON.
+            local reader = [==[var current_page = 1, m = "12", ch = "3", chs = 0;]==]
+            local ids = js.ExecJS(reader .. ';JSON.stringify({m:m,ch:ch,chs:chs});')
+            assert(ids == '{"m":"12","ch":"3","chs":0}', ids)
 
             -- modules/acqqcom.lua:21: a script that writes to `window`.
             local nonce = js.ExecJS('var window={};' .. [==[eval("window[\"no\"+\"nce\"] = \"3f9a\" + (1+1);")]==] .. ';window.nonce;')

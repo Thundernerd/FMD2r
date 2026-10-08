@@ -58,14 +58,8 @@ fn exec_js(lua: &mlua::Lua, code: mlua::Value) -> mlua::Result<mlua::MultiValue>
         .coerce_string(code)?
         .map(|s| until_nul(&s.as_bytes()).to_vec())
         .unwrap_or_default();
-    let lua_dir = lua
-        .app_data_ref::<LuaDir>()
-        .map(|dir| dir.0.clone())
-        .unwrap_or_default();
-    let settings = lua
-        .app_data_ref::<JsSettings>()
-        .map(|settings| settings.clone())
-        .unwrap_or_default();
+    let lua_dir = app_data_or_default::<LuaDir>(lua).0;
+    let settings = app_data_or_default::<JsSettings>(lua);
     match eval(&source, &lua_dir, settings) {
         Ok(result) => {
             // baseunits/Duktape.pas:98-99: a result of "undefined" is returned as ''. Then
@@ -78,7 +72,7 @@ fn exec_js(lua: &mlua::Lua, code: mlua::Value) -> mlua::Result<mlua::MultiValue>
             lua.create_string(result)?.into_lua_multi(lua)
         }
         Err(JsError(message)) => {
-            // baseunits/lua/LuaDuktape.pas:20-21 around the exception from
+            // baseunits/lua/LuaDuktape.pas:20-22 around the exception from
             // baseunits/Duktape.pas:95.
             log::error!("Duktape.ExecJS() Duktape error: {message}");
             Ok(mlua::MultiValue::new())
@@ -86,10 +80,17 @@ fn exec_js(lua: &mlua::Lua, code: mlua::Value) -> mlua::Result<mlua::MultiValue>
     }
 }
 
+/// A copy of the runtime's app data of type `T`, or its default when none is set.
+fn app_data_or_default<T: Clone + Default + 'static>(lua: &mlua::Lua) -> T {
+    lua.app_data_ref::<T>()
+        .map(|data| data.clone())
+        .unwrap_or_default()
+}
+
 /// `ExecJS` (baseunits/Duktape.pas:77-104): evaluates `source` as global code in a fresh heap
 /// with FMD2's globals, and coerces the completion value with `duk_safe_to_string`.
 fn eval(source: &[u8], lua_dir: &Path, settings: JsSettings) -> Result<Vec<u8>, JsError> {
-    let runtime = rquickjs::Runtime::new().map_err(engine_error)?;
+    let runtime = rquickjs::Runtime::new().map_err(setup_error)?;
     runtime.set_memory_limit(settings.limits.memory);
     let deadline = Instant::now() + settings.limits.time;
     let terminate = settings.terminate;
@@ -97,16 +98,16 @@ fn eval(source: &[u8], lua_dir: &Path, settings: JsSettings) -> Result<Vec<u8>, 
     runtime.set_interrupt_handler(Some(Box::new(move || {
         terminate.is_terminated() || Instant::now() >= deadline
     })));
-    let context = Context::full(&runtime).map_err(engine_error)?;
+    let context = Context::full(&runtime).map_err(setup_error)?;
     context.with(|ctx| {
-        install_globals(&ctx, lua_dir.to_path_buf()).map_err(engine_error)?;
+        install_globals(&ctx, lua_dir.to_path_buf()).map_err(setup_error)?;
         // `duk_peval` compiles non-strict global code; rquickjs defaults to strict.
         let mut options = EvalOptions::default();
         options.strict = false;
         let completion = ctx.eval_with_options::<Value, _>(source.to_vec(), options);
         match completion {
             Ok(value) => Ok(safe_to_string(&ctx, value)),
-            Err(_) => Err(JsError(lossy(safe_to_string(&ctx, ctx.catch())))),
+            Err(_) => Err(JsError(utf8_lossy(safe_to_string(&ctx, ctx.catch())))),
         }
     })
 }
@@ -137,7 +138,7 @@ fn mod_search(lua_dir: &Path, id: &str) -> Option<String> {
         }
     }
     match std::fs::read(&path) {
-        Ok(bytes) => Some(lossy(bytes)),
+        Ok(bytes) => Some(utf8_lossy(bytes)),
         Err(error) => {
             // baseunits/Duktape.pas:63-65.
             log::error!("modSearch Error: {}: {error}", path.display());
@@ -146,7 +147,8 @@ fn mod_search(lua_dir: &Path, id: &str) -> Option<String> {
     }
 }
 
-/// `duk_safe_to_string`: `ToString(value)`; when that throws, `ToString` of the error; when
+/// `duk_safe_to_string` (baseunits/Duktape.Api.pas:1636; Duktape 2.3's `duk_safe_to_lstring`):
+/// `ToString(value)`; when that throws, `ToString` of the error; when
 /// that throws too, `"Error"`.
 fn safe_to_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Vec<u8> {
     to_string(ctx, value)
@@ -179,12 +181,13 @@ fn until_nul(bytes: &[u8]) -> &[u8] {
     bytes.split(|&b| b == 0).next().unwrap_or_default()
 }
 
-fn lossy(bytes: Vec<u8>) -> String {
+/// `bytes` decoded as UTF-8, with invalid sequences replaced by U+FFFD.
+fn utf8_lossy(bytes: Vec<u8>) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
-/// QuickJS could not set up a heap, like `duk_create_heap_default` returning nil
-/// (baseunits/Duktape.pas:86-87).
-fn engine_error(error: rquickjs::Error) -> JsError {
-    JsError(format!("Failed to create a QuickJS heap: {error}"))
+/// QuickJS could not create the heap or install FMD2's globals, like `duk_create_heap_default`
+/// returning nil (baseunits/Duktape.pas:86-87).
+fn setup_error(error: rquickjs::Error) -> JsError {
+    JsError(format!("Failed to set up a QuickJS heap: {error}"))
 }

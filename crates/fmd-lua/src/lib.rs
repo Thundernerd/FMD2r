@@ -22,6 +22,7 @@ pub enum Error {
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// The `lua/` directory of a runtime, stored as app data on its Lua state.
+#[derive(Clone, Default)]
 struct LuaDir(PathBuf);
 
 /// Makes `require(name)` return the table `open` builds, like `LuaPackage.AddLib` registers
