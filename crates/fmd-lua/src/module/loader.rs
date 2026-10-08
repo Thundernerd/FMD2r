@@ -71,6 +71,25 @@ impl ModuleRegistry {
             }
         };
         let results = load_files(lua_dir, &files);
+        Self::collect(files, results, &settings)
+    }
+
+    /// Loads the modules of the one module file `file` as the scan loads each of its files
+    /// (`LoadLuaWebsiteModule`, baseunits/lua/LuaWebsiteModules.pas:514-590), keeping options and
+    /// cookies in memory. `lua_dir` is the `lua/` tree its `require`s resolve against.
+    pub fn load_file(lua_dir: &Path, file: &Path) -> LoadReport {
+        let settings: Arc<dyn ModuleSettingsStore> = Arc::new(MemorySettingsStore::new());
+        let files = vec![file.to_path_buf()];
+        let results = load_files(lua_dir, &files);
+        Self::collect(files, results, &settings)
+    }
+
+    /// The report of `files`, loaded into `results` (in `files` order).
+    fn collect(
+        files: Vec<PathBuf>,
+        results: Vec<FileResult>,
+        settings: &Arc<dyn ModuleSettingsStore>,
+    ) -> LoadReport {
         let mut modules = Vec::new();
         let mut failures = Vec::new();
         for (file, result) in files.iter().zip(results) {
@@ -105,6 +124,51 @@ impl ModuleRegistry {
     /// The module with ID `id`.
     pub fn get(&self, id: &str) -> Option<&Arc<Module>> {
         self.modules.iter().find(|m| m.def_read().id == id)
+    }
+
+    /// The module serving `host` (`LocateModuleByHost`, baseunits/WebsiteModules.pas:500-534):
+    /// the last module, by ID, whose `RootURL` contains the lowercased host; failing that, the
+    /// last one containing the bare host name (`SplitURL` without protocol and port); failing
+    /// that, when that name starts with `www.` or holds a `w` (FMD2's `w+\d*` regex matches
+    /// anywhere), the last one containing it without its first four characters.
+    ///
+    /// FMD2 first tries the module it located last; every call here starts afresh.
+    pub fn locate_by_host(&self, host: &str) -> Option<&Arc<Module>> {
+        // Pascal's `Pos` never finds an empty string.
+        let pos_module = |s: &str| {
+            self.modules
+                .iter()
+                .rev()
+                .find(|m| !s.is_empty() && m.def_read().root_url.contains(s))
+        };
+        // Pascal's `LowerCase` only maps ASCII letters.
+        let host = host.to_ascii_lowercase();
+        if let Some(module) = pos_module(&host) {
+            return Some(module);
+        }
+        let name = bare_host(&host);
+        pos_module(&name).or_else(|| {
+            if name.starts_with("www.") || name.contains('w') {
+                pos_module(name.get(4..).unwrap_or_default())
+            } else {
+                None
+            }
+        })
+    }
+}
+
+/// The host of `url` without protocol and port: `SplitURL(url, @host, nil, False, False)`
+/// (baseunits/httpsendthread.pas:191-276).
+fn bare_host(url: &str) -> String {
+    let (host, _) = fmd_http::split_url_bytes(url.as_bytes());
+    let host = String::from_utf8_lossy(&host).into_owned();
+    // `split_url_bytes` adds `proto://` and appends `:port` when there is one.
+    let host = host.split_once("://").map_or(host.as_str(), |(_, h)| h);
+    match host.rsplit_once(':') {
+        Some((name, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => {
+            name.to_owned()
+        }
+        _ => host.to_owned(),
     }
 }
 
