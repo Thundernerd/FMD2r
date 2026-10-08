@@ -5,8 +5,9 @@ name: Smoke (nightly)
 # fails is an FMD2r regression, one that fails only live had its site or upstream module change.
 #
 # Entry failures don't fail the job (`fmd-smoke run` exits 0 on them): live sites break all the
-# time, and this workflow only reports. It runs on a schedule, so it sets no status on main's
-# commits or on PRs; CI's own replay (the `smoke` test in ci.yml) is what gates merges.
+# time, and this workflow only reports. The run steps also continue on errors, so the report is
+# written from whatever results exist. It runs on a schedule, not on pushes or PRs, so it doesn't
+# gate merges; CI's own replay (the `smoke` test run by `cargo test` in ci.yml) does.
 on:
   schedule:
     - cron: "23 3 * * *"
@@ -27,10 +28,14 @@ jobs:
       - name: Build
         run: cargo build -p fmd2r -p fmd-smoke
       - name: Replay
+        continue-on-error: true
         run: target/debug/fmd-smoke run --out smoke-replay.json
       - name: Live
+        continue-on-error: true
         run: target/debug/fmd-smoke run --live --out smoke-live.json
       - name: Report
+        if: always()
+        continue-on-error: true
         run: |
           target/debug/fmd-smoke report --live smoke-live.json --replay smoke-replay.json --out smoke-report.md
           cat smoke-report.md >> "$GITHUB_STEP_SUMMARY"

@@ -25,15 +25,13 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # Includes the smoke list's offline replay (crates/fmd2r/tests/smoke.rs): every entry's
+      # recorded HTTP traffic, compared with its info and pages snapshots in fixtures/smoke.
       - name: Test
         run: cargo test --workspace
       # Prints how many upstream modules pass `Init` (the test itself fails on any failure).
       - name: Module corpus
         run: cargo test -p fmd-lua --test module_corpus -- --nocapture
-      # Replays the smoke list's recorded HTTP traffic offline and compares each entry's info and
-      # pages with its snapshot (fixtures/smoke); prints how many entries ran.
-      - name: Smoke replay
-        run: cargo test -p fmd2r --test smoke -- --nocapture
 
   # crates/xpath-fpc is outside the root workspace: it needs fpc, which the check job doesn't install.
   xpath-fpc:

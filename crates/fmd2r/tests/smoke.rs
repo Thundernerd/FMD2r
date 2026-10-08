@@ -34,12 +34,11 @@ fn every_smoke_entry_replays_to_its_snapshots() {
         runs.into_iter().map(|run| run.join().unwrap()).collect()
     });
     let failures: Vec<String> = results
-        .into_iter()
+        .iter()
         .flat_map(|result| {
-            [("info", result.info), ("pages", result.pages)]
-                .into_iter()
-                .filter(|(_, step)| !step.passed)
-                .map(move |(step, r)| format!("{} {step}: {}", result.name, r.detail))
+            result
+                .failures("replay")
+                .map(|failure| format!("{}: {failure}", result.name))
         })
         .collect();
     println!("{} smoke entries replayed", list.entries.len());

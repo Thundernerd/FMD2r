@@ -47,7 +47,8 @@ smoke/<name>/
   pages/  pages.json   the same for `module pages <chapter_url>`
 ```
 
-Image response bodies are emptied after recording: `info` and `pages` don't need them.
+Image response bodies are dropped after recording (the exchange's `body` becomes `null`): `info`
+and `pages` don't need them.
 
 The `fmd-smoke` crate drives the list. Three places run it:
 

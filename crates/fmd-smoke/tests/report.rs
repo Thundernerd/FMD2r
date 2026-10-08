@@ -83,3 +83,12 @@ fn the_report_lists_failures_under_their_verdict_with_the_failing_step() {
         "{report}"
     );
 }
+
+#[test]
+fn an_entry_missing_from_the_live_run_counts_as_failing_live() {
+    let live = results(r#"{ "entries": [] }"#);
+    let classified = classify(&live, &results(REPLAY));
+    let ok = classified.iter().find(|c| c.name == "ok").unwrap();
+    assert_eq!(ok.verdict, Verdict::SiteChanged);
+    assert_eq!(ok.failures, ["live run missing"]);
+}

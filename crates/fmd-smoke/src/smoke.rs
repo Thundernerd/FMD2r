@@ -18,13 +18,18 @@ pub enum SmokeError {
     #[error("cannot access {}: {source}", path.display())]
     Io { path: PathBuf, source: io::Error },
     #[error("cannot parse {}: {source}", path.display())]
-    List {
+    ListParse {
         path: PathBuf,
         source: toml::de::Error,
     },
     #[error("cannot parse {}: {source}", path.display())]
-    Json {
+    JsonParse {
         path: PathBuf,
+        source: serde_json::Error,
+    },
+    #[error("cannot serialize {what}: {source}")]
+    JsonWrite {
+        what: &'static str,
         source: serde_json::Error,
     },
     #[error("no smoke entry named {0}")]
@@ -35,6 +40,12 @@ pub enum SmokeError {
         step: Step,
         detail: String,
     },
+}
+
+/// An [`SmokeError::Io`] on `path`, for `map_err`.
+pub(crate) fn io_error(path: &Path) -> impl FnOnce(io::Error) -> SmokeError + use<> {
+    let path = path.to_owned();
+    move |source| SmokeError::Io { path, source }
 }
 
 /// `fixtures/smoke/list.toml`.
@@ -93,11 +104,23 @@ impl std::fmt::Display for Step {
     }
 }
 
-/// How long one live `fmd2r module` run may take.
-const LIVE_TIMEOUT: Duration = Duration::from_secs(300);
-/// Response bodies of these media types are emptied after recording: `info` and `pages` don't
+/// How long one `fmd2r module` run may take.
+const TIMEOUT: Duration = Duration::from_secs(300);
+/// Response bodies of these media types are dropped after recording: `info` and `pages` don't
 /// need image data, and they would make the fixtures large.
 const TRUNCATED_MEDIA: &str = "image/";
+
+/// Where a step's HTTP goes.
+enum Mode {
+    /// To the live site.
+    Live,
+    /// To the live site, recorded into this fixture directory.
+    Record(PathBuf),
+    /// To the fixtures recorded in this directory, with an empty `PATH`: a module that runs a
+    /// program (node, python, ...) through `fmd.subprocess` would reach the network past the
+    /// replay.
+    Replay(PathBuf),
+}
 
 /// Where the smoke list lives and what runs it.
 #[derive(Debug, Clone)]
@@ -114,11 +137,8 @@ impl Smoke {
     /// Reads `list.toml`.
     pub fn list(&self) -> Result<SmokeList, SmokeError> {
         let path = self.dir.join("list.toml");
-        let text = fs::read_to_string(&path).map_err(|source| SmokeError::Io {
-            path: path.clone(),
-            source,
-        })?;
-        toml::from_str(&text).map_err(|source| SmokeError::List { path, source })
+        let text = fs::read_to_string(&path).map_err(io_error(&path))?;
+        toml::from_str(&text).map_err(|source| SmokeError::ListParse { path, source })
     }
 
     /// The entry named `name`.
@@ -132,26 +152,27 @@ impl Smoke {
 
     /// Runs the entry on its recorded traffic: each step passes when it prints its snapshot.
     pub fn replay(&self, entry: &Entry) -> EntryResult {
-        self.result(entry, |step| {
-            let out = self.run_replay(entry, step)?;
+        self.run_steps(entry, |step| {
+            let out = self.run(entry, step, Mode::Replay(self.fixtures(entry, step)))?;
             let snapshot_path = self.snapshot(entry, step);
             let snapshot = fs::read_to_string(&snapshot_path)
                 .map_err(|e| format!("cannot read {}: {e}", snapshot_path.display()))?;
             compare(&snapshot, &out)
+                .map_err(|e| format!("the output differs from the snapshot {e}"))
         })
     }
 
     /// Runs the entry against the live site: each step passes when it finds something (see
     /// [`check_output`]).
     pub fn live(&self, entry: &Entry) -> EntryResult {
-        self.result(entry, |step| {
-            let out = self.run(entry, step, &[], &[], Some(LIVE_TIMEOUT))?;
+        self.run_steps(entry, |step| {
+            let out = self.run(entry, step, Mode::Live)?;
             check_output(step, &out)
         })
     }
 
     /// Records the entry from the live site, replacing its fixtures and snapshots: each step's
-    /// traffic is recorded, image bodies are emptied, and the step is replayed; the replay's
+    /// traffic is recorded, image bodies are dropped, and the step is replayed; the replay's
     /// output, which must match the live one, becomes the snapshot.
     pub fn record(&self, entry: &Entry) -> Result<(), SmokeError> {
         for step in Step::ALL {
@@ -162,28 +183,23 @@ impl Smoke {
             };
             let fixtures = self.fixtures(entry, step);
             let live = self
-                .run(
-                    entry,
-                    step,
-                    &["--record".as_ref(), fixtures.as_ref()],
-                    &[],
-                    Some(LIVE_TIMEOUT),
-                )
+                .run(entry, step, Mode::Record(fixtures.clone()))
                 .map_err(failed)?;
             check_output(step, &live).map_err(failed)?;
             truncate_media(&fixtures)?;
             let replayed = self
-                .run_replay(entry, step)
+                .run(entry, step, Mode::Replay(fixtures))
                 .map_err(|e| failed(format!("replaying the recording: {e}")))?;
             compare(&live, &replayed)
-                .map_err(|e| failed(format!("the replay differs from the live run: {e}")))?;
+                .map_err(|e| failed(format!("the replay differs from the live run {e}")))?;
             let path = self.snapshot(entry, step);
-            fs::write(&path, replayed).map_err(|source| SmokeError::Io { path, source })?;
+            fs::write(&path, replayed).map_err(io_error(&path))?;
         }
         Ok(())
     }
 
-    fn result(
+    /// Runs `step` on the entry's info and pages steps, collecting a result for each.
+    fn run_steps(
         &self,
         entry: &Entry,
         mut step: impl FnMut(Step) -> Result<(), String>,
@@ -218,24 +234,9 @@ impl Smoke {
             .join(format!("{}.json", step.command()))
     }
 
-    /// Runs the step on its recorded fixtures, with an empty `PATH`: a module that runs a program
-    /// (node, python, ...) through `fmd.subprocess` would reach the network past the replay.
-    fn run_replay(&self, entry: &Entry, step: Step) -> Result<String, String> {
-        let fixtures = self.fixtures(entry, step);
-        let args = ["--replay".as_ref(), fixtures.as_os_str()];
-        self.run(entry, step, &args, &[("PATH", "")], None)
-    }
-
-    /// Runs `fmd2r module <step> <url> --module <id>` with `extra` arguments and `env` variables and returns its
-    /// stdout, or why it failed.
-    fn run(
-        &self,
-        entry: &Entry,
-        step: Step,
-        extra: &[&std::ffi::OsStr],
-        env: &[(&str, &str)],
-        timeout: Option<Duration>,
-    ) -> Result<String, String> {
+    /// Runs `fmd2r module <step> <url> --module <id>` in `mode` and returns its stdout, or why
+    /// it failed.
+    fn run(&self, entry: &Entry, step: Step, mode: Mode) -> Result<String, String> {
         let mut command = Command::new(&self.fmd2r);
         command
             .arg("module")
@@ -244,16 +245,20 @@ impl Smoke {
             .arg("--lua-dir")
             .arg(&self.lua_dir)
             .arg("--module")
-            .arg(&entry.module_id)
-            .args(extra)
-            .envs(env.iter().copied());
-        let output = run_with_timeout(command, timeout)
+            .arg(&entry.module_id);
+        match mode {
+            Mode::Live => {}
+            Mode::Record(dir) => {
+                command.arg("--record").arg(dir);
+            }
+            Mode::Replay(dir) => {
+                command.arg("--replay").arg(dir).env("PATH", "");
+            }
+        }
+        let output = run_with_timeout(command, TIMEOUT)
             .map_err(|e| format!("cannot run {}: {e}", self.fmd2r.display()))?;
         let Some(output) = output else {
-            return Err(format!(
-                "timed out after {}s",
-                timeout.unwrap_or_default().as_secs()
-            ));
+            return Err(format!("timed out after {}s", TIMEOUT.as_secs()));
         };
         if !output.success {
             let stderr = output.stderr.trim();
@@ -272,7 +277,7 @@ struct Output {
 
 /// Runs `command` and collects its output, or `None` (after killing it) when it outlives
 /// `timeout`.
-fn run_with_timeout(mut command: Command, timeout: Option<Duration>) -> io::Result<Option<Output>> {
+fn run_with_timeout(mut command: Command, timeout: Duration) -> io::Result<Option<Output>> {
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -295,8 +300,9 @@ fn run_with_timeout(mut command: Command, timeout: Option<Duration>) -> io::Resu
         if let Some(status) = child.try_wait()? {
             break Some(status);
         }
-        if timeout.is_some_and(|t| started.elapsed() > t) {
-            child.kill()?;
+        if started.elapsed() > timeout {
+            // Fails only when the child has exited meanwhile, which `wait` then reaps.
+            let _ = child.kill();
             child.wait()?;
             break None;
         }
@@ -311,7 +317,7 @@ fn run_with_timeout(mut command: Command, timeout: Option<Duration>) -> io::Resu
     }))
 }
 
-/// Passes when `actual` is `expected`, else names the first line that differs.
+/// Passes when `actual` is `expected`, else names the first line that differs (`at line N: ...`).
 fn compare(expected: &str, actual: &str) -> Result<(), String> {
     if expected == actual {
         return Ok(());
@@ -324,7 +330,7 @@ fn compare(expected: &str, actual: &str) -> Result<(), String> {
             (Some(e), Some(a)) if e == a => line += 1,
             (e, a) => {
                 return Err(format!(
-                    "the output differs from the snapshot at line {line}: expected {}, got {}",
+                    "at line {line}: expected {}, got {}",
                     e.map_or("the end".to_owned(), |e| format!("`{}`", e.trim())),
                     a.map_or("the end".to_owned(), |a| format!("`{}`", a.trim())),
                 ));
@@ -370,21 +376,19 @@ pub fn check_output(step: Step, out: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Empties the recorded response bodies of images in the fixture directory `dir`.
+/// Drops the recorded response bodies of images in the fixture directory `dir`: the exchange's
+/// `body` becomes `null`, as for an empty body (docs/fixtures.md).
 fn truncate_media(dir: &Path) -> Result<(), SmokeError> {
     let exchanges = dir.join("exchanges");
-    let io_error = |path: &Path| {
-        let path = path.to_owned();
-        move |source| SmokeError::Io { path, source }
-    };
     for file in fs::read_dir(&exchanges).map_err(io_error(&exchanges))? {
         let path = file.map_err(io_error(&exchanges))?.path();
         let text = fs::read_to_string(&path).map_err(io_error(&path))?;
-        let exchange: Value = serde_json::from_str(&text).map_err(|source| SmokeError::Json {
-            path: path.clone(),
-            source,
-        })?;
-        let response = &exchange["response"];
+        let mut exchange: Value =
+            serde_json::from_str(&text).map_err(|source| SmokeError::JsonParse {
+                path: path.clone(),
+                source,
+            })?;
+        let response = &mut exchange["response"];
         let is_media = response["headers"].as_array().is_some_and(|headers| {
             headers.iter().any(|h| {
                 h[0].as_str()
@@ -394,10 +398,19 @@ fn truncate_media(dir: &Path) -> Result<(), SmokeError> {
                         .is_some_and(|v| v.trim().to_ascii_lowercase().starts_with(TRUNCATED_MEDIA))
             })
         });
-        if let (true, Some(body)) = (is_media, response["body"].as_str()) {
-            let body = dir.join(body);
-            fs::write(&body, b"").map_err(io_error(&body))?;
-        }
+        let Some(body) = response["body"].as_str().filter(|_| is_media) else {
+            continue;
+        };
+        let body = dir.join(body);
+        fs::remove_file(&body).map_err(io_error(&body))?;
+        response["body"] = Value::Null;
+        let mut json =
+            serde_json::to_vec_pretty(&exchange).map_err(|source| SmokeError::JsonWrite {
+                what: "an exchange",
+                source,
+            })?;
+        json.push(b'\n');
+        fs::write(&path, json).map_err(io_error(&path))?;
     }
     Ok(())
 }

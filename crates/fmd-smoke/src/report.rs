@@ -51,8 +51,8 @@ impl EntryResult {
         self.info.passed && self.pages.passed
     }
 
-    /// The failed steps, as `<run> <step> failed: <detail>`.
-    fn failures(&self, run: &str) -> impl Iterator<Item = String> {
+    /// The failed steps, as `<run> <step> failed: <detail>`, e.g. `replay pages failed: ...`.
+    pub fn failures(&self, run: &str) -> impl Iterator<Item = String> {
         [("info", &self.info), ("pages", &self.pages)]
             .into_iter()
             .filter(|(_, step)| !step.passed)

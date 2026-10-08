@@ -115,8 +115,8 @@ fn run(smoke: &Smoke, command: Command) -> Result<ExitCode, SmokeError> {
                 });
             }
             let json =
-                serde_json::to_string_pretty(&results).map_err(|source| SmokeError::Json {
-                    path: out.clone().unwrap_or_default(),
+                serde_json::to_string_pretty(&results).map_err(|source| SmokeError::JsonWrite {
+                    what: "the results",
                     source,
                 })? + "\n";
             write(out.as_deref(), &json)?;
@@ -136,7 +136,7 @@ fn read_results(path: &Path) -> Result<Results, SmokeError> {
         path: path.to_owned(),
         source,
     })?;
-    serde_json::from_str(&text).map_err(|source| SmokeError::Json {
+    serde_json::from_str(&text).map_err(|source| SmokeError::JsonParse {
         path: path.to_owned(),
         source,
     })
