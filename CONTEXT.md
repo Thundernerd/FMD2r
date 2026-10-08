@@ -26,3 +26,7 @@ _Avoid_: compatible (without saying which bar)
 **Catalog**:
 Everything FMD2r knows each website offers: the per-website manga lists, seeded from FMD2-DB and refreshed by updating a website's list. FMD2r can always rebuild it, so it is not the user's data.
 _Avoid_: manga list (when meaning all websites), database
+
+**Series**:
+One manga as offered by one website, identified by its module and its link on that site. Favorites, downloads and chapter history all refer to a Series. The same manga on two websites is two Series.
+_Avoid_: title, entry, manga (when meaning this specific identity)
