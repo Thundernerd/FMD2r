@@ -17,3 +17,7 @@ tempfile = "3"
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "search"
+harness = false

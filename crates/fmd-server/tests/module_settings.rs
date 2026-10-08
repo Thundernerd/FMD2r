@@ -237,6 +237,15 @@ async fn modules_are_listed_for_the_picker() {
     let body = body_json(send(&h.state, get("/api/modules")).await).await;
     assert_eq!(
         body,
-        json!([{ "id": "fixture", "name": "Fixture", "category": "", "option_count": 4 }])
+        json!([{
+            "id": "fixture",
+            "name": "Fixture",
+            "category": "",
+            "option_count": 4,
+            "capabilities": { "update_list": false, "info": false, "download": false, "account": false },
+            "list_size": 0,
+            "list_updated": null,
+            "list_job_running": false,
+        }])
     );
 }

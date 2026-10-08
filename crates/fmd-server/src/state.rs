@@ -6,8 +6,9 @@ use std::time::Instant;
 
 use fmd_core::accounts::AccountService;
 use fmd_core::jobs::JobRegistry;
+use fmd_core::lists::ListJobs;
 use fmd_core::settings::{SettingsError, SettingsService};
-use fmd_store::{AppDb, NewEvent};
+use fmd_store::{AppDb, ListsDb, NewEvent};
 use tokio::sync::watch;
 
 use crate::ApiError;
@@ -38,6 +39,8 @@ pub struct AppState {
     pub(crate) accounts: Option<Arc<AccountService>>,
     pub(crate) tools: Arc<dyn ToolProbe>,
     pub(crate) covers: Option<Arc<Covers>>,
+    pub(crate) lists: Option<ListsDb>,
+    pub(crate) list_jobs: Option<ListJobs>,
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) started: Instant,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
@@ -57,6 +60,8 @@ impl AppState {
             accounts: None,
             tools: Arc::new(NoTools),
             covers: None,
+            lists: None,
+            list_jobs: None,
             data_dir: None,
             started: Instant::now(),
             shutdown: Arc::new(watch::channel(false).0),
@@ -130,6 +135,28 @@ impl AppState {
     pub fn with_covers(mut self, config: CoverConfig, modules: impl CoverModules) -> Self {
         self.covers = Some(Arc::new(Covers::new(config, Arc::new(modules))));
         self
+    }
+
+    /// Serves the Discover endpoints (`/api/lists/search`, `/api/lists/facets`) and the list
+    /// sizes in `GET /api/modules` from `lists`. Without it they answer 503.
+    pub fn with_lists(mut self, lists: ListsDb) -> Self {
+        self.lists = Some(lists);
+        self
+    }
+
+    /// Starts list updates and FMD2-DB imports (`POST /api/lists/{module}/...`) with `jobs`.
+    /// Without it they answer 503. `jobs` should send its events to [`AppState::events`] as
+    /// [`ServerEvent::Lists`].
+    pub fn with_list_jobs(mut self, jobs: ListJobs) -> Self {
+        self.list_jobs = Some(jobs);
+        self
+    }
+
+    /// The `lists.db` behind the Discover endpoints, or a 503.
+    pub(crate) fn lists(&self) -> Result<ListsDb, ApiError> {
+        self.lists
+            .clone()
+            .ok_or_else(|| ApiError::Unavailable("lists.db is not open".into()))
     }
 
     /// Reports `dir` and the sizes of the databases in it in `GET /api/about`.

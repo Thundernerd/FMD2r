@@ -9,7 +9,9 @@ use fmd_lua::{
     AccountState, ModuleDef, ModuleSettingsStore, OptionKind, OptionValue, SettingsStoreError,
 };
 use fmd_store::{Account, AppDb, Cipher};
+use serde::Serialize;
 use serde_json::Value;
+use utoipa::ToSchema;
 
 use crate::settings::ModuleLimits;
 
@@ -27,6 +29,20 @@ pub struct ModuleInfo {
     pub limits: ModuleLimits,
     /// The options a user can set, in declaration order.
     pub options: Vec<OptionDef>,
+    pub capabilities: ModuleCapabilities,
+}
+
+/// What a module can do, from the callbacks and flags it declares.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, ToSchema)]
+pub struct ModuleCapabilities {
+    /// Its list can be updated: it declares `OnGetNameAndLink`.
+    pub update_list: bool,
+    /// It reads manga info: it declares `OnGetInfo` (`InformationAvailable` aside).
+    pub info: bool,
+    /// It downloads chapters: it declares `OnGetPageNumber`.
+    pub download: bool,
+    /// It has an account to log in with (`AccountSupport`).
+    pub account: bool,
 }
 
 /// One option a module declared with `AddOption*`.
@@ -96,6 +112,12 @@ impl From<&ModuleDef> for ModuleInfo {
                     },
                 })
                 .collect(),
+            capabilities: ModuleCapabilities {
+                update_list: def.on_get_name_and_link.is_some(),
+                info: def.on_get_info.is_some(),
+                download: def.on_get_page_number.is_some(),
+                account: def.account_support,
+            },
         }
     }
 }

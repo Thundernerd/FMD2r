@@ -94,7 +94,7 @@ export const defaultSettings = (): Settings => ({
 
 /** A module as the mock knows it: what it declares. Values live in the module's overrides. */
 interface MockModule {
-	summary: Omit<ModuleSummary, 'option_count'>;
+	summary: Pick<ModuleSummary, 'id' | 'name' | 'category'>;
 	limits: ModuleSettingsView['module_limits'];
 	options: ModuleOptionSetting[];
 }
@@ -169,8 +169,21 @@ const MODULES: MockModule[] = [
 		summary: { id: 'webtoons', name: 'Webtoons', category: 'English' },
 		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
 		options: []
+	},
+	{
+		summary: { id: 'rawkuma', name: 'Rawkuma', category: 'Raw' },
+		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
+		options: []
+	},
+	{
+		summary: { id: 'tmo', name: 'TuMangaOnline', category: 'Spanish' },
+		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
+		options: []
 	}
 ];
+
+/** What the settings know of a module for `GET /api/modules`; the list fields come from the lists mock. */
+export type ModuleBasics = Pick<ModuleSummary, 'id' | 'name' | 'category' | 'option_count'>;
 
 type Overrides = Pick<ModuleSettingsView, 'enabled' | 'limits' | 'http'> & {
 	options: Record<string, unknown>;
@@ -326,7 +339,7 @@ export function createMockSettings() {
 
 		previewRename,
 
-		listModules: (): ModuleSummary[] =>
+		listModules: (): ModuleBasics[] =>
 			MODULES.map((m) => ({ ...m.summary, option_count: m.options.length })),
 
 		getModule(id: string): ModuleSettingsView | null {

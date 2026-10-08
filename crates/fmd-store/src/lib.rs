@@ -30,6 +30,6 @@ pub use app::tasks::{
 pub use crypto::{ACCOUNTS_KEY_FILE, Cipher, KeyFileCipher};
 pub use error::{Result, StoreError};
 pub use lists::{
-    ListsDb, MangaListing, MasterListEntry, MasterListRepo, PageRequest, SearchFilters,
-    SearchResults,
+    FacetCount, Facets, ListSummary, ListsDb, MangaListing, MasterListEntry, MasterListRepo,
+    PageRequest, SearchFilters, SearchResults, read_fmd2_list,
 };

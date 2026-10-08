@@ -4,16 +4,21 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use fmd_core::modules::{ModuleInfo, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
+use std::collections::HashMap;
+
+use fmd_core::modules::{ModuleCapabilities, ModuleInfo, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
 use fmd_core::settings::{HttpOverrides, LimitOverrides, ModuleLimits, ModuleOverrides};
 use serde::Serialize;
 use serde_json::Value;
 use utoipa::ToSchema;
 
+use fmd_store::ListSummary;
+
 use crate::error::ApiJson;
+use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
-/// A loaded module, for the module picker.
+/// A loaded module, for the module pickers.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ModuleSummary {
     pub id: String,
@@ -21,6 +26,13 @@ pub struct ModuleSummary {
     pub category: String,
     /// How many options the module declares.
     pub option_count: usize,
+    pub capabilities: ModuleCapabilities,
+    /// Titles in its list (`lists.db`).
+    pub list_size: u64,
+    /// RFC 3339 time its list last changed through an update or import.
+    pub list_updated: Option<String>,
+    /// Whether a list update or import of it is running.
+    pub list_job_running: bool,
 }
 
 /// A module's settings.
@@ -137,20 +149,42 @@ impl ModuleSettingsView {
 /// Every loaded module, sorted by ID.
 #[utoipa::path(get, path = "/api/modules", tag = "modules", operation_id = "listModules",
     responses((status = 200, body = Vec<ModuleSummary>, description = "The loaded modules")))]
-pub(crate) async fn list(State(state): State<AppState>) -> Json<Vec<ModuleSummary>> {
-    Json(
+pub(crate) async fn list(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ModuleSummary>>, ApiError> {
+    let lists: HashMap<String, ListSummary> = match state.lists.clone() {
+        Some(lists) => off_thread(move || lists.masterlist().summaries())
+            .await??
+            .into_iter()
+            .map(|s| (s.module_id.clone(), s))
+            .collect(),
+        None => HashMap::new(),
+    };
+    Ok(Json(
         state
             .modules
             .modules()
             .into_iter()
-            .map(|m| ModuleSummary {
-                option_count: m.options.len(),
-                id: m.id,
-                name: m.name,
-                category: m.category,
+            .map(|m| {
+                let list = lists.get(&m.id);
+                ModuleSummary {
+                    option_count: m.options.len(),
+                    capabilities: m.capabilities,
+                    list_size: list.map_or(0, |l| l.count),
+                    list_updated: list
+                        .and_then(|l| l.updated_at)
+                        .map(crate::time::rfc3339_from_unix_ms),
+                    list_job_running: state
+                        .list_jobs
+                        .as_ref()
+                        .is_some_and(|jobs| jobs.is_running(&m.id)),
+                    id: m.id,
+                    name: m.name,
+                    category: m.category,
+                }
             })
             .collect(),
-    )
+    ))
 }
 
 /// A module's options, limits and overrides.

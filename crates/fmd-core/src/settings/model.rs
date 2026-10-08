@@ -389,8 +389,8 @@ impl Default for FavoriteSettings {
     }
 }
 
-/// FMD2-DB download URL; `<website>` is replaced by the module name (`db_url`,
-/// dist/config.json:4).
+/// FMD2-DB download URL (`db_url`, dist/config.json:4); `<website>` is replaced by the module
+/// ID (`GetDBURL(FModule.ID)`, baseunits/DBUpdater.pas:125).
 pub const DEFAULT_DB_URL: &str =
     "https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z";
 
@@ -413,7 +413,7 @@ pub struct UpdateListSettings {
     /// (mangadownloader/forms/frmMain.lfm:2950-2951).
     #[schema(minimum = 1, maximum = 365)]
     pub new_manga_days: u32,
-    /// FMD2-DB URL template ([`DEFAULT_DB_URL`]).
+    /// FMD2-DB URL template ([`DEFAULT_DB_URL`]); `<website>` is replaced by the module ID.
     pub db_url: String,
 }
 

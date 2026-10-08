@@ -30,3 +30,10 @@ Out: favorites (T25).
 - `baseunits/DBDataProcess.pas:143-153` (FMD2-DB schema), `:1255` (`Search`), `:1367` (`Filter`: genres include/exclude, status)
 - `baseunits/DBUpdater.pas` (FMD2-DB download/extract), `dist/config.json` (`db_url` template)
 - `docs/LUA-REFERENCE.md:348-448` (update-list callbacks)
+
+## Implementation notes
+- The update follows `uUpdateThread.pas` where the scope summary above differs: `OnAfterUpdateList` then `OnBeforeUpdateList` run before the directory count (:672-675), `OnBeforeUpdateList` runs again after the pages (:705-706), and `OnAfterUpdateList` runs again only on termination (:683-684). A sorted list stops after the first page holding *any* listed link (:247-251), including a link repeated within that page.
+- Not ported: the per-module `UpdateListNumberOfThread` and `UpdateListDirectoryPageNumber` (inverted list) overrides, which have no FMD2r setting yet.
+- FMD2-DB import replaces the module's list, as FMD2 overwrites `<module id>.db`. `GetDBURL` never appends the ID (its `Pos(...) <> -1` guard is always true), so neither does `db_url`.
+- `ListJobs` (update/import/cancel) is built by whoever wires the worker pool and module registry into `serve`; until then those endpoints answer 503, while search, facets and list sizes work from `lists.db`.
+- Bench: `cargo bench -p fmd-store --bench search` (100k titles): every search and facet query under 70 ms on a laptop.

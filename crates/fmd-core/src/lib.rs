@@ -3,5 +3,6 @@
 pub mod accounts;
 pub mod download;
 pub mod jobs;
+pub mod lists;
 pub mod modules;
 pub mod settings;
