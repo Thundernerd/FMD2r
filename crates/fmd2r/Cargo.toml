@@ -9,7 +9,9 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["env"] }
+fmd-import = { path = "../fmd-import" }
 fmd-server = { path = "../fmd-server" }
+fmd-store = { path = "../fmd-store" }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 

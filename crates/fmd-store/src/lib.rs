@@ -19,13 +19,13 @@ pub use app::AppDb;
 pub use app::accounts::{Account, AccountRepo, AccountStatus};
 pub use app::downloaded_chapters::DownloadedChaptersRepo;
 pub use app::events::{Event, EventId, EventQuery, EventRepo, EventSeverity, NewEvent};
-pub use app::favorites::{Favorite, FavoriteId, FavoriteRepo, NewFavorite};
+pub use app::favorites::{Favorite, FavoriteId, FavoriteRepo, ImportedFavorite, NewFavorite};
 pub use app::module_files::{ModuleFile, ModuleFileRepo};
 pub use app::module_settings::{ModuleSettings, ModuleSettingsRepo};
 pub use app::settings::SettingsRepo;
 pub use app::tasks::{
-    ChapterStatus, NewChapter, NewPage, NewTask, PageStatus, Task, TaskChapter, TaskId, TaskPage,
-    TaskRepo, TaskStatus,
+    ChapterStatus, ImportedChapter, ImportedTask, NewChapter, NewPage, NewTask, PageStatus, Task,
+    TaskChapter, TaskId, TaskPage, TaskRepo, TaskStatus,
 };
 pub use crypto::{Cipher, KeyFileCipher};
 pub use error::{Result, StoreError};

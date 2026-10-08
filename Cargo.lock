@@ -743,6 +743,17 @@ dependencies = [
 [[package]]
 name = "fmd-import"
 version = "0.1.0"
+dependencies = [
+ "fmd-core",
+ "fmd-http",
+ "fmd-lua",
+ "fmd-store",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
 
 [[package]]
 name = "fmd-lua"
@@ -845,7 +856,9 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "fmd-import",
  "fmd-server",
+ "fmd-store",
  "predicates",
  "serde_json",
  "tempfile",

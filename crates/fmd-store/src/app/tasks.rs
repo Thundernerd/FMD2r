@@ -116,6 +116,27 @@ pub struct TaskPage {
     pub status: PageStatus,
 }
 
+/// A complete task with its progress, chapters and pages, as an importer restores it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedTask {
+    pub task: NewTask,
+    /// Unix milliseconds.
+    pub date_added: i64,
+    /// Unix milliseconds.
+    pub date_last_downloaded: Option<i64>,
+    pub current_chapter: u32,
+    pub chapters: Vec<ImportedChapter>,
+}
+
+/// A chapter of an [`ImportedTask`]. Its page count is the number of `pages`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedChapter {
+    pub chapter: NewChapter,
+    pub status: ChapterStatus,
+    pub current_page: u32,
+    pub pages: Vec<NewPage>,
+}
+
 const TASK_COLUMNS: &str = "id, module_id, link, title, save_to, status, enabled, sort_order, \
      date_added, date_last_downloaded, current_chapter, error";
 
@@ -167,6 +188,71 @@ impl<'a> TaskRepo<'a> {
             ],
             task_from_row,
         )?;
+        Ok(task)
+    }
+
+    /// Inserts a task at the end of the queue with its dates, progress, chapters and pages kept
+    /// as given, in one transaction.
+    pub fn import(&self, imported: &ImportedTask) -> Result<Task> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        let new = &imported.task;
+        let task = tx.query_row(
+            &format!(
+                "INSERT INTO tasks (module_id, link, title, save_to, status, enabled, sort_order,
+                    date_added, date_last_downloaded, current_chapter)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, {}, ?7, ?8, ?9)
+                 RETURNING {TASK_COLUMNS}",
+                next_sort_order("tasks")
+            ),
+            params![
+                new.module_id,
+                new.link,
+                new.title,
+                new.save_to,
+                new.status,
+                new.enabled,
+                imported.date_added,
+                imported.date_last_downloaded,
+                imported.current_chapter
+            ],
+            task_from_row,
+        )?;
+        {
+            let mut chapter_stmt = tx.prepare_cached(
+                "INSERT INTO task_chapters
+                    (task_id, idx, link, name, custom_filename, status, page_count, current_page)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )?;
+            let mut page_stmt = tx.prepare_cached(
+                "INSERT INTO task_pages (task_id, chapter_idx, idx, url, container_url, filename, status)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            )?;
+            for (idx, ch) in imported.chapters.iter().enumerate() {
+                chapter_stmt.execute(params![
+                    task.id.0,
+                    idx,
+                    ch.chapter.link,
+                    ch.chapter.name,
+                    ch.chapter.custom_filename,
+                    ch.status,
+                    ch.pages.len(),
+                    ch.current_page
+                ])?;
+                for (page_idx, p) in ch.pages.iter().enumerate() {
+                    page_stmt.execute(params![
+                        task.id.0,
+                        idx,
+                        page_idx,
+                        p.url,
+                        p.container_url,
+                        p.filename,
+                        p.status
+                    ])?;
+                }
+            }
+        }
+        tx.commit()?;
         Ok(task)
     }
 
