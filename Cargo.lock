@@ -731,13 +731,17 @@ name = "fmd-lua"
 version = "0.1.0"
 dependencies = [
  "aes 0.8.4",
+ "cc",
  "chacha20 0.9.1",
+ "flate2",
  "fmd-http",
  "fmd-testkit",
  "fmd-xpath",
+ "image",
  "md-5 0.10.6",
  "md4",
  "mlua",
+ "mlua-sys",
  "poly1305",
  "rquickjs",
  "serde_json",

@@ -5,6 +5,7 @@ pub mod crypto;
 mod duktape;
 mod file;
 mod globals;
+mod libs;
 mod memory_stream;
 mod strings;
 pub mod xquery;
@@ -15,6 +16,7 @@ pub use class::LuaClass;
 pub use duktape::JsLimits;
 pub use fmd_http::TerminateToken;
 pub use globals::Globals;
+pub use libs::subprocess;
 pub use memory_stream::{LuaMemoryStream, MemoryStream};
 pub use mlua;
 pub use strings::{ListIndexError, LuaStrings, StringList};
@@ -50,7 +52,8 @@ pub struct Runtime {
 impl Runtime {
     /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
     /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with the `fmd.*` Host API libraries
-    /// implemented so far (`fmd.strings`, [`crypto`], `fmd.duktape`) in `package.preload`. FMD2's package
+    /// implemented so far (`fmd.strings`, [`crypto`], `fmd.duktape`, gzip, fileutil, logger, subprocess, imagepuzzle,
+    /// mangafoxwatermark, the pcre2 stub, and the `pb` C module) in `package.preload`. FMD2's package
     /// searcher (:124) comes with T06.
     pub fn new() -> Result<Runtime> {
         // SAFETY: FMD2 opens every standard library, including `debug` (used by e.g.
@@ -63,6 +66,7 @@ impl Runtime {
         lua.set_app_data(LuaDir(PathBuf::from("lua")));
         lua.set_app_data(duktape::JsSettings::default());
         duktape::register(&lua)?;
+        libs::register(&lua)?;
         // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) needs an XPath backend: without
         // the `xpath-fpc` feature there is none yet (the native one is T34), so the global is
         // missing.
@@ -97,6 +101,24 @@ impl Runtime {
     /// The underlying Lua state, for registering Host API objects and globals.
     pub fn lua(&self) -> &mlua::Lua {
         &self.lua
+    }
+
+    /// Makes `fmd.subprocess` start its processes through `spawner` instead of the system.
+    pub fn set_spawner(&self, spawner: impl subprocess::Spawner + 'static) {
+        self.update_subprocess_config(|c| c.spawner = std::rc::Rc::new(spawner));
+    }
+
+    /// Sets the directory `fmd.subprocess` runs commands in, against which their relative paths
+    /// resolve; FMD2 runs them in its own directory, the parent of `lua/`. Defaults to the
+    /// process's current directory.
+    pub fn set_working_dir(&self, dir: impl Into<std::path::PathBuf>) {
+        self.update_subprocess_config(|c| c.working_dir = Some(dir.into()));
+    }
+
+    fn update_subprocess_config(&self, update: impl FnOnce(&mut subprocess::Config)) {
+        let mut config = subprocess::Config::of(&self.lua);
+        update(&mut config);
+        self.lua.set_app_data(config);
     }
 
     /// Installs the global helper functions (`print`, `sleep`, `Trim`, `MaybeFillHost`,
