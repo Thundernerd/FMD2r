@@ -12,9 +12,8 @@ use super::dom::{Dom, NodeId, NodeKind};
 
 /// An evaluation error. FMD2 swallows every one (baseunits/XQueryEngineHTML.pas:252-284), so
 /// only the fact that one happened matters; the message helps debugging.
-#[derive(Debug)]
-// The message is only ever read through `Debug`, when debugging: FMD2 drops every error.
-#[allow(dead_code)]
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
 pub(crate) struct XPathError(pub(crate) String);
 
 pub(crate) type XResult<T> = Result<T, XPathError>;

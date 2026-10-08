@@ -101,6 +101,7 @@ pub(crate) fn call(ev: &mut Evaluator, name: &str, args: Vec<Seq>, focus: &Focus
         ("subsequence", [a, start, length]) => {
             subsequence(a, double_arg(start)?, double_arg(length)?)
         }
+        // internettools data/xquery__functions.pas:2660.
         ("insert-before", [a, position, inserts]) => {
             let position = double_arg(position)?.max(1.0) as usize;
             let at = (position - 1).min(a.len());
@@ -211,6 +212,7 @@ pub(crate) fn call(ev: &mut Evaluator, name: &str, args: Vec<Seq>, focus: &Focus
         }
         ("string-join", [a]) => string(join(a, "")),
         ("string-join", [a, separator]) => string(join(a, &text(separator))),
+        // internettools data/xquery__functions.pas:1520-1537.
         ("join", [a]) => string(join(a, " ")),
         ("join", [a, separator]) => string(join(a, &text(separator))),
         ("string-length", []) => integer(text(&context(focus)?).chars().count()),
@@ -219,6 +221,8 @@ pub(crate) fn call(ev: &mut Evaluator, name: &str, args: Vec<Seq>, focus: &Focus
         ("normalize-space", [a]) => string(normalize_space(&text(a))),
         ("upper-case", [a]) => string(text(a).to_uppercase()),
         ("lower-case", [a]) => string(text(a).to_lowercase()),
+        // contains, starts-with, ends-with, substring-before/after use the default collation
+        // (internettools data/xquery__functions.pas:1691-1746).
         ("contains", [a, b]) => boolean(collation_find(&text(a), &text(b)).is_some()),
         ("starts-with", [a, b]) => {
             let (a, b) = (text(a), text(b));
@@ -253,6 +257,7 @@ pub(crate) fn call(ev: &mut Evaluator, name: &str, args: Vec<Seq>, focus: &Focus
                 None => "",
             })
         }
+        // internettools data/xquery__functions.pas:1539.
         ("substring", [a, start]) => string(substring(&text(a), double_arg(start)?, f64::INFINITY)),
         ("substring", [a, start, length]) => {
             string(substring(&text(a), double_arg(start)?, double_arg(length)?))
@@ -347,8 +352,10 @@ pub(crate) fn call(ev: &mut Evaluator, name: &str, args: Vec<Seq>, focus: &Focus
         }
         ("encode-for-uri" | "uri-encode", [a]) => string(encode_uri(&text(a), false)),
         ("iri-to-uri" | "escape-html-uri", [a]) => string(encode_uri(&text(a), true)),
-        ("uri-decode" | "decode-uri", [a]) => string(decode_uri(&text(a))),
+        ("uri-decode" | "decode-uri", [a]) => string(decode_uri(&text(a))?),
         ("normalize-unicode", [a, ..]) => string(text(a)),
+        // internettools data/xquery__functions.pas:2471; without a base, FMD2 would use its
+        // working directory (crates/fmd-xpath/README.md, "Known differences").
         ("resolve-uri", [relative, base @ ..]) => {
             if relative.is_empty() {
                 return Ok(Vec::new());
@@ -434,6 +441,38 @@ pub(crate) fn call(ev: &mut Evaluator, name: &str, args: Vec<Seq>, focus: &Focus
             [Item::Object(object)] => integer(object.len()),
             _ => err("XPTY0004: expected an array"),
         },
+        // `object((key, value, ...))` (internettools data/xquery__functions.pas:1969-1990).
+        ("object", [pairs]) => {
+            if pairs.len() % 2 == 1 {
+                return err("pxp:OBJECT: an odd number of items");
+            }
+            let mut object = super::value::Object::new();
+            for pair in pairs.chunks(2) {
+                match pair {
+                    [Item::Str(key, _), value] => {
+                        object.insert(key.to_string(), vec![value.clone()]);
+                    }
+                    _ => return err("pxp:OBJECT: property names must be strings"),
+                }
+            }
+            Ok(vec![Item::Object(Rc::new(object))])
+        }
+        // `jn:object($objects...)` merges objects; a repeated key is an error
+        // (internettools data/xquery_json.pas:68-90).
+        ("jn:object", objects) => {
+            let mut merged = super::value::Object::new();
+            for item in objects.iter().flatten() {
+                let Item::Object(object) = item else {
+                    return err("XPTY0004: jn:object expects objects");
+                };
+                for (key, value) in object.iter() {
+                    if merged.insert(key.clone(), value.clone()).is_some() {
+                        return err(format!("jerr:JNDY0003: duplicate key {key}"));
+                    }
+                }
+            }
+            Ok(vec![Item::Object(Rc::new(merged))])
+        }
         ("jn:null", []) => Ok(vec![Item::Null]),
         ("jn:is-null", [a]) => boolean(matches!(a.as_slice(), [Item::Null])),
         ("map:get", [map, key]) => match (map.as_slice(), atomize_single(key)?) {
@@ -689,27 +728,30 @@ fn encode_uri(s: &str, lenient: bool) -> String {
     out
 }
 
-/// Decodes `%XX` escapes (and `+` as a space, like internettools' `uri-decode`).
-fn decode_uri(s: &str) -> String {
+/// Decodes `%XX` escapes and `+` as a space; a `%` without two hex digits is an error
+/// (`urlHexDecode`, internettools data/xquery.internals.common.pas:1653-1676).
+fn decode_uri(s: &str) -> XResult<String> {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'%' if i + 2 < bytes.len() => match u8::from_str_radix(&s[i + 1..i + 3], 16) {
-                Ok(b) => {
-                    out.push(b);
-                    i += 3;
-                    continue;
+    while let Some(&b) = bytes.get(i) {
+        match b {
+            b'%' => {
+                let hex = bytes
+                    .get(i + 1..i + 3)
+                    .and_then(|h| std::str::from_utf8(h).ok());
+                match hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                    Some(decoded) => out.push(decoded),
+                    None => return err("pxp:uri: invalid escape"),
                 }
-                Err(_) => out.push(b'%'),
-            },
+                i += 2;
+            }
             b'+' => out.push(b' '),
             b => out.push(b),
         }
         i += 1;
     }
-    String::from_utf8_lossy(&out).into_owned()
+    Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
 /// Resolves `relative` against `base`; without a base, `relative` stays as it is.

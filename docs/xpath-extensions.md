@@ -13,6 +13,11 @@ literal passed as the first argument of `XPath`, `XPathString`, `XPathStringAll`
 concatenation only contribute their first literal, so counts are lower bounds. Counts below are distinct expressions
 and the modules they appear in.
 
+A second pass took every string literal in the tree that looks like XPath (3,304, including expressions kept in
+variables and Lua long strings) and listed the functions they call; it added `object()` and `jn:object()`
+(`Cubari.lua`, `Guya.lua`). Both passes were also evaluated on both backends against sample HTML and JSON
+documents, with and without a JSON context item, and gave the same results.
+
 ## Engine set-up the modules see
 
 `TXQueryEngine.Create` (internettools `data/xquery.pas:8376-8414`) and FMD2's `TXQueryEngineHTML`
@@ -37,6 +42,7 @@ and the modules they appear in.
 | `?` lookups: `?key`, `?*`, `?n`, also right after a path step (`genres?*?name`); a lookup on a node fails | `?key` 101 / 33; `?*` 101 / 42; `?n` 1 / 1 | `string-join(genres?*?name, ', ')` | `lookups_read_objects_and_arrays` |
 | Path steps on JSON (PXP extensions): `child::name` reads a property (of every object in an array), `//name` searches at any depth, `true`/`false`/`null` are literals | `?*/name` 8 / 5; `true` 2 / 2; plus any relative step with a JSON context item | `statuses?*/name`, `restricted_view?is_open=true` | `steps_on_objects_read_properties` |
 | `jn:keys`, `jn:members` (and `jn:size`, `jn:null`, `jn:is-null`) | `jn:keys` 2 / 2; `jn:members` 3 / 3 | `jn:keys(json(*))` | `jn_functions_list_keys_and_members` |
+| `object(("key", value, ...))` and `jn:object($objects)`, which merges objects (a repeated key is an error) | 2 / 2 (in long strings) | `jn:object(object(("chapter_id", $k)), (chapters)($k))` | `object_constructors_build_and_merge_objects` |
 | `css($selector)`: CSS 3 selectors translated to XPath like `TXQueryEngine.parseCSSTerm` (data/xquery.pas:8749-9119), starting at the context node itself | 16 / 6 | `css("div.chapter-list > div.slot > a")` | `css_selects_like_internettools`, `a_context_value_scopes_xpath_and_css` |
 | `string-join` with internettools' typing (atomized items, any separator) | 111 / 73 | `string-join(.//a, ", ")` | `strings_join_and_compare_like_internettools` |
 | Simple map `!` and string concatenation `\|\|` (XPath 3.0) | `!` 10 / 8; `\|\|` 8 / 8 | `//script ! substring-after(., "x = ")` | `strings_join_and_compare_like_internettools` |

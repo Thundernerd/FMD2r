@@ -41,6 +41,9 @@ evaluator implements that model directly (`src/native/`):
   and comparisons (`compareCommon`, `case-insensitive-clever`).
 - `functions.rs`, `json.rs`, `css.rs`: the function library, the liberal JSON parser, and the CSS-to-XPath translation.
 
+Behaviour the native backend reproduces cites internettools as `internettools data/<file>:<line>`, relative to the
+pinned revision `crates/xpath-fpc/build.sh` downloads (FMD2's checkout doesn't contain it).
+
 ## Known differences of the `native` backend
 
 None of these show in the shared suite; they are what the T35 differential corpus is for.

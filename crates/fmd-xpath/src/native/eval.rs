@@ -639,9 +639,15 @@ fn axis_nodes(node: &NodeRef, axis: Axis) -> Vec<usize> {
             let siblings = &dom.node(parent).children;
             let index = siblings.iter().position(|&s| s == id).unwrap_or(0);
             if axis == Axis::FollowingSibling {
-                siblings[index + 1..].to_vec()
+                siblings.get(index + 1..).unwrap_or_default().to_vec()
             } else {
-                siblings[..index].iter().rev().copied().collect()
+                siblings
+                    .get(..index)
+                    .unwrap_or_default()
+                    .iter()
+                    .rev()
+                    .copied()
+                    .collect()
             }
         }
         Axis::Following => {

@@ -195,6 +195,17 @@ macro_rules! suite {
         }
 
         #[test]
+        fn object_constructors_build_and_merge_objects() {
+            // As fixtures/lua/modules/Cubari.lua:55 builds chapters.
+            let merged = r#"jn:object(object(("chapter_id", "7")), json('{"title":"t"}'))"#;
+            assert_eq!(items("", &format!("{merged}()")), ["chapter_id", "title"]);
+            assert_eq!(string("", &format!("{merged}.chapter_id")), "7");
+            // Odd pairs and duplicate keys are errors.
+            assert!(items("", r#"object(("a", 1, "b"))"#).is_empty());
+            assert!(items("", r#"jn:object(object(("a", 1)), object(("a", 2)))"#).is_empty());
+        }
+
+        #[test]
         fn steps_on_objects_read_properties() {
             assert_eq!(items_in(API, "json(*)", "data/title"), ["T"]);
             assert_eq!(items_in(API, "json(*)", "data/tags/name"), ["a", "b"]);
@@ -238,6 +249,14 @@ macro_rules! suite {
             assert_eq!(string("", "'10' = 10"), "true");
             assert_eq!(string("", "3 + '4'"), "7");
             assert_eq!(items(html, "//li ! upper-case(.)"), ["ONE", "TWO"]);
+        }
+
+        #[test]
+        fn uri_decode_fails_on_a_bad_escape() {
+            assert_eq!(string("", "uri-decode('a%20b+c%C3%A9')"), "a b cé");
+            // A `%` without two hex digits is an error, even before a multi-byte character.
+            assert!(items("", "uri-decode('%aé')").is_empty());
+            assert!(items("", "uri-decode('100%')").is_empty());
         }
 
         #[test]
