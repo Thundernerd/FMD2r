@@ -2,9 +2,9 @@
 //! not depend on the engine crates.
 
 use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::covers::{CoverModules, CoverSession};
-use utoipa::ToSchema;
 
 /// The download engine (T20). Queue endpoints (T23) add the methods they need.
 pub trait DownloadEngine: Send + Sync + 'static {}

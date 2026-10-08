@@ -3,6 +3,7 @@
 use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
 
 use fmd_http::HttpError;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
@@ -13,7 +14,7 @@ use super::{CoverModules, CoverSession};
 const MAX_REDIRECTS: u32 = 5;
 
 /// Validators of a cached copy, for a conditional request.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Validators {
     pub(crate) etag: Option<String>,
     pub(crate) last_modified: Option<String>,
@@ -93,6 +94,12 @@ pub(crate) fn fetch(
             }
             304 if cached.is_some() => return Ok(Fetched::NotModified),
             200..=299 if !session.document().is_empty() => {
+                let Some(content_type) = image_type(session.document(), session.mime_type()) else {
+                    return Err(FetchError::Upstream(format!(
+                        "{url} is not an image ({})",
+                        session.mime_type()
+                    )));
+                };
                 let header = |name| {
                     Some(session.headers().value(name).trim().to_owned()).filter(|v| !v.is_empty())
                 };
@@ -101,7 +108,7 @@ pub(crate) fn fetch(
                         etag: header("ETag"),
                         last_modified: header("Last-Modified"),
                     },
-                    content_type: session.mime_type().to_owned(),
+                    content_type,
                     body: std::mem::take(session.document_mut()),
                 });
             }
@@ -115,6 +122,10 @@ pub(crate) fn fetch(
 
 /// The SSRF guard: only http(s), and no private-network target unless it is the module's own host
 /// (a module for a site on the LAN may fetch its covers there).
+///
+/// The session resolves the host again when it connects, so a DNS server that answers
+/// differently the second time (DNS rebinding) can slip past; pinning the checked address needs
+/// support in `fmd_http`'s transport.
 fn guard(url: &Url, root: Option<&Url>) -> Result<(), FetchError> {
     if !matches!(url.scheme(), "http" | "https") {
         return Err(FetchError::Forbidden(format!("not an http(s) URL: {url}")));
@@ -175,4 +186,15 @@ fn is_private_v4(ip: Ipv4Addr) -> bool {
         || a == 0
         // Shared address space 100.64.0.0/10.
         || (a == 100 && (64..128).contains(&b))
+}
+
+/// The content type to serve `body` with, or `None` when it is not an image. The bytes decide when
+/// the `image` crate knows the format; otherwise a declared raster `image/*` type is trusted. A
+/// page or an SVG (which can carry script) is never served from the app's origin.
+fn image_type(body: &[u8], declared: &str) -> Option<String> {
+    if let Ok(format) = image::guess_format(body) {
+        return Some(format.to_mime_type().to_owned());
+    }
+    let declared = declared.trim().to_ascii_lowercase();
+    (declared.starts_with("image/") && !declared.starts_with("image/svg")).then_some(declared)
 }

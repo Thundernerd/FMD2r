@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+use fmd_core::settings::SettingsService;
 use fmd_store::AppDb;
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -31,6 +32,8 @@ pub enum ServeError {
     },
     #[error("app.db: {0}")]
     Store(#[from] fmd_store::StoreError),
+    #[error("settings: {0}")]
+    Settings(#[from] fmd_core::settings::SettingsError),
     #[error("bind {addr}: {source}")]
     Bind {
         addr: SocketAddr,
@@ -51,6 +54,13 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let db = tokio::task::spawn_blocking(move || AppDb::open(db_path))
         .await
         .map_err(std::io::Error::other)??;
+    // Read once: cover cache changes apply on the next start.
+    let settings = {
+        let db = db.clone();
+        tokio::task::spawn_blocking(move || SettingsService::load(db))
+            .await
+            .map_err(std::io::Error::other)??
+    };
     // Absolute, so `GET /api/about` shows where the data really is.
     let data_dir = std::fs::canonicalize(&config.data_dir).unwrap_or(config.data_dir);
     let bypass_config = data_dir.join("lua/websitebypass/websitebypass_config.json");
@@ -58,7 +68,10 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         .with_logs(config.logs)
         .with_data_dir(&data_dir)
         .with_tools(SystemTools::new(bypass_config))
-        .with_covers(CoverConfig::new(data_dir.join("covers")), Idle);
+        .with_covers(
+            CoverConfig::from_settings(data_dir.join("covers"), &settings.get().covers),
+            Idle,
+        );
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }

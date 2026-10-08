@@ -67,10 +67,31 @@ async fn cover(State(up): State<Upstream>, headers: HeaderMap) -> Response {
         .into_response()
 }
 
+/// A page, not an image: must never be served from the app's origin.
+async fn page(State(up): State<Upstream>, headers: HeaderMap) -> Response {
+    up.requests.lock().unwrap().push(headers);
+    (
+        [(header::CONTENT_TYPE, "text/html")],
+        "<script>alert(1)</script>",
+    )
+        .into_response()
+}
+
+/// The cover on the first request, then a server error.
+async fn flaky(State(up): State<Upstream>, headers: HeaderMap) -> Response {
+    up.requests.lock().unwrap().push(headers);
+    if up.hits() > 1 {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    ([(header::CONTENT_TYPE, "image/png")], png()).into_response()
+}
+
 /// A stub site on a local socket; returns its root URL (`http://127.0.0.1:<port>`).
 async fn start_upstream(up: Upstream) -> String {
     let app = axum::Router::new()
         .route("/covers/{name}", get(cover))
+        .route("/page.html", get(page))
+        .route("/flaky/{name}", get(flaky))
         .with_state(up);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -152,6 +173,7 @@ async fn fetches_with_the_module_http_settings_then_serves_from_disk() {
     assert_eq!(res.headers()[header::CONTENT_TYPE], "image/png");
     assert!(res.headers().contains_key(header::ETAG));
     assert!(res.headers().contains_key(header::CACHE_CONTROL));
+    assert_eq!(res.headers()[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
     assert_eq!(body(res).await, png());
 
     let seen = up.last();
@@ -351,4 +373,40 @@ async fn a_stale_cover_is_revalidated_upstream() {
     assert_eq!(body(res).await, png());
     assert_eq!(up.hits(), 2);
     assert_eq!(up.last()[header::IF_NONE_MATCH], "\"v1\"");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_body_that_is_not_an_image_is_refused() {
+    let up = Upstream::default();
+    let root = start_upstream(up.clone()).await;
+    let cache = tempfile::tempdir().unwrap();
+    let h = harness(cache.path(), &[("site", &root)], |_| {});
+
+    let res = send(
+        &h.state,
+        get_req(&cover_url("site", &format!("{root}/page.html"))),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(
+        res.headers()[header::CONTENT_TYPE],
+        "application/problem+json"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stale_cover_is_served_when_upstream_fails() {
+    let up = Upstream::default();
+    let root = start_upstream(up.clone()).await;
+    let cache = tempfile::tempdir().unwrap();
+    let h = harness(cache.path(), &[("site", &root)], |c| {
+        c.revalidate_after = Duration::ZERO;
+    });
+    let uri = cover_url("site", &format!("{root}/flaky/a.png"));
+
+    assert_eq!(send(&h.state, get_req(&uri)).await.status(), StatusCode::OK);
+    let res = send(&h.state, get_req(&uri)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(body(res).await, png());
+    assert_eq!(up.hits(), 2);
 }

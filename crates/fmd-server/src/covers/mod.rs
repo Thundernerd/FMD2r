@@ -21,7 +21,7 @@ use tokio::sync::oneshot;
 use url::Url;
 use utoipa::IntoParams;
 
-use self::cache::{DiskCache, Entry, Meta};
+use self::cache::{DiskCache, Entry};
 use self::fetch::{FetchError, Fetched, Validators};
 use crate::error::ApiQuery;
 use crate::state::off_thread;
@@ -129,18 +129,14 @@ impl Covers {
             let Some((body, content_type)) = made else {
                 return Ok(cover);
             };
-            let thumb = Entry {
-                meta: Meta {
-                    etag: etag_of(&body),
-                    content_type: content_type.to_owned(),
-                    upstream_etag: None,
-                    upstream_last_modified: None,
-                    fetched_at: cover.meta.fetched_at,
-                    source_etag: Some(cover.meta.etag),
-                },
+            let thumb = Entry::new(
                 body,
-            };
-            cache.store(&key, &thumb)?;
+                content_type.to_owned(),
+                Validators::default(),
+                cover.meta.fetched_at,
+                Some(cover.meta.etag),
+            );
+            cache.store(&key, &thumb).map_err(cache_error)?;
             Ok(thumb)
         })
         .await?
@@ -152,11 +148,15 @@ impl Covers {
             let mut map = self.inflight.lock().unwrap_or_else(|e| e.into_inner());
             map.entry(key.to_owned()).or_default().clone()
         };
-        Inflight {
+        // Built before waiting, so a request cancelled while it waits still cleans up.
+        let mut inflight = Inflight {
             map: &self.inflight,
             key: key.to_owned(),
-            guard: Some(lock.lock_owned().await),
-        }
+            lock: Some(lock.clone()),
+            guard: None,
+        };
+        inflight.guard = Some(lock.lock_owned().await);
+        inflight
     }
 
     async fn resolve(&self, key: String, module: &str, url: &Url) -> Result<Entry, ApiError> {
@@ -170,10 +170,7 @@ impl Covers {
         {
             return Ok(entry.clone());
         }
-        let validators = cached.as_ref().map(|e| Validators {
-            etag: e.meta.upstream_etag.clone(),
-            last_modified: e.meta.upstream_last_modified.clone(),
-        });
+        let validators = cached.as_ref().map(|e| e.meta.upstream.clone());
         let modules = self.modules.clone();
         let (module, target) = (module.to_owned(), url.clone());
         let fetched = on_fetch_thread(move || {
@@ -185,7 +182,9 @@ impl Covers {
             (Ok(Fetched::NotModified), Some(mut entry)) => {
                 entry.meta.fetched_at = cache::now();
                 let meta = entry.meta.clone();
-                off_thread(move || cache.store_meta(&key, &meta)).await??;
+                off_thread(move || cache.store_meta(&key, &meta))
+                    .await?
+                    .map_err(cache_error)?;
                 Ok(entry)
             }
             (
@@ -196,24 +195,21 @@ impl Covers {
                 }),
                 _,
             ) => {
-                let entry = Entry {
-                    meta: Meta {
-                        etag: etag_of(&body),
-                        content_type,
-                        upstream_etag: validators.etag,
-                        upstream_last_modified: validators.last_modified,
-                        fetched_at: cache::now(),
-                        source_etag: None,
-                    },
-                    body,
-                };
+                let entry = Entry::new(body, content_type, validators, cache::now(), None);
                 let stored = entry.clone();
-                off_thread(move || cache.store(&key, &stored)).await??;
+                off_thread(move || cache.store(&key, &stored))
+                    .await?
+                    .map_err(cache_error)?;
                 Ok(entry)
             }
             (Ok(Fetched::NotModified), None) => Err(ApiError::BadGateway(
                 "upstream answered 304 to a plain GET".into(),
             )),
+            // A site that is down keeps its covers: serve the stale copy.
+            (Err(FetchError::Upstream(msg)), Some(entry)) => {
+                tracing::debug!(target: "fmd_server", "serving a stale cover: {msg}");
+                Ok(entry)
+            }
             (Err(err), _) => Err(err.into()),
         }
     }
@@ -230,10 +226,8 @@ impl From<FetchError> for ApiError {
     }
 }
 
-impl From<std::io::Error> for ApiError {
-    fn from(err: std::io::Error) -> Self {
-        ApiError::Internal(format!("cover cache: {err}"))
-    }
+fn cache_error(err: std::io::Error) -> ApiError {
+    ApiError::Internal(format!("cover cache: {err}"))
 }
 
 /// A held per-cover lock. Dropping it (also when the request is cancelled) releases the lock and
@@ -241,6 +235,7 @@ impl From<std::io::Error> for ApiError {
 struct Inflight<'a> {
     map: &'a Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     key: String,
+    lock: Option<Arc<tokio::sync::Mutex<()>>>,
     guard: Option<tokio::sync::OwnedMutexGuard<()>>,
 }
 
@@ -248,8 +243,9 @@ impl Drop for Inflight<'_> {
     fn drop(&mut self) {
         let mut map = self.map.lock().unwrap_or_else(|e| e.into_inner());
         self.guard.take();
-        // Clones are only made under the map's mutex, so a count of one (the map's) means no
-        // request holds or waits for the lock.
+        self.lock.take();
+        // Every request takes its first reference under the map's mutex and keeps one until it
+        // gets here, so a count of one (the map's) means no request holds or waits for the lock.
         if map
             .get(&self.key)
             .is_some_and(|l| Arc::strong_count(l) == 1)
@@ -282,11 +278,6 @@ fn cache_key(module: &str, url: &Url) -> String {
         .chain_update([0])
         .chain_update(url.as_str().as_bytes())
         .finalize())
-}
-
-/// A strong ETag for `body`.
-fn etag_of(body: &[u8]) -> String {
-    format!("\"{}\"", hex(&Sha256::digest(body)[..16]))
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -323,10 +314,9 @@ pub(crate) async fn get(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let covers = state.covers.clone().ok_or(ApiError::NotFound)?;
+    // The scheme is checked with the rest of the SSRF guard, before anything is fetched.
     let url = Url::parse(&query.url)
-        .ok()
-        .filter(|u| matches!(u.scheme(), "http" | "https"))
-        .ok_or_else(|| ApiError::BadRequest(format!("not an http(s) URL: {:?}", query.url)))?;
+        .map_err(|e| ApiError::BadRequest(format!("bad URL {:?}: {e}", query.url)))?;
     if query.w.is_some_and(|w| w == 0 || w > MAX_WIDTH) {
         return Err(ApiError::BadRequest(format!(
             "w must be between 1 and {MAX_WIDTH}"
@@ -345,6 +335,8 @@ fn respond(entry: Entry, request: &HeaderMap, max_age: Duration) -> Response {
             header::CACHE_CONTROL,
             format!("private, max-age={}", max_age.as_secs()),
         ),
+        // Only images are cached, but never let a browser sniff one into something else.
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
     ];
     if browser_has(request, &entry.meta.etag) {
         return (StatusCode::NOT_MODIFIED, validators).into_response();

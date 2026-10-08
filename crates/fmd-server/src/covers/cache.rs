@@ -4,15 +4,42 @@
 use std::fs::{self, File};
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+use super::fetch::Validators;
 
 /// A cached cover (or thumbnail).
 #[derive(Debug, Clone)]
 pub(crate) struct Entry {
     pub(crate) meta: Meta,
     pub(crate) body: Vec<u8>,
+}
+
+impl Entry {
+    /// An entry for `body`, with an ETag derived from it.
+    pub(crate) fn new(
+        body: Vec<u8>,
+        content_type: String,
+        upstream: Validators,
+        fetched_at: u64,
+        source_etag: Option<String>,
+    ) -> Self {
+        let digest = Sha256::digest(&body);
+        let etag: String = digest[..16].iter().map(|b| format!("{b:02x}")).collect();
+        Self {
+            meta: Meta {
+                content_type,
+                etag: format!("\"{etag}\""),
+                upstream,
+                fetched_at,
+                source_etag,
+            },
+            body,
+        }
+    }
 }
 
 /// What is stored next to a cached body.
@@ -22,8 +49,7 @@ pub(crate) struct Meta {
     /// The ETag the browser sees: derived from the body, so it changes only when the image does.
     pub(crate) etag: String,
     /// The upstream validators, sent back when revalidating.
-    pub(crate) upstream_etag: Option<String>,
-    pub(crate) upstream_last_modified: Option<String>,
+    pub(crate) upstream: Validators,
     /// When upstream last confirmed the body, in seconds since the Unix epoch.
     pub(crate) fetched_at: u64,
     /// For a thumbnail: the ETag of the cover it was made from.
@@ -74,7 +100,8 @@ impl DiskCache {
         write_atomic(&self.path(key, META), &meta)
     }
 
-    /// Removes the least recently used entries until the cache fits its cap.
+    /// Removes the least recently used entries until the cache fits its cap, after clearing out
+    /// leftovers: temporary files of interrupted writes and halves of entries.
     fn evict(&self) -> io::Result<()> {
         let mut entries = Vec::new();
         let mut total = 0u64;
@@ -82,11 +109,29 @@ impl DiskCache {
             let dirent = dirent?;
             let path = dirent.path();
             let Ok(md) = dirent.metadata() else { continue };
+            let modified = md.modified().unwrap_or(UNIX_EPOCH);
+            let age = SystemTime::now()
+                .duration_since(modified)
+                .unwrap_or_default();
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or_default();
+            let leftover = match ext {
+                "tmp" => age > LEFTOVER_AGE,
+                META => !path.with_extension(BODY).exists(),
+                // A body without metadata is either being stored right now or left over.
+                BODY => !path.with_extension(META).exists() && age > LEFTOVER_AGE,
+                _ => false,
+            };
+            if leftover {
+                remove(&path)?;
+                continue;
+            }
             total += md.len();
-            if path.extension().is_some_and(|e| e == BODY) {
+            if ext == BODY {
                 let meta_len = fs::metadata(path.with_extension(META)).map_or(0, |m| m.len());
-                let used = md.modified().unwrap_or(UNIX_EPOCH);
-                entries.push((used, md.len() + meta_len, path));
+                entries.push((modified, md.len() + meta_len, path));
             }
         }
         if total <= self.max_bytes {
@@ -104,6 +149,10 @@ impl DiskCache {
         Ok(())
     }
 }
+
+/// How old a temporary file or half an entry must be to count as left over by an interrupted
+/// write rather than one in progress.
+const LEFTOVER_AGE: Duration = Duration::from_secs(60 * 60);
 
 /// Seconds since the Unix epoch.
 pub(crate) fn now() -> u64 {
