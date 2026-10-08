@@ -134,7 +134,7 @@
 				"parameters": [
 					{
 						"name": "module",
-						"in": "path",
+						"in": "query",
 						"description": "Module ID.",
 						"required": true,
 						"schema": {
@@ -143,7 +143,7 @@
 					},
 					{
 						"name": "link",
-						"in": "path",
+						"in": "query",
 						"description": "The series link relative to the module's `RootURL`.",
 						"required": true,
 						"schema": {

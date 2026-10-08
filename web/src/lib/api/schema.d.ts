@@ -1366,14 +1366,14 @@ export interface operations {
 	};
 	getSeries: {
 		parameters: {
-			query?: never;
-			header?: never;
-			path: {
+			query: {
 				/** @description Module ID. */
 				module: string;
 				/** @description The series link relative to the module's `RootURL`. */
 				link: string;
 			};
+			header?: never;
+			path?: never;
 			cookie?: never;
 		};
 		requestBody?: never;

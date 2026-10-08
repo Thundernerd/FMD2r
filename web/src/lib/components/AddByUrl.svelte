@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import type { Api } from '#lib/api/client.ts';
+	import { seriesHref } from '#lib/series/href.ts';
 
 	let { api }: { api: Api } = $props();
 
@@ -23,8 +24,7 @@
 				return;
 			}
 			url = '';
-			const link = series.link.split('/').map(encodeURIComponent).join('/');
-			await goto(`/series/${encodeURIComponent(series.module)}/${link}`);
+			await goto(seriesHref(series));
 		} catch {
 			error = 'Could not reach FMD2r. Try again.';
 		} finally {

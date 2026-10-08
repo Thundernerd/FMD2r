@@ -49,6 +49,7 @@ pub(crate) async fn resolve(
 
 /// Which series to show.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct SeriesQuery {
     /// Module ID.
     module: String,
