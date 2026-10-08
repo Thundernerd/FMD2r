@@ -288,8 +288,8 @@ function Start() TASK.PageNumber = TASK.PageLinks.Count; TASK.Link = 'started'; 
 function ImageURL() TASK.PageLinks[WORKID] = URL .. ' ' .. math.type(WORKID); return true end
 function Before() HTTP.Headers.Values['Referer'] = URL; return false end
 function Download() return HTTP.GET(URL) end
-function Save() return PATH .. '/' .. FILENAME .. '.jpg' end
-function Saved() return FILENAME == '/out/001.jpg' end
+function Save() return PATH .. '/' .. FILENAME .. '-' .. WORKID .. '.jpg' end
+function Saved() return FILENAME == '/out/001-1.jpg' and WORKID == 1 end
 "#;
 
 #[test]
@@ -348,9 +348,14 @@ fn download_callbacks_see_their_globals_and_task() {
         request.headers
     );
 
-    let saved = on().save_image("/out", "001").wait().unwrap();
-    assert_eq!(saved.value, "/out/001.jpg");
-    assert!(on().after_image_saved("/out/001.jpg").wait().unwrap().value);
+    let saved = on().save_image(1, "/out", "001").wait().unwrap();
+    assert_eq!(saved.value, "/out/001-1.jpg");
+    assert!(
+        on().after_image_saved(1, "/out/001-1.jpg")
+            .wait()
+            .unwrap()
+            .value
+    );
 }
 
 #[test]

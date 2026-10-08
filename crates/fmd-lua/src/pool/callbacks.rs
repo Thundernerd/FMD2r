@@ -202,11 +202,13 @@ pub enum Call {
     },
     /// `PATH` is the chapter's directory, `FILENAME` the image's file name without extension.
     SaveImage {
+        work_id: i32,
         path: String,
         name: String,
     },
     /// `FILENAME` is the saved file.
     AfterImageSaved {
+        work_id: i32,
         file_name: String,
     },
     Login,
@@ -408,10 +410,18 @@ pub(super) fn run(ctx: &mut Ctx<'_>, call: Call) -> Result<Answer, JobError> {
         }
         // `DoSaveImage` (baseunits/lua/LuaWebsiteModules.pas:372-391): the result through
         // `luaToString`, so anything but a string or number is `''`.
-        Call::SaveImage { path, name } => {
+        Call::SaveImage {
+            work_id,
+            path,
+            name,
+        } => {
             let lua = ctx.lua().clone();
             ctx.setup(callback, |ctx| {
                 ctx.set_http()?;
+                // FMD2's `WORKID` here is whatever the same download thread set last, i.e.
+                // this page's (baseunits/uDownloadsManager.pas:382-394); a pool worker may
+                // have run another task since, so it is set explicitly.
+                lua.globals().set("WORKID", work_id)?;
                 lua.globals().set("PATH", path.as_str())?;
                 lua.globals().set("FILENAME", name.as_str())
             })?;
@@ -420,10 +430,12 @@ pub(super) fn run(ctx: &mut Ctx<'_>, call: Call) -> Result<Answer, JobError> {
                 .map_err(|e| ctx.error(callback, e.to_string(), String::new()))?;
             Ok(Answer::SaveImage(text(&saved)))
         }
-        // `DoAfterImageSaved` (baseunits/lua/LuaWebsiteModules.pas:393-410).
-        Call::AfterImageSaved { file_name } => {
+        // `DoAfterImageSaved` (baseunits/lua/LuaWebsiteModules.pas:393-410), with `WORKID` as
+        // for `SaveImage`.
+        Call::AfterImageSaved { work_id, file_name } => {
             let lua = ctx.lua().clone();
             ctx.setup(callback, |_| {
+                lua.globals().set("WORKID", work_id)?;
                 lua.globals().set("FILENAME", file_name.as_str())
             })?;
             let top = ctx.call(callback)?;

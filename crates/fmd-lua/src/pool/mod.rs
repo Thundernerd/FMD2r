@@ -384,8 +384,9 @@ impl Caller<'_> {
 
     /// `DoSaveImage` (baseunits/lua/LuaWebsiteModules.pas:372-391): saves the image in the
     /// session's document as `name` (without extension) in the directory `path`.
-    pub fn save_image(self, path: &str, name: &str) -> Pending<Reply<String>> {
+    pub fn save_image(self, work_id: i32, path: &str, name: &str) -> Pending<Reply<String>> {
         let call = Call::SaveImage {
+            work_id,
             path: path.into(),
             name: name.into(),
         };
@@ -397,8 +398,9 @@ impl Caller<'_> {
 
     /// `DoAfterImageSaved` (baseunits/lua/LuaWebsiteModules.pas:393-410) for the file
     /// `file_name`.
-    pub fn after_image_saved(self, file_name: &str) -> Pending<Reply<bool>> {
+    pub fn after_image_saved(self, work_id: i32, file_name: &str) -> Pending<Reply<bool>> {
         let call = Call::AfterImageSaved {
+            work_id,
             file_name: file_name.into(),
         };
         self.submit(call, |answer| match answer {
