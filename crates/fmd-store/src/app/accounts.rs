@@ -19,8 +19,9 @@ text_enum! {
     }
 }
 
-/// A module's account, in plaintext.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A module's account, in plaintext. Its `Debug` output leaves the credentials and cookies out,
+/// so they never reach a log.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Account {
     pub module_id: String,
     pub enabled: bool,
@@ -28,6 +29,16 @@ pub struct Account {
     pub password: String,
     pub cookies: String,
     pub status: AccountStatus,
+}
+
+impl std::fmt::Debug for Account {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Account")
+            .field("module_id", &self.module_id)
+            .field("enabled", &self.enabled)
+            .field("status", &self.status)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Repository for accounts. Obtain it with [`crate::AppDb::accounts`].
