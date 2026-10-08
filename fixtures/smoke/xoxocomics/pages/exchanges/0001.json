@@ -1,0 +1,125 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://xoxocomic.com/comic/357/full/all",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 19:58:16 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "cache-control",
+        "private, max-age=2678400"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=U5DBevopf%2FpxNR%2FRXftjIp9UYxxioMjeFgHNFovk2mJL5uDDNtLYadWq3JeTmEMJqVVBmUjWJo2p3ybW9pxfghLXm30AYcF%2BlmMX67p1DVou0izCim%2FhXuSSslzfMgPR\"}]}"
+      ],
+      [
+        "x-frame-options",
+        "SAMEORIGIN"
+      ],
+      [
+        "x-xss-protection",
+        "1; mode=block"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "last-modified",
+        "Thu, 08 Oct 2026 19:58:16 GMT"
+      ],
+      [
+        "cf-cache-status",
+        "MISS"
+      ],
+      [
+        "speculation-rules",
+        "\"/cdn-cgi/speculation\""
+      ],
+      [
+        "server-timing",
+        "cfCacheStatus;desc=\"MISS\""
+      ],
+      [
+        "server-timing",
+        "cfEdge;dur=175,cfOrigin;dur=28"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a477b8263a1a66fe-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "zstd"
+  }
+}

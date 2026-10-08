@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://3asq.online/manga/dig-it/1/?style=list",
+      "status": 200
+    }
+  ]
+}

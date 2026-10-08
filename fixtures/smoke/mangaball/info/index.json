@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://api.mangaball.com/api/v1/title/detail/6889f391e00aa4d41d07dfeb",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://api.mangaball.com/api/v1/title/chapter-listing?title_id=6889f391e00aa4d41d07dfeb&page=1&limit=100&group_by=chapter_number&language=en",
+      "status": 200
+    }
+  ]
+}

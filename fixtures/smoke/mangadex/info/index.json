@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga/a25e46ec-30f7-4db6-89df-cacbc1d9a900?includes%5B%5D=author&includes%5B%5D=artist&includes%5B%5D=cover_art",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga/a25e46ec-30f7-4db6-89df-cacbc1d9a900/feed?limit=50&offset=0&translatedLanguage%5B%5D=en&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&contentRating%5B%5D=pornographic&includes%5B%5D=scanlation_group&order%5Bvolume%5D=asc&order%5Bchapter%5D=asc",
+      "status": 200
+    }
+  ]
+}

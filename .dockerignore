@@ -4,6 +4,7 @@ target
 data
 userdata
 fixtures/local
+fixtures/smoke
 web/node_modules
 web/build
 web/.svelte-kit

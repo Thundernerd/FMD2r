@@ -1,0 +1,105 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://olympusxyz.com/api/capitulo/comic-el-ascenso-de-namgung-el-emperador-de-la-espada-20261008-080454595/129742",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:03:31 GMT"
+      ],
+      [
+        "content-type",
+        "application/json"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "last-modified",
+        "Thu, 08 Oct 2026 20:03:31 GMT"
+      ],
+      [
+        "etag",
+        "W/\"G2K0j3UOxn\""
+      ],
+      [
+        "cache-control",
+        "max-age=900"
+      ],
+      [
+        "x-cache-status",
+        "EXPIRED"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=nQUL8oTLuF2CEw4jBAemW4idbpNJYG72brQBazK4faWc%2F16nBaFuHTmiUqW7LSTg2wO0Hwgbdjf8Pq8F2ZlwxvJyHeSXHnssiaJcZ9DWduEOBUOCdXHYMirzEUOoozz0aw%3D%3D\"}]}"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a477bfd94e29fea6-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "zstd"
+  }
+}

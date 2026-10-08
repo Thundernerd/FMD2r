@@ -1,0 +1,109 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.omegascans.org/chapter/query?page=1&perPage=100&series_id=716",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Cookie",
+        "ts-session=s%3AeyJtZXNzYWdlIjoibXB2YWRkdTdnenh5cDlmbGN6ZDdjNDcxIiwicHVycG9zZSI6InRzLXNlc3Npb24ifQ.7NON994z8LBSBKa8U7TVD1sYjXMEtOO_yaqtnGBVGvA"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ],
+      [
+        "Referer",
+        "https://omegascans.org"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 19:58:00 GMT"
+      ],
+      [
+        "content-type",
+        "application/json; charset=utf-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "set-cookie",
+        "ts-session=s%3AeyJtZXNzYWdlIjoibXB2YWRkdTdnenh5cDlmbGN6ZDdjNDcxIiwicHVycG9zZSI6InRzLXNlc3Npb24ifQ.7NON994z8LBSBKa8U7TVD1sYjXMEtOO_yaqtnGBVGvA; Max-Age=604800; Domain=omegascans.org; Path=/; HttpOnly; Secure"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=Hv7tcgoEZ%2BNIRNwJy6AQ9ADugwmloXsbt50autB9%2FHE0l3JaOAYBtno0mDET38AaRvaoyP%2F4jZsUq65Itqs1DYVqZdRvKc9DkiuL9g6JroxYJszRhXm6Yh0oGs7RpKH2vTL7FhU%3D\"}]}"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "access-control-allow-credentials",
+        "true"
+      ],
+      [
+        "access-control-allow-origin",
+        "https://omegascans.org"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a477b7c27cb7e899-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0002.response",
+    "decoded_from": "zstd"
+  }
+}

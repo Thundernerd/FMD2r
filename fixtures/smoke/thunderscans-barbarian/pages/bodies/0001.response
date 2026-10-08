@@ -1,0 +1,1689 @@
+<!DOCTYPE html
+	PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "https://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+
+
+
+<html xmlns="https://www.w3.org/1999/xhtml" lang="en-US">
+<head profile="http://gmpg.org/xfn/11">
+				
+
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta name="referrer-debug" content="">
+	<meta name="url"
+		content="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/">
+	<meta name="viewport" content="width=device-width" />
+		<meta name="theme-color" content="#7f00ff">
+	<meta name="msapplication-navbutton-color" content="#7f00ff">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="#7f00ff">
+
+	<title>A Barbarian’s Adventure in a Fantasy World Chapter 1 &#8211; Thunderscans EN</title>
+<meta name='robots' content='max-image-preview:large' />
+<link rel='dns-prefetch' href='//cdn.jsdelivr.net' />
+<link rel="alternate" type="application/rss+xml" title="Thunderscans EN &raquo; A Barbarian’s Adventure in a Fantasy World Chapter 1 Comments Feed" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/feed/" />
+<link rel="alternate" title="oEmbed (JSON)" type="application/json+oembed" href="https://en-thunderscans.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fen-thunderscans.com%2Fa-barbarians-adventure-in-a-fantasy-world-chapter-1%2F" />
+<link rel="alternate" title="oEmbed (XML)" type="text/xml+oembed" href="https://en-thunderscans.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fen-thunderscans.com%2Fa-barbarians-adventure-in-a-fantasy-world-chapter-1%2F&#038;format=xml" />
+		<!-- This site uses the Google Analytics by MonsterInsights plugin v11.3.0 - Using Analytics tracking - https://www.monsterinsights.com/ -->
+							<script src="//www.googletagmanager.com/gtag/js?id=G-H2QCKBG34R"  data-cfasync="false" data-wpfc-render="false" type="text/javascript" async></script>
+			<script data-cfasync="false" data-wpfc-render="false" type="text/javascript">
+				var mi_version = '11.3.0';
+				var mi_track_user = true;
+				var mi_no_track_reason = '';
+								var MonsterInsightsDefaultLocations = {"page_location":"https:\/\/en-thunderscans.com\/a-barbarians-adventure-in-a-fantasy-world-chapter-1\/"};
+								if ( typeof MonsterInsightsPrivacyGuardFilter === 'function' ) {
+					var MonsterInsightsLocations = (typeof MonsterInsightsExcludeQuery === 'object') ? MonsterInsightsPrivacyGuardFilter( MonsterInsightsExcludeQuery ) : MonsterInsightsPrivacyGuardFilter( MonsterInsightsDefaultLocations );
+				} else {
+					var MonsterInsightsLocations = (typeof MonsterInsightsExcludeQuery === 'object') ? MonsterInsightsExcludeQuery : MonsterInsightsDefaultLocations;
+				}
+
+								var disableStrs = [
+										'ga-disable-G-H2QCKBG34R',
+									];
+
+				/* Function to detect opted out users */
+				function __gtagTrackerIsOptedOut() {
+					for (var index = 0; index < disableStrs.length; index++) {
+						if (document.cookie.indexOf(disableStrs[index] + '=true') > -1) {
+							return true;
+						}
+					}
+
+					return false;
+				}
+
+				/* Disable tracking if the opt-out cookie exists. */
+				if (__gtagTrackerIsOptedOut()) {
+					for (var index = 0; index < disableStrs.length; index++) {
+						window[disableStrs[index]] = true;
+					}
+				}
+
+				/* Opt-out function */
+				function __gtagTrackerOptout() {
+					for (var index = 0; index < disableStrs.length; index++) {
+						document.cookie = disableStrs[index] + '=true; expires=Thu, 31 Dec 2099 23:59:59 UTC; path=/';
+						window[disableStrs[index]] = true;
+					}
+				}
+
+				if ('undefined' === typeof gaOptout) {
+					function gaOptout() {
+						__gtagTrackerOptout();
+					}
+				}
+								window.dataLayer = window.dataLayer || [];
+
+				window.MonsterInsightsDualTracker = {
+					helpers: {},
+					trackers: {},
+				};
+				if (mi_track_user) {
+					function __gtagDataLayer() {
+						dataLayer.push(arguments);
+					}
+
+					function __gtagTracker(type, name, parameters) {
+						if (!parameters) {
+							parameters = {};
+						}
+
+						if (parameters.send_to) {
+							__gtagDataLayer.apply(null, arguments);
+							return;
+						}
+
+						if (type === 'event') {
+														parameters.send_to = monsterinsights_frontend.v4_id;
+							var hookName = name;
+							if (typeof parameters['event_category'] !== 'undefined') {
+								hookName = parameters['event_category'] + ':' + name;
+							}
+
+							if (typeof MonsterInsightsDualTracker.trackers[hookName] !== 'undefined') {
+								MonsterInsightsDualTracker.trackers[hookName](parameters);
+							} else {
+								__gtagDataLayer('event', name, parameters);
+							}
+							
+						} else {
+							__gtagDataLayer.apply(null, arguments);
+						}
+					}
+
+					__gtagTracker('js', new Date());
+					__gtagTracker('set', {
+						'developer_id.dZGIzZG': true,
+											});
+					if ( MonsterInsightsLocations.page_location ) {
+						__gtagTracker('set', MonsterInsightsLocations);
+					}
+										__gtagTracker('config', 'G-H2QCKBG34R', {"forceSSL":"true","link_attribution":"true"} );
+										window.gtag = __gtagTracker;										(function () {
+						/* https://developers.google.com/analytics/devguides/collection/analyticsjs/ */
+						/* ga and __gaTracker compatibility shim. */
+						var noopfn = function () {
+							return null;
+						};
+						var newtracker = function () {
+							return new Tracker();
+						};
+						var Tracker = function () {
+							return null;
+						};
+						var p = Tracker.prototype;
+						p.get = noopfn;
+						p.set = noopfn;
+						p.send = function () {
+							var args = Array.prototype.slice.call(arguments);
+							args.unshift('send');
+							__gaTracker.apply(null, args);
+						};
+						var __gaTracker = function () {
+							var len = arguments.length;
+							if (len === 0) {
+								return;
+							}
+							var f = arguments[len - 1];
+							if (typeof f !== 'object' || f === null || typeof f.hitCallback !== 'function') {
+								if ('send' === arguments[0]) {
+									var hitConverted, hitObject = false, action;
+									if ('event' === arguments[1]) {
+										if ('undefined' !== typeof arguments[3]) {
+											hitObject = {
+												'eventAction': arguments[3],
+												'eventCategory': arguments[2],
+												'eventLabel': arguments[4],
+												'value': arguments[5] ? arguments[5] : 1,
+											}
+										}
+									}
+									if ('pageview' === arguments[1]) {
+										if ('undefined' !== typeof arguments[2]) {
+											hitObject = {
+												'eventAction': 'page_view',
+												'page_path': arguments[2],
+											}
+										}
+									}
+									if (typeof arguments[2] === 'object') {
+										hitObject = arguments[2];
+									}
+									if (typeof arguments[5] === 'object') {
+										Object.assign(hitObject, arguments[5]);
+									}
+									if ('undefined' !== typeof arguments[1].hitType) {
+										hitObject = arguments[1];
+										if ('pageview' === hitObject.hitType) {
+											hitObject.eventAction = 'page_view';
+										}
+									}
+									if (hitObject) {
+										action = 'timing' === arguments[1].hitType ? 'timing_complete' : hitObject.eventAction;
+										hitConverted = mapArgs(hitObject);
+										__gtagTracker('event', action, hitConverted);
+									}
+								}
+								return;
+							}
+
+							function mapArgs(args) {
+								var arg, hit = {};
+								var gaMap = {
+									'eventCategory': 'event_category',
+									'eventAction': 'event_action',
+									'eventLabel': 'event_label',
+									'eventValue': 'event_value',
+									'nonInteraction': 'non_interaction',
+									'timingCategory': 'event_category',
+									'timingVar': 'name',
+									'timingValue': 'value',
+									'timingLabel': 'event_label',
+									'page': 'page_path',
+									'location': 'page_location',
+									'title': 'page_title',
+									'referrer' : 'page_referrer',
+								};
+								for (arg in args) {
+																		if (!(!args.hasOwnProperty(arg) || !gaMap.hasOwnProperty(arg))) {
+										hit[gaMap[arg]] = args[arg];
+									} else {
+										hit[arg] = args[arg];
+									}
+								}
+								return hit;
+							}
+
+							try {
+								f.hitCallback();
+							} catch (ex) {
+							}
+						};
+						__gaTracker.create = newtracker;
+						__gaTracker.getByName = newtracker;
+						__gaTracker.getAll = function () {
+							return [];
+						};
+						__gaTracker.remove = noopfn;
+						__gaTracker.loaded = true;
+						window['__gaTracker'] = __gaTracker;
+					})();
+									} else {
+										console.log("");
+					(function () {
+						function __gtagTracker() {
+							return null;
+						}
+
+						window['__gtagTracker'] = __gtagTracker;
+						window['gtag'] = __gtagTracker;
+					})();
+									}
+			</script>
+							<!-- / Google Analytics by MonsterInsights -->
+		<style id="wp-img-auto-sizes-contain-inline-css">
+img:is([sizes=auto i],[sizes^="auto," i]){contain-intrinsic-size:3000px 1500px}
+/*# sourceURL=wp-img-auto-sizes-contain-inline-css */
+</style>
+<style id="wp-emoji-styles-inline-css">
+
+	img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 1em !important;
+		width: 1em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+/*# sourceURL=wp-emoji-styles-inline-css */
+</style>
+<style id="classic-theme-styles-inline-css">
+/*! This file is auto-generated */
+.wp-block-button__link{color:#fff;background-color:#32373c;border-radius:9999px;box-shadow:none;text-decoration:none;padding:calc(.667em + 2px) calc(1.333em + 2px);font-size:1.125em}.wp-block-file__button{background:#32373c;color:#fff;text-decoration:none}
+/*# sourceURL=/wp-includes/css/classic-themes.min.css */
+</style>
+
+<style id="global-styles-inline-css">
+:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgb(6,147,227) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgb(252,185,0) 0%,rgb(255,105,0) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgb(255,105,0) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgb(255, 255, 255), 6px 6px rgb(0, 0, 0);--wp--preset--shadow--crisp: 6px 6px 0px rgb(0, 0, 0);}.wp-block-button{--wp--preset--dimension--25: 25%;--wp--preset--dimension--50: 50%;--wp--preset--dimension--75: 75%;--wp--preset--dimension--100: 100%;}:where(body) { margin: 0; }:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}body{padding-top: 0px;padding-right: 0px;padding-bottom: 0px;padding-left: 0px;}:root :where(.wp-element-button, .wp-block-button__link){background-color: #32373c;border-width: 0;color: #fff;font-family: inherit;font-size: inherit;font-style: inherit;font-weight: inherit;letter-spacing: inherit;line-height: inherit;padding-top: calc(0.667em + 2px);padding-right: calc(1.333em + 2px);padding-bottom: calc(0.667em + 2px);padding-left: calc(1.333em + 2px);text-decoration: none;text-transform: inherit;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+/*# sourceURL=global-styles-inline-css */
+</style>
+
+<link rel='stylesheet' id='chld_thm_cfg_parent-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/style.css?ver=1786556668' media='all' />
+<link rel='stylesheet' id='lamoudstyle-css' href='https://en-thunderscans.com/wp-content/themes/mangareader-child/lamoud-pages/lm_main.css?ver=3.2.2' media='all' />
+<link rel='stylesheet' id='style-css' href='https://en-thunderscans.com/wp-content/themes/mangareader-child/style.css?ver=2.1.3' media='all' />
+<link rel='stylesheet' id='lightstyle-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/assets/css/lightmode.css?ver=2.1.1' media='all' />
+<link rel='stylesheet' id='fontawesome-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/assets/css/font-awesome.min.css?ver=5.13.0' media='all' />
+<link rel='stylesheet' id='navbar-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/navbar.css?ver=1.0.0' media='all' />
+<link rel='stylesheet' id='series-page-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/series-page.css?ver=1.0.12' media='all' />
+<link rel='stylesheet' id='home-page-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/home-page.css?ver=1.0.2' media='all' />
+<link rel='stylesheet' id='flamechan-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/remove-flame.css?ver=1.0.0' media='all' />
+<link rel='stylesheet' id='archive-page-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/archive-page.css?ver=1.0.0' media='all' />
+<link rel='stylesheet' id='chapter-page-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/chapter-page.css?ver=1.0.0' media='all' />
+<link rel='stylesheet' id='root-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/root.css?ver=7.1.3' media='all' />
+<link rel='stylesheet' id='footer-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/footer.css?ver=7.1.3' media='all' />
+<link rel='stylesheet' id='novel-forms-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/novel-forms.css?ver=1786556668' media='all' />
+<link rel='stylesheet' id='header-modern-css' href='https://en-thunderscans.com/wp-content/themes/mangareader/custom-css/header-modern.css?ver=1786556668' media='all' />
+<link rel='stylesheet' id='mcs-frontend-css-css' href='https://en-thunderscans.com/wp-content/plugins/manga-comments-system/assets/css/frontend.css?ver=1789258619' media='all' />
+	<script>
+		var baseurl = "https://en-thunderscans.com/";
+		var ajaxurl = "https://en-thunderscans.com/wp-admin/admin-ajax.php";
+		var max_bookmark = 50;
+		var max_history = 10;
+		var defaultTheme = "darkmode";
+	</script>
+<script async data-wp-strategy="async" id="monsterinsights-frontend-script-js" src="https://en-thunderscans.com/wp-content/plugins/google-analytics-for-wordpress/assets/js/frontend-gtag.min.js?ver=11.3.0"></script>
+<script data-cfasync="false" data-wpfc-render="false" type="text/javascript" id='monsterinsights-frontend-script-js-extra'>/* <![CDATA[ */
+var monsterinsights_frontend = {"js_events_tracking":"true","download_extensions":"doc,pdf,ppt,zip,xls,docx,pptx,xlsx","inbound_paths":"[{\"path\":\"\\\/go\\\/\",\"label\":\"affiliate\"},{\"path\":\"\\\/recommend\\\/\",\"label\":\"affiliate\"}]","home_url":"https:\/\/en-thunderscans.com","hash_tracking":"false","v4_id":"G-H2QCKBG34R"};/* ]]> */
+</script>
+<script id="jquery-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/jquery.min.js?ver=3.5.1"></script>
+<script id="bookmarks_script-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/bookmark.js?ver=2.2.0"></script>
+<script id="series_history_script-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/series-history.js?ver=2.2.0"></script>
+<script id="history_script-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/history.js?ver=7.1.3"></script>
+<script id="tsfn_scripts-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/function.js?ver=7.1.3"></script>
+<script id="reading-options-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/reading-options.js?ver=1.0.0"></script>
+<script id="nsfw_scripts-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/nsfw.js?ver=1.0.0"></script>
+<link rel="https://api.w.org/" href="https://en-thunderscans.com/wp-json/" /><link rel="alternate" title="JSON" type="application/json" href="https://en-thunderscans.com/wp-json/wp/v2/posts/84199" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://en-thunderscans.com/xmlrpc.php?rsd" />
+<meta name="generator" content="WordPress 7.1.3" />
+<link rel="canonical" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/" />
+<link rel='shortlink' href='https://en-thunderscans.com/?p=84199' />
+        <style>
+            .lamoud_icon_after {
+                display: none;
+            }
+
+            .avatar-class {
+                display: none !important;
+            }
+        </style>
+        <script>
+	$(document).ready(function(){
+		$(".shme").click(function(){
+			$(".mm").toggleClass("shwx");
+		});
+		$(".srcmob").click(function(){
+			$(".minmb").toggleClass("minmbx");
+			$(".fa-search").toggleClass("hidden");
+			$(".fa-bars").toggleClass("hidden");
+		});
+		$(".see-more").click(()=>{
+			$(".entry-content.entry-content-single").css({'height':'auto'});
+			$(".summary .entry-content.entry-content-single").addClass("clicked");
+			$(".see-more").toggleClass("hidden");
+			$(".see-less").toggleClass("hidden");
+		});
+		$(".see-less").click(()=>{
+			$(".entry-content.entry-content-single").removeAttr('style');
+			$(".summary .entry-content.entry-content-single").removeClass("clicked");
+			$(".see-more").toggleClass("hidden");
+			$(".see-less").toggleClass("hidden");
+		});
+		$(".mobile-titles.first").click(()=>{
+			$(".mobile-titles").removeClass("hidden");
+			$(".mobile-titles.first").addClass("hidden");
+			
+		})
+	});
+</script>
+<script type="text/javascript">
+$(document).ready(function(){
+	if($(window).width() >= 890){
+		$(".mm").removeClass("shwx");
+		$('.mobile-slide').addClass("hidden");
+		$('.pop-list-desktop').removeClass("hidden");
+		$('.pop-list').addClass("hidden");
+		$('.desktop-slide').removeClass("hidden");
+	}else{
+		$('.pop-list-desktop').addClass("hidden");
+		$('.pop-list').removeClass("hidden");
+		$('.mobile-slide').removeClass("hidden");
+		$('.desktop-slide').addClass("hidden");
+	}
+	$(window).resize(function() {
+		if($(window).width() >= 890){
+			$(".mm").removeClass("shwx");
+			$('.pop-list-desktop').removeClass("hidden");
+			$('.pop-list').addClass("hidden");
+			$('.mobile-slide').addClass("hidden");
+			$('.desktop-slide').removeClass("hidden");
+		}else{
+			$('.pop-list-desktop').addClass("hidden");
+			$('.pop-list').removeClass("hidden"); 
+			$('.mobile-slide').removeClass("hidden");
+			$('.desktop-slide').addClass("hidden");
+		}
+	});
+	var timer;
+	$(window).scroll(function(){
+		clearTimeout(timer);
+		if($(window).scrollTop() > 100){
+			$('.scrollToTop').fadeIn();
+			timer = setTimeout(function(){$('.scrollToTop').fadeOut();}, 1000);	
+		}else{
+			$('.scrollToTop').fadeOut();
+		}
+	});
+	
+	//Click event to scroll to top
+	$('.scrollToTop').click(function(){
+		$('html, body').animate({scrollTop : 0},800);
+		return false;
+	});
+	
+});
+</script>
+<style>
+	.th, .serieslist.pop ul li.topone .limit .bw .ctr,.releases .vl,.scrollToTop,#sidebar #bm-history li a:hover,.hpage a,#footer .footermenu,.footer-az .az-list li a,.main-info .info-desc .spe span:before,.bxcl ul li span.dt a,.bookmark,.commentx #submit,.radiox input:checked ~ .checkmarkx,.advancedsearch button.searchz,.lightmode .nav_apb a:hover,.lista a,.lightmode .lista a:hover,.nextprev a,.disqusmen #commentform #submit, .blogbox .btitle .vl, .bigblogt span a,.big-slider .paging .centerpaging .swiper-pagination span.swiper-pagination-bullet-active {background:#7f00ff} .pagination span.page-numbers.current,.quickfilter .filters .filter.submit button,#sidebar .section .ts-wpop-series-gen .ts-wpop-nav-tabs li.active a,#gallery.owl-loaded .owl-dots .owl-dot.active span {background:#7f00ff !important} 
+	#sidebar .section #searchform #searchsubmit,.series-gen .nav-tabs li.active a,.lastend .inepcx a,.nav_apb a:hover,#top-menu li a:hover,.readingnav.rnavbot .readingnavbot .readingbar .readingprogress,.lightmode .main-info .info-desc .wd-full .mgen a:hover,.lightmode .bxcl ul li .chbox:hover,.lightmode ul.taxindex li a:hover,.comment-list .comment-body .reply a:hover,.topmobile,.bxcl ul::-webkit-scrollbar-thumb,.lightmode .slider:before,.quickfilter .filters .filter .genrez::-webkit-scrollbar-thumb,.hothome .releases,.lightmode .seriestucon .seriestucont .seriestucontr .seriestugenre a:hover {background:#7f00ff} 
+	.lightmode #sidebar .section h4, .lightmode .serieslist ul li .ctr,.listupd .utao .uta .luf ul li,.lightmode .bs .bsx:hover .tt,.soralist ul,a:hover,.lightmode .blogbox .btitle h3,.lightmode .blogbox .btitle h1,.bxcl ul li .lchx a:visited, .listupd .utao .uta .luf ul li a:visited,.lightmode .pagination a:hover,.lightmode a:hover,#sidebar .serieslist ul li .leftseries h2 a:hover,.bs.styletere .epxs,.bxcl ul li .dt a,.lightmode .main-info .info-desc .wd-full .mgen a,.lightmode #sidebar .serieslist ul li .leftseries h2 a:hover,.comment-list .comment-body .reply a,.bxcl ul li .eph-num a:visited,.headpost .allc a,.lightmode .seriestucon .seriestucont .seriestucontr .seriestugenre a {color:#7f00ff} 
+	.bxcl ul li .lchx a:visited, .listupd .utao .uta .luf ul li a:visited {color:#7f00ff !important} 
+	.lightmode .serieslist ul li .ctr,.advancedsearch button.searchz,.lista a,.lightmode .lista a:hover,.blogbox .boxlist .bma .bmb .bmba, .page.blog .thumb,#sidebar .section #searchform #searchsubmit,.lightmode .main-info .info-desc .wd-full .mgen a,.lightmode .bxcl ul li .chbox:hover, .comment-list .comment-body .reply a,.lightmode .seriestucon .seriestucont .seriestucontr .seriestugenre a {border-color:#7f00ff}
+	.slider.round:before{background: #333;}
+	.hpage a:hover{color:#FFF !important;}
+	@media only screen and (max-width:800px) {
+		.lightmode.black .th, .lightmode .th, .th, .surprise{background:#7f00ff} 
+		#main-menu {background: rgba(28,28,28,0.95);}
+	}
+</style>
+<style>
+	.home-genres{background:#0575e6;}
+	.home-genres .alman a{color:#0575e6;}
+</style>
+        <script type="text/javascript">
+                var sf_templates = "<a href=\"{search_url_escaped}\">View All Results<\/a>";
+                var sf_position = '0';
+                var sf_input = '.search-live';
+                jQuery(document).ready(function(){
+                    jQuery(sf_input).ajaxyLiveSearch({"expand":false,"searchUrl":"https:\/\/en-thunderscans.com\/?s=%s","text":"Search","delay":500,"iwidth":180,"width":350,"ajaxUrl":"https:\/\/en-thunderscans.com\/wp-admin\/admin-ajax.php","rtl":0});
+                    jQuery(".live-search_ajaxy-selective-input").keyup(function() {
+                        var width = jQuery(this).val().length * 8;
+                        if(width < 50) {
+                            width = 50;
+                        }
+                        jQuery(this).width(width);
+                    });
+                    jQuery(".live-search_ajaxy-selective-search").click(function() {
+                        jQuery(this).find(".live-search_ajaxy-selective-input").focus();
+                    });
+                    jQuery(".live-search_ajaxy-selective-close").click(function() {
+                        jQuery(this).parent().remove();
+                    });
+                });
+        </script>
+        <link rel="icon" href="https://en-thunderscans.com/wp-content/uploads/2023/12/cropped-EN-TH-WEB-32x32.png" sizes="32x32" />
+<link rel="icon" href="https://en-thunderscans.com/wp-content/uploads/2023/12/cropped-EN-TH-WEB-192x192.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="https://en-thunderscans.com/wp-content/uploads/2023/12/cropped-EN-TH-WEB-180x180.png" />
+<meta name="msapplication-TileImage" content="https://en-thunderscans.com/wp-content/uploads/2023/12/cropped-EN-TH-WEB-270x270.png" />
+<style id="wp-custom-css">
+body {
+}
+div#disqus_thread iframe[sandbox] {
+        max-height: 0px !important;
+}
+	.chnav .ch-report-btn:not() {
+  color: red;
+  border-color: #7c3aed;
+}
+
+</style>
+	
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+	<link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap"
+		rel="stylesheet">
+	<!-- 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet"> -->
+</head>
+<style>
+	.navbar {
+		padding: 0 !important;
+	}
+</style>
+
+
+
+	
+	
+
+
+
+	
+<body class="darkmode			  black" itemscope="itemscope" itemtype="http://schema.org/WebPage">
+		<script>ts_darkmode.init();</script>
+	
+		
+		<header class="thn-header" role="banner" itemscope itemtype="http://schema.org/WPHeader">
+	<div class="thn-bar">
+
+		<button type="button" class="thn-burger" aria-label="Open menu" aria-expanded="false" data-thn-open>
+			<span></span><span></span><span></span>
+		</button>
+
+		<a class="thn-logo" href="https://en-thunderscans.com/" title="Thunderscans EN">
+							<img src="https://i.ibb.co/YFq4ZqBR/EN-TH-WEB.png" alt="Thunderscans EN">
+					</a>
+
+		<nav class="thn-nav" itemscope itemtype="http://schema.org/SiteNavigationElement" role="navigation">
+			<ul><li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item"><a href="/"><i class="fas fa-home" aria-hidden="true"></i><span>Home</span></a></li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children thn-nav-item thn-has-children"><a href="/comics"><i class="fas fa-book-open" aria-hidden="true"></i><span>Comics</span></a><button type="button" class="thn-nav-toggle" aria-expanded="false" aria-label="Toggle submenu"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+<ul class="sub-menu">
+<li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item thn-nav-sub-item"><a href="https://en-thunderscans.com/comics/?status=&#038;type=manhwa&#038;order="><span>Manhwa</span></a></li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item thn-nav-sub-item"><a href="https://en-thunderscans.com/comics/?type=manhua"><span>Manhua</span></a></li>
+</ul>
+</li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item"><a href="https://en-thunderscans.com/genres/manga/"><i class="fas fa-book-open" aria-hidden="true"></i><span>Manga</span></a></li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item"><a href="https://en-thunderscans.com/packages-store/"><i class="fas fa-box" aria-hidden="true"></i><span>Packages</span></a></li>
+</ul>
+		</nav>
+
+		<div class="thn-actions">
+			<form class="thn-search" action="https://en-thunderscans.com/" method="get"
+				  itemprop="potentialAction" itemscope itemtype="http://schema.org/SearchAction">
+				<meta itemprop="target" content="https://en-thunderscans.com/?s={query}"/>
+				<i class="fas fa-search" aria-hidden="true"></i>
+				<input id="s" itemprop="query-input" class="search-live" type="text" name="s"
+					   placeholder="Search">
+			</form>
+
+			<button type="button" class="thn-icon-btn thn-search-toggle" aria-label="Search" data-thn-search>
+				<i class="fas fa-search" aria-hidden="true"></i>
+			</button>
+
+			<a class="thn-icon-btn" href="https://en-thunderscans.com/bookmark/" aria-label="Bookmarks">
+				<i class="far fa-bookmark" aria-hidden="true"></i>
+			</a>
+
+			<div class="thn-account has-menu">
+				<a class="thn-avatar" href="https://en-thunderscans.com/login/"
+				   aria-label="Sign In">
+					<i class="fas fa-user" aria-hidden="true"></i>				</a>
+
+									<div class="thn-account-menu">
+						<a href="https://en-thunderscans.com/login/">
+							<i class="fas fa-sign-in-alt" aria-hidden="true"></i>
+							<span>Sign In</span>
+						</a>
+						<a href="https://en-thunderscans.com/register/">
+							<i class="fas fa-user-plus" aria-hidden="true"></i>
+							<span>Sign Up</span>
+						</a>
+					</div>
+							</div>
+		</div>
+	</div>
+
+	<!-- Mobile drawer. Same menu markup, re-rendered so the accordion has its
+	     own DOM rather than moving nodes around at breakpoints. -->
+	<div class="thn-drawer" hidden>
+		<div class="thn-drawer-backdrop" data-thn-close></div>
+		<div class="thn-drawer-panel" role="dialog" aria-modal="true" aria-label="Menu">
+			<div class="thn-drawer-head">
+				<button type="button" class="thn-drawer-close" aria-label="Close menu" data-thn-close>
+					<i class="fas fa-times" aria-hidden="true"></i>
+				</button>
+				<a class="thn-logo" href="https://en-thunderscans.com/">
+											<img src="https://i.ibb.co/YFq4ZqBR/EN-TH-WEB.png" alt="">
+									</a>
+			</div>
+
+			<nav class="thn-drawer-nav">
+				<ul><li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item"><a href="/"><i class="fas fa-home" aria-hidden="true"></i><span>Home</span></a></li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children thn-nav-item thn-has-children"><a href="/comics"><i class="fas fa-book-open" aria-hidden="true"></i><span>Comics</span></a><button type="button" class="thn-nav-toggle" aria-expanded="false" aria-label="Toggle submenu"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+<ul class="sub-menu">
+<li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item thn-nav-sub-item"><a href="https://en-thunderscans.com/comics/?status=&#038;type=manhwa&#038;order="><span>Manhwa</span></a></li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item thn-nav-sub-item"><a href="https://en-thunderscans.com/comics/?type=manhua"><span>Manhua</span></a></li>
+</ul>
+</li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item"><a href="https://en-thunderscans.com/genres/manga/"><i class="fas fa-book-open" aria-hidden="true"></i><span>Manga</span></a></li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom thn-nav-item"><a href="https://en-thunderscans.com/packages-store/"><i class="fas fa-box" aria-hidden="true"></i><span>Packages</span></a></li>
+</ul>
+			</nav>
+
+			<ul class="thn-drawer-extra">
+				<li class="thn-nav-item">
+					<a href="https://en-thunderscans.com/bookmark/">
+						<i class="far fa-bookmark" aria-hidden="true"></i>
+						<span>Bookmarks</span>
+					</a>
+				</li>
+				
+				
+									<li class="thn-nav-item">
+						<a href="https://en-thunderscans.com/login/">
+							<i class="fas fa-sign-in-alt" aria-hidden="true"></i>
+							<span>Sign In</span>
+						</a>
+					</li>
+					<li class="thn-nav-item">
+						<a href="https://en-thunderscans.com/register/">
+							<i class="fas fa-user-plus" aria-hidden="true"></i>
+							<span>Sign Up</span>
+						</a>
+					</li>
+							</ul>
+		</div>
+	</div>
+</header>
+
+	
+	<div id="content"  class="readercontent">
+
+				
+		<div class="wrapper">
+			
+<script>
+    window.addEventListener('keydown', function (e) {
+        if(e.key === "ArrowRight"){
+            document.querySelector(".ch-next-btn").click(); 
+        }
+        if(e.key === "ArrowLeft"){
+            document.querySelector(".ch-prev-btn").click(); 
+        }
+    }, false);
+</script>
+<div class="chapterbody">
+	<div class="postarea">
+		<article id="post-84199" class="post-84199 hentry" itemscope="itemscope" itemtype="http://schema.org/CreativeWork">
+						<div class="headpost">
+				<h1 class="entry-title" itemprop="name">A Barbarian’s Adventure in a Fantasy World Chapter 1</h1>
+				<div class="allc">All chapters are in <a href="https://en-thunderscans.com/comics/a-barbarians-adventure-in-a-fantasy-world/">A Barbarian’s Adventure in a Fantasy World</a></div>
+			</div>
+			<div class='socialts'>
+	<a href="https://www.facebook.com/sharer/sharer.php?u=https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/&t=A Barbarian’s Adventure in a Fantasy World Chapter 1" target="_blank" class="fb">
+		<i class="fab fa-facebook-f"></i>
+		<span>Facebook</span>
+	</a>
+	<a href="https://www.twitter.com/intent/tweet?url=https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/&text=A Barbarian’s Adventure in a Fantasy World Chapter 1" target="_blank" class="twt">
+		<i class="fab fa-twitter"></i>
+		<span>Twitter</span>
+	</a>
+	<a href="whatsapp://send?text=A Barbarian’s Adventure in a Fantasy World Chapter 1 https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/" target="_blank" class="wa">
+		<i class="fab fa-whatsapp"></i>
+		<span>WhatsApp</span>
+	</a>
+	<a href="https://pinterest.com/pin/create/button/?url=https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/&media=&description=A Barbarian’s Adventure in a Fantasy World Chapter 1" target="_blank" class="pntrs">
+		<i class="fab fa-pinterest-p"></i>
+		<span>Pinterest</span>
+	</a>
+</div>			        <div class="ts-breadcrumb bixbox">
+            <div itemscope="" itemtype="http://schema.org/BreadcrumbList">
+                <span itemprop="itemListElement" itemscope="" itemtype="http://schema.org/ListItem">
+                    <a itemprop="item" href="https://en-thunderscans.com/"><span
+                            itemprop="name">Home</span></a>
+                    <meta itemprop="position" content="1">
+                </span>
+                ›
+                                    <span itemprop="itemListElement" itemscope="" itemtype="http://schema.org/ListItem">
+                        <a itemprop="item" href="https://en-thunderscans.com/comics/a-barbarians-adventure-in-a-fantasy-world/"><span
+                                itemprop="name">A Barbarian’s Adventure in a Fantasy World</span></a>
+                        <meta itemprop="position" content="2">
+                    </span>
+                    ›
+                    <span itemprop="itemListElement" itemscope="" itemtype="http://schema.org/ListItem">
+                        <a itemprop="item" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/"><span itemprop="name">A Barbarian’s Adventure in a Fantasy World Chapter 1</span></a>
+                        <meta itemprop="position" content="3">
+                    </span>
+                            </div>
+        </div>
+    			
+			<div class="entry-content entry-content-single maincontent" itemprop="description">
+				<div class="chdesc">
+					<p>
+					Read the latest manga <b> A Barbarian’s Adventure in a Fantasy World Chapter 1 </b> at <b> Thunderscans EN </b>. Manga <b> A Barbarian’s Adventure in a Fantasy World </b> is always updated at <b> Thunderscans EN </b>. Dont forget to read the other manga updates. A list of manga collections <b> Thunderscans EN </b> is in the Manga List menu.					</p>
+				</div>
+				
+				<div class="chnav ctop nomirror">
+					<span class="selector slc l">        <div class="nvx">
+            <select name="chapter" id="chapter" onchange="this.options[this.selectedIndex].value&&window.location.assign(this.options[this.selectedIndex].value)" aria-label="select chapter">
+                <option value="">Select Chapter</option>
+            </select>
+
+        </div>
+    </span>
+					<span class="navrig">
+																	<span class="selector readingmode l">
+							<select name="readingmode" id="readingmode">
+								<option value="full" selected="selected">Full Page</option>
+								<option value="single">Single Page</option>
+							</select>
+						</span>
+					</span>
+										<span class="navlef">
+						<span class="npv r">    <div class="nextprev">
+        <a class="ch-prev-btn" href="#/prev/" rel="prev">
+            <i class="fas fa-angle-left"></i> Prev        </a>
+        <a class="ch-next-btn" href="#/next/" rel="next">
+            Next <i class="fas fa-angle-right"></i>
+        </a>
+    </div>
+</span>
+						<span class="npv r">
+								<div class="nextprev">
+																			<a class="ch-report-btn disabled" href="#" >Report Chapter</a>
+																		
+								</div>
+						</span>
+						<span class="amob nodlx">
+							<span class="selector pagedsel r">
+								<select name="select-paged" class="ts-select-paged" id="select-paged">
+									<option value="1">?/?</option>
+								</select>
+							</span>
+						</span>
+											</span>
+				</div>
+				
+								
+				<div id="readerarea"></div>
+				<div id="readerarea-loading" style="text-align: center;">
+					<img src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/img/readerarea.svg" />
+				</div>
+								
+				<div class="chnav cbot">
+					<span class="selector slc l">        <div class="nvx">
+            <select name="chapter" id="chapter" onchange="this.options[this.selectedIndex].value&&window.location.assign(this.options[this.selectedIndex].value)" aria-label="select chapter">
+                <option value="">Select Chapter</option>
+            </select>
+
+        </div>
+    </span>
+					<span class="amob">
+						<span class="npv r">    <div class="nextprev">
+        <a class="ch-prev-btn" href="#/prev/" rel="prev">
+            <i class="fas fa-angle-left"></i> Prev        </a>
+        <a class="ch-next-btn" href="#/next/" rel="next">
+            Next <i class="fas fa-angle-right"></i>
+        </a>
+    </div>
+</span>
+						<span class="npv r">
+								<div class="nextprev">
+																			<a class="ch-report-btn disabled" href="#" >Report Chapter</a>
+																		
+								</div>
+						</span>
+
+						<span class="selector pagedsel r">
+							<select name="select-paged" class="ts-select-paged" id="select-paged">
+								<option value="">?/?</option>
+							</select>
+						</span>
+					</span>
+				</div>
+				
+						</div>	
+			
+			<div class="chaptertags">
+			<p>Tags: read manga A Barbarian’s Adventure in a Fantasy World Chapter 1, comic A Barbarian’s Adventure in a Fantasy World Chapter 1, read A Barbarian’s Adventure in a Fantasy World Chapter 1 online, A Barbarian’s Adventure in a Fantasy World Chapter 1 chapter, A Barbarian’s Adventure in a Fantasy World Chapter 1 chapter, A Barbarian’s Adventure in a Fantasy World Chapter 1 high quality, A Barbarian’s Adventure in a Fantasy World Chapter 1 manga scan, 
+			<time class="entry-date" datetime="2025-07-31GMT+000014:22:35+0000" itemprop="datePublished" pubdate>July 31, 2025</time>, <span itemprop="author">jinmowu</span></p>
+		</div>
+		</article>	
+		
+						<div class="bixbox">
+					<div class="releases"><h2><span>Related Series</span></h2></div>
+					<div class="listupd a5">
+						<div class="bs">
+	<div class="bsx">
+		
+		<a href="https://en-thunderscans.com/comics/with-a-no-cooldown-cheat-i-can-transform-into-an-undead-calamity/" title="With a No-Cooldown Cheat, I Can Transform into an Undead Calamity!">
+		<div class="limit">
+			<div class="ply"></div>
+<!-- 			 -->
+<!-- 			 -->
+			<!-- 			 -->
+<!-- 			<span class="type Manhua"></span> -->
+        
+			
+			<span class="colored"><i class="fas fa-palette"></i> Color</span>									<img src="https://en-thunderscans.com/wp-content/uploads/2026/08/2026-08-13-11-18-47-1786663127836-225x300.jpeg" class="ts-post-image wp-post-image attachment-medium size-medium" loading="lazy" width="225" height="300"/>		</div>
+		<div class="bigor">
+			<div class="adds">
+<!-- 				<div class="epxs">Chapter 14</div> -->
+								<div class="rt">
+						<div class="rating">
+							<div class="rating-prc">
+								<div class="rtp">
+									<div class="rtb"><span style="width:85%"></span></div>
+								</div>
+							</div>
+							<div class="numscore">8.5</div>
+						</div>
+				</div>
+							</div>
+			<div class="tt">
+				With a No-Cooldown Cheat, I Can Transform into an Undead Calamity!			</div>
+			<div class="extra-info">
+				<div class="mobile-rt">
+										<div class="numscore">8.5</div>
+					<i class="fas fa-star"></i>
+									</div>
+				
+					<div class="imptdt">
+
+						<div class="status">
+
+							<span class="status-dot Ongoing"></span> <i>Ongoing</i>
+						</div>
+					</div>	
+							</div>
+				
+		</div>
+		</a>
+	</div>
+</div><div class="bs">
+	<div class="bsx">
+		
+		<a href="https://en-thunderscans.com/comics/tomb-raider-king-end-line/" title="Tomb Raider King End Line">
+		<div class="limit">
+			<div class="ply"></div>
+<!-- 			 -->
+<!-- 			 -->
+			<!-- 			 -->
+<!-- 			<span class="type Manhwa"></span> -->
+        
+			
+			<span class="colored"><i class="fas fa-palette"></i> Color</span>									<img src="https://en-thunderscans.com/wp-content/uploads/2026/06/2026-06-25-09-47-26-1782424046400-196x300.jpg" class="ts-post-image wp-post-image attachment-medium size-medium" loading="lazy" width="196" height="300"/>		</div>
+		<div class="bigor">
+			<div class="adds">
+<!-- 				<div class="epxs">Chapter 29</div> -->
+								<div class="rt">
+						<div class="rating">
+							<div class="rating-prc">
+								<div class="rtp">
+									<div class="rtb"><span style="width:95%"></span></div>
+								</div>
+							</div>
+							<div class="numscore">9.5</div>
+						</div>
+				</div>
+							</div>
+			<div class="tt">
+				Tomb Raider King End Line			</div>
+			<div class="extra-info">
+				<div class="mobile-rt">
+										<div class="numscore">9.5</div>
+					<i class="fas fa-star"></i>
+									</div>
+				
+					<div class="imptdt">
+
+						<div class="status">
+
+							<span class="status-dot Ongoing"></span> <i>Ongoing</i>
+						</div>
+					</div>	
+							</div>
+				
+		</div>
+		</a>
+	</div>
+</div><div class="bs">
+	<div class="bsx">
+		
+		<a href="https://en-thunderscans.com/comics/the-expelled-middle-aged-blacksmith-becomes-a-legendary-famous-craftsman-for-some-reason-the-kids-who-he-once-made-some-toy-weapons-for-have-all-become-heroes/" title="The Expelled Middle-Aged Blacksmith, Becomes a Legendary Famous Craftsman for Some Reason: The Kids Who He Once Made Some Toy Weapons for Have All Become Heroes">
+		<div class="limit">
+			<div class="ply"></div>
+<!-- 			 -->
+<!-- 			 -->
+			<!-- 			 -->
+<!-- 			<span class="type Manga"></span> -->
+        
+			
+												<img src="https://en-thunderscans.com/wp-content/uploads/2026/09/2026-09-04-02-49-28-1788533368840-211x300.jpg" class="ts-post-image wp-post-image attachment-medium size-medium" loading="lazy" width="211" height="300"/>		</div>
+		<div class="bigor">
+			<div class="adds">
+<!-- 				<div class="epxs">Chapter 27.2</div> -->
+								<div class="rt">
+						<div class="rating">
+							<div class="rating-prc">
+								<div class="rtp">
+									<div class="rtb"><span style="width:88%"></span></div>
+								</div>
+							</div>
+							<div class="numscore">8.8</div>
+						</div>
+				</div>
+							</div>
+			<div class="tt">
+				The Expelled Middle-Aged Blacksmith, Becomes a Legendary Famous Craftsman for Some Reason: The Kids Who He Once Made Some Toy Weapons for Have All Become Heroes			</div>
+			<div class="extra-info">
+				<div class="mobile-rt">
+										<div class="numscore">8.8</div>
+					<i class="fas fa-star"></i>
+									</div>
+				
+					<div class="imptdt">
+
+						<div class="status">
+
+							<span class="status-dot Ongoing"></span> <i>Ongoing</i>
+						</div>
+					</div>	
+							</div>
+				
+		</div>
+		</a>
+	</div>
+</div><div class="bs">
+	<div class="bsx">
+		
+		<a href="https://en-thunderscans.com/comics/return-of-the-devourer/" title="Return of the Devourer">
+		<div class="limit">
+			<div class="ply"></div>
+<!-- 			 -->
+<!-- 			 -->
+			<!-- 			 -->
+<!-- 			<span class="type Manhua"></span> -->
+        
+			
+			<span class="colored"><i class="fas fa-palette"></i> Color</span>									<img src="https://en-thunderscans.com/wp-content/uploads/2025/12/2026-08-14-07-58-37-1786737517832-200x300.jpg" class="ts-post-image wp-post-image attachment-medium size-medium" loading="lazy" width="200" height="300"/>		</div>
+		<div class="bigor">
+			<div class="adds">
+<!-- 				<div class="epxs">Chapter 52</div> -->
+								<div class="rt">
+						<div class="rating">
+							<div class="rating-prc">
+								<div class="rtp">
+									<div class="rtb"><span style="width:100%"></span></div>
+								</div>
+							</div>
+							<div class="numscore">10</div>
+						</div>
+				</div>
+							</div>
+			<div class="tt">
+				Return of the Devourer			</div>
+			<div class="extra-info">
+				<div class="mobile-rt">
+										<div class="numscore">10</div>
+					<i class="fas fa-star"></i>
+									</div>
+				
+					<div class="imptdt">
+
+						<div class="status">
+
+							<span class="status-dot Ongoing"></span> <i>Ongoing</i>
+						</div>
+					</div>	
+							</div>
+				
+		</div>
+		</a>
+	</div>
+</div><div class="bs">
+	<div class="bsx">
+		
+		<a href="https://en-thunderscans.com/comics/the-comeback-of-the-demon-king-who-formed-a-demons-guild-after-being-vanquished-by-the-hero/" title="The Comeback Of The Demon King Who Formed A Demon&#8217;s Guild After Being Vanquished By The Hero">
+		<div class="limit">
+			<div class="ply"></div>
+<!-- 			 -->
+<!-- 			 -->
+			<!-- 			 -->
+<!-- 			<span class="type Manga"></span> -->
+        
+			
+												<img src="https://en-thunderscans.com/wp-content/uploads/2026/08/2026-08-19-11-04-26-1787137466456-211x300.jpg" class="ts-post-image wp-post-image attachment-medium size-medium" loading="lazy" width="211" height="300"/>		</div>
+		<div class="bigor">
+			<div class="adds">
+<!-- 				<div class="epxs">Chapter 80</div> -->
+								<div class="rt">
+						<div class="rating">
+							<div class="rating-prc">
+								<div class="rtp">
+									<div class="rtb"><span style="width:93%"></span></div>
+								</div>
+							</div>
+							<div class="numscore">9.3</div>
+						</div>
+				</div>
+							</div>
+			<div class="tt">
+				The Comeback Of The Demon King Who Formed A Demon&#8217;s Guild After Being Vanquished By The Hero			</div>
+			<div class="extra-info">
+				<div class="mobile-rt">
+										<div class="numscore">9.3</div>
+					<i class="fas fa-star"></i>
+									</div>
+				
+					<div class="imptdt">
+
+						<div class="status">
+
+							<span class="status-dot Ongoing"></span> <i>Ongoing</i>
+						</div>
+					</div>	
+							</div>
+				
+		</div>
+		</a>
+	</div>
+</div><div class="bs">
+	<div class="bsx">
+		
+		<a href="https://en-thunderscans.com/comics/the-eldest-son-of-the-marquis-house-is-a-martial-artist/" title="The Eldest Son of the Marquis House is a Martial Artist">
+		<div class="limit">
+			<div class="ply"></div>
+<!-- 			 -->
+<!-- 			 -->
+			<!-- 			 -->
+<!-- 			<span class="type Manhwa"></span> -->
+        
+			
+			<span class="colored"><i class="fas fa-palette"></i> Color</span>									<img src="https://en-thunderscans.com/wp-content/uploads/2025/08/2025-08-26-04-09-07-1756224547702-212x300.jpg" class="ts-post-image wp-post-image attachment-medium size-medium" loading="lazy" width="212" height="300"/>		</div>
+		<div class="bigor">
+			<div class="adds">
+<!-- 				<div class="epxs">Chapter 40</div> -->
+								<div class="rt">
+						<div class="rating">
+							<div class="rating-prc">
+								<div class="rtp">
+									<div class="rtb"><span style="width:85%"></span></div>
+								</div>
+							</div>
+							<div class="numscore">8.5</div>
+						</div>
+				</div>
+							</div>
+			<div class="tt">
+				The Eldest Son of the Marquis House is a Martial Artist			</div>
+			<div class="extra-info">
+				<div class="mobile-rt">
+										<div class="numscore">8.5</div>
+					<i class="fas fa-star"></i>
+									</div>
+				
+					<div class="imptdt">
+
+						<div class="status">
+
+							<span class="status-dot Ongoing"></span> <i>Ongoing</i>
+						</div>
+					</div>	
+							</div>
+				
+		</div>
+		</a>
+	</div>
+</div><div class="bs">
+	<div class="bsx">
+		
+		<a href="https://en-thunderscans.com/comics/other-world-warrior/" title="Other World Warrior">
+		<div class="limit">
+			<div class="ply"></div>
+<!-- 			 -->
+<!-- 			 -->
+			<!-- 			 -->
+<!-- 			<span class="type Manhwa"></span> -->
+        
+			
+			<span class="colored"><i class="fas fa-palette"></i> Color</span>						<span class="hotx"><i class="fab fa-hotjar"></i></span>			<img src="https://en-thunderscans.com/wp-content/uploads/2026/01/2026-01-22-06-29-51-1769106591858-210x300.webp" class="ts-post-image wp-post-image attachment-medium size-medium" loading="lazy" width="210" height="300"/>		</div>
+		<div class="bigor">
+			<div class="adds">
+<!-- 				<div class="epxs">Chapter 314</div> -->
+								<div class="rt">
+						<div class="rating">
+							<div class="rating-prc">
+								<div class="rtp">
+									<div class="rtb"><span style="width:85%"></span></div>
+								</div>
+							</div>
+							<div class="numscore">8.5</div>
+						</div>
+				</div>
+							</div>
+			<div class="tt">
+				Other World Warrior			</div>
+			<div class="extra-info">
+				<div class="mobile-rt">
+										<div class="numscore">8.5</div>
+					<i class="fas fa-star"></i>
+									</div>
+				
+					<div class="imptdt">
+
+						<div class="status">
+
+							<span class="status-dot Ongoing"></span> <i>Ongoing</i>
+						</div>
+					</div>	
+							</div>
+				
+		</div>
+		</a>
+	</div>
+</div>					</div>
+				</div>
+							
+		<div id="comments" class="bixbox comments-area">
+			<div class="releases"><h2><span>Comment</span></h2></div>
+			<div class="cmt commentx">
+														<div id="comments" class="mcs-comments-host bixbox comments-area">
+	<div class="cmt commentx mcs-comments-host__inner">
+				<section class="mcs-comments mcs-comments--unified mcs-comments--full mcs-comments--asura" style="--mcs-accent:#913FE2;--mcs-accent-hover:#7B35C1;--mcs-pinned-tint:rgba(145,63,226,0.08);--mcs-pinned-border:rgba(145,63,226,0.22);" data-post-id="84199" data-mcs-sort="newest" data-mcs-max-depth="3" data-mcs-comment-max="2000" data-mcs-requires-login="1" data-mcs-login-url="https://en-thunderscans.com/login/?redirect_to=https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/">
+			<div class="mcs-comments__surface mcs-comments__surface--asura-stack">
+								<div class="mcs-comments__reactions-band">
+							<div class="mcs-series-reactions mcs-series-reactions--integrated" data-post-id="84199" data-login-url="https://en-thunderscans.com/login/?redirect_to=https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/" role="group" aria-label="Series reactions">
+			<h3 class="mcs-series-reactions__title">What did you think of this series?</h3>
+			<p class="mcs-series-reactions__subtitle">1 reaction</p>
+			<div class="mcs-series-reactions__grid">
+														<button class="mcs-reaction-item" type="button" data-reaction="upvote" aria-pressed="false">
+						<span class="mcs-reaction-icon-wrap mcs-reaction-icon-wrap--emoji-only">
+															<span class="mcs-reaction-emoji" aria-hidden="true">👍</span>
+													</span>
+						<span class="mcs-reaction-count">1</span>
+						<span class="mcs-reaction-label">Upvote</span>
+					</button>
+														<button class="mcs-reaction-item" type="button" data-reaction="funny" aria-pressed="false">
+						<span class="mcs-reaction-icon-wrap mcs-reaction-icon-wrap--emoji-only">
+															<span class="mcs-reaction-emoji" aria-hidden="true">😆</span>
+													</span>
+						<span class="mcs-reaction-count">0</span>
+						<span class="mcs-reaction-label">Funny</span>
+					</button>
+														<button class="mcs-reaction-item" type="button" data-reaction="love" aria-pressed="false">
+						<span class="mcs-reaction-icon-wrap mcs-reaction-icon-wrap--emoji-only">
+															<span class="mcs-reaction-emoji" aria-hidden="true">❤️</span>
+													</span>
+						<span class="mcs-reaction-count">0</span>
+						<span class="mcs-reaction-label">Love</span>
+					</button>
+														<button class="mcs-reaction-item" type="button" data-reaction="surprised" aria-pressed="false">
+						<span class="mcs-reaction-icon-wrap mcs-reaction-icon-wrap--emoji-only">
+															<span class="mcs-reaction-emoji" aria-hidden="true">😲</span>
+													</span>
+						<span class="mcs-reaction-count">0</span>
+						<span class="mcs-reaction-label">Surprised</span>
+					</button>
+														<button class="mcs-reaction-item" type="button" data-reaction="angry" aria-pressed="false">
+						<span class="mcs-reaction-icon-wrap mcs-reaction-icon-wrap--emoji-only">
+															<span class="mcs-reaction-emoji" aria-hidden="true">😡</span>
+													</span>
+						<span class="mcs-reaction-count">0</span>
+						<span class="mcs-reaction-label">Angry</span>
+					</button>
+														<button class="mcs-reaction-item" type="button" data-reaction="sad" aria-pressed="false">
+						<span class="mcs-reaction-icon-wrap mcs-reaction-icon-wrap--emoji-only">
+															<span class="mcs-reaction-emoji" aria-hidden="true">😢</span>
+													</span>
+						<span class="mcs-reaction-count">0</span>
+						<span class="mcs-reaction-label">Sad</span>
+					</button>
+							</div>
+		</div>
+						</div>
+								<div class="mcs-comments__main-band">
+
+				<div class="mcs-comments-nav">
+					<div class="mcs-comments-nav__count" aria-live="polite">6 Comments</div>
+					<div class="mcs-comments-nav__controls">
+						<div class="mcs-sort-tabs" role="tablist" aria-label="Sort comments">
+							<button type="button" class="mcs-sort-pill" role="tab" aria-selected="false" data-mcs-sort="best">Best</button>
+							<button type="button" class="mcs-sort-pill is-active" role="tab" aria-selected="true" data-mcs-sort="newest">Newest</button>
+							<button type="button" class="mcs-sort-pill" role="tab" aria-selected="false" data-mcs-sort="oldest">Oldest</button>
+						</div>
+						<button type="button" class="mcs-comments-refresh mcs-comments-refresh--minimal" aria-label="Refresh comments">
+							<svg class="mcs-comments-refresh__svg" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+								<path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0020 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 004 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/>
+							</svg>
+						</button>
+					</div>
+				</div>
+
+									<div class="mcs-login-cta">
+						<div class="mcs-login-cta__icon" aria-hidden="true">
+							<svg class="mcs-login-cta__svg" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+								<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="currentColor" />
+							</svg>
+						</div>
+						<h3 class="mcs-login-cta__title">Join the discussion</h3>
+						<p class="mcs-login-cta__text">Log in to comment and interact with other readers.</p>
+						<a class="mcs-login-cta__button" href="https://en-thunderscans.com/login/?redirect_to=https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/">Log In to Comment</a>
+					</div>
+				
+				<div class="mcs-comments__thread">
+								<div class="mcs-comments-list-wrap" data-mcs-sort="newest" data-mcs-root-limit="10" data-mcs-next-root-offset="5" data-mcs-next-root-last-id="2710" data-mcs-has-more="0" data-mcs-total-roots="5">
+									<ol class="mcs-comments-list">		<li class="mcs-comment" id="mcs-comment-42543" data-comment-id="42543" data-parent-id="0" data-post-id="84199" data-mcs-depth="1" data-comment-status="approved" data-is-pinned="0">
+			<article class="mcs-comment-body mcs-comment-body--thread">
+				<div class="mcs-comment-avatar-col">
+											<span class="mcs-comment-avatar"><img class="mcs-comment-avatar__img" src="https://secure.gravatar.com/avatar/1a7b7cc7febb6ec3ea73fc2d4172071d8888102a13a0afc0da035693675ad77a?s=160&#038;d=https%3A%2F%2Fen-thunderscans.com%2Fwp-content%2Fuploads%2F2023%2F12%2Fcropped-EN-TH-WEB-180x180.png&#038;r=g" alt="oscblade avatar" width="80" height="80" loading="lazy" decoding="async" /></span>									</div>
+				<div class="mcs-comment-main-col">
+					<header class="mcs-comment-meta">
+						<div class="mcs-comment-meta__row">
+							<div class="mcs-comment-meta__identity">
+								<span class="mcs-comment-author">oscblade</span>
+								<span class="mcs-comment-badges"></span>							</div>
+															<time class="mcs-comment-date" datetime="2026-08-20T16:32:14+00:00">August 20, 2026 4:32 PM</time>
+													</div>
+					</header>
+					<div class="mcs-comment-content">
+						<div class="mcs-comment-content-view"><p>Would have been cool if he was taller then them all</p>
+</div>
+						<div class="mcs-comment-content-edit" hidden>
+							<label class="screen-reader-text" for="mcs-edit-42543">Edit comment</label>
+							<textarea id="mcs-edit-42543" class="mcs-moderate-edit-text" rows="4">Would have been cool if he was taller then them all</textarea>
+							<p class="mcs-moderate-edit-actions">
+								<button type="button" class="mcs-moderate-save">Save</button>
+								<button type="button" class="mcs-moderate-cancel-edit">Cancel</button>
+							</p>
+						</div>
+					</div>
+										<div class="mcs-comment-footer">
+						<div class="mcs-comment-footer__left">
+									<div class="mcs-comment-votes" data-comment-id="42543" data-post-id="84199">
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--up" data-mcs-vote="upvote" aria-pressed="false" aria-label="Upvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 19V6M7 11l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--down" data-mcs-vote="downvote" aria-pressed="false" aria-label="Downvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 5v13M7 13l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+		</div>
+																								<a class="mcs-comment-view" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/#mcs-comment-42543" title="View comment" aria-label="View comment">View</a>
+													</div>
+						<button type="button" class="mcs-report-open" data-comment-id="42543" data-post-id="84199">Report</button>
+					</div>
+				</div>
+			</article>
+			<div class="mcs-comment-reply-anchor" data-mcs-reply-anchor aria-hidden="true"></div>
+					</li>
+				<li class="mcs-comment" id="mcs-comment-11740" data-comment-id="11740" data-parent-id="0" data-post-id="84199" data-mcs-depth="1" data-comment-status="approved" data-is-pinned="0">
+			<article class="mcs-comment-body mcs-comment-body--thread">
+				<div class="mcs-comment-avatar-col">
+											<span class="mcs-comment-avatar"><img class="mcs-comment-avatar__img" src="https://secure.gravatar.com/avatar/668580e68b0c65412474ff9a7ecabfa5e81c631ce95c0e7e296a34ac90adee73?s=160&#038;d=https%3A%2F%2Fen-thunderscans.com%2Fwp-content%2Fuploads%2F2023%2F12%2Fcropped-EN-TH-WEB-180x180.png&#038;r=g" alt="Silver1432 avatar" width="80" height="80" loading="lazy" decoding="async" /></span>									</div>
+				<div class="mcs-comment-main-col">
+					<header class="mcs-comment-meta">
+						<div class="mcs-comment-meta__row">
+							<div class="mcs-comment-meta__identity">
+								<span class="mcs-comment-author">Silver1432</span>
+								<span class="mcs-comment-badges"></span>							</div>
+															<time class="mcs-comment-date" datetime="2025-12-28T11:44:37+00:00">December 28, 2025 11:44 AM</time>
+													</div>
+					</header>
+					<div class="mcs-comment-content">
+						<div class="mcs-comment-content-view"><p>So umm… did the barbarian girl die too, or is it just unclear?</p>
+</div>
+						<div class="mcs-comment-content-edit" hidden>
+							<label class="screen-reader-text" for="mcs-edit-11740">Edit comment</label>
+							<textarea id="mcs-edit-11740" class="mcs-moderate-edit-text" rows="4">So umm… did the barbarian girl die too, or is it just unclear?</textarea>
+							<p class="mcs-moderate-edit-actions">
+								<button type="button" class="mcs-moderate-save">Save</button>
+								<button type="button" class="mcs-moderate-cancel-edit">Cancel</button>
+							</p>
+						</div>
+					</div>
+										<div class="mcs-comment-footer">
+						<div class="mcs-comment-footer__left">
+									<div class="mcs-comment-votes" data-comment-id="11740" data-post-id="84199">
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--up" data-mcs-vote="upvote" aria-pressed="false" aria-label="Upvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 19V6M7 11l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--down" data-mcs-vote="downvote" aria-pressed="false" aria-label="Downvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 5v13M7 13l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+		</div>
+																								<a class="mcs-comment-view" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/#mcs-comment-11740" title="View comment" aria-label="View comment">View</a>
+													</div>
+						<button type="button" class="mcs-report-open" data-comment-id="11740" data-post-id="84199">Report</button>
+					</div>
+				</div>
+			</article>
+			<div class="mcs-comment-reply-anchor" data-mcs-reply-anchor aria-hidden="true"></div>
+					</li>
+				<li class="mcs-comment" id="mcs-comment-8077" data-comment-id="8077" data-parent-id="0" data-post-id="84199" data-mcs-depth="1" data-comment-status="approved" data-is-pinned="0">
+			<article class="mcs-comment-body mcs-comment-body--thread">
+				<div class="mcs-comment-avatar-col">
+											<span class="mcs-comment-avatar"><img class="mcs-comment-avatar__img" src="https://secure.gravatar.com/avatar/927240b6e94becfe8365431d4f1ad1ceeadd8cbef05fc7ec68b4f343de2583d3?s=160&#038;d=https%3A%2F%2Fen-thunderscans.com%2Fwp-content%2Fuploads%2F2023%2F12%2Fcropped-EN-TH-WEB-180x180.png&#038;r=g" alt="walmartbaglover avatar" width="80" height="80" loading="lazy" decoding="async" /></span>									</div>
+				<div class="mcs-comment-main-col">
+					<header class="mcs-comment-meta">
+						<div class="mcs-comment-meta__row">
+							<div class="mcs-comment-meta__identity">
+								<span class="mcs-comment-author">walmartbaglover</span>
+								<span class="mcs-comment-badges"></span>							</div>
+															<time class="mcs-comment-date" datetime="2025-11-12T13:21:24+00:00">November 12, 2025 1:21 PM</time>
+													</div>
+					</header>
+					<div class="mcs-comment-content">
+						<div class="mcs-comment-content-view"><p>My second favorite web novel I've read... Thank God they didn't botch the characters and they ACTUALLY look really pretty!! Thank you studio please NEVER change the artist</p>
+</div>
+						<div class="mcs-comment-content-edit" hidden>
+							<label class="screen-reader-text" for="mcs-edit-8077">Edit comment</label>
+							<textarea id="mcs-edit-8077" class="mcs-moderate-edit-text" rows="4">My second favorite web novel I&#039;ve read... Thank God they didn&#039;t botch the characters and they ACTUALLY look really pretty!! Thank you studio please NEVER change the artist</textarea>
+							<p class="mcs-moderate-edit-actions">
+								<button type="button" class="mcs-moderate-save">Save</button>
+								<button type="button" class="mcs-moderate-cancel-edit">Cancel</button>
+							</p>
+						</div>
+					</div>
+										<div class="mcs-comment-footer">
+						<div class="mcs-comment-footer__left">
+									<div class="mcs-comment-votes" data-comment-id="8077" data-post-id="84199">
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--up" data-mcs-vote="upvote" aria-pressed="false" aria-label="Upvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 19V6M7 11l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--down" data-mcs-vote="downvote" aria-pressed="false" aria-label="Downvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 5v13M7 13l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+		</div>
+																								<a class="mcs-comment-view" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/#mcs-comment-8077" title="View comment" aria-label="View comment">View</a>
+													</div>
+						<button type="button" class="mcs-report-open" data-comment-id="8077" data-post-id="84199">Report</button>
+					</div>
+				</div>
+			</article>
+			<div class="mcs-comment-reply-anchor" data-mcs-reply-anchor aria-hidden="true"></div>
+											<button type="button" class="mcs-replies-toggle" id="mcs-replies-toggle-8077" aria-expanded="true" aria-controls="mcs-replies-br-8077" data-mcs-reply-count="1" data-mcs-label-hide="Hide 1 replies" data-mcs-label-show="Show 1 replies">
+					<span class="mcs-replies-toggle__bubble" aria-hidden="true">
+						<svg class="mcs-replies-toggle__bubble-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+							<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="currentColor" opacity="0.9"/>
+						</svg>
+					</span>
+					<span class="mcs-replies-toggle__chev mcs-replies-toggle__chev--open" aria-hidden="true"></span>
+					<span class="mcs-replies-toggle__text">Hide 1 replies</span>
+				</button>
+								<div class="mcs-replies-branch" id="mcs-replies-br-8077">
+					<ol class="mcs-comments-list mcs-comments-list--nested" data-mcs-list-depth="2">		<li class="mcs-comment" id="mcs-comment-14264" data-comment-id="14264" data-parent-id="8077" data-post-id="84199" data-mcs-depth="2" data-comment-status="approved" data-is-pinned="0">
+			<article class="mcs-comment-body mcs-comment-body--thread">
+				<div class="mcs-comment-avatar-col">
+																	<span class="mcs-comment-avatar mcs-comment-avatar--guest" aria-hidden="true"><span class="mcs-comment-avatar__fallback">C</span></span>
+									</div>
+				<div class="mcs-comment-main-col">
+					<header class="mcs-comment-meta">
+						<div class="mcs-comment-meta__row">
+							<div class="mcs-comment-meta__identity">
+								<span class="mcs-comment-author">Charan</span>
+								<span class="mcs-comment-badges"></span>							</div>
+															<time class="mcs-comment-date" datetime="2026-01-18T07:59:48+00:00">January 18, 2026 7:59 AM</time>
+													</div>
+					</header>
+					<div class="mcs-comment-content">
+						<div class="mcs-comment-content-view"><p>What is your first then</p>
+</div>
+						<div class="mcs-comment-content-edit" hidden>
+							<label class="screen-reader-text" for="mcs-edit-14264">Edit comment</label>
+							<textarea id="mcs-edit-14264" class="mcs-moderate-edit-text" rows="4">What is your first then</textarea>
+							<p class="mcs-moderate-edit-actions">
+								<button type="button" class="mcs-moderate-save">Save</button>
+								<button type="button" class="mcs-moderate-cancel-edit">Cancel</button>
+							</p>
+						</div>
+					</div>
+										<div class="mcs-comment-footer">
+						<div class="mcs-comment-footer__left">
+									<div class="mcs-comment-votes" data-comment-id="14264" data-post-id="84199">
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--up" data-mcs-vote="upvote" aria-pressed="false" aria-label="Upvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 19V6M7 11l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--down" data-mcs-vote="downvote" aria-pressed="false" aria-label="Downvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 5v13M7 13l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+		</div>
+																								<a class="mcs-comment-view" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/#mcs-comment-14264" title="View comment" aria-label="View comment">View</a>
+													</div>
+						<button type="button" class="mcs-report-open" data-comment-id="14264" data-post-id="84199">Report</button>
+					</div>
+				</div>
+			</article>
+			<div class="mcs-comment-reply-anchor" data-mcs-reply-anchor aria-hidden="true"></div>
+					</li>
+		</ol>									</div>
+					</li>
+				<li class="mcs-comment" id="mcs-comment-3272" data-comment-id="3272" data-parent-id="0" data-post-id="84199" data-mcs-depth="1" data-comment-status="approved" data-is-pinned="0">
+			<article class="mcs-comment-body mcs-comment-body--thread">
+				<div class="mcs-comment-avatar-col">
+											<span class="mcs-comment-avatar"><img class="mcs-comment-avatar__img" src="https://secure.gravatar.com/avatar/5bcec9a762fd01822f1a30cde89a8522d545cd74c7498b21b3cf0d93e38871f5?s=160&#038;d=https%3A%2F%2Fen-thunderscans.com%2Fwp-content%2Fuploads%2F2023%2F12%2Fcropped-EN-TH-WEB-180x180.png&#038;r=g" alt="InfiniteParadox avatar" width="80" height="80" loading="lazy" decoding="async" /></span>									</div>
+				<div class="mcs-comment-main-col">
+					<header class="mcs-comment-meta">
+						<div class="mcs-comment-meta__row">
+							<div class="mcs-comment-meta__identity">
+								<span class="mcs-comment-author">InfiniteParadox</span>
+								<span class="mcs-comment-badges"></span>							</div>
+															<time class="mcs-comment-date" datetime="2025-08-16T19:27:52+00:00">August 16, 2025 7:27 PM</time>
+													</div>
+					</header>
+					<div class="mcs-comment-content">
+						<div class="mcs-comment-content-view"><p>Bro is max str build and endurance.<br />
+If someone was walking shirtless 7 feet tall with a six pack in what's way below freezing temps i'd be scared too.</p>
+</div>
+						<div class="mcs-comment-content-edit" hidden>
+							<label class="screen-reader-text" for="mcs-edit-3272">Edit comment</label>
+							<textarea id="mcs-edit-3272" class="mcs-moderate-edit-text" rows="4">Bro is max str build and endurance. 
+If someone was walking shirtless 7 feet tall with a six pack in what&#039;s way below freezing temps i&#039;d be scared too.</textarea>
+							<p class="mcs-moderate-edit-actions">
+								<button type="button" class="mcs-moderate-save">Save</button>
+								<button type="button" class="mcs-moderate-cancel-edit">Cancel</button>
+							</p>
+						</div>
+					</div>
+										<div class="mcs-comment-footer">
+						<div class="mcs-comment-footer__left">
+									<div class="mcs-comment-votes" data-comment-id="3272" data-post-id="84199">
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--up" data-mcs-vote="upvote" aria-pressed="false" aria-label="Upvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 19V6M7 11l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--down" data-mcs-vote="downvote" aria-pressed="false" aria-label="Downvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 5v13M7 13l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+		</div>
+																								<a class="mcs-comment-view" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/#mcs-comment-3272" title="View comment" aria-label="View comment">View</a>
+													</div>
+						<button type="button" class="mcs-report-open" data-comment-id="3272" data-post-id="84199">Report</button>
+					</div>
+				</div>
+			</article>
+			<div class="mcs-comment-reply-anchor" data-mcs-reply-anchor aria-hidden="true"></div>
+					</li>
+				<li class="mcs-comment" id="mcs-comment-2710" data-comment-id="2710" data-parent-id="0" data-post-id="84199" data-mcs-depth="1" data-comment-status="approved" data-is-pinned="0">
+			<article class="mcs-comment-body mcs-comment-body--thread">
+				<div class="mcs-comment-avatar-col">
+											<span class="mcs-comment-avatar"><img class="mcs-comment-avatar__img" src="https://secure.gravatar.com/avatar/52bc7b11b50169885f1a661c18818317c5b4822497ac96be30dfcf62b9a8878c?s=160&#038;d=https%3A%2F%2Fen-thunderscans.com%2Fwp-content%2Fuploads%2F2023%2F12%2Fcropped-EN-TH-WEB-180x180.png&#038;r=g" alt="kiezjon2022 avatar" width="80" height="80" loading="lazy" decoding="async" /></span>									</div>
+				<div class="mcs-comment-main-col">
+					<header class="mcs-comment-meta">
+						<div class="mcs-comment-meta__row">
+							<div class="mcs-comment-meta__identity">
+								<span class="mcs-comment-author">kiezjon2022</span>
+								<span class="mcs-comment-badges"></span>							</div>
+															<time class="mcs-comment-date" datetime="2025-08-01T09:13:34+00:00">August 1, 2025 9:13 AM</time>
+													</div>
+					</header>
+					<div class="mcs-comment-content">
+						<div class="mcs-comment-content-view"><p>That introduction was tuff</p>
+</div>
+						<div class="mcs-comment-content-edit" hidden>
+							<label class="screen-reader-text" for="mcs-edit-2710">Edit comment</label>
+							<textarea id="mcs-edit-2710" class="mcs-moderate-edit-text" rows="4">That introduction was tuff</textarea>
+							<p class="mcs-moderate-edit-actions">
+								<button type="button" class="mcs-moderate-save">Save</button>
+								<button type="button" class="mcs-moderate-cancel-edit">Cancel</button>
+							</p>
+						</div>
+					</div>
+										<div class="mcs-comment-footer">
+						<div class="mcs-comment-footer__left">
+									<div class="mcs-comment-votes" data-comment-id="2710" data-post-id="84199">
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--up" data-mcs-vote="upvote" aria-pressed="false" aria-label="Upvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 19V6M7 11l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+			<button type="button" class="mcs-comment-vote mcs-comment-vote--down" data-mcs-vote="downvote" aria-pressed="false" aria-label="Downvote">
+				<span class="mcs-comment-vote__icon" aria-hidden="true">
+					<svg class="mcs-comment-vote__svg" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+						<path d="M12 5v13M7 13l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</span>
+				<span class="mcs-comment-vote__count">0</span>
+			</button>
+		</div>
+																								<a class="mcs-comment-view" href="https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/#mcs-comment-2710" title="View comment" aria-label="View comment">View</a>
+													</div>
+						<button type="button" class="mcs-report-open" data-comment-id="2710" data-post-id="84199">Report</button>
+					</div>
+				</div>
+			</article>
+			<div class="mcs-comment-reply-anchor" data-mcs-reply-anchor aria-hidden="true"></div>
+					</li>
+		</ol>											</div>
+							</div>
+
+				</div>
+			</div>
+
+			<div class="mcs-report-panel" hidden>
+				<div class="mcs-report-panel__backdrop" tabindex="-1"></div>
+				<div class="mcs-report-panel__dialog" role="dialog" aria-modal="true" aria-labelledby="mcs-report-title-84199">
+					<h4 id="mcs-report-title-84199" class="mcs-report-panel__title">Report this comment</h4>
+					<label class="mcs-report-panel__label" for="mcs-report-category-84199">Reason</label>
+					<select id="mcs-report-category-84199" class="mcs-report-category mcs-input" required>
+						<option value="" disabled selected>Select a reason…</option>
+						<option value="spam">Spam</option><option value="harassment">Harassment</option><option value="hate_speech">Hate speech</option><option value="spoiler">Spoiler</option><option value="offensive">Offensive content</option><option value="other">Other</option>					</select>
+					<div class="mcs-report-other-wrap" hidden>
+						<label class="mcs-report-panel__label mcs-report-panel__label--details" for="mcs-report-details-84199">Details (optional)</label>
+						<textarea id="mcs-report-details-84199" class="mcs-report-details mcs-input" rows="3" maxlength="300"></textarea>
+					</div>
+					<input type="hidden" class="mcs-report-comment-id" value="" />
+					<p class="mcs-report-panel__actions">
+						<button type="button" class="mcs-report-submit mcs-submit">Submit report</button>
+						<button type="button" class="mcs-report-cancel">Cancel</button>
+					</p>
+				</div>
+			</div>
+		</section>
+			</div>
+</div>
+							</div>
+		</div>
+		
+	</div>
+</div>
+
+<script>ts_reader.run({"post_id":84199,"noimagehtml":"<center><h4>NO IMAGE YET<\/h4><\/center>","prevUrl":"","nextUrl":"https:\/\/en-thunderscans.com\/a-barbarians-adventure-in-a-fantasy-world-chapter-2\/","mode":"full","sources":[{"source":"Server 1","images":["https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/01.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/02.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/03.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/04.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/05.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/06.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/07.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/08.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/09.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/10.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/11.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/12.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/13.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/14.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/15.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/16.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/17.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/18.webp","https:\/\/en-thunderscans.com\/wp-content\/uploads\/manga\/ee94249f\/19.webp"]}],"lazyload":false,"defaultSource":"Server 1","lazyloadPlaceHolder":"https:\/\/en-thunderscans.com\/wp-content\/themes\/mangareader\/assets\/img\/readerarea.svg","progressBar":false,"contentmode":"advanced","protected":false,"is_novel":false,"unlock_token":null});</script>
+<script>
+	var post_id = 84172;
+	var chapter_id = 84199;
+
+	loadChList();
+	
+	jQuery( document ).ready(function() {jQuery.ajax({url : ajaxurl,type : 'post',data : {action : 'dynamic_view_ajax',post_id : post_id},success : function( response ) {}});});
+	jQuery(document).ready(function(){
+		HISTORY.push(84199, {"manga_ID":"84172","manga_title":"A Barbarian\u2019s Adventure in a Fantasy World","chapter_ID":84199,"chapter_title":"A Barbarian\u2019s Adventure in a Fantasy World Chapter 1","chapter_permalink":"https:\/\/en-thunderscans.com\/a-barbarians-adventure-in-a-fantasy-world-chapter-1\/"});
+	});
+</script>
+
+<script>
+function openReportModal(postId) {
+    document.getElementById('modal_post_id').value = postId;
+    document.getElementById('reportModal').style.display = 'block';
+}
+
+var modal = document.getElementById("reportModal");
+var span = document.getElementsByClassName("close")[0];
+
+span.onclick = function() {
+    modal.style.display = "none";
+}
+
+window.onclick = function(event) {
+    if (event.target == modal) {
+        modal.style.display = "none";
+    }
+}
+</script></div>
+</div>
+<div id="footer">
+	<img src="https://i.ibb.co/8jQPQ2y/aaaaaaaaaaaaaaaa.png" alt="footer Image" class="footer-img">
+	<footer id="colophon" class="site-footer" itemscope="itemscope" itemtype="http://schema.org/WPFooter" role="contentinfo">
+	<div class="menu">
+		<div class="menu-footer-container"><ul id="menu-footer" class="menu"><li id="menu-item-10692" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-10692"><a href="/" itemprop="url">Home</a></li>
+<li id="menu-item-10688" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-privacy-policy menu-item-10688"><a rel="privacy-policy" href="https://en-thunderscans.com/privacy-policy/" itemprop="url">Privacy Policy</a></li>
+<li id="menu-item-10690" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-10690"><a href="https://en-thunderscans.com/dmca-statement/" itemprop="url">DMCA</a></li>
+<li id="menu-item-10691" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-10691"><a href="https://en-thunderscans.com/terms-and-conditions/" itemprop="url">TERMS AND CONDITIONS</a></li>
+</ul></div>	</div>
+	<a href="https://discord.gg/9jDbMQHjac">
+		<i class="fab fa-discord fa-2x"></i>
+	</a>
+		<div class="footercopyright">
+		<div class="sosmedmrgn"></div>		<div class="socialbutton">
+						<!-- <a href="mailto:info@flamescans.org" class="scml" target="_blank"><i class="fas fa-envelope"></i></a> -->
+</div>
+		<div class="copyright">
+			<div class="txt">
+				<p>All the comics on this website are only previews of the original comics, there may be many language errors, character names, and story lines. For the original version, please buy the comic if it's available in your city.</p>
+			</div>
+		</div>
+	</div>
+	</footer>
+</div>
+<style>
+#footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.menu {
+    display: flex;
+    justify-content: center;
+    list-style-type: none;
+    padding: 0;
+    width: 100%;
+}
+
+.menu li {
+    margin: 10px;
+	font-size: 15px;
+}
+
+.site-footer {
+    width: 100%;
+}
+
+.footermenu {
+    display: flex;
+    justify-content: center;
+}
+
+.footercopyright {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.site-footer a {
+    margin: 0 10px;
+}
+
+#main-menu ul li ul {
+	right: 0 !important;
+}
+</style>
+<script type="speculationrules">
+{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/wp-*.php","/wp-admin/*","/wp-content/uploads/*","/wp-content/*","/wp-content/plugins/*","/wp-content/themes/mangareader-child/*","/wp-content/themes/mangareader/*","/*\\?(.+)"]}},{"not":{"selector_matches":"a[rel~=\"nofollow\"]"}},{"not":{"selector_matches":".no-prefetch, .no-prefetch a"}}]},"eagerness":"conservative"}]}
+</script>
+<script>series_history.push({"mid":"84172","cid":84199,"c":"1"});</script><a href="#" class="scrollToTop"><span class="fas fa-angle-up"></span></a>
+
+<!-- 
+ -->
+<script>ts_darkmode.listen();</script>
+<script id="lamoudjs-js" src="https://en-thunderscans.com/wp-content/themes/mangareader-child/lamoud-pages/lm_main.js?ver=1.2.4"></script>
+<script id="filter-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/filter.js?ver=1.0.0"></script>
+<script id="sweetalert2-js" src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script id="report-ch-script-js-extra">
+var ajaxurl = "https://en-thunderscans.com/wp-admin/admin-ajax.php";
+//# sourceURL=report-ch-script-js-extra
+</script>
+<script id="report-ch-script-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/report.js?ver=1.0.3"></script>
+<script id="bookmark-delete-script-js-extra">
+var ajax_object = {"ajax_url":"https://en-thunderscans.com/wp-admin/admin-ajax.php","user_id":"0"};
+//# sourceURL=bookmark-delete-script-js-extra
+</script>
+<script id="bookmark-delete-script-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/bookmark-delete.js"></script>
+<script id="bookmark-script-js-extra">
+var bookmarkAjax = {"ajaxurl":"https://en-thunderscans.com/wp-admin/admin-ajax.php"};
+//# sourceURL=bookmark-script-js-extra
+</script>
+<script id="bookmark-script-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/bookmark.js"></script>
+<script id="my-load-more-script-js-extra">
+var ajax_params = {"ajax_url":"https://en-thunderscans.com/wp-admin/admin-ajax.php"};
+//# sourceURL=my-load-more-script-js-extra
+</script>
+<script id="my-load-more-script-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/load-more.js"></script>
+<script id="my-load-more-script-novel-js-extra">
+var ajax_params = {"ajax_url":"https://en-thunderscans.com/wp-admin/admin-ajax.php"};
+//# sourceURL=my-load-more-script-novel-js-extra
+</script>
+<script id="my-load-more-script-novel-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/load-more-novel.js"></script>
+<script id="novel-forms-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/novel-forms.js?ver=1786556668"></script>
+<script id="header-modern-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/header-modern.js?ver=1786556668"></script>
+<script id="mcs-frontend-js-extra">
+var mcsAjax = {"url":"https://en-thunderscans.com/wp-admin/admin-ajax.php","addAction":"mcs_add_comment","loadAction":"mcs_load_comments","loadThreadRepliesAction":"mcs_load_thread_replies","moderateAction":"mcs_moderate_comment","reportAction":"mcs_report_comment","commentVoteAction":"mcs_comment_vote","nonces":{"add":"6df59e5737","load":"fa759ac490","loadThreadReplies":"d11a0831ce","moderate":"07ed2c9ec8","report":"d8e7019256","commentVote":"522f44e87d","seriesReaction":"aa7237e8a3"},"i18n":{"errorGeneric":"Something went wrong. Please try again.","loading":"Loading\u2026","replyingTo":"Replying to %s","replyButton":"Reply","replyActionActive":"Cancel","confirmDeleteComment":"Delete this comment?","reportThanks":"Thank you. Your report was submitted.","reportCategoryRequired":"Please select a reason for this report.","reportDetailsTooLong":"Additional details may be at most %d characters.","reportReasonTooLong":"Report description is too long.","reportRateLimited":"You're reporting too quickly. Please try again later.","loginRequiredReport":"You must be logged in to report comments.","reportDuplicate":"You already have a pending report for this comment.","loginRequiredModerate":"You must be logged in to moderate.","loadMoreComments":"Load more comments","viewMoreReplies":"View more replies","loadingMoreReplies":"Loading\u2026","fmtBoldPlaceholder":"bold text","fmtItalicPlaceholder":"italic text","fmtSpoilerPlaceholder":"spoiler text","fmtLinkDefaultLabel":"Link","fmtLinkUrlPrompt":"Enter link URL (https://, http://, or a path starting with /)","fmtLinkInvalidUrl":"Please enter a valid http(s) URL or a path starting with / (not protocol-relative).","moderateApprove":"Approve","moderateUnapprove":"Unapprove","commentPendingBadge":"Pending","commentPinnedBadge":"Pinned by Staff","moderatePin":"Pin","moderateUnpin":"Unpin","imageTooLarge":"Image must be 2MB or smaller.","imageBadType":"Only JPG, PNG, WebP, and GIF images are allowed.","imageUploadFailed":"Could not upload the image. Please try again.","insertImage":"Insert image","commentSeeMore":"See more","commentShowLess":"Show less","loginRequiredVote":"You must be logged in to vote on comments.","loginRequired":"Please log in to react to this series.","reactionsDisabled":"Reactions are not available."},"maxReplyDepth":"3","pluginUrl":"https://en-thunderscans.com/wp-content/plugins/manga-comments-system/","isLoggedIn":"","commentsRootLimit":"10","reportLoginUrl":"https://en-thunderscans.com/login/?redirect_to=https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/","relocateToCommentsHost":"","replaceWpComments":"1","seriesReactionAction":"mcs_series_reaction","loginUrl":"https://en-thunderscans.com/login/?redirect_to=https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/"};
+//# sourceURL=mcs-frontend-js-extra
+</script>
+<script id="mcs-frontend-js" src="https://en-thunderscans.com/wp-content/plugins/manga-comments-system/assets/js/mcs-frontend.js?ver=1789258619"></script>
+<script id="mcs-reactions-frontend-js" src="https://en-thunderscans.com/wp-content/plugins/manga-comments-system/assets/js/frontend.js?ver=1789258619"></script>
+<script id="ts-search-js" src="https://en-thunderscans.com/wp-content/themes/mangareader/assets/js/search-V2.js?ver=7.1.3"></script>
+<script id="wp-emoji-settings" type="application/json">
+{"baseUrl":"https://s.w.org/images/core/emoji/17.0.2/72x72/","ext":".png","svgUrl":"https://s.w.org/images/core/emoji/17.0.2/svg/","svgExt":".svg","source":{"concatemoji":"https://en-thunderscans.com/wp-includes/js/wp-emoji-release.min.js?ver=7.1.3"}}
+</script>
+<script type="module">
+/*! This file is auto-generated */
+var e="script#wp-emoji-settings",t=document.querySelector(e);if(!(t instanceof HTMLScriptElement))throw new Error("Element missing: "+e);const r=JSON.parse(t.text),s=(window._wpemojiSettings=r,"wpEmojiSettingsSupports"),o=["flag","emoji"];function i(e){try{var t={supportTests:e,timestamp:(new Date).valueOf()};sessionStorage.setItem(s,JSON.stringify(t))}catch(e){}}function c(e,t,n){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);t=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(n,0,0);const r=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);return t.every((e,t)=>e===r[t])}function p(e,t){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);var n=e.getImageData(16,16,1,1);for(let e=0;e<n.data.length;e++)if(0!==n.data[e])return!1;return!0}function u(e,t,n,r){switch(t){case"flag":return n(e,"\ud83c\udff3\ufe0f\u200d\u26a7\ufe0f","\ud83c\udff3\ufe0f\u200b\u26a7\ufe0f")?!1:!n(e,"\ud83c\udde8\ud83c\uddf6","\ud83c\udde8\u200b\ud83c\uddf6")&&!n(e,"\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f","\ud83c\udff4\u200b\udb40\udc67\u200b\udb40\udc62\u200b\udb40\udc65\u200b\udb40\udc6e\u200b\udb40\udc67\u200b\udb40\udc7f");case"emoji":return!r(e,"\ud83e\u1fac8")}return!1}function f(e,t,n,r){let a;const s=(a="undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?new OffscreenCanvas(300,150):document.createElement("canvas")).getContext("2d",{willReadFrequently:!0}),o=(s.textBaseline="top",s.font="600 32px Arial",{});return e.forEach(e=>{o[e]=t(s,e,n,r)}),o}function a(e){var t=document.createElement("script");t.src=e,t.defer=!0,document.head.appendChild(t)}r.supports={everything:!0,everythingExceptFlag:!0},new Promise(t=>{let n=function(){try{var e=JSON.parse(sessionStorage.getItem(s));if("object"==typeof e&&"number"==typeof e.timestamp&&(new Date).valueOf()<e.timestamp+604800&&"object"==typeof e.supportTests)return e.supportTests}catch(e){}return null}();if(!n){if("undefined"!=typeof Worker&&"undefined"!=typeof OffscreenCanvas&&"undefined"!=typeof URL&&URL.createObjectURL&&"undefined"!=typeof Blob)try{var e="postMessage("+f.toString()+"("+[JSON.stringify(o),u.toString(),c.toString(),p.toString()].join(",")+"));",r=new Blob([e],{type:"text/javascript"});const a=new Worker(URL.createObjectURL(r),{name:"wpTestEmojiSupports"});return void(a.onmessage=e=>{i(n=e.data),a.terminate(),t(n)})}catch(e){}i(n=f(o,u,c,p))}t(n)}).then(e=>{for(const n in e)r.supports[n]=e[n],r.supports.everything=r.supports.everything&&r.supports[n],"flag"!==n&&(r.supports.everythingExceptFlag=r.supports.everythingExceptFlag&&r.supports[n]);var t;r.supports.everythingExceptFlag=r.supports.everythingExceptFlag&&!r.supports.flag,r.supports.everything||((t=r.source||{}).concatemoji?a(t.concatemoji):t.wpemoji&&t.twemoji&&(a(t.twemoji),a(t.wpemoji)))});
+//# sourceURL=https://en-thunderscans.com/wp-includes/js/wp-emoji-loader.min.js
+</script>
+</body>
+</html>

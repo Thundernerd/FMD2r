@@ -1,0 +1,113 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://en-thunderscans.com/comics/a-barbarians-adventure-in-a-fantasy-world/",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:00:25 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "set-cookie",
+        "PHPSESSID=38mah07mkq3dr43hb90gium5s3; path=/"
+      ],
+      [
+        "expires",
+        "Thu, 19 Nov 1981 08:52:00 GMT"
+      ],
+      [
+        "cache-control",
+        "no-store, no-cache, must-revalidate"
+      ],
+      [
+        "pragma",
+        "no-cache"
+      ],
+      [
+        "link",
+        "<https://en-thunderscans.com/wp-json/>; rel=\"https://api.w.org/\""
+      ],
+      [
+        "link",
+        "<https://en-thunderscans.com/?p=84172>; rel=shortlink"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=3Uc9hX4qmVpzXnq5xXPPQp5b5358da5vkRssoG1WV9DtSiVCgJALGyrPdJg2TIoUR3fg5iVU%2F8lbnrDoYV2BXft%2FQvMzoFKEHaH2JhwnIzkoNU8E%2B6b5sjaFLs%2FFe%2FTUkhHr7ME%3D\"}]}"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "content-encoding",
+        "br"
+      ],
+      [
+        "cf-ray",
+        "a477bb4f8b55ff2d-AMS"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "br"
+  }
+}

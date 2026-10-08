@@ -25,6 +25,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # Includes the smoke list's offline replay (crates/fmd2r/tests/smoke.rs): every entry's
+      # recorded HTTP traffic, compared with its info and pages snapshots in fixtures/smoke.
       - name: Test
         run: cargo test --workspace
       # Prints how many upstream modules pass `Init` (the test itself fails on any failure).

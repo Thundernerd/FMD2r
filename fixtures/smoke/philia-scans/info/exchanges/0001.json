@@ -1,0 +1,157 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://philiascans.org/series/confession-of-an-ayakashi-bride",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:02:37 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=utf-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "content-security-policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://code.jquery.com https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.googletagmanager.com https://www.google-analytics.com https://www.googletagservices.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; media-src 'self' blob: https://media.philiascans.org; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://philiascans.org https://api.philiascans.org https://media.philiascans.org https://static.cloudflareinsights.com; frame-src 'self' https://challenges.cloudflare.com; worker-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+      ],
+      [
+        "permissions-policy",
+        "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(self), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=()"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "referrer-policy",
+        "no-referrer"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ],
+      [
+        "cross-origin-opener-policy",
+        "same-origin"
+      ],
+      [
+        "cross-origin-resource-policy",
+        "same-site"
+      ],
+      [
+        "cache-control",
+        "private, no-store"
+      ],
+      [
+        "set-cookie",
+        "philia_session=v1.1791489757.ddab04caa3c67504bacadf6dd738f88bec6a9073d6ede099df1494ac4e3e8564; Path=/; Expires=Fri, 09 Oct 2026 20:02:37 GMT; Max-Age=86400; Secure; HttpOnly; SameSite=lax"
+      ],
+      [
+        "set-cookie",
+        "philia_seen=1; Path=/; Expires=Fri, 09 Oct 2026 20:02:37 GMT; Max-Age=86400; Secure; SameSite=lax"
+      ],
+      [
+        "vary",
+        "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch"
+      ],
+      [
+        "vary",
+        "accept-encoding"
+      ],
+      [
+        "link",
+        "</_next/static/css/9620efd037f016f2.css>; rel=preload; as=\"style\", </_next/static/css/1e8923599741e68d.css>; rel=preload; as=\"style\", </_next/static/css/5b6f9562c68b1d59.css>; rel=preload; as=\"style\""
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=qJZvmNgBwwseXzSCxAZxVeVuR6Ahg6O76goBrlphtH2%2BTodA7E7b2bAhgPr2j9JdITaF5MT18acQ5KaWKUJRUxJ7wklJzcu0L02tqM9mOC3vJWk3lxzwsxHI0rI4BE5M5%2BY%3D\"}]}"
+      ],
+      [
+        "x-litespeed-cache",
+        "miss"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "speculation-rules",
+        "\"/cdn-cgi/speculation\""
+      ],
+      [
+        "server-timing",
+        "cfCacheStatus;desc=\"DYNAMIC\""
+      ],
+      [
+        "server-timing",
+        "cfEdge;dur=26,cfOrigin;dur=125"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a477be884a7c655d-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "zstd"
+  }
+}

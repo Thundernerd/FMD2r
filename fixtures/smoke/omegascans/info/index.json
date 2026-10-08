@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://api.omegascans.org/series/a-theme-for-every-building",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://api.omegascans.org/chapter/query?page=1&perPage=100&series_id=716",
+      "status": 200
+    }
+  ]
+}

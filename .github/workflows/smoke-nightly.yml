@@ -1,0 +1,50 @@
+name: Smoke (nightly)
+
+# Runs the smoke list (fixtures/smoke/list.toml) against the live sites and against its recorded
+# fixtures, and uploads a report that tells the two kinds of breakage apart: an entry whose replay
+# fails is an FMD2r regression, one that fails only live had its site or upstream module change.
+#
+# Entry failures don't fail the job (`fmd-smoke run` exits 0 on them): live sites break all the
+# time, and this workflow only reports. The run steps also continue on errors, so the report is
+# written from whatever results exist. It runs on a schedule, not on pushes or PRs, so it doesn't
+# gate merges; CI's own replay (the `smoke` test run by `cargo test` in ci.yml) does.
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build -p fmd2r -p fmd-smoke
+      - name: Replay
+        continue-on-error: true
+        run: target/debug/fmd-smoke run --out smoke-replay.json
+      - name: Live
+        continue-on-error: true
+        run: target/debug/fmd-smoke run --live --out smoke-live.json
+      - name: Report
+        if: always()
+        continue-on-error: true
+        run: |
+          target/debug/fmd-smoke report --live smoke-live.json --replay smoke-replay.json --out smoke-report.md
+          cat smoke-report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-report
+          path: |
+            smoke-report.md
+            smoke-live.json
+            smoke-replay.json
+          if-no-files-found: warn

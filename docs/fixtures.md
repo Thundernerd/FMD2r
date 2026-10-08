@@ -1,8 +1,8 @@
 # HTTP fixtures (record/replay)
 
 `fmd2r module info` and `fmd2r module pages` can record every HTTP exchange a module makes and
-replay them later without a network. The smoke tests (T16) and the XPath corpus (T35) are built
-on this.
+replay them later without a network. The smoke list (`fixtures/smoke`, see `fixtures/README.md`)
+and the XPath corpus (T35) are built on this.
 
 ```sh
 # Run against the live site and record what it sends and receives.

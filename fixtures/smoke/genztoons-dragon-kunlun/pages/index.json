@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://genztoons.org/chapter/657595f9f1b-6575c88577e/",
+      "status": 200
+    }
+  ]
+}

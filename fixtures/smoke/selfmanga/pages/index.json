@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://1.selfmanga.live/boi_za_sudbu/vol1/1?mtr=true",
+      "status": 200
+    }
+  ]
+}

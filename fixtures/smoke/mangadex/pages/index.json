@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://api.mangadex.org/at-home/server/2140c24a-cc73-4c01-90a7-7ac0117b28b9",
+      "status": 200
+    }
+  ]
+}

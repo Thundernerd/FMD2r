@@ -1,0 +1,121 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://www.mangaread.org/manga/a-i-doctor/chapter-1/?style=list",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:00:08 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "cf-edge-cache",
+        "cache,platform=wordpress"
+      ],
+      [
+        "set-cookie",
+        "wpmanga-reading-history=W3siaWQiOjgzMjg2LCJjIjoiODgzODQiLCJwIjoxLCJpIjoiIiwidCI6MTc5MTQ3NTIwOH1d; expires=Sat, 07 Nov 2026 20:00:08 GMT; Max-Age=2592000; path=/"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000;"
+      ],
+      [
+        "cf-apo-via",
+        "origin,qs"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "speculation-rules",
+        "\"/cdn-cgi/speculation\""
+      ],
+      [
+        "server-timing",
+        "cfCacheStatus;desc=\"DYNAMIC\""
+      ],
+      [
+        "server-timing",
+        "cfEdge;dur=30,cfOrigin;dur=212"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=0LmXml9gkzVLoqK2RuMccazSa0ENwNeT0ycio0DkcJr0ndzMj%2BNhzhddZbRccKnBF%2Fg5v82n%2Bg1ZJXaYev3wjK0ovSCE7idAa4GprsOXM9BnMW3C%2FdYONwubMDuM7AWn16ic\"}]}"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "content-encoding",
+        "br"
+      ],
+      [
+        "cf-ray",
+        "a477bae378c01c1d-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "br"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://rizzfables.com/series/r2311170-absolute-dominion",
+      "status": 200
+    }
+  ]
+}

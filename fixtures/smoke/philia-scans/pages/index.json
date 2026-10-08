@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://philiascans.org/api/manga/confession-of-an-ayakashi-bride/chapters/chapter-1",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "POST",
+      "url": "https://philiascans.org/api/reader/access-token",
+      "status": 200
+    },
+    {
+      "id": "0003",
+      "method": "GET",
+      "url": "https://philiascans.org/api/chapters/16102/page-keys",
+      "status": 200
+    },
+    {
+      "id": "0004",
+      "method": "POST",
+      "url": "https://philiascans.org/api/chapters/16102/open",
+      "status": 201
+    },
+    {
+      "id": "0005",
+      "method": "GET",
+      "url": "https://philiascans.org/api/chapters/16102/get-drm?session=cmuzyqwkp0rthyd6awd8va6qy",
+      "status": 404
+    }
+  ]
+}

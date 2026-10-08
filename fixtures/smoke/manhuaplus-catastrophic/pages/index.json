@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://manhuaplus.com/manga/catastrophic563/chapter-1/?style=list",
+      "status": 200
+    }
+  ]
+}

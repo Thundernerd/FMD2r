@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://olympusxyz.com/api/series/el-ascenso-de-namgung-el-emperador-de-la-espada-20261008-080454595",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://panel.olympusxyz.com/api/series/el-ascenso-de-namgung-el-emperador-de-la-espada-20261008-080454595/chapters?direction=asc&type=comic&page=1",
+      "status": 200
+    }
+  ]
+}
