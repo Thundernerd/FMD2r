@@ -24,6 +24,8 @@ fn start_with(args: &[&str]) -> Server {
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("fmd2r"))
         .args(["serve", "--bind", "127.0.0.1:0", "--data-dir"])
         .arg(dir.path().join("data"))
+        // Tests never reach the network: no module sync with GitHub.
+        .arg("--no-module-updates")
         .args(args)
         .env("RUST_LOG", "info")
         .stdout(Stdio::null())

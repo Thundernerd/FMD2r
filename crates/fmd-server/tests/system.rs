@@ -202,6 +202,43 @@ async fn running_a_job_calls_it_and_answers_with_its_new_state() {
 }
 
 #[tokio::test]
+async fn one_job_is_read_by_id() {
+    let h = harness();
+    let jobs = JobRegistry::new();
+    jobs.register(idle_favorites());
+    jobs.register(failed_modules());
+    let state = h.state.clone().with_jobs(jobs);
+
+    let res = send(&state, get("/api/jobs/modules")).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let job = body_json(res).await;
+    assert_eq!(job["id"], "modules");
+    assert_eq!(job["state"], "failed");
+    assert_eq!(job["last_error"], "GitHub API: HTTP 403");
+
+    let res = send(&state, get("/api/jobs/x")).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn updating_modules_runs_the_modules_job() {
+    let h = harness();
+    let jobs = JobRegistry::new();
+    let modules = failed_modules();
+    let calls = modules.calls.clone();
+    jobs.register(modules);
+    let state = h.state.clone().with_jobs(jobs);
+
+    let res = send(&state, post("/api/modules/update")).await;
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+    assert_eq!(body_json(res).await["state"], "running");
+    assert_eq!(*calls.lock().unwrap(), ["run modules"]);
+
+    let res = send(&h.state, post("/api/modules/update")).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn cancelling_a_job_that_is_not_running_is_a_409() {
     let h = harness();
     let jobs = JobRegistry::new();

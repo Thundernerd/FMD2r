@@ -1,10 +1,12 @@
-//! `GET /api/jobs`, `POST /api/jobs/{id}/run` and `POST /api/jobs/{id}/cancel`: the registered
-//! background jobs, for the System page.
+//! `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/jobs/{id}/run` and
+//! `POST /api/jobs/{id}/cancel`: the registered background jobs, for the System page; and
+//! `POST /api/modules/update`, which runs the module updater.
 
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use fmd_core::jobs::{Job, JobError};
+use fmd_core::module_updater::ModuleUpdaterJob;
 
 use crate::events::JobState;
 use crate::state::off_thread;
@@ -22,6 +24,35 @@ pub(crate) async fn list(State(state): State<AppState>) -> Json<Vec<JobState>> {
             .map(|j| JobState::of(j.as_ref()))
             .collect(),
     )
+}
+
+/// One registered job with its state, e.g. `modules` for the module updater.
+#[utoipa::path(get, path = "/api/jobs/{id}", tag = "system", operation_id = "getJob",
+    params(("id" = String, Path, description = "Job id")),
+    responses(
+        (status = 200, body = JobState),
+        (status = 404, description = "No such job", body = Problem),
+    ))]
+pub(crate) async fn get(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<JobState>, ApiError> {
+    let job = state.jobs.get(&id).ok_or(ApiError::NotFound)?;
+    Ok(Json(JobState::of(job.as_ref())))
+}
+
+/// Sync the Lua modules with upstream now and hot-reload the ones that changed: runs the
+/// `modules` job.
+#[utoipa::path(post, path = "/api/modules/update", tag = "system", operation_id = "updateModules",
+    responses(
+        (status = 202, description = "Started; progress follows as `job.state` events", body = JobState),
+        (status = 404, description = "The module updater is not running in this server", body = Problem),
+        (status = 409, description = "Already running", body = Problem),
+    ))]
+pub(crate) async fn update_modules(
+    State(state): State<AppState>,
+) -> Result<(StatusCode, Json<JobState>), ApiError> {
+    control(&state, ModuleUpdaterJob::ID, |job| job.run()).await
 }
 
 /// Start a job now.

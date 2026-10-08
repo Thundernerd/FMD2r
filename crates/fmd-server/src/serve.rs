@@ -8,7 +8,7 @@ use fmd_store::AppDb;
 use thiserror::Error;
 use tokio::net::TcpListener;
 
-use crate::{AppState, CoverConfig, Idle, LogBuffer, SystemTools, build_router};
+use crate::{AppState, CoverConfig, Idle, LogBuffer, SystemTools, build_router, module_updates};
 
 /// What [`serve`] needs.
 pub struct ServeConfig {
@@ -23,6 +23,9 @@ pub struct ServeConfig {
     /// The buffer the `tracing` subscriber feeds; `GET /api/logs` reads it and `GET /api/events`
     /// streams its bus.
     pub logs: LogBuffer,
+    /// Load the Lua modules and keep them in sync with upstream (the `modules` job and its
+    /// schedule). Off, no module updater runs and nothing is fetched from GitHub.
+    pub module_updates: bool,
 }
 
 /// Errors that stop [`serve`].
@@ -82,6 +85,13 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         .with_covers(covers, Idle);
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
+    }
+    if config.module_updates {
+        tokio::spawn(module_updates::start(
+            state.clone(),
+            lua_dir,
+            flaresolverr_url,
+        ));
     }
     let listener = TcpListener::bind(config.bind)
         .await
