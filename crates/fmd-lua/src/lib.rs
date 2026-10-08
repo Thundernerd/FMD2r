@@ -1,6 +1,7 @@
 //! Lua runtime and the full FMD2 Host API that website modules see (the core of FMD2r).
 
 mod class;
+pub mod crypto;
 
 pub use class::LuaClass;
 pub use mlua;
@@ -23,14 +24,16 @@ pub struct Runtime {
 
 impl Runtime {
     /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
-    /// FMD2's base state (baseunits/lua/LuaBase.pas:123). The Host API libraries and package
-    /// loader it registers next (:124-125) come with later tickets.
+    /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with the `fmd.*` Host API libraries
+    /// implemented so far requirable (see [`crypto`]). FMD2's package searcher (:124)
+    /// comes with T06.
     pub fn new() -> Result<Runtime> {
         // SAFETY: FMD2 opens every standard library, including `debug` (used by e.g.
         // lua/modules/MangaPlus.lua), which mlua only loads in unsafe mode. Later tickets also
         // need C modules (`pb`), which the safe mode forbids.
         let lua =
             unsafe { mlua::Lua::unsafe_new_with(mlua::StdLib::ALL, mlua::LuaOptions::default()) };
+        crypto::register(&lua)?;
         Ok(Runtime { lua })
     }
 
