@@ -1,6 +1,7 @@
 //! The generic binding through which every Host API object is exposed to Lua, reproducing the
 //! object semantics of FMD2's `LuaClass` (baseunits/lua/LuaClass.pas).
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -320,7 +321,9 @@ impl<T: 'static> LuaClass<T> {
 
     /// Creates the Lua object.
     pub fn build(self, lua: &Lua) -> crate::Result<AnyUserData> {
-        let object = lua.create_userdata(LuaObject)?;
+        let object = lua.create_userdata(LuaObject {
+            state: self.state.clone(),
+        })?;
         let table = lua.create_table()?;
         // Registered first, as in FMD2, so a member named `self` replaces it
         // (baseunits/lua/LuaClass.pas:290).
@@ -332,16 +335,24 @@ impl<T: 'static> LuaClass<T> {
         object.set_user_value(table)?;
         Ok(object)
     }
+
+    /// The state behind `object` when it is a `LuaClass` object over `T`, like FMD2 taking the
+    /// Pascal object out of a userdata argument with `luaToUserData`
+    /// (baseunits/lua/LuaUtils.pas:201).
+    pub fn state(object: &AnyUserData) -> Option<Rc<RefCell<T>>> {
+        let state = object.borrow::<LuaObject>().ok()?.state.clone();
+        state.downcast::<RefCell<T>>().ok()
+    }
 }
 
 /// Borrows the object's state for a callback; a conflicting borrow becomes a Lua error.
-fn borrow<T>(state: &Rc<RefCell<T>>) -> mlua::Result<std::cell::RefMut<'_, T>> {
+pub(crate) fn borrow<T>(state: &Rc<RefCell<T>>) -> mlua::Result<std::cell::RefMut<'_, T>> {
     state.try_borrow_mut().map_err(mlua::Error::external)
 }
 
 /// Converts a Lua value to bytes like `luaToString` (baseunits/lua/LuaUtils.pas:206): strings
 /// and numbers convert, anything else becomes empty. Unlike FMD2, NUL bytes are kept.
-fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
+pub(crate) fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
     Ok(match lua.coerce_string(value)? {
         Some(s) => s.as_bytes().to_vec(),
         None => Vec::new(),
@@ -349,7 +360,10 @@ fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
 }
 
 /// The userdata behind every `LuaClass` object; its members live in its user value.
-struct LuaObject;
+struct LuaObject {
+    /// The object's state, for [`LuaClass::state`].
+    state: Rc<dyn Any>,
+}
 
 /// Converts a number key to its string form, as `lua_tostring` does in place on the key's
 /// stack slot (baseunits/lua/LuaClass.pas:104, :140, :175, :191). Other keys are unchanged, so

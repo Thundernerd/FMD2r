@@ -2,5 +2,6 @@
 //!
 //! The C ABI is declared in `fmdxpath.h`; `fmd-xpath` binds it.
 
-/// Directory that holds the built `libfmdxpath.so`.
-pub const LIB_DIR: &str = env!("OUT_DIR");
+/// Directory that holds `libfmdxpath.so`: the one built into `OUT_DIR`, or `FMDXPATH_LIB_DIR`
+/// when that was set at build time.
+pub const LIB_DIR: &str = env!("FMDXPATH_LIB_DIR");

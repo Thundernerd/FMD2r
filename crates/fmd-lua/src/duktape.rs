@@ -42,8 +42,18 @@ pub(crate) struct JsSettings {
 /// Why a script produced no result. The message is what Duktape's error coerces to.
 struct JsError(String);
 
+/// Puts `fmd.duktape` in `package.preload`, like `LuaPackage.AddLib`
+/// (baseunits/lua/LuaDuktape.pas:39).
+pub(crate) fn register(lua: &mlua::Lua) -> mlua::Result<()> {
+    let preload: mlua::Table = lua
+        .globals()
+        .get::<mlua::Table>("package")?
+        .get("preload")?;
+    preload.set("fmd.duktape", lua.create_function(|lua, ()| open(lua))?)
+}
+
 /// Opens the library table, like `luaopen_duktape` (baseunits/lua/LuaDuktape.pas:32-36).
-pub(crate) fn open(lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
+fn open(lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
     let lib = lua.create_table()?;
     lib.set("ExecJS", lua.create_function(exec_js)?)?;
     Ok(lib)
@@ -74,7 +84,7 @@ fn exec_js(lua: &mlua::Lua, code: mlua::Value) -> mlua::Result<mlua::MultiValue>
         Err(JsError(message)) => {
             // baseunits/lua/LuaDuktape.pas:20-22 around the exception from
             // baseunits/Duktape.pas:95.
-            log::error!("Duktape.ExecJS() Duktape error: {message}");
+            tracing::error!("Duktape.ExecJS() Duktape error: {message}");
             Ok(mlua::MultiValue::new())
         }
     }
@@ -117,7 +127,7 @@ fn install_globals<'js>(ctx: &Ctx<'js>, lua_dir: PathBuf) -> rquickjs::Result<()
     let prelude: Function = ctx.eval(include_str!("duktape/prelude.js"))?;
     let mod_search = Function::new(ctx.clone(), move |id: String| mod_search(&lua_dir, &id))?;
     // baseunits/Duktape.pas:28.
-    let log = Function::new(ctx.clone(), |text: String| log::info!("{text}"))?;
+    let log = Function::new(ctx.clone(), |text: String| tracing::info!("{text}"))?;
     prelude.call::<_, ()>((mod_search, log))
 }
 
@@ -141,7 +151,7 @@ fn mod_search(lua_dir: &Path, id: &str) -> Option<String> {
         Ok(bytes) => Some(utf8_lossy(bytes)),
         Err(error) => {
             // baseunits/Duktape.pas:63-65.
-            log::error!("modSearch Error: {}: {error}", path.display());
+            tracing::error!("modSearch Error: {}: {error}", path.display());
             None
         }
     }

@@ -1,14 +1,23 @@
 //! Lua runtime and the full FMD2 Host API that website modules see (the core of FMD2r).
 
 mod class;
+pub mod crypto;
 mod duktape;
+mod file;
+mod globals;
+mod memory_stream;
+mod strings;
+pub mod xquery;
 
 use std::path::PathBuf;
 
 pub use class::LuaClass;
 pub use duktape::JsLimits;
 pub use fmd_http::TerminateToken;
+pub use globals::Globals;
+pub use memory_stream::{LuaMemoryStream, MemoryStream};
 pub use mlua;
+pub use strings::{ListIndexError, LuaStrings, StringList};
 
 /// Errors raised by the Lua runtime.
 #[derive(Debug, thiserror::Error)]
@@ -18,26 +27,20 @@ pub enum Error {
     Lua(#[from] mlua::Error),
 }
 
+impl From<Error> for mlua::Error {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::Lua(error) => error,
+        }
+    }
+}
+
 /// Result type of the `fmd-lua` crate.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// The `lua/` directory of a runtime, stored as app data on its Lua state.
 #[derive(Clone, Default)]
 struct LuaDir(PathBuf);
-
-/// Makes `require(name)` return the table `open` builds, like `LuaPackage.AddLib` registers
-/// `fmd.<name>` libraries (baseunits/lua/LuaDuktape.pas:39).
-fn register_lib(
-    lua: &mlua::Lua,
-    name: &str,
-    open: fn(&mlua::Lua) -> mlua::Result<mlua::Table>,
-) -> mlua::Result<()> {
-    let preload: mlua::Table = lua
-        .globals()
-        .get::<mlua::Table>("package")?
-        .get("preload")?;
-    preload.set(name, lua.create_function(move |lua, ()| open(lua))?)
-}
 
 /// One Lua state with the FMD2 Host API installed.
 pub struct Runtime {
@@ -46,17 +49,25 @@ pub struct Runtime {
 
 impl Runtime {
     /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
-    /// FMD2's base state (baseunits/lua/LuaBase.pas:123). The Host API libraries and package
-    /// loader it registers next (:124-125) come with later tickets.
+    /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with the `fmd.*` Host API libraries
+    /// implemented so far (`fmd.strings`, [`crypto`], `fmd.duktape`) in `package.preload`. FMD2's package
+    /// searcher (:124) comes with T06.
     pub fn new() -> Result<Runtime> {
         // SAFETY: FMD2 opens every standard library, including `debug` (used by e.g.
         // lua/modules/MangaPlus.lua), which mlua only loads in unsafe mode. Later tickets also
         // need C modules (`pb`), which the safe mode forbids.
         let lua =
             unsafe { mlua::Lua::unsafe_new_with(mlua::StdLib::ALL, mlua::LuaOptions::default()) };
+        strings::register(&lua)?;
+        crypto::register(&lua)?;
         lua.set_app_data(LuaDir(PathBuf::from("lua")));
         lua.set_app_data(duktape::JsSettings::default());
-        register_lib(&lua, "fmd.duktape", duktape::open)?;
+        duktape::register(&lua)?;
+        // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) needs an XPath backend: without
+        // the `xpath-fpc` feature there is none yet (the native one is T34), so the global is
+        // missing.
+        #[cfg(feature = "xpath-fpc")]
+        xquery::register(&lua, std::rc::Rc::new(fmd_xpath::fpc::FpcEngine))?;
         Ok(Runtime { lua })
     }
 
@@ -86,6 +97,14 @@ impl Runtime {
     /// The underlying Lua state, for registering Host API objects and globals.
     pub fn lua(&self) -> &mlua::Lua {
         &self.lua
+    }
+
+    /// Installs the global helper functions (`print`, `sleep`, `Trim`, `MaybeFillHost`,
+    /// `MangaInfoStatusIfPos`, `GetBetween`, `SeparateLeft`, `SeparateRight`), like FMD2's
+    /// `LuaBaseRegisterAll` (baseunits/lua/LuaBase.pas:86-92). Installing again replaces them.
+    pub fn install_globals(&self, globals: Globals) -> Result<()> {
+        globals::install(&self.lua, globals)?;
+        Ok(())
     }
 
     /// Runs a chunk of Lua code.

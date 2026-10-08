@@ -31,6 +31,7 @@ pub use terminate::TerminateToken;
 pub use transport::{
     BoxFuture, Proxy, ProxyKind, Transport, TransportError, WireRequest, WireResponse,
 };
+pub use url::split_url_bytes;
 
 /// Errors from the `fmd-http` API itself. Network failures are not errors: like FMD2,
 /// they make a request return `false`.

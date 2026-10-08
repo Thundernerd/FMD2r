@@ -7,7 +7,7 @@ Expose FMD2's TStringList and TMemoryStream objects to Lua with the exact surfac
 ## Scope (in/out)
 In:
 - A Rust `LuaStrings` type registered via the T03 `LuaClass` helper, with the full surface from `LuaStrings.pas`: `LoadFromFile`, `LoadFromStream`, `SaveToFile`, `SaveToStream`, `Text` (get/set), `CommaText`, `Add`, `AddText`, `Get`, `Set`, `DelimitedText`, `Delimiter`, `NameValueSeparator`, `Values[name]`, `Count`, `Sort`, `Clear`, `Delete`, `IndexOf`, `IndexOfName`, `Reverse`, and the **0-based default array property** (`list[0]` is the first item).
-- Name/value semantics matching TStrings (`Values['k']` reads/writes `k=v` lines; setting to `''` removes the line).
+- Name/value semantics matching TStrings (`Values['k']` reads/writes `k=v` lines; setting to `''` writes `k=`, as FPC 3.2.2 does, rather than removing the line as Delphi does).
 - `Text` joins with line endings and splits on CR/LF/CRLF like FPC's TStrings.
 - `require 'fmd.strings'` returning a lib with `New()` that creates a standalone list.
 - A Rust `LuaMemoryStream` with `ToString`, `WriteString`, `LoadFromFile`, `SaveToFile`, `Size` (get/set), `Clear`, binary-safe.
@@ -27,7 +27,7 @@ s.Reverse(); assert(s[0] == 'k=v')
 s.Text = 'x\r\ny\nz'; assert(s.Count == 3)
 s.CommaText = 'a,"b c",d'; assert(s[1] == 'b c')
 ```
-And the MemoryStream: `m.WriteString('a\0b'); assert(m.Size == 3 and m.ToString() == 'a\0b')`.
+And the MemoryStream: `m.WriteString('a\0b'); assert(m.Size == 3)`, with `ToString()` returning `'a\0b'` once the owner (the public Rust handle) moves the position back to 0. Like FMD2's `StreamToString`, `ToString` reads from the position, which writing leaves at the end.
 
 ## Acceptance criteria
 - [ ] Default index on TStrings is 0-based; out-of-range reads behave as in FMD2 (document what FPC does and match it).
