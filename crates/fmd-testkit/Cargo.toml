@@ -1,0 +1,16 @@
+[package]
+name = "fmd-testkit"
+description = "Test support: the upstream Lua module corpus fixture and helpers to check every module"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
