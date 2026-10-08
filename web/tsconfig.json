@@ -1,0 +1,13 @@
+{
+	"extends": "$app/tsconfig",
+	"include": ["src", "e2e", "*"],
+	"exclude": ["src/service-worker"],
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": true,
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"skipLibCheck": true,
+		"sourceMap": true
+	}
+}
