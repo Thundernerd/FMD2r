@@ -20,7 +20,8 @@ declared in `fmdxpath.h` and the ones the library exports differ.
 
 This directory is also a Cargo package, kept out of the root workspace because it needs `fpc`. Its `build.rs` runs
 `build.sh` into `OUT_DIR`, or, when `FMDXPATH_LIB_DIR` names a directory holding a prebuilt `libfmdxpath.so`,
-links that one and skips the build; `xpath_fpc::LIB_DIR` names the directory in use. `fmd-xpath`'s `fpc` feature
+links that one and skips the build (outside `target/`, Cargo doesn't add that directory to `LD_LIBRARY_PATH` when
+running other crates' tests and binaries, so set it yourself); `xpath_fpc::LIB_DIR` names the directory in use. `fmd-xpath`'s `fpc` feature
 (and `fmd-lua`'s `xpath-fpc`, which turns it on) depends on it; with the feature off the workspace builds without
 `fpc`. The ABI tests call the library through raw FFI:
 

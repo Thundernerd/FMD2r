@@ -5,7 +5,7 @@
 //! Lua types exactly like the Pascal's `lua_gettop` cases. A bound method gets its arguments
 //! without the object (crate::class), so the counts match FMD2's dot calls.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use fmd_xpath::{Document, XPathEngine, XPathValue};
@@ -44,9 +44,10 @@ fn create_txquery(
     args: &[Value],
 ) -> mlua::Result<MultiValue> {
     let html = match args {
-        [arg] if is_string(arg) => to_string_bytes(lua, arg)?,
-        [arg] if is_userdata(arg) => stream_bytes(arg)?,
-        [_] => return Ok(MultiValue::new()),
+        [arg] => match html_arg(lua, arg)? {
+            Some(html) => html,
+            None => return Ok(MultiValue::new()),
+        },
         _ => Vec::new(),
     };
     let doc = engine.parse(&html).map_err(mlua::Error::external)?;
@@ -92,10 +93,13 @@ fn create_txquery(
 /// one (baseunits/XQueryEngineHTML.pas:417-421), and so does an argument of another type.
 /// Values from the previous document stay valid.
 fn parse_html(lua: &Lua, q: &mut TXQuery, args: &[Value]) -> mlua::Result<()> {
-    let html = match args.first() {
-        Some(arg) if is_string(arg) => to_string_bytes(lua, arg)?,
-        Some(arg) if is_userdata(arg) => stream_bytes(arg)?,
-        _ => return Ok(()),
+    let Some(html) = args
+        .first()
+        .map(|arg| html_arg(lua, arg))
+        .transpose()?
+        .flatten()
+    else {
+        return Ok(());
     };
     if !html.is_empty() {
         q.doc = q.engine.parse(&html).map_err(mlua::Error::external)?;
@@ -184,11 +188,11 @@ fn href_all(
     args: &[Value],
     second: impl Fn(&dyn XPathValue) -> String,
 ) -> mlua::Result<()> {
-    if !matches!(args.len(), 3 | 4) {
+    let ([_, links, others] | [_, links, others, _]) = args else {
         return Ok(());
-    }
+    };
     let expr = arg_string(lua, args, 0)?;
-    let (links, others) = (strings(&args[1])?, strings(&args[2])?);
+    let (links, others) = (strings(links)?, strings(others)?);
     for item in items(eval_in(q, &expr, args.get(3))?.as_ref()) {
         add(&links, &item.attribute("href"))?;
         add(&others, &second(item.as_ref()))?;
@@ -226,7 +230,7 @@ fn add(list: &AnyUserData, s: &str) -> mlua::Result<()> {
 
 /// The items of a value, as `for v in value` enumerates them in Pascal: a single item yields
 /// itself, the empty sequence nothing.
-fn items(value: &dyn XPathValue) -> impl std::iter::Iterator<Item = Box<dyn XPathValue>> + '_ {
+fn items(value: &dyn XPathValue) -> impl Iterator<Item = Box<dyn XPathValue>> + '_ {
     (1..=value.count()).map(|i| value.get(i))
 }
 
@@ -259,25 +263,19 @@ fn xpath_count(lua: &Lua, q: &mut TXQuery, args: &[Value]) -> mlua::Result<i32> 
 /// An `IXQValue` object (`TLuaIXQValue`, baseunits/lua/LuaIXQValue.pas:13-18).
 struct XQValue {
     value: Rc<dyn XPathValue>,
-    iterator: Rc<RefCell<Iterator>>,
-}
-
-/// The position every `Get()` iterator of one value shares (`TLuaIXQValue.Current`,
-/// baseunits/lua/LuaIXQValue.pas:15), so a second loop continues where the first stopped.
-struct Iterator {
-    value: Rc<dyn XPathValue>,
-    current: u32,
+    /// The position every `Get()` iterator of this value shares (`TLuaIXQValue.Current`,
+    /// baseunits/lua/LuaIXQValue.pas:15), so a second loop continues where the first stopped.
+    current: Rc<Cell<u32>>,
 }
 
 /// Pushes an `IXQValue` object (`luaIXQValuePush`, baseunits/lua/LuaIXQValue.pas:158-161)
 /// with its methods and `Count` property (:134-156).
 fn push_value(lua: &Lua, value: Box<dyn XPathValue>) -> mlua::Result<AnyUserData> {
-    let value: Rc<dyn XPathValue> = Rc::from(value);
-    let iterator = Rc::new(RefCell::new(Iterator {
-        value: value.clone(),
-        current: 0,
-    }));
-    LuaClass::new(Rc::new(RefCell::new(XQValue { value, iterator })))
+    let state = XQValue {
+        value: Rc::from(value),
+        current: Rc::new(Cell::new(0)),
+    };
+    LuaClass::new(Rc::new(RefCell::new(state)))
         .method("Get", |lua, v: &mut XQValue, args: Variadic<Value>| {
             value_get(lua, v, &args)
         })
@@ -328,8 +326,8 @@ fn value_get(lua: &Lua, v: &mut XQValue, args: &[Value]) -> mlua::Result<MultiVa
             let none = lua.create_function(|_, ()| Ok(MultiValue::new()))?;
             return Ok(MultiValue::from_iter([Value::Function(none)]));
         }
-        let iterator = v.iterator.clone();
-        let next = lua.create_function(move |lua, ()| iterator_next(lua, &iterator))?;
+        let (value, current) = (v.value.clone(), v.current.clone());
+        let next = lua.create_function(move |lua, ()| get_next(lua, value.as_ref(), &current))?;
         return Ok(MultiValue::from_iter([Value::Function(next)]));
     };
     let index = lua.coerce_integer(arg.clone())?.unwrap_or(0);
@@ -340,14 +338,13 @@ fn value_get(lua: &Lua, v: &mut XQValue, args: &[Value]) -> mlua::Result<MultiVa
 /// One step of a `Get()` iterator (`ixqvalue_geti`, baseunits/lua/LuaIXQValue.pas:85-108):
 /// advances the value's position, and yields nothing once it passes the last item or reaches
 /// an empty one.
-fn iterator_next(lua: &Lua, iterator: &RefCell<Iterator>) -> mlua::Result<MultiValue> {
-    let mut iterator = iterator.borrow_mut();
+fn get_next(lua: &Lua, value: &dyn XPathValue, current: &Cell<u32>) -> mlua::Result<MultiValue> {
     // `Current` is a `Cardinal`; it never gets near wrapping.
-    iterator.current = iterator.current.saturating_add(1);
-    if i64::from(iterator.current) > iterator.value.count() {
+    current.set(current.get().saturating_add(1));
+    if i64::from(current.get()) > value.count() {
         return Ok(MultiValue::new());
     }
-    let item = iterator.value.get(i64::from(iterator.current));
+    let item = value.get(i64::from(current.get()));
     if item.is_undefined() {
         return Ok(MultiValue::new());
     }
@@ -364,6 +361,19 @@ fn context(arg: &Value) -> mlua::Result<Rc<RefCell<XQValue>>> {
         _ => None,
     }
     .ok_or_else(|| mlua::Error::runtime("bad context argument (IXQValue expected)"))
+}
+
+/// The HTML an argument of `CreateTXQuery` or `ParseHTML` holds: a string (or number) through
+/// `luaToString`, a userdata as a memory stream, anything else none
+/// (baseunits/lua/LuaXQuery.pas:30-34, :51-55).
+fn html_arg(lua: &Lua, arg: &Value) -> mlua::Result<Option<Vec<u8>>> {
+    if is_string(arg) {
+        to_string_bytes(lua, arg).map(Some)
+    } else if is_userdata(arg) {
+        stream_bytes(arg).map(Some)
+    } else {
+        Ok(None)
+    }
 }
 
 /// `lua_isstring`: strings and numbers.
