@@ -4,7 +4,7 @@
 
 	let { children }: { children?: Snippet } = $props();
 
-	// Icons only show in the phone bottom bar; desktop uses text pills like the prototype.
+	// Icons only show in the phone bottom bar.
 	const links = [
 		{ href: '/', label: 'Library', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
 		{
@@ -41,6 +41,7 @@
 </header>
 
 <style>
+	/* Phones first: the nav is a bottom tab bar with icons. */
 	.top {
 		position: sticky;
 		top: var(--safe-top);
@@ -49,35 +50,45 @@
 		border-bottom: 1px solid var(--line);
 		display: flex;
 		align-items: center;
-		gap: 18px;
-		padding: 10px var(--sp-5);
+		gap: var(--sp-3);
+		padding: 10px var(--sp-4);
 	}
 	.brand {
-		font: 800 20px var(--f-display);
+		font: 800 18px var(--f-display);
 		letter-spacing: -0.02em;
 		color: var(--fg);
 		text-decoration: none;
 	}
 	.nav {
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: calc(var(--bottom-nav-h) + var(--safe-bottom));
+		padding-bottom: var(--safe-bottom);
+		background: var(--surface);
+		border-top: 1px solid var(--line);
 		display: flex;
-		gap: 2px;
+		justify-content: space-around;
 	}
 	.nav-link {
-		padding: 6px 12px;
-		border-radius: var(--r-pill);
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		padding: 6px 2px;
+		font-size: var(--fs-xs);
 		font-weight: 500;
-		color: var(--fg);
+		color: var(--muted);
 		text-decoration: none;
 	}
-	.nav-link:hover {
-		background: var(--surface-2);
-	}
 	.nav-link[aria-current='page'] {
-		background: var(--fg);
-		color: var(--bg);
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.nav-icon {
-		display: none;
 		width: 22px;
 		height: 22px;
 		fill: none;
@@ -95,48 +106,41 @@
 		gap: var(--sp-3);
 	}
 
-	/* Phones: the same nav becomes a bottom tab bar. */
-	@media (max-width: 860px) {
+	/* Desktop: the nav sits in the top bar as text pills, like the prototype. */
+	@media (min-width: 861px) {
 		.top {
-			padding: 10px var(--sp-4);
-			gap: var(--sp-3);
+			gap: 18px;
+			padding: 10px var(--sp-5);
 		}
 		.brand {
-			font-size: 18px;
+			font-size: 20px;
 		}
 		.nav {
-			position: fixed;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			height: calc(var(--bottom-nav-h) + var(--safe-bottom));
-			padding-bottom: var(--safe-bottom);
-			background: var(--surface);
-			border-top: 1px solid var(--line);
-			justify-content: space-around;
+			position: static;
+			height: auto;
+			padding: 0;
+			background: transparent;
+			border: 0;
+			gap: 2px;
 		}
 		.nav-link {
-			flex: 1;
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			gap: 2px;
-			border-radius: 0;
-			padding: 6px 2px;
-			font-size: var(--fs-xs);
-			color: var(--muted);
+			flex: none;
+			display: block;
+			padding: 6px 12px;
+			border-radius: var(--r-pill);
+			font-size: var(--fs-md);
+			color: var(--fg);
 		}
 		.nav-link:hover {
-			background: transparent;
+			background: var(--surface-2);
 		}
 		.nav-link[aria-current='page'] {
-			background: transparent;
-			color: var(--accent);
-			font-weight: 600;
+			background: var(--fg);
+			color: var(--bg);
+			font-weight: 500;
 		}
 		.nav-icon {
-			display: block;
+			display: none;
 		}
 	}
 </style>

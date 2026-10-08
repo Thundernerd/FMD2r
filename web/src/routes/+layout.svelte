@@ -12,19 +12,14 @@
 
 	$effect(() => {
 		events.start();
-		// Snapshot what happened before the stream connected; frames that already arrived win.
+		// Snapshot what happened before the stream connected.
 		api
 			.listInbox()
-			.then((items) => {
-				const seen = new Set(events.inbox.map((i) => i.id));
-				events.inbox = [...events.inbox, ...items.filter((i) => !seen.has(i.id))];
-			})
+			.then((inbox) => events.seed({ inbox }))
 			.catch(() => {});
 		api
 			.listTasks()
-			.then((tasks) => {
-				for (const task of tasks) events.tasks[task.id] ??= task;
-			})
+			.then((tasks) => events.seed({ tasks }))
 			.catch(() => {});
 		return () => events.stop();
 	});
@@ -47,19 +42,20 @@
 </div>
 
 <style>
+	/* Leave room for the bottom tab bar (phones) and the queue dock. */
 	.app {
 		min-height: 100%;
-		padding-bottom: var(--sp-6);
+		padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + var(--sp-4));
 	}
 	.app.with-dock {
-		padding-bottom: 130px;
+		padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 90px);
 	}
-	@media (max-width: 860px) {
+	@media (min-width: 861px) {
 		.app {
-			padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + var(--sp-4));
+			padding-bottom: var(--sp-6);
 		}
 		.app.with-dock {
-			padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 90px);
+			padding-bottom: 130px;
 		}
 	}
 </style>

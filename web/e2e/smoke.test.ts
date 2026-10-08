@@ -49,6 +49,14 @@ test('add by URL opens the series page', async ({ page }) => {
 	await expect(page.getByRole('heading', { level: 1 })).toContainText('title/abc123/frieren');
 });
 
+test('add by URL accepts a URL pasted without its scheme', async ({ page }) => {
+	await page.goto('/');
+	await page.getByRole('textbox', { name: 'Manga URL' }).fill('mangadex.org/title/abc123/frieren');
+	await page.getByRole('button', { name: 'Add' }).click();
+
+	await expect(page).toHaveURL('/series/MangaDex/title/abc123/frieren');
+});
+
 test('add by URL reports a URL no module handles', async ({ page }) => {
 	await page.goto('/');
 	await page.getByRole('textbox', { name: 'Manga URL' }).fill('https://example.com/nothing');

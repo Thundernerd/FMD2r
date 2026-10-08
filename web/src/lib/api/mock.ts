@@ -1,5 +1,8 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
-import type { InboxItem, SeriesRef, TaskProgress } from './types';
+import type { paths } from './schema';
+import type { InboxItem, JobState, SeriesRef, TaskProgress } from './types';
+
+type ResolveBody = paths['/api/resolve']['post']['requestBody']['content']['application/json'];
 
 // In-memory stand-in for fmd-server, used when VITE_API_MOCK=true (see README.md).
 // Data mirrors the approved layout prototype so the chrome has something realistic to show.
@@ -92,13 +95,20 @@ const json = (body: unknown, status = 200): Response =>
 export interface MockBackend {
 	/** Answers `/api/*` requests from in-memory state. */
 	fetch: (input: Request) => Promise<Response>;
-	/** A fake `/api/events` stream that advances the downloading tasks once a second. */
+	/** A fake `/api/events` stream that advances tasks and a job, logs, and posts one inbox item after 30 s. */
 	eventSource: (url: string) => EventSourceLike;
 }
 
 export function createMockBackend(): MockBackend {
 	const inbox = seedInbox();
 	const tasks = seedTasks();
+	const favorites: JobState = {
+		id: 'favorites',
+		title: 'Checking favorites',
+		state: 'running',
+		done: 31,
+		total: 48
+	};
 
 	const resolve = (raw: string): SeriesRef | null => {
 		let url: URL;
@@ -128,8 +138,9 @@ export function createMockBackend(): MockBackend {
 		}
 
 		if (route === 'POST /api/resolve') {
-			const body = (await req.json()) as { url?: unknown };
-			const ref = typeof body.url === 'string' ? resolve(body.url) : null;
+			// Untrusted input: check the shape instead of trusting the generated type.
+			const body = (await req.json()) as Partial<ResolveBody> | null;
+			const ref = typeof body?.url === 'string' ? resolve(body.url) : null;
 			return ref ? json(ref) : new Response(null, { status: 404 });
 		}
 
@@ -143,11 +154,36 @@ export function createMockBackend(): MockBackend {
 			for (const listener of listeners.get(type) ?? []) listener(ev);
 		};
 
+		let ticks = 0;
 		const tick = () => {
+			ticks++;
 			for (const task of tasks) {
 				if (task.status !== 'downloading') continue;
 				task.done = task.done >= task.total ? 0 : task.done + 1;
+				task.bytes_per_sec = Math.round(1_500_000 + Math.random() * 1_500_000);
 				emit('task.progress', task);
+				emit('log', {
+					time: new Date().toISOString(),
+					level: 'INFO',
+					target: 'download',
+					message: `${task.title}: page ${task.done}/${task.total} saved`
+				});
+			}
+			favorites.done = Math.min(favorites.done + 1, favorites.total);
+			if (favorites.done === favorites.total) favorites.state = 'done';
+			emit('job.state', favorites);
+			// Late enough not to disturb the smoke tests, early enough to see in `npm run dev:mock`.
+			if (ticks === 30) {
+				const item: InboxItem = {
+					id: 'download-failed',
+					kind: 'error',
+					title: 'Blue Lock Ch. 3 failed',
+					body: 'HTTP 403 from the image host after 3 retries.',
+					created_at: new Date().toISOString(),
+					read: false
+				};
+				inbox.unshift(item);
+				emit('inbox.new', item);
 			}
 		};
 

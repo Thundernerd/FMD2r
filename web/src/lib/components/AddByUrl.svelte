@@ -10,7 +10,9 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		const value = url.trim();
+		// People often paste without the scheme (`mangadex.org/title/…`).
+		const typed = url.trim();
+		const value = typed && !/^[a-z][a-z\d+.-]*:\/\//i.test(typed) ? `https://${typed}` : typed;
 		if (!value || busy) return;
 		busy = true;
 		error = null;
@@ -34,11 +36,10 @@
 <form class="add" onsubmit={submit}>
 	<input
 		class="input"
-		type="url"
+		type="text"
 		inputmode="url"
 		placeholder="Paste a manga URL"
 		aria-label="Manga URL"
-		required
 		bind:value={url}
 		oninput={() => (error = null)}
 	/>

@@ -11,12 +11,13 @@ export interface EventSourceLike {
 export interface EventStoreOptions {
 	url: string;
 	connect: (url: string) => EventSourceLike;
-	/** First reconnect delay; doubles on every failed attempt. */
-	initialBackoffMs?: number;
-	maxBackoffMs?: number;
 	/** How many log lines to keep; older ones are dropped. */
 	maxLogLines?: number;
 }
+
+/** First reconnect delay; it doubles on every failed attempt up to the cap. */
+const INITIAL_BACKOFF_MS = 1000;
+const MAX_BACKOFF_MS = 30_000;
 
 /** Live state fed by the server's SSE stream (`/api/events`). */
 export class EventStore {
@@ -32,11 +33,10 @@ export class EventStore {
 	#opts: Required<EventStoreOptions>;
 	#source: EventSourceLike | null = null;
 	#retry: ReturnType<typeof setTimeout> | null = null;
-	#backoff: number;
+	#backoff = INITIAL_BACKOFF_MS;
 
 	constructor(opts: EventStoreOptions) {
-		this.#opts = { initialBackoffMs: 1000, maxBackoffMs: 30_000, maxLogLines: 500, ...opts };
-		this.#backoff = this.#opts.initialBackoffMs;
+		this.#opts = { maxLogLines: 500, ...opts };
 	}
 
 	start(): void {
@@ -52,12 +52,27 @@ export class EventStore {
 		this.connected = false;
 	}
 
+	/**
+	 * Merges a REST snapshot taken around connect time. Anything a frame already delivered is
+	 * newer than the snapshot, so it wins.
+	 */
+	seed(snapshot: { inbox?: InboxItem[]; tasks?: TaskProgress[] }): void {
+		const fresh = (snapshot.inbox ?? []).filter((s) => !this.inbox.some((i) => i.id === s.id));
+		this.inbox = [...this.inbox, ...fresh];
+		for (const task of snapshot.tasks ?? []) this.tasks[task.id] ??= task;
+	}
+
+	markRead(id: string): void {
+		const item = this.inbox.find((i) => i.id === id);
+		if (item) item.read = true;
+	}
+
 	#open(): void {
 		const es = this.#opts.connect(this.#opts.url);
 		this.#source = es;
 		es.onopen = () => {
 			this.connected = true;
-			this.#backoff = this.#opts.initialBackoffMs;
+			this.#backoff = INITIAL_BACKOFF_MS;
 		};
 		// EventSource retries on its own for some failures but gives up for others (e.g. a 5xx),
 		// so always close it and reconnect on our own schedule.
@@ -66,7 +81,7 @@ export class EventStore {
 			this.#source = null;
 			this.connected = false;
 			const delay = this.#backoff;
-			this.#backoff = Math.min(this.#backoff * 2, this.#opts.maxBackoffMs);
+			this.#backoff = Math.min(this.#backoff * 2, MAX_BACKOFF_MS);
 			this.#retry = setTimeout(() => {
 				this.#retry = null;
 				this.#open();
@@ -89,8 +104,4 @@ export class EventStore {
 			this.logs = [...this.logs, line].slice(-this.#opts.maxLogLines);
 		});
 	}
-}
-
-export function createEventStore(opts: EventStoreOptions): EventStore {
-	return new EventStore(opts);
 }

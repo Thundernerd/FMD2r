@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InboxItem, TaskProgress } from '#lib/api/types.ts';
-import { createEventStore, type EventSourceLike } from '#lib/events.svelte.ts';
+import { EventStore, type EventSourceLike } from '#lib/events.svelte.ts';
 
 /** A stand-in for the browser's EventSource that the test drives by hand. */
 class FakeEventSource implements EventSourceLike {
@@ -72,7 +72,7 @@ describe('event store', () => {
 	});
 
 	const start = () => {
-		const store = createEventStore({
+		const store = new EventStore({
 			url: '/api/events',
 			connect: (url) => new FakeEventSource(url)
 		});
@@ -192,7 +192,7 @@ describe('event store', () => {
 	});
 
 	it('keeps the most recent log lines, oldest dropped first', () => {
-		const store = createEventStore({
+		const store = new EventStore({
 			url: '/api/events',
 			connect: (url) => new FakeEventSource(url),
 			maxLogLines: 3
@@ -208,5 +208,32 @@ describe('event store', () => {
 		}
 
 		expect(store.logs.map((l) => l.message)).toEqual(['line 2', 'line 3', 'line 4']);
+	});
+
+	it('merges an API snapshot under frames that already arrived', () => {
+		const store = start();
+		latest().emit('task.progress', progress({ done: 30 }));
+		latest().emit('inbox.new', { ...inboxItem, title: 'from the stream' });
+
+		store.seed({
+			inbox: [inboxItem, { ...inboxItem, id: 'older', read: true }],
+			tasks: [progress({ done: 22 }), progress({ id: 3, status: 'queued', done: 0 })]
+		});
+
+		expect(store.tasks[1]?.done).toBe(30);
+		expect(store.tasks[3]?.status).toBe('queued');
+		expect(store.inbox.map((i) => [i.id, i.title])).toEqual([
+			['new-chapters', 'from the stream'],
+			['older', inboxItem.title]
+		]);
+	});
+
+	it('marks an inbox item read', () => {
+		const store = start();
+		latest().emit('inbox.new', inboxItem);
+		store.markRead('new-chapters');
+
+		expect(store.inbox[0]?.read).toBe(true);
+		expect(store.unread).toBe(0);
 	});
 });

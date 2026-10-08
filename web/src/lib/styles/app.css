@@ -125,7 +125,7 @@ a {
 .page {
 	max-width: var(--page-max);
 	margin: 0 auto;
-	padding: 22px var(--sp-5);
+	padding: 22px var(--sp-4);
 	display: flex;
 	flex-direction: column;
 	gap: 18px;
@@ -143,10 +143,10 @@ a {
 	max-width: 65ch;
 }
 
-@media (max-width: 860px) {
+@media (min-width: 861px) {
 	.page {
-		padding-left: var(--sp-4);
-		padding-right: var(--sp-4);
+		padding-left: var(--sp-5);
+		padding-right: var(--sp-5);
 	}
 }
 

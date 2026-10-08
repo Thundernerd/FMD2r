@@ -30,14 +30,14 @@ export interface ApiOptions {
 export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 	const client = createClient<paths>({ baseUrl, ...(fetch ? { fetch } : {}) });
 
-	const ok = <T>(what: string, res: { data?: T; response: Response }): T => {
+	const unwrap = <T>(what: string, res: { data?: T; response: Response }): T => {
 		if (!res.response.ok || res.data === undefined) throw new ApiError(res.response.status, what);
 		return res.data;
 	};
 
 	return {
 		async listInbox() {
-			return ok('listInbox', await client.GET('/api/inbox'));
+			return unwrap('listInbox', await client.GET('/api/inbox'));
 		},
 		async markRead(id) {
 			const { response } = await client.POST('/api/inbox/{id}/read', {
@@ -46,12 +46,12 @@ export function createApi({ baseUrl = '', fetch }: ApiOptions = {}): Api {
 			if (!response.ok) throw new ApiError(response.status, 'markRead');
 		},
 		async listTasks() {
-			return ok('listTasks', await client.GET('/api/tasks'));
+			return unwrap('listTasks', await client.GET('/api/tasks'));
 		},
 		async resolveUrl(url) {
 			const res = await client.POST('/api/resolve', { body: { url } });
 			if (res.response.status === 404) return null;
-			return ok('resolveUrl', res);
+			return unwrap('resolveUrl', res);
 		}
 	};
 }

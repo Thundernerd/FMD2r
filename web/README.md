@@ -2,7 +2,7 @@
 
 The FMD2r web UI: a SvelteKit (Svelte 5, TypeScript strict) single-page app built with `@sveltejs/adapter-static`. `npm run build` writes it to `build/`, which `fmd-server` (T21) embeds and serves with `index.html` as the fallback for every route.
 
-Layout follows prototype variant B "Library" (https://claude.ai/artifact/As3XTN7NjxM8ydAP9oEcqL): a top bar with the main nav, the add-by-URL field and the inbox, and a queue dock at the bottom. On phones (≤ 860px) the main nav moves to a bottom tab bar.
+Layout follows prototype variant B "Library" (https://claude.ai/artifact/As3XTN7NjxM8ydAP9oEcqL): a top bar with the main nav, the add-by-URL field and the inbox, and a queue dock at the bottom. Styles are mobile-first: phones get a bottom tab bar, and from 861px up the main nav moves into the top bar.
 
 ## Scripts
 
@@ -29,8 +29,8 @@ VITE_API_MOCK=true npm run build && npm run preview  # production build
 In mock mode `src/lib/api/mock.ts` stands in for fmd-server:
 
 - `/api/*` requests are answered from in-memory data (inbox items, tasks) that resets on reload. Marking an inbox item read sticks until then.
-- `/api/events` is a fake event source that advances the downloading tasks once a second.
-- Add-by-URL knows `mangadex.org`, `comick.io`, `bato.to` and `www.webtoons.com`; any other host gets "No module handles this URL".
+- `/api/events` is a fake event source. Once a second it advances the downloading tasks (`task.progress`), logs a line per task (`log`) and advances a favorites check (`job.state`). After 30 seconds it posts one `inbox.new` item.
+- Add-by-URL accepts a URL with or without `https://`. The mock knows `mangadex.org`, `comick.io`, `bato.to` and `www.webtoons.com`; any other host gets "No module handles this URL".
 
 A mock-mode build goes to `.svelte-kit/build-mock/`, never to `build/`, so it can't be embedded by accident.
 

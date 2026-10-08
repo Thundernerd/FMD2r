@@ -9,14 +9,14 @@
 	let error = $state<string | null>(null);
 	let root: HTMLElement | undefined = $state();
 
-	const when = (iso: string): string =>
+	const formatTime = (iso: string): string =>
 		new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 
 	async function markRead(item: InboxItem) {
 		error = null;
 		try {
 			await api.markRead(item.id);
-			item.read = true;
+			store.markRead(item.id);
 		} catch {
 			error = 'Could not mark the item read.';
 		}
@@ -57,7 +57,7 @@
 						<li class="item kind-{item.kind}" class:unread={!item.read}>
 							<div class="head">
 								<b class="title">{item.title}</b>
-								<span class="small muted">{when(item.created_at)}</span>
+								<span class="small muted">{formatTime(item.created_at)}</span>
 							</div>
 							<div class="small">{item.body}</div>
 							{#if !item.read}
