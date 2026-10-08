@@ -28,7 +28,7 @@ impl ModuleHttp {
     }
 
     /// `ActiveConnections`: requests of this module holding a connection slot right now
-    /// (baseunits/httpsendthread.pas:417-435).
+    /// (baseunits/httpsendthread.pas:58, counted at :417-440).
     pub fn active_connections(&self) -> u32 {
         self.queue.active_connections()
     }

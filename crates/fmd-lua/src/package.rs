@@ -9,8 +9,8 @@ use std::sync::{Arc, Mutex};
 use mlua::prelude::LuaChunkMode as ChunkMode;
 use mlua::{Function, Lua, Table, Value};
 
-use crate::LuaDir;
 use crate::class::to_bytes;
+use crate::{LuaDir, app_data_or_default};
 
 /// The prefix of host library names (`LIBPREFIX`, baseunits/lua/LuaPackage.pas:23).
 const LIB_PREFIX: &str = "fmd.";
@@ -51,15 +51,9 @@ impl PackageCache {
         if !path.is_file() {
             return Ok(None);
         }
-        // `LuaDumpFileToStream` reads the file with `luaL_loadfile` and keeps debug info so errors name file and line
+        // `LuaDumpFileToStream` keeps debug info so errors name file and line
         // (baseunits/lua/LuaBase.pas:187-210).
-        let source = crate::file::read_lua_file(path).map_err(mlua::Error::external)?;
-        let chunk: Arc<[u8]> = lua
-            .load(source)
-            .set_name(format!("@{}", path.display()))
-            .into_function()?
-            .dump(false)
-            .into();
+        let chunk: Arc<[u8]> = crate::file::load_lua_file(lua, path)?.dump(false).into();
         self.lock().insert(path.clone(), chunk.clone());
         Ok(Some(chunk))
     }
@@ -103,15 +97,9 @@ fn find_package(lua: &Lua, name: Value) -> mlua::Result<Option<Function>> {
         let libs: Table = lua.named_registry_value(HOST_LIBS_KEY)?;
         return libs.raw_get(name);
     }
-    let LuaDir(dir) = lua
-        .app_data_ref::<LuaDir>()
-        .map(|d| d.clone())
-        .unwrap_or_default();
+    let LuaDir(dir) = app_data_or_default(lua);
     let path = dir.join(format!("{}.lua", name.replace('.', "/")));
-    let cache = lua
-        .app_data_ref::<PackageCache>()
-        .map(|c| c.clone())
-        .unwrap_or_default();
+    let cache: PackageCache = app_data_or_default(lua);
     let loaded = cache.chunk(lua, &path).and_then(|chunk| {
         chunk
             .map(|chunk| {
@@ -143,10 +131,7 @@ fn open_env(lua: &Lua) -> mlua::Result<Table> {
         .file_stem()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let LuaDir(lua_dir) = lua
-        .app_data_ref::<LuaDir>()
-        .map(|d| d.clone())
-        .unwrap_or_default();
+    let LuaDir(lua_dir) = app_data_or_default(lua);
     let env = lua.create_table()?;
     // `FMD_DIRECTORY` and `FMD_EXENAME` (baseunits/FMDOptions.pas:261-262): the program's
     // directory with a trailing separator and its file name without extension.

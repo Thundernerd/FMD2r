@@ -186,12 +186,7 @@ fn run_init(
         .install_globals(Globals::default())
         .map_err(|e| format!("new Lua state: {e}"))?;
     let lua = runtime.lua();
-    let source = crate::file::read_lua_file(file).map_err(|e| format!("luaL_loadfile: {e}"))?;
-    let chunk = lua
-        .load(source)
-        .set_name(format!("@{}", file.display()))
-        .into_function()
-        .map_err(|e| format!("luaL_loadfile: {e}"))?;
+    let chunk = crate::file::load_lua_file(lua, file).map_err(|e| format!("luaL_loadfile: {e}"))?;
     chunk
         .call::<()>(())
         .map_err(|e| format!("lua_pcall: {e}"))?;

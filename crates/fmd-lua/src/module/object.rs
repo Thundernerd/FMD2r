@@ -184,8 +184,8 @@ fn add_methods(class: Class) -> Class {
 ///
 /// FMD2 keeps the options in a sorted, case-insensitive `TStringList` that ignores duplicates:
 /// adding a name again finds the existing entry and replaces its caption, kind and default.
-/// An option without a name is left out, as `TModuleContainer.AddOption` leaves it out of the
-/// option list the settings use (baseunits/WebsiteModules.pas:427).
+/// An option without a name is kept, so `GetOption('')` finds it, though it never reaches the
+/// settings (baseunits/WebsiteModules.pas:427).
 fn add_option(
     lua: &Lua,
     module: &mut Arc<Module>,
@@ -198,9 +198,6 @@ fn add_option(
         caption: to_string(lua, caption)?,
         kind,
     };
-    if option.name.is_empty() {
-        return Ok(());
-    }
     let mut def = module.def_write();
     match def
         .options
@@ -246,7 +243,7 @@ fn build_storage(lua: &Lua, module: &Arc<Module>) -> mlua::Result<AnyUserData> {
             let name = to_bytes(lua, name)?;
             let mut storage = super::lock(&m.storage);
             let i = storage.values.index_of_name(&name);
-            // `IndexOfName` found it, so the index is in bounds.
+            // FMD2 exits when the name is missing (:93); `delete` refuses index -1 the same way.
             let _ = storage.values.delete(i);
             Ok(())
         })
@@ -431,7 +428,8 @@ const CALLBACK_PROPERTIES: &[(&str, CallbackField)] = &[
     ("OnCheckSite", |d| &mut d.on_check_site),
 ];
 
-/// A string property (`luaClassAddStringProperty`, baseunits/lua/LuaClass.pas:464-474):
+/// A string property (`luaClassAddStringProperty`, baseunits/lua/LuaClass.pas:520-524,
+/// accessors :464-474):
 /// assigning converts like `luaToString`.
 fn string_property(class: Class, name: &str, field: StringField) -> Class {
     class.property(
@@ -445,7 +443,8 @@ fn string_property(class: Class, name: &str, field: StringField) -> Class {
     )
 }
 
-/// An integer property (`luaClassAddIntegerProperty`, baseunits/lua/LuaClass.pas:476-486):
+/// An integer property (`luaClassAddIntegerProperty`, baseunits/lua/LuaClass.pas:526-530,
+/// accessors :476-486):
 /// assigning converts like `lua_tointeger`.
 fn integer_property(class: Class, name: &str, field: IntegerField) -> Class {
     class.property(
@@ -459,7 +458,8 @@ fn integer_property(class: Class, name: &str, field: IntegerField) -> Class {
     )
 }
 
-/// A boolean property (`luaClassAddBooleanProperty`, baseunits/lua/LuaClass.pas:488-498):
+/// A boolean property (`luaClassAddBooleanProperty`, baseunits/lua/LuaClass.pas:532-536,
+/// accessors :488-498):
 /// assigning converts like `lua_toboolean`.
 fn boolean_property(class: Class, name: &str, field: BooleanField) -> Class {
     class.property(

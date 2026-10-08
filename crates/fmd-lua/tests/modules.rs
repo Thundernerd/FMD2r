@@ -398,7 +398,7 @@ fn defaults_are_those_of_a_new_module_container() {
 
     let def = report.registry.get("plain").unwrap().def();
 
-    // TModuleContainer.Create (baseunits/WebsiteModules.pas:325-343).
+    // TModuleContainer.Create (baseunits/WebsiteModules.pas:296-312).
     assert!(def.information_available && def.favorite_available);
     assert!(!def.sorted_list && !def.dynamic_page_link && !def.account_support);
     assert_eq!(def.total_directory, 1);
@@ -494,4 +494,40 @@ fn module_files_load_like_lual_loadfile_skipping_a_bom_and_a_hash_line() {
 
     assert!(report.failures.is_empty(), "{:?}", report.failures);
     assert_eq!(report.registry.modules().len(), 2);
+}
+
+#[test]
+fn options_are_stored_under_their_cleaned_name_and_unnamed_ones_still_answer_get_option() {
+    use fmd_lua::{ModuleSettingsStore, OptionValue};
+    let store = std::sync::Arc::new(fmd_lua::MemorySettingsStore::new());
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("modules")).unwrap();
+    fs::write(
+        dir.path().join("modules/Clean.lua"),
+        r#"
+        function Init()
+          local m = NewWebsiteModule(); m.ID = 'clean'; m.Name = 'Clean'
+          m.AddOptionEdit(' 2nd-server.url ', 'Server', 'a')
+          m.AddOptionSpinEdit('', 'Unnamed', 5)
+        end
+        "#,
+    )
+    .unwrap();
+    // CleanOptionName (baseunits/WebsiteModules.pas:223-240): trimmed, leading digits and
+    // anything but letters, digits and '_' removed.
+    store
+        .set_option("clean", "ndserverurl", OptionValue::Text("b".into()))
+        .unwrap();
+    let report = ModuleRegistry::load_dir_with(dir.path(), store);
+    let runtime = runtime_for(report.registry.get("clean").unwrap());
+
+    runtime
+        .exec(
+            r#"
+            assert(MODULE.GetOption(' 2nd-server.url ') == 'b', MODULE.GetOption(' 2nd-server.url '))
+            -- TLuaWebsiteModule.AddOption keeps an unnamed option (LuaWebsiteModules.pas:757-766).
+            assert(MODULE.GetOption('') == 5)
+            "#,
+        )
+        .unwrap();
 }

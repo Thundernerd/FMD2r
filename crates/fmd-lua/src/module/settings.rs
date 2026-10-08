@@ -28,8 +28,8 @@ impl SettingsStoreError {
     }
 }
 
-/// Per-module option values and cookies, keyed by module ID. Options are keyed by the name the
-/// module declared them with. Cookies are the module's cookie jar as JSON
+/// Per-module option values and cookies, keyed by module ID. Options are keyed by
+/// [`ModuleOption::settings_key`](super::ModuleOption::settings_key), as in FMD2's `modules.json`. Cookies are the module's cookie jar as JSON
 /// ([`fmd_http::CookieJar::to_json`]).
 pub trait ModuleSettingsStore: Send + Sync {
     /// The stored value of option `name`, if any.

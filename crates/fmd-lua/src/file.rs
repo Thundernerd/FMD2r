@@ -26,10 +26,18 @@ pub(crate) fn write_file(path: &Path, bytes: &[u8]) -> mlua::Result<()> {
     })
 }
 
+/// Compiles a Lua file like `luaL_loadfile`: read with [`read_lua_file`] and named `@<path>`.
+pub(crate) fn load_lua_file(lua: &Lua, path: &Path) -> mlua::Result<mlua::Function> {
+    let source = read_lua_file(path).map_err(mlua::Error::external)?;
+    lua.load(source)
+        .set_name(format!("@{}", path.display()))
+        .into_function()
+}
+
 /// Reads a Lua file as `luaL_loadfile` hands it to the parser (lauxlib.c `skipcomment` in Lua
 /// 5.4): a leading UTF-8 BOM is dropped, and a first line starting with `#` becomes an empty
 /// line, so line numbers stay right.
-pub(crate) fn read_lua_file(path: &Path) -> std::io::Result<Vec<u8>> {
+fn read_lua_file(path: &Path) -> std::io::Result<Vec<u8>> {
     let bytes = std::fs::read(path)?;
     let source = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes);
     if source.first() != Some(&b'#') {

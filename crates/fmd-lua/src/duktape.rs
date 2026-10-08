@@ -9,7 +9,7 @@ use mlua::IntoLuaMulti;
 use rquickjs::context::EvalOptions;
 use rquickjs::{Context, Ctx, FromJs, Function, Value};
 
-use crate::LuaDir;
+use crate::{LuaDir, app_data_or_default};
 
 /// Bounds on one `ExecJS` call. FMD2's Duktape has none; a script that exceeds them fails like
 /// any script error, so a runaway script cannot hang or crash a worker.
@@ -84,13 +84,6 @@ fn exec_js(lua: &mlua::Lua, code: mlua::Value) -> mlua::Result<mlua::MultiValue>
             Ok(mlua::MultiValue::new())
         }
     }
-}
-
-/// A copy of the runtime's app data of type `T`, or its default when none is set.
-fn app_data_or_default<T: Clone + Default + 'static>(lua: &mlua::Lua) -> T {
-    lua.app_data_ref::<T>()
-        .map(|data| data.clone())
-        .unwrap_or_default()
 }
 
 /// `ExecJS` (baseunits/Duktape.pas:77-104): evaluates `source` as global code in a fresh heap

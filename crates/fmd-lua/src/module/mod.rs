@@ -124,6 +124,21 @@ pub struct ModuleOption {
     pub kind: OptionKind,
 }
 
+impl ModuleOption {
+    /// The name the option's value is saved under: `CleanOptionName` of its name, trimmed, without
+    /// leading digits and keeping only ASCII letters, digits and `_`
+    /// (baseunits/WebsiteModules.pas:223-241, applied at :433). Empty for an option the settings
+    /// never hold.
+    pub fn settings_key(&self) -> String {
+        self.name
+            .trim()
+            .trim_start_matches(|c: char| c.is_ascii_digit())
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect()
+    }
+}
+
 /// The kind of an option, with its default value (`TOptionItem*`,
 /// baseunits/lua/LuaWebsiteModules.pas:113-132).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -269,7 +284,9 @@ impl Module {
             }
         };
         let stored = match self.settings() {
-            Some(store) if !id.is_empty() => store.option(&id, &option.name)?,
+            Some(store) if !id.is_empty() && !option.settings_key().is_empty() => {
+                store.option(&id, &option.settings_key())?
+            }
             _ => None,
         };
         Ok(Some(match (option.kind, stored) {

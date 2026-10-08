@@ -52,6 +52,13 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Clone, Default)]
 struct LuaDir(PathBuf);
 
+/// A copy of the runtime's app data of type `T`, or its default when none is set.
+fn app_data_or_default<T: Clone + Default + 'static>(lua: &mlua::Lua) -> T {
+    lua.app_data_ref::<T>()
+        .map(|data| data.clone())
+        .unwrap_or_default()
+}
+
 /// One Lua state with the FMD2 Host API installed.
 pub struct Runtime {
     lua: mlua::Lua,
