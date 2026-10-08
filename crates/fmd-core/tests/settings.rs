@@ -1,7 +1,9 @@
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 
-use fmd_core::settings::{OutputFormat, SettingsError, SettingsService, SymbolMode, WebpSaveAs};
+use fmd_core::settings::{
+    OutputFormat, SettingsError, SettingsService, SymbolMode, WebpSaveAs, XPathBackend,
+};
 use fmd_store::AppDb;
 use serde_json::json;
 
@@ -60,6 +62,9 @@ fn fresh_db_returns_fmd2_defaults() {
     assert_eq!(s.module_updater.repo_name, "FMD2");
     assert_eq!(s.module_updater.repo_ref, "master");
     assert_eq!(s.module_updater.repo_path, "lua");
+
+    // FMD2's own XPath engine until the native one reaches parity (T35).
+    assert_eq!(s.xpath.backend, XPathBackend::Fpc);
 }
 
 #[test]

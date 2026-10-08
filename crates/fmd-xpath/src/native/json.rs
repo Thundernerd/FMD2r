@@ -14,6 +14,7 @@ pub(crate) fn parse(text: &str) -> XResult<Seq> {
     let mut parser = Json {
         chars: text.chars().collect(),
         pos: 0,
+        depth: 0,
     };
     let mut items = Vec::new();
     loop {
@@ -28,7 +29,12 @@ pub(crate) fn parse(text: &str) -> XResult<Seq> {
 struct Json {
     chars: Vec<char>,
     pos: usize,
+    /// Open objects and arrays, bounded so hostile input can't exhaust the stack.
+    depth: usize,
 }
+
+/// The deepest nesting accepted.
+const MAX_DEPTH: usize = 512;
 
 impl Json {
     fn at_end(&self) -> bool {
@@ -48,8 +54,19 @@ impl Json {
     fn value(&mut self) -> XResult<Item> {
         self.skip_space();
         match self.peek() {
-            Some('{') => self.object(),
-            Some('[') => self.array(),
+            Some(c @ ('{' | '[')) => {
+                if self.depth >= MAX_DEPTH {
+                    return err("jerr:JNDY0021: nested too deeply");
+                }
+                self.depth += 1;
+                let value = if c == '{' {
+                    self.object()
+                } else {
+                    self.array()
+                };
+                self.depth -= 1;
+                value
+            }
             Some(q @ ('"' | '\'')) => Ok(Item::str(self.string(q)?)),
             Some(c) if c == '-' || c.is_ascii_digit() => self.number(),
             Some(c) if c.is_alphabetic() => {

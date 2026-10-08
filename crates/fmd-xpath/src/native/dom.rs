@@ -44,7 +44,18 @@ impl Dom {
     /// Parses `html` (invalid UTF-8 replaced) like `TTreeParser.parseTree`.
     pub(crate) fn parse(html: &[u8]) -> Dom {
         let sink = Sink::default();
-        let sink = html5ever::parse_document(sink, Default::default())
+        // Closer to internettools: `<noscript>` content is markup (scripting off), and there is
+        // no quirks mode, which an `iframe srcdoc` document never enters (`<p>` closes before
+        // `<table>`).
+        let options = html5ever::ParseOpts {
+            tree_builder: html5ever::tree_builder::TreeBuilderOpts {
+                scripting_enabled: false,
+                iframe_srcdoc: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let sink = html5ever::parse_document(sink, options)
             .from_utf8()
             .one(html);
         let prefix = leading_whitespace(html);
@@ -119,59 +130,72 @@ impl Dom {
     /// (internettools data/xquery__serialization_nodes.pas:386-700).
     pub(crate) fn html(&self, id: NodeId, outer: bool) -> String {
         let mut out = String::new();
-        match &self.nodes[id].kind {
-            NodeKind::Document => self.inner(id, false, &mut out),
-            NodeKind::Element(_) if !outer => self.inner(id, false, &mut out),
-            NodeKind::Element(_) => self.outer(id, false, &mut out),
-            NodeKind::Text(text) if outer => escape_text(text, &mut out),
-            NodeKind::Text(_) | NodeKind::Attribute { .. } => {}
+        let first = match &self.nodes[id].kind {
+            NodeKind::Element(_) if outer => id,
+            NodeKind::Document | NodeKind::Element(_) => id + 1,
+            NodeKind::Text(text) => {
+                if outer {
+                    escape_text(text, &mut out);
+                }
+                return out;
+            }
+            NodeKind::Attribute { .. } => return out,
+        };
+        // Walks the subtree in document order, without recursion: the open elements, with
+        // whether each makes its content raw text.
+        let mut open: Vec<(NodeId, &str, bool)> = Vec::new();
+        let mut raw = 0;
+        for i in first..=self.nodes[id].last {
+            while let Some(&(element, name, is_raw)) = open.last() {
+                if self.nodes[element].last >= i {
+                    break;
+                }
+                open.pop();
+                raw -= usize::from(is_raw);
+                close_tag(name, &mut out);
+            }
+            let node = &self.nodes[i];
+            match &node.kind {
+                NodeKind::Text(text) if raw > 0 => out.push_str(text),
+                NodeKind::Text(text) => escape_text(text, &mut out),
+                NodeKind::Element(name) => {
+                    self.start_tag(i, name, raw > 0, &mut out);
+                    if !(node.children.is_empty() && is_childless(name)) {
+                        let is_raw = is_raw_text(name);
+                        raw += usize::from(is_raw);
+                        open.push((i, name, is_raw));
+                    }
+                }
+                NodeKind::Document | NodeKind::Attribute { .. } => {}
+            }
+        }
+        while let Some((_, name, _)) = open.pop() {
+            close_tag(name, &mut out);
         }
         out
     }
 
-    fn inner(&self, id: NodeId, cdata: bool, out: &mut String) {
-        for &child in &self.nodes[id].children {
-            self.outer(child, cdata, out);
-        }
-    }
-
-    fn outer(&self, id: NodeId, cdata: bool, out: &mut String) {
-        let node = &self.nodes[id];
-        match &node.kind {
-            NodeKind::Text(text) if cdata => out.push_str(text),
-            NodeKind::Text(text) => escape_text(text, out),
-            NodeKind::Element(name) => {
-                out.push('<');
-                out.push_str(name);
-                for &a in &node.attributes {
-                    if let NodeKind::Attribute { name: attr, value } = &self.nodes[a].kind {
-                        out.push(' ');
-                        out.push_str(attr);
-                        if attr.eq_ignore_ascii_case(value) && is_boolean_attribute(name, attr) {
-                            continue;
-                        }
-                        out.push_str("=\"");
-                        if cdata {
-                            out.push_str(value);
-                        } else {
-                            escape_attribute(value, out);
-                        }
-                        out.push('"');
-                    }
+    /// `<name attributes>`; attribute values are raw inside raw text elements.
+    fn start_tag(&self, id: NodeId, name: &str, raw: bool, out: &mut String) {
+        out.push('<');
+        out.push_str(name);
+        for &a in &self.nodes[id].attributes {
+            if let NodeKind::Attribute { name: attr, value } = &self.nodes[a].kind {
+                out.push(' ');
+                out.push_str(attr);
+                if attr.eq_ignore_ascii_case(value) && is_boolean_attribute(name, attr) {
+                    continue;
                 }
-                if node.children.is_empty() && is_childless(name) {
-                    out.push('>');
-                    return;
+                out.push_str("=\"");
+                if raw {
+                    out.push_str(value);
+                } else {
+                    escape_attribute(value, out);
                 }
-                out.push('>');
-                self.inner(id, cdata || is_raw_text(name), out);
-                out.push_str("</");
-                out.push_str(name);
-                out.push('>');
+                out.push('"');
             }
-            NodeKind::Document => self.inner(id, cdata, out),
-            NodeKind::Attribute { .. } => {}
         }
+        out.push('>');
     }
 
     /// A human-readable text (`TTreeNode.innerText`, internettools
@@ -185,56 +209,45 @@ impl Dom {
         }
         let mut out = String::new();
         let mut trailing_space = false;
-        self.inner_text_walk(id, &mut out, &mut trailing_space);
-        trim_pascal(&out).to_owned()
-    }
-
-    fn inner_text_walk(&self, id: NodeId, out: &mut String, trailing_space: &mut bool) {
-        let node = &self.nodes[id];
-        match &node.kind {
-            NodeKind::Text(text) => {
-                if text.is_empty() {
-                    return;
+        let mut i = id;
+        while i <= self.nodes[id].last {
+            let node = &self.nodes[i];
+            match &node.kind {
+                NodeKind::Text(text) if !text.is_empty() => {
+                    let normalized = trim_and_normalize(text);
+                    if normalized.is_empty() {
+                        trailing_space = true;
+                    } else {
+                        let ends_with_space = out.as_bytes().last().is_some_and(|&b| b <= b' ');
+                        let starts_with_space = text.as_bytes().first().is_some_and(|&b| b <= b' ');
+                        if (trailing_space || starts_with_space) && !ends_with_space {
+                            out.push(' ');
+                        }
+                        out.push_str(&normalized);
+                        trailing_space = text.as_bytes().last().is_some_and(|&b| b <= b' ');
+                    }
                 }
-                let normalized = trim_and_normalize(text);
-                if normalized.is_empty() {
-                    *trailing_space = true;
-                    return;
+                NodeKind::Element(name) => {
+                    if self.skips_text(i, name) {
+                        i = node.last + 1;
+                        continue;
+                    }
+                    let marker = match name.to_ascii_lowercase().as_str() {
+                        "br" | "tr" => "\n",
+                        "td" | "th" => "\t",
+                        "p" => "\n\n",
+                        _ => "",
+                    };
+                    if !marker.is_empty() {
+                        out.push_str(marker);
+                        trailing_space = false;
+                    }
                 }
-                let ends_with_space = out.as_bytes().last().is_some_and(|&b| b <= b' ');
-                let starts_with_space = text.as_bytes().first().is_some_and(|&b| b <= b' ');
-                if (*trailing_space || starts_with_space) && !ends_with_space {
-                    out.push(' ');
-                }
-                out.push_str(&normalized);
-                *trailing_space = text.as_bytes().last().is_some_and(|&b| b <= b' ');
+                NodeKind::Text(_) | NodeKind::Document | NodeKind::Attribute { .. } => {}
             }
-            NodeKind::Element(name) => {
-                if self.skips_text(id, name) {
-                    return;
-                }
-                let before = out.len();
-                match name.to_ascii_lowercase().as_str() {
-                    "br" => out.push('\n'),
-                    "td" | "th" => out.push('\t'),
-                    "tr" => out.push('\n'),
-                    "p" => out.push_str("\n\n"),
-                    _ => {}
-                }
-                if out.len() != before {
-                    *trailing_space = false;
-                }
-                for &child in &node.children {
-                    self.inner_text_walk(child, out, trailing_space);
-                }
-            }
-            NodeKind::Document => {
-                for &child in &node.children {
-                    self.inner_text_walk(child, out, trailing_space);
-                }
-            }
-            NodeKind::Attribute { .. } => {}
+            i += 1;
         }
+        trim_pascal(&out).to_owned()
     }
 
     fn skips_text(&self, id: NodeId, name: &str) -> bool {
@@ -245,6 +258,12 @@ impl Dom {
         SKIPPED.iter().any(|s| s.eq_ignore_ascii_case(name))
             || self.attribute(id, "style").is_some_and(css_hides)
     }
+}
+
+fn close_tag(name: &str, out: &mut String) {
+    out.push_str("</");
+    out.push_str(name);
+    out.push('>');
 }
 
 /// Pascal's `strTrim`: strips every character up to `' '`.
@@ -496,57 +515,67 @@ impl Sink {
     fn into_dom(self) -> Dom {
         let nodes = self.nodes.into_inner();
         let mut dom = Dom { nodes: Vec::new() };
-        freeze(&nodes, 0, None, &mut dom);
+        freeze(&nodes, &mut dom);
         dom
     }
 }
 
-/// Copies `id`'s subtree into `dom` in document order.
-fn freeze(nodes: &[SinkNode], id: usize, parent: Option<NodeId>, dom: &mut Dom) {
-    let new = dom.nodes.len();
-    let (kind, children) = match &nodes[id].data {
-        SinkData::Document => (NodeKind::Document, &nodes[id].children),
-        SinkData::Element { name, template, .. } => (
-            NodeKind::Element(qualified(name)),
-            match template {
-                Some(contents) => &nodes[*contents].children,
-                None => &nodes[id].children,
-            },
-        ),
-        SinkData::Text(text) => (NodeKind::Text(text.clone()), &nodes[id].children),
-        SinkData::Dropped => return,
-    };
-    dom.nodes.push(Node {
-        kind,
-        parent,
-        attributes: Vec::new(),
-        children: Vec::new(),
-        last: new,
-    });
-    if let SinkData::Element { attrs, .. } = &nodes[id].data {
-        for attr in attrs {
-            let a = dom.nodes.len();
-            dom.nodes.push(Node {
-                kind: NodeKind::Attribute {
-                    name: qualified(&attr.name),
-                    value: attr.value.to_string(),
+/// Copies the tree under the sink's document into `dom` in document order, without
+/// recursion (pages can nest arbitrarily deep).
+fn freeze(nodes: &[SinkNode], dom: &mut Dom) {
+    let mut pending: Vec<(usize, Option<NodeId>)> = vec![(0, None)];
+    while let Some((id, parent)) = pending.pop() {
+        let (kind, children) = match &nodes[id].data {
+            SinkData::Document => (NodeKind::Document, &nodes[id].children),
+            SinkData::Element { name, template, .. } => (
+                NodeKind::Element(qualified(name)),
+                match template {
+                    Some(contents) => &nodes[*contents].children,
+                    None => &nodes[id].children,
                 },
-                parent: Some(new),
-                attributes: Vec::new(),
-                children: Vec::new(),
-                last: a,
-            });
-            dom.nodes[new].attributes.push(a);
+            ),
+            SinkData::Text(text) => (NodeKind::Text(text.clone()), &nodes[id].children),
+            SinkData::Dropped => continue,
+        };
+        let new = dom.nodes.len();
+        dom.nodes.push(Node {
+            kind,
+            parent,
+            attributes: Vec::new(),
+            children: Vec::new(),
+            last: new,
+        });
+        if let Some(parent) = parent {
+            dom.nodes[parent].children.push(new);
         }
-    }
-    for &child in children {
-        let before = dom.nodes.len();
-        freeze(nodes, child, Some(new), dom);
-        if dom.nodes.len() > before {
-            dom.nodes[new].children.push(before);
+        if let SinkData::Element { attrs, .. } = &nodes[id].data {
+            for attr in attrs {
+                let a = dom.nodes.len();
+                dom.nodes.push(Node {
+                    kind: NodeKind::Attribute {
+                        name: qualified(&attr.name),
+                        value: attr.value.to_string(),
+                    },
+                    parent: Some(new),
+                    attributes: Vec::new(),
+                    children: Vec::new(),
+                    last: a,
+                });
+                dom.nodes[new].attributes.push(a);
+            }
         }
+        pending.extend(children.iter().rev().map(|&child| (child, Some(new))));
     }
-    dom.nodes[new].last = dom.nodes.len() - 1;
+    // Children have larger ids than their parents, so going backwards sees them first.
+    for id in (0..dom.nodes.len()).rev() {
+        let node = &dom.nodes[id];
+        let last = match (node.children.last(), node.attributes.last()) {
+            (Some(&child), _) => dom.nodes[child].last,
+            (None, Some(&attribute)) => attribute,
+            (None, None) => id,
+        };
+        dom.nodes[id].last = last;
+    }
 }
 
 /// `prefix:local`, as internettools names nodes from the source.

@@ -15,6 +15,7 @@ use std::path::PathBuf;
 pub use class::LuaClass;
 pub use duktape::JsLimits;
 pub use fmd_http::TerminateToken;
+pub use fmd_xpath::Backend as XPathBackend;
 pub use globals::Globals;
 pub use libs::subprocess;
 pub use memory_stream::{LuaMemoryStream, MemoryStream};
@@ -27,12 +28,16 @@ pub enum Error {
     /// A Lua chunk failed to compile or raised an error, or a value failed to convert.
     #[error(transparent)]
     Lua(#[from] mlua::Error),
+    /// The XPath backend asked for isn't part of this build (its cargo feature is off).
+    #[error("the {0:?} XPath backend is not built in")]
+    MissingXPathBackend(XPathBackend),
 }
 
 impl From<Error> for mlua::Error {
     fn from(error: Error) -> Self {
         match error {
             Error::Lua(error) => error,
+            other => mlua::Error::external(other),
         }
     }
 }
@@ -67,12 +72,25 @@ impl Runtime {
         lua.set_app_data(duktape::JsSettings::default());
         duktape::register(&lua)?;
         libs::register(&lua)?;
-        // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) needs an XPath backend: without
-        // the `xpath-fpc` feature there is none yet (the native one is T34), so the global is
-        // missing.
-        #[cfg(feature = "xpath-fpc")]
-        xquery::register(&lua, std::rc::Rc::new(fmd_xpath::fpc::FpcEngine))?;
+        // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) over the default backend, `fpc`
+        // (the `xpath.backend` setting's default), or `native` when this build has no `fpc`;
+        // with neither built in, the global is missing.
+        let engine = XPathBackend::Fpc
+            .engine()
+            .or_else(|| XPathBackend::Native.engine());
+        if let Some(engine) = engine {
+            xquery::register(&lua, engine)?;
+        }
         Ok(Runtime { lua })
+    }
+
+    /// Reinstalls `CreateTXQuery` over `backend` (the `xpath.backend` setting). TXQuery objects
+    /// made before keep their backend.
+    pub fn set_xpath_backend(&self, backend: XPathBackend) -> Result<()> {
+        let engine = backend
+            .engine()
+            .ok_or(Error::MissingXPathBackend(backend))?;
+        xquery::register(&self.lua, engine)
     }
 
     /// Sets the directory holding FMD2's `lua/` tree (`modules/`, `utils/`, ...). Defaults to

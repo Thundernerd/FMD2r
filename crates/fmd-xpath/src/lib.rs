@@ -12,6 +12,29 @@ pub mod fpc;
 #[cfg(feature = "native")]
 pub mod native;
 
+/// An XPath backend, as the `xpath.backend` setting names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Backend {
+    /// FMD2's own engine (internettools) through `libfmdxpath.so`.
+    Fpc,
+    /// The pure-Rust engine.
+    Native,
+}
+
+impl Backend {
+    /// The backend's engine, or `None` when this build leaves it out (its cargo feature is off).
+    pub fn engine(self) -> Option<Rc<dyn XPathEngine>> {
+        match self {
+            #[cfg(feature = "fpc")]
+            Backend::Fpc => Some(Rc::new(fpc::FpcEngine)),
+            #[cfg(feature = "native")]
+            Backend::Native => Some(Rc::new(native::NativeEngine)),
+            #[allow(unreachable_patterns)] // Unreachable when both backends are built.
+            _ => None,
+        }
+    }
+}
+
 /// Errors raised by an XPath backend.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
