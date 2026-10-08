@@ -202,6 +202,20 @@ export const SETTINGS_SECTIONS: Section[] = [
 		]
 	},
 	{
+		id: 'covers',
+		title: 'Covers',
+		fields: [
+			number(
+				'covers.revalidate_after_hours',
+				'Recheck cached covers after (hours)',
+				0,
+				U32_MAX,
+				'0 asks the website every time.'
+			),
+			number('covers.cache_size_mb', 'Cover cache size (MiB)', 1, U32_MAX)
+		]
+	},
+	{
 		id: 'server',
 		title: 'Server',
 		fields: [

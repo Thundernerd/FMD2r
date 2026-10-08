@@ -86,6 +86,7 @@ export const defaultSettings = (): Settings => ({
 		github_token: null,
 		keep_last_good: true
 	},
+	covers: { revalidate_after_hours: 168, cache_size_mb: 256 },
 	server: { bind: '0.0.0.0:8080', auth_token: null },
 	xpath: { backend: 'fpc' }
 });

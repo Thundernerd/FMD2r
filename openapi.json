@@ -767,6 +767,26 @@
 					}
 				}
 			},
+			"CoverSettings": {
+				"type": "object",
+				"description": "The cover proxy's disk cache (`/api/covers`). No FMD2 counterpart: FMD2 keeps the one cover it\nshows in memory (baseunits/uGetMangaInfosThread.pas:168-191).",
+				"properties": {
+					"cache_size_mb": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Size cap of the cover cache in MiB; least recently used covers are evicted past it.\nMinimum 1.",
+						"default": 256,
+						"minimum": 1
+					},
+					"revalidate_after_hours": {
+						"type": "integer",
+						"format": "int32",
+						"description": "Hours a cached cover is served before the site is asked whether it changed; 0 asks every\ntime.",
+						"default": 168,
+						"minimum": 0
+					}
+				}
+			},
 			"FavoriteSettings": {
 				"type": "object",
 				"description": "New-chapter checks for the library (mangadownloader/forms/frmMain.pas:5946-5955).",
@@ -1547,6 +1567,17 @@
 							"threads_per_task": 1,
 							"timeout_secs": 30,
 							"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+						}
+					},
+					"covers": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/CoverSettings"
+							}
+						],
+						"default": {
+							"cache_size_mb": 256,
+							"revalidate_after_hours": 168
 						}
 					},
 					"favorites": {

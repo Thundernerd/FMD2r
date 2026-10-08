@@ -486,6 +486,26 @@ export interface components {
 			 */
 			user_agent: string;
 		};
+		/**
+		 * @description The cover proxy's disk cache (`/api/covers`). No FMD2 counterpart: FMD2 keeps the one cover it
+		 *     shows in memory (baseunits/uGetMangaInfosThread.pas:168-191).
+		 */
+		CoverSettings: {
+			/**
+			 * Format: int32
+			 * @description Size cap of the cover cache in MiB; least recently used covers are evicted past it.
+			 *     Minimum 1.
+			 * @default 256
+			 */
+			cache_size_mb: number;
+			/**
+			 * Format: int32
+			 * @description Hours a cached cover is served before the site is asked whether it changed; 0 asks every
+			 *     time.
+			 * @default 168
+			 */
+			revalidate_after_hours: number;
+		};
 		/** @description New-chapter checks for the library (mangadownloader/forms/frmMain.pas:5946-5955). */
 		FavoriteSettings: {
 			/**
@@ -961,6 +981,13 @@ export interface components {
 			 *     }
 			 */
 			connections: components['schemas']['ConnectionSettings'];
+			/**
+			 * @default {
+			 *       "cache_size_mb": 256,
+			 *       "revalidate_after_hours": 168
+			 *     }
+			 */
+			covers: components['schemas']['CoverSettings'];
 			/**
 			 * @default {
 			 *       "auto_download": false,

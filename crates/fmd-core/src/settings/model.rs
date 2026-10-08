@@ -510,6 +510,7 @@ pub struct CoverSettings {
     pub revalidate_after_hours: u32,
     /// Size cap of the cover cache in MiB; least recently used covers are evicted past it.
     /// Minimum 1.
+    #[schema(minimum = 1)]
     pub cache_size_mb: u32,
 }
 
