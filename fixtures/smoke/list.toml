@@ -1,6 +1,25 @@
 # The smoke list: representative upstream modules whose `module info` and `module pages` runs
 # are recorded (fixtures/smoke/<name>/), replayed offline in CI and run live every night.
-# See fixtures/README.md.
+# See fixtures/README.md; re-record an entry with scripts/smoke-record.sh <name>.
+#
+# Coverage (each entry's `notes` say what it covers):
+# - Templates: Madara (3asq-dig-it, mangaread-a-i-doctor, manhuaplus-catastrophic),
+#   MangaThemesia (thunderscans-barbarian, rizzcomics-absolute-dominion), WPComics (xoxocomics,
+#   manhuaplus-top), HeanCMS (omegascans), GroupLe (selfmanga), FoOlSlide (deathtollscans,
+#   seinagi-online), Liliana (manhuaplus-org), KeyoApp (genztoons-dragon-kunlun), Guya (guya-moe),
+#   LibGroup (mangalib).
+# - JSON APIs: mangadex, mangaplus, mangaball, olympus-scans, voratoon, guya-moe, mangalib, webtoons.
+# - Libraries: fmd.crypto (mangadex, mangaplus, webtoons, mangaball, philia-scans, voratoon,
+#   olympus-scans, e-hentai), fmd.duktape (fanfox), fmd.imagepuzzle (nexus-scanlation,
+#   philia-scans), pb (mangaplus).
+# - Cookies (webtoons, fanfox, e-hentai), account support (selfmanga, e-hentai; both run logged
+#   out), DynamicPageLink (e-hentai).
+#
+# Not covered, for want of a live site when the list was recorded (2026-10): MangaReaderOnline,
+# FMReader, MangaBox, Genkan and NineManga (sites dead, parked or behind Cloudflare challenges),
+# MadTheme (TooniTube's chapter API now redirects to another host), MangaHub (its API host is
+# down). Modules that run node (utils.nodejs, e.g. Comix) can't be replayed: node fetches pages
+# itself, past the recorded HTTP.
 
 [[entry]]
 name = "mangadex"
@@ -8,3 +27,171 @@ module_id = "d07c9c2425764da8ba056505f57cf40c"
 manga_url = "https://mangadex.org/title/a25e46ec-30f7-4db6-89df-cacbc1d9a900/horimiya"
 chapter_url = "https://mangadex.org/2140c24a-cc73-4c01-90a7-7ac0117b28b9"
 notes = "JSON API (api.mangadex.org); fmd.crypto; the plan's end-to-end check"
+
+[[entry]]
+name = "3asq-dig-it"
+module_id = "7bda2905b61c49d1976777e9f2356361"
+manga_url = "https://3asq.online/manga/dig-it/"
+chapter_url = "https://3asq.online/manga/dig-it/1/"
+notes = "Madara template"
+
+[[entry]]
+name = "mangaread-a-i-doctor"
+module_id = "c01aa037f7f1459984e7cd8676fe9658"
+manga_url = "https://www.mangaread.org/manga/a-i-doctor/"
+chapter_url = "https://www.mangaread.org/manga/a-i-doctor/chapter-1/"
+notes = "Madara template"
+
+[[entry]]
+name = "manhuaplus-catastrophic"
+module_id = "a964861afd0f410cb5122df5f50d3e1a"
+manga_url = "https://manhuaplus.com/manga/catastrophic563/"
+chapter_url = "https://manhuaplus.com/manga/catastrophic563/chapter-1/"
+notes = "Madara template"
+
+[[entry]]
+name = "thunderscans-barbarian"
+module_id = "d96acafbe22849349b9bb6a62a42aaf5"
+manga_url = "https://en-thunderscans.com/comics/a-barbarians-adventure-in-a-fantasy-world/"
+chapter_url = "https://en-thunderscans.com/a-barbarians-adventure-in-a-fantasy-world-chapter-1/"
+notes = "MangaThemesia template"
+
+[[entry]]
+name = "rizzcomics-absolute-dominion"
+module_id = "3593adad980d454abe489c42e7158032"
+manga_url = "https://rizzfables.com/series/r2311170-absolute-dominion"
+chapter_url = "https://rizzfables.com/chapter/r2311170-absolute-dominion-chapter-0"
+notes = "MangaThemesia template"
+
+[[entry]]
+name = "genztoons-dragon-kunlun"
+module_id = "ef9347dbab424553b9909332c8739f32"
+manga_url = "https://genztoons.org/series/a-dragon-lives-in-kunlun/"
+chapter_url = "https://genztoons.org/chapter/657595f9f1b-6575c88577e/"
+notes = "KeyoApp template"
+
+[[entry]]
+name = "omegascans"
+module_id = "752cda75b5e24f6ab4256079c564eba2"
+manga_url = "https://omegascans.org/series/a-theme-for-every-building"
+chapter_url = "https://omegascans.org/chapter/a-theme-for-every-building/chapter-1"
+notes = "HeanCMS template"
+
+[[entry]]
+name = "xoxocomics"
+module_id = "ae6218eafb5b42a0850ee0c348578ae6"
+manga_url = "https://xoxocomic.com/comic/357"
+chapter_url = "https://xoxocomic.com/comic/357/full"
+notes = "WPComics template"
+
+[[entry]]
+name = "deathtollscans"
+module_id = "613368d384af4edf8036b869c85e2967"
+manga_url = "https://reader.deathtollscans.net/series/a_gentle_time/"
+chapter_url = "https://reader.deathtollscans.net/read/a_gentle_time/en/0/0/"
+notes = "FoOlSlide template"
+
+[[entry]]
+name = "selfmanga"
+module_id = "e658998df5b9454abe469d181f51e6c8"
+manga_url = "https://1.selfmanga.live/boi_za_sudbu"
+chapter_url = "https://1.selfmanga.live/boi_za_sudbu/vol1/1"
+notes = "GroupLe template (SelfMangaRU); account support (AccountSupport/OnLogin), run logged out"
+
+[[entry]]
+name = "manhuaplus-org"
+module_id = "a97df15cb1224eb0a40eb15dfe6fd299"
+manga_url = "https://manhuaplus.org/manga/sss-rank-paladin-who-transcends-common-sense"
+chapter_url = "https://manhuaplus.org/manga/sss-rank-paladin-who-transcends-common-sense/chapter-1"
+notes = "Liliana template"
+
+[[entry]]
+name = "manhuaplus-top"
+module_id = "dae88998411643008b6d75852bb4c398"
+manga_url = "https://manhuaplus.top/manga/sss-rank-paladin-who-transcends-common-sense"
+chapter_url = "https://manhuaplus.top/manga/sss-rank-paladin-who-transcends-common-sense/chapter-1"
+notes = "WPComics template (second host)"
+
+[[entry]]
+name = "seinagi-online"
+module_id = "4c5e7c7582f6402b9bab2b019c8c4429"
+manga_url = "https://online.seinagi.org.es/series/frantic/"
+chapter_url = "https://online.seinagi.org.es/read/frantic/es/0/1/"
+notes = "FoOlSlide template (second host)"
+
+[[entry]]
+name = "mangaplus"
+module_id = "f239e87c7a1248d29cdd2ea8a77df36c"
+manga_url = "https://mangaplus.shueisha.co.jp/titles/100056"
+chapter_url = "https://mangaplus.shueisha.co.jp/1001834"
+notes = "JSON/protobuf API (pb); fmd.crypto image key"
+
+[[entry]]
+name = "webtoons"
+module_id = "18f636ec7fdf47fabe95d940ad0b548f"
+manga_url = "https://www.webtoons.com/en/drama/at-arms-length/list?title_no=3653"
+chapter_url = "https://www.webtoons.com/en/drama/at-arms-length/episode-1/viewer?title_no=3653&episode_no=1"
+notes = "HTML + mobile JSON episodes API; fmd.crypto; cookies"
+
+[[entry]]
+name = "mangaball"
+module_id = "0b6ee312575e4f3583a89c62ce2ed18f"
+manga_url = "https://mangaball.com/title-detail/6889f391e00aa4d41d07dfeb"
+chapter_url = "https://mangaball.com/chapter-detail/68cfed45b5bd46018066b668"
+notes = "JSON API (api.mangaball.com); fmd.crypto HTMLEncode"
+
+[[entry]]
+name = "nexus-scanlation"
+module_id = "a1f3c7d9e0b64a2c8d5f1e93b7a4c6d2"
+manga_url = "https://nexusscanlation.com/series/el-dueno-de-la-isla-desierta"
+chapter_url = "https://nexusscanlation.com/el-dueno-de-la-isla-desierta/capitulo-1"
+notes = "JSON API; uses fmd.imagepuzzle (descrambles while downloading, so info/pages only cover the module around it)"
+
+[[entry]]
+name = "philia-scans"
+module_id = "c280ce32f36843fbba73dcc891e979af"
+manga_url = "https://philiascans.org/series/confession-of-an-ayakashi-bride"
+chapter_url = "https://philiascans.org/manga/confession-of-an-ayakashi-bride/chapters/chapter-1"
+notes = "Next.js page data (utils.nextjs); fmd.crypto; uses fmd.imagepuzzle (descrambles while downloading)"
+
+[[entry]]
+name = "voratoon"
+module_id = "b8206e754d4541689c1d367f7e19fd64"
+manga_url = "https://v1.voratoon.com/series/amphisbaena-no-kuchizuke"
+chapter_url = "https://v1.voratoon.com/series/amphisbaena-no-kuchizuke/chapters/1"
+notes = "Next.js JSON/API; fmd.crypto"
+
+[[entry]]
+name = "olympus-scans"
+module_id = "760d177b1f6d4763a08971c0c1b5572b"
+manga_url = "https://olympusxyz.com/series/comic-el-ascenso-de-namgung-el-emperador-de-la-espada-20261008-080454595"
+chapter_url = "https://olympusxyz.com/el-ascenso-de-namgung-el-emperador-de-la-espada-20261008-080454595/chapters/129742"
+notes = "JSON API (panel.olympusxyz.com), paginated chapter list"
+
+[[entry]]
+name = "fanfox"
+module_id = "0d3653a8d9b747a381374f32e0a1641e"
+manga_url = "https://fanfox.net/manga/kimi_no_na_wa/"
+chapter_url = "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/"
+notes = "fmd.duktape (ExecJS unpacks the page script); cookies; Referer header; sleeps 2s per page request (FanFox.lua:131)"
+
+[[entry]]
+name = "e-hentai"
+module_id = "f7ab487b6d29468e8280e8a3cbebbeb4"
+manga_url = "https://e-hentai.org/g/4239217/914dbd2064/"
+chapter_url = "https://e-hentai.org/g/4239217/914dbd2064/"
+notes = "DynamicPageLink (the only upstream module with it: pages are container links); cookies (nw=1); account support, run logged out; fmd.crypto"
+
+[[entry]]
+name = "guya-moe"
+module_id = "7d12ff8d54d44137adbdf8fbe6f49bee"
+manga_url = "https://guya.cubari.moe/manga/Original-Hinatazaka/"
+chapter_url = "https://guya.cubari.moe/read/manga/Original-Hinatazaka/1/#9"
+notes = "Guya template; JSON API"
+
+[[entry]]
+name = "mangalib"
+module_id = "df365d3d22f141ad8b9224cc1413ca02"
+manga_url = "https://mangalib.me/ru/manga/269436--the-flash"
+chapter_url = "https://mangalib.me/manga/269436--the-flash/chapter?number=1&volume=1"
+notes = "LibGroup template; JSON API"

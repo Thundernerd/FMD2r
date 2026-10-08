@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://manhuaplus.org/manga/sss-rank-paladin-who-transcends-common-sense/chapter-1",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://manhuaplus.org/ajax/image/list/chap/31407",
+      "status": 200
+    }
+  ]
+}

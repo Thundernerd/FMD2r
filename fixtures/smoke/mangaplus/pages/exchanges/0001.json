@@ -1,0 +1,81 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://jumpg-webapi.tokyo-cdn.com/api/manga_viewer?chapter_id=1001834&img_quality=super_high&split=yes",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ],
+      [
+        "Session-Token",
+        "2002699c-c645-19c5-8634-c62778c8b4dc"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 19:56:47 GMT"
+      ],
+      [
+        "content-type",
+        "application/x-protobuf"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "access-control-allow-methods",
+        "POST, GET, PUT, DELETE, OPTIONS"
+      ],
+      [
+        "access-control-allow-headers",
+        "Origin, Authorization, Accept"
+      ],
+      [
+        "access-control-allow-credentials",
+        "true"
+      ],
+      [
+        "content-encoding",
+        "gzip"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "gzip"
+  }
+}

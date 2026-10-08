@@ -1,0 +1,177 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://philiascans.org/api/chapters/16102/get-drm?session=cmuzyqwkp0rthyd6awd8va6qy",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ],
+      [
+        "X-Reader-Access-Token",
+        "v1.1791490658.908b3d063ecd6d52f2f6a2fe27140bd4768f75b47218db64e551eb3995d635e9"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "reason": "Not Found",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:02:38 GMT"
+      ],
+      [
+        "content-type",
+        "application/json; charset=utf-8"
+      ],
+      [
+        "content-length",
+        "40"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "cross-origin-opener-policy",
+        "same-origin"
+      ],
+      [
+        "cross-origin-resource-policy",
+        "cross-origin"
+      ],
+      [
+        "origin-agent-cluster",
+        "?1"
+      ],
+      [
+        "referrer-policy",
+        "strict-origin-when-cross-origin"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-dns-prefetch-control",
+        "off"
+      ],
+      [
+        "x-download-options",
+        "noopen"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ],
+      [
+        "x-permitted-cross-domain-policies",
+        "none"
+      ],
+      [
+        "x-xss-protection",
+        "0"
+      ],
+      [
+        "vary",
+        "Origin"
+      ],
+      [
+        "access-control-allow-credentials",
+        "true"
+      ],
+      [
+        "x-ratelimit-limit-burst",
+        "12"
+      ],
+      [
+        "x-ratelimit-remaining-burst",
+        "11"
+      ],
+      [
+        "x-ratelimit-reset-burst",
+        "10000"
+      ],
+      [
+        "x-ratelimit-limit",
+        "60"
+      ],
+      [
+        "x-ratelimit-remaining",
+        "59"
+      ],
+      [
+        "x-ratelimit-reset",
+        "60000"
+      ],
+      [
+        "cache-control",
+        "no-store"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "speculation-rules",
+        "\"/cdn-cgi/speculation\""
+      ],
+      [
+        "server-timing",
+        "cfCacheStatus;desc=\"DYNAMIC\""
+      ],
+      [
+        "server-timing",
+        "cfEdge;dur=13,cfOrigin;dur=83"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=ZhMbTJe3OeYAznPBCYHRWwtW0yxLNW8sT%2ByNprYSC0KUFWxHyMtrU%2F5t7xEanfOyQpxCpMBbEL91VUUmT5WezBRBTpuCwixy87zRCc%2FcpFA%2B2QgdvBaAzKICyFkhn4%2BVc5E%3D\"}]}"
+      ],
+      [
+        "cf-ray",
+        "a477be8f3a63f18a-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0005.response",
+    "decoded_from": null
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://guya.cubari.moe/api/series/Original-Hinatazaka",
+    "headers": [
+      [
+        "User-Agent",
+        "FreeMangaDownloader"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 301,
+    "reason": "Moved Permanently",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:00:37 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=utf-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "location",
+        "/api/series/Original-Hinatazaka/"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=3600; includeSubDomains; preload"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-xss-protection",
+        "1; mode=block"
+      ],
+      [
+        "referrer-policy",
+        "same-origin"
+      ],
+      [
+        "cf-cache-status",
+        "HIT"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=POi%2FNw00mnF3Sp2imuD%2Bn8ryoF77aLQ9lGasO6%2FrskhfcF%2BwXZ0hloBllHmmEvSvIDG%2FjkFCSwqjjA4xmEn789pT4Bqe8We06Y8QyqPK05d9r2C8hnRpKFxLN7iqF523vNo%3D\"}]}"
+      ],
+      [
+        "cf-ray",
+        "a477bb9bede4587a-LHR"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": null,
+    "decoded_from": null
+  }
+}

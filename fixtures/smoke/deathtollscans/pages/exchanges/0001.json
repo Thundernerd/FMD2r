@@ -1,0 +1,109 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://reader.deathtollscans.net/read/a_gentle_time/en/0/0/",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Content-Type",
+        "application/x-www-form-urlencoded; charset=UTF-8"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": "bodies/0001.request"
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 19:50:03 GMT"
+      ],
+      [
+        "server",
+        "Apache"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=15552000; includeSubDomains; preload"
+      ],
+      [
+        "x-powered-by",
+        "PHP/5.6.40"
+      ],
+      [
+        "set-cookie",
+        "ci_session=UDRROAY2VDZbIlJ2DToMMVFhB2pTcAJ1ATNcf1IqAjoDYFVrAwxSOVMyBHUAP1R%2FUmpTNwM8DjhTcVUzCDkCPlVjVmdSP1MyDDkEZwdgAjVQZ1EyBjNUPls7UmENMAxmUWcHYFM3AmcBNFxtUm0CYgM%2FVTwDYlJmU2UEdQA%2FVH9SalM1Az4OOFNxVWsIeQJZVWNWYlI9U3AMZQQnByQCIlBuUXEGOFQ9W2pSPw0iDDZRYwd%2BU2YCMwF4XD1SaQJkAyFVNANjUmVTdARsAHdUNlJhUzQDNA4gUyZVcQhsAnRVXVZnUj5TZwxuBCAHdQI7UCZROAYzVD1baFI%2FDSIMTVE%2BBypTOwJqATpcbVJ2AmYDIVU1A3NSeFMBBD4AalRoUj9TcwN9DiJTHVVWCCkCN1UyVihSaVM5DCAEAwc%2BAm5QY1E2BjlULFshUjMNNAwpUXEHEVMiAnYBOlxpUg4CNgNtVU4DOlIkU3kEYgA3VDtSflM3AzgOIlN7VUkIQQJSVU9WSlJ1UyIMbAQ9BzwCZVB1UUUGZ1RvWzJSag0pDCBREgc4UyACaQE7XGlSdgJiAzxVNgN9UmBTeARnACpUPFJwU1cDbw5kUzJVcAhgAilVN1Y1Um5TLAwzBGIHdQI7UCZROAYzVD9bY1InDWwMYVEiByRTDQJnATVceFIwAiUDZlVxAypSclNtBD4APlQ9UmdTPQM%2FDjZTa1U7CDkCNlUxVj1SJA%3D%3D; expires=Thu, 08-Oct-2026 21:50:03 GMT; Max-Age=7200; path=/"
+      ],
+      [
+        "set-cookie",
+        "ci_session=UTVROAAwVDZSKwMnVGNcYQIyAG1TcAl%2BXG5UdwB4Vm4FZgc5BwgCaQFgVCVTbAArATlTN1BvADZYelcxBDVUaAUzU2ICbwRlUGUDYFM0UGdRZlEyADVUPlIyAzBUaVw2AjQAZ1M3CWxcaVRlAD9WNgU5B24HZgI2ATdUJVNsACsBOVM1UG0ANlh6V2kEdVQPBTNTZwJtBCdQOQMgU3BQcFFvUXEAPlQ9UmMDblR7XGYCMAB5U2YJOFwlVDUAO1YwBScHZgdnAjUBJlQ8UyQAYgEyUzRQZwAuWC1XcwRgVCIFDVNiAm4EMFAyAydTIVBpUSdROAA1VD1SYQNuVHtcHQJtAC1TOwlhXGdUZQAkVjIFJwdnB3cCKAFTVG5TOQA8AWxTc1AuACxYFldUBCVUYQViUy0COQRuUHwDBFNqUDxRYlE2AD9ULFIoA2JUbVx5AiIAFlMiCX1cZ1RhAFxWYgVrBxwHPgJ0AStUMlNkAG8BLVM3UGsALFhwV0sETVQEBR9TTwIlBHVQMAM6U2hQN1F0UUUAYVRvUjsDO1RwXHACQQA%2FUyAJYlxmVGEAJFY2BToHZAd5AjABKlQ3U3kAaAEjU1dQPABqWDlXcgRsVH8FZ1MwAj4Ee1BvA2VTIVBpUSdROAA1VD9SagN2VDVcMQJxACNTDQlsXGhUcABiVnEFYAcjBy4CIgE%2FVG5TbQBpATRTPVBsADhYYFc5BDVUYAVhUzgCdA%3D%3D; expires=Thu, 08-Oct-2026 21:50:03 GMT; Max-Age=7200; path=/"
+      ],
+      [
+        "set-cookie",
+        "ci_session=AWVXPgU1BWcBeFN3VGMBPAQ0Uj9TcAF2VWdScQd%2FVm4AYwQ6BQpQOwZnB3ZUa1lyV29QNA0yDjhRc1UzADEAPFdhUmMBbFY3V2JTMAZhAjUBNlc0BTAFbwFhU2BUaQFrBDJSNVM3AWRVYFJjBzhWNgA8BG0FZFBkBjAHdlRrWXJXb1A2DTAOOFFzVWsAcQBbV2FSZgFuVnVXPlNwBiUCIgE%2FV3cFOwVsATBTPlR7ATsENlIrU2YBMFUsUjMHPFYwACIEZQVlUGcGIQdvVCNZO1dkUDcNOg4gUSRVcQBkAHZXX1JjAW1WYlc1U3cGdAI7AXdXPgUwBWwBMlM%2BVHsBQARrUn9TOwFpVW5SYwcjVjIAIgRkBXVQegZUBz1UPlllVzpQcA1zDiJRH1VWACEANVcwUiwBOlY8V3tTVAY%2FAm4BMlcwBToFfQF7UzJUbQEkBCRSRFMiAXVVblJnB1tWYgBuBB8FPFAmBiwHYVRjWTZXe1A0DTYOIlF5VUkASQBQV01STgEmVidXN1NqBj0CZQEkV0MFZAU%2BAWhTa1RwAS0ER1JtUyABalVvUmcHI1Y2AD8EZwV7UGIGLQdkVH5ZMVd1UFQNYQ5kUTBVcABoACtXNVIxAT1WKVdoUzUGdAI7AXdXPgUwBW4BOVMmVDUBbAR3UnFTDQFkVWFSdgdlVnEAZQQgBSxQcAY4Bz1UalkwV2JQPg0xDjZRaVU7ADEANFczUjkBdw%3D%3D; expires=Thu, 08-Oct-2026 21:50:03 GMT; Max-Age=7200; path=/"
+      ],
+      [
+        "expires",
+        "Sat, 01 Jan 2000 00:00:01 GMT"
+      ],
+      [
+        "cache-control",
+        "post-check=0, pre-check=0, max-age=0"
+      ],
+      [
+        "last-modified",
+        "Thu, 08 Oct 2026 19:50:03 GMT"
+      ],
+      [
+        "pragma",
+        "no-cache"
+      ],
+      [
+        "content-encoding",
+        "gzip"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "content-length",
+        "7443"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "gzip"
+  }
+}

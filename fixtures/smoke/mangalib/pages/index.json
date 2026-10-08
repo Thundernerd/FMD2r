@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://api.cdnlibs.org/api/constants?fields%5B%5D=imageServers",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://api.cdnlibs.org/api/manga/269436--the-flash/chapter?number=1&volume=1",
+      "status": 200
+    }
+  ]
+}

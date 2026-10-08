@@ -1,0 +1,129 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=41&key=8baee81f817e1b30",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Cookie",
+        "MG_MACHINEKEY=87307ebf-d941-4d46-8c31-382f2df526f6; webstickynode=035d7b9dfbcd7439e99dd492ed943c34; image_time_cookie=525022|639271151749426421|0; dm5imgpage=525022|39:0"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ],
+      [
+        "Pragma",
+        "no-cache"
+      ],
+      [
+        "Cache-Control",
+        "no-cache"
+      ],
+      [
+        "Referer",
+        "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/1.html"
+      ],
+      [
+        "X-Requested-With",
+        "XMLHttpRequest"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 19:59:37 GMT"
+      ],
+      [
+        "content-type",
+        "text/plain; charset=utf-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "cache-control",
+        "private, max-age=600"
+      ],
+      [
+        "last-modified",
+        "Thu, 08 Oct 2026 19:59:37 GMT"
+      ],
+      [
+        "x-aspnet-version",
+        "4.0.30319"
+      ],
+      [
+        "set-cookie",
+        "image_time_cookie=525022|639271151771117498|0; domain=fanfox.net; expires=Thu, 08-Oct-2026 21:59:37 GMT; path=/"
+      ],
+      [
+        "set-cookie",
+        "dm5imgpage=525022|41:0; domain=fanfox.net; expires=Fri, 09-Oct-2026 19:59:37 GMT; path=/"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=zdIhn1QIM4m1DvuMDhM3cL9e7mUPkd91fy3wA4ZzP6dHEMXXp8h2gZ5eovZWksKGnRR2oYDRYsjzmSpMqZV8KO30wDs3f2RcLNOdki9nUWpEeLXsAj41I3XFc7yI\"}]}"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a477ba207a5a0b34-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0022.response",
+    "decoded_from": "zstd"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://api.mangaball.com/api/v1/chapter-detail?chapter_id=68cfed45b5bd46018066b668",
+      "status": 200
+    }
+  ]
+}

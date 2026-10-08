@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://api.cdnlibs.org/api/manga/269436--the-flash?fields%5B%5D=authors&fields%5B%5D=artists&fields%5B%5D=genres&fields%5B%5D=tags&fields%5B%5D=status_id&fields%5B%5D=summary",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://api.cdnlibs.org/api/manga/269436--the-flash/chapters",
+      "status": 200
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://1.selfmanga.live/boi_za_sudbu/vol1/1?mtr=true",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ],
+      [
+        "Referer",
+        "https://1.selfmanga.live"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "server",
+        "nginx/1.28.0"
+      ],
+      [
+        "date",
+        "Thu, 08 Oct 2026 19:58:52 GMT"
+      ],
+      [
+        "content-type",
+        "text/html;charset=UTF-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "vary",
+        "Origin"
+      ],
+      [
+        "vary",
+        "Access-Control-Request-Method"
+      ],
+      [
+        "vary",
+        "Access-Control-Request-Headers"
+      ],
+      [
+        "set-cookie",
+        "JSESSIONID=61BCFD7173A1C6D760845C5DB2BD3275; Path=/; HttpOnly"
+      ],
+      [
+        "content-language",
+        "en-US"
+      ],
+      [
+        "content-encoding",
+        "gzip"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "gzip"
+  }
+}

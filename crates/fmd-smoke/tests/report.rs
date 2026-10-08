@@ -1,4 +1,6 @@
 //! The nightly report: live and replay results in, a classification per entry out.
+// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+#![allow(clippy::unwrap_used)]
 
 use fmd_smoke::{Verdict, classify, render_report};
 

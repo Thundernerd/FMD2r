@@ -1,0 +1,143 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/1.html",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=1&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0003",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=3&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0004",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=5&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0005",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=7&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0006",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=9&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0007",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=11&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0008",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=13&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0009",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=15&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0010",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=17&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0011",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=19&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0012",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=21&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0013",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=23&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0014",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=25&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0015",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=27&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0016",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=29&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0017",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=31&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0018",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=33&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0019",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=35&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0020",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=37&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0021",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=39&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0022",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=41&key=8baee81f817e1b30",
+      "status": 200
+    },
+    {
+      "id": "0023",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/v02/c004/chapterfun.ashx?cid=525022&page=43&key=8baee81f817e1b30",
+      "status": 200
+    }
+  ]
+}

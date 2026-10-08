@@ -23,10 +23,18 @@ fn smoke() -> Smoke {
 fn every_smoke_entry_replays_to_its_snapshots() {
     let smoke = smoke();
     let list = smoke.list().unwrap();
-    let failures: Vec<String> = list
-        .entries
-        .iter()
-        .map(|entry| smoke.replay(entry))
+    // In parallel: some modules sleep between requests (FanFox waits 2s per page request,
+    // FanFox.lua:131), and a replay keeps those waits.
+    let results: Vec<_> = std::thread::scope(|scope| {
+        let runs: Vec<_> = list
+            .entries
+            .iter()
+            .map(|entry| scope.spawn(|| smoke.replay(entry)))
+            .collect();
+        runs.into_iter().map(|run| run.join().unwrap()).collect()
+    });
+    let failures: Vec<String> = results
+        .into_iter()
         .flat_map(|result| {
             [("info", result.info), ("pages", result.pages)]
                 .into_iter()

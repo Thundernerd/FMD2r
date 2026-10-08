@@ -103,17 +103,22 @@ fn run(smoke: &Smoke, command: Command) -> Result<ExitCode, SmokeError> {
                 .filter(|e| names.is_empty() || names.contains(&e.name));
             let mut results = Results::default();
             for entry in entries {
-                eprintln!("{} {}", if live { "running" } else { "replaying" }, entry.name);
+                eprintln!(
+                    "{} {}",
+                    if live { "running" } else { "replaying" },
+                    entry.name
+                );
                 results.entries.push(if live {
                     smoke.live(&entry)
                 } else {
                     smoke.replay(&entry)
                 });
             }
-            let json = serde_json::to_string_pretty(&results).map_err(|source| SmokeError::Json {
-                path: out.clone().unwrap_or_default(),
-                source,
-            })? + "\n";
+            let json =
+                serde_json::to_string_pretty(&results).map_err(|source| SmokeError::Json {
+                    path: out.clone().unwrap_or_default(),
+                    source,
+                })? + "\n";
             write(out.as_deref(), &json)?;
             // Failures are results, not errors: the report classifies them.
             Ok(ExitCode::SUCCESS)

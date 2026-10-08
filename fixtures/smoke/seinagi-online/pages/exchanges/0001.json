@@ -1,0 +1,113 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://online.seinagi.org.es/read/frantic/es/0/1/",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Content-Type",
+        "application/x-www-form-urlencoded; charset=UTF-8"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": "bodies/0001.request"
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:00:58 GMT"
+      ],
+      [
+        "server",
+        "Apache"
+      ],
+      [
+        "expires",
+        "Sat, 01 Jan 2000 00:00:01 GMT"
+      ],
+      [
+        "cache-control",
+        "post-check=0, pre-check=0, max-age=0"
+      ],
+      [
+        "pragma",
+        "no-cache"
+      ],
+      [
+        "content-encoding",
+        "gzip"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "set-cookie",
+        "ci_session=VQYYknC8QANkf0wTIE3QCtaI6XkQgq0UbSi19Nmwzcc0%2FsIfiKEqgCaF81aL9FDGOwNjxktr%2FvHxDFOrjSKKvWMCd7P6Anpr2CHTMfW4uHFnTR9qRQfLrM4anjXtVsM%2BnL62bZnmggcgiXf0TyzkgOBi97BfU%2Ftbm%2B0LZFXOiComyfge5MpqcN2%2BWGzPpLivpkn32jpz4DsThjHJhpD0COd3uiJd4eTAn%2B65NgAn2hAxZ3G9vn9SJ32p6SY4moKo8y%2FMz1Am554ksODgKqdzouFUM0AIlhFbcF9WqlLsNxCP9wSkka70DVP1tgjVsgeAlgWvvJuTDgu5EmfOT3jSelMiNP2ReyOcWQkkyxXbWYXcWWRHF5xCqQCnRRGfvqD3NAdbVD%2BNvnLXxpUz%2Fui7mXhG2RjXvUZSa9EifVYjps0%3D; expires=Thu, 08-Oct-2026 22:00:58 GMT; Max-Age=7200; path=/"
+      ],
+      [
+        "set-cookie",
+        "ci_session=ERZbjDenNGFHA3T74UnxL4p1thgriIsc3CtLRwSW04nTtUfxKrM1HhkpW2yNYM%2BhToMslRQKgJqiGxEiFO%2Bqf%2FdVxlLaxEOL%2BDVaFfLDcCh3CdxzZPgZO2Ju4FTn7Lp6x%2FQUGLj7ByJRWsdbuB87fuTIyvxjhou%2BT0aHE416MK7V6zgiHSKrF8jPC8nU%2FNGadCP5Tfomc1ywDRd7d7kKygoD6hMi79Tnldpwf7FrWEGHBY6fM2F7XZ5W3TJBXpAcBtAGM5aEfhcCzbWjuJdqVnWxiBxpRytAHn7cFJzbsXe6B87RVhjVFiCOSuA9v59zhCoQEKhel1QNVUqR5suGyKDXLNkM%2FYvmwVQmWoGIEsfA8B9DTDZBhseXleA6UVKs6T%2FWtGstFc7MUqxnsDyKhXIs2Y7qKwrc3vDrOBSj%2FB8%3D; expires=Thu, 08-Oct-2026 22:00:58 GMT; Max-Age=7200; path=/"
+      ],
+      [
+        "set-cookie",
+        "ci_session=ElJaUqJyKEpusUlt1KUoDvkRtfy3c97LUIfYYd%2B1qsOHoXuucK6cq06tPPWGPgLsJUopnN9xvUcheVuwxDqMbXkGAtPs3XJDVhYLXhxl%2B2mpchS%2F41V6sJz98LbuFsTN4nPTb8bVskSbiXKDppSeTy9ShpO44oEFaTvmG6mVvsvUD3LOANVHYhEJLAuCdgRD3g2G3n2bnjgFChmRqobxSmJx614AaA0CFBOQelsIBqOt2Yoi2wc%2F1zXk6%2BRZ0%2FpsppYqERFWN4NpAtQoGuEU9aTXvqjmUtWLA1gDW4RHMC0lrCZ1%2F0kNdwn9r1ROJbUuWWYa1MDO414fZ7KXZcyEWNxxLcLHiKTsivzUhz%2FWXNh7Jrw%2FR6PmDLjYnY%2FTOqHS%2BPCvfK84xdu6sPYoGTaXA%2BGVSYVvKfc0QwnQGiNMupw%3D; expires=Thu, 08-Oct-2026 22:00:58 GMT; Max-Age=7200; path=/"
+      ],
+      [
+        "set-cookie",
+        "SeinagiOnline=kelrc8itat9sft7703mg86psg7; path=/"
+      ],
+      [
+        "upgrade",
+        "h2"
+      ],
+      [
+        "connection",
+        "Upgrade"
+      ],
+      [
+        "last-modified",
+        "Thu, 08 Oct 2026 20:00:59 GMT"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "gzip"
+  }
+}

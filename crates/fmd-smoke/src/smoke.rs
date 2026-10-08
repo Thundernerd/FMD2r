@@ -133,8 +133,7 @@ impl Smoke {
     /// Runs the entry on its recorded traffic: each step passes when it prints its snapshot.
     pub fn replay(&self, entry: &Entry) -> EntryResult {
         self.result(entry, |step| {
-            let fixtures = self.fixtures(entry, step);
-            let out = self.run(entry, step, &["--replay".as_ref(), fixtures.as_ref()], None)?;
+            let out = self.run_replay(entry, step)?;
             let snapshot_path = self.snapshot(entry, step);
             let snapshot = fs::read_to_string(&snapshot_path)
                 .map_err(|e| format!("cannot read {}: {e}", snapshot_path.display()))?;
@@ -146,7 +145,7 @@ impl Smoke {
     /// [`check_output`]).
     pub fn live(&self, entry: &Entry) -> EntryResult {
         self.result(entry, |step| {
-            let out = self.run(entry, step, &[], Some(LIVE_TIMEOUT))?;
+            let out = self.run(entry, step, &[], &[], Some(LIVE_TIMEOUT))?;
             check_output(step, &out)
         })
     }
@@ -167,13 +166,14 @@ impl Smoke {
                     entry,
                     step,
                     &["--record".as_ref(), fixtures.as_ref()],
+                    &[],
                     Some(LIVE_TIMEOUT),
                 )
                 .map_err(failed)?;
             check_output(step, &live).map_err(failed)?;
             truncate_media(&fixtures)?;
             let replayed = self
-                .run(entry, step, &["--replay".as_ref(), fixtures.as_ref()], None)
+                .run_replay(entry, step)
                 .map_err(|e| failed(format!("replaying the recording: {e}")))?;
             compare(&live, &replayed)
                 .map_err(|e| failed(format!("the replay differs from the live run: {e}")))?;
@@ -218,13 +218,22 @@ impl Smoke {
             .join(format!("{}.json", step.command()))
     }
 
-    /// Runs `fmd2r module <step> <url> --module <id>` with `extra` arguments and returns its
+    /// Runs the step on its recorded fixtures, with an empty `PATH`: a module that runs a program
+    /// (node, python, ...) through `fmd.subprocess` would reach the network past the replay.
+    fn run_replay(&self, entry: &Entry, step: Step) -> Result<String, String> {
+        let fixtures = self.fixtures(entry, step);
+        let args = ["--replay".as_ref(), fixtures.as_os_str()];
+        self.run(entry, step, &args, &[("PATH", "")], None)
+    }
+
+    /// Runs `fmd2r module <step> <url> --module <id>` with `extra` arguments and `env` variables and returns its
     /// stdout, or why it failed.
     fn run(
         &self,
         entry: &Entry,
         step: Step,
         extra: &[&std::ffi::OsStr],
+        env: &[(&str, &str)],
         timeout: Option<Duration>,
     ) -> Result<String, String> {
         let mut command = Command::new(&self.fmd2r);
@@ -236,11 +245,15 @@ impl Smoke {
             .arg(&self.lua_dir)
             .arg("--module")
             .arg(&entry.module_id)
-            .args(extra);
+            .args(extra)
+            .envs(env.iter().copied());
         let output = run_with_timeout(command, timeout)
             .map_err(|e| format!("cannot run {}: {e}", self.fmd2r.display()))?;
         let Some(output) = output else {
-            return Err(format!("timed out after {}s", timeout.unwrap_or_default().as_secs()));
+            return Err(format!(
+                "timed out after {}s",
+                timeout.unwrap_or_default().as_secs()
+            ));
         };
         if !output.success {
             let stderr = output.stderr.trim();
@@ -259,10 +272,7 @@ struct Output {
 
 /// Runs `command` and collects its output, or `None` (after killing it) when it outlives
 /// `timeout`.
-fn run_with_timeout(
-    mut command: Command,
-    timeout: Option<Duration>,
-) -> io::Result<Option<Output>> {
+fn run_with_timeout(mut command: Command, timeout: Option<Duration>) -> io::Result<Option<Output>> {
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -352,8 +362,7 @@ pub fn check_output(step: Step, out: &str) -> Result<(), String> {
                     .as_array()
                     .is_some_and(|links| links.iter().filter_map(Value::as_str).any(resolved))
             };
-            if !any("page_links", |l| l != "W") && !any("page_container_links", |l| !l.is_empty())
-            {
+            if !any("page_links", |l| l != "W") && !any("page_container_links", |l| !l.is_empty()) {
                 return Err("no resolved page links".to_owned());
             }
         }

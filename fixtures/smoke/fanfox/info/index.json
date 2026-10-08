@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://fanfox.net/manga/kimi_no_na_wa/",
+      "status": 200
+    }
+  ]
+}

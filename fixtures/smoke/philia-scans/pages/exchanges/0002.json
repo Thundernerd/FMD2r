@@ -1,0 +1,177 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://philiascans.org/api/reader/access-token",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ],
+      [
+        "X-Requested-With",
+        "XMLHttpRequest"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:02:38 GMT"
+      ],
+      [
+        "content-type",
+        "application/json; charset=utf-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "cross-origin-opener-policy",
+        "same-origin"
+      ],
+      [
+        "cross-origin-resource-policy",
+        "cross-origin"
+      ],
+      [
+        "origin-agent-cluster",
+        "?1"
+      ],
+      [
+        "referrer-policy",
+        "strict-origin-when-cross-origin"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-dns-prefetch-control",
+        "off"
+      ],
+      [
+        "x-download-options",
+        "noopen"
+      ],
+      [
+        "x-frame-options",
+        "DENY"
+      ],
+      [
+        "x-permitted-cross-domain-policies",
+        "none"
+      ],
+      [
+        "x-xss-protection",
+        "0"
+      ],
+      [
+        "vary",
+        "Origin"
+      ],
+      [
+        "access-control-allow-credentials",
+        "true"
+      ],
+      [
+        "x-ratelimit-limit-burst",
+        "10"
+      ],
+      [
+        "x-ratelimit-remaining-burst",
+        "9"
+      ],
+      [
+        "x-ratelimit-reset-burst",
+        "10000"
+      ],
+      [
+        "x-ratelimit-limit",
+        "20"
+      ],
+      [
+        "x-ratelimit-remaining",
+        "19"
+      ],
+      [
+        "x-ratelimit-reset",
+        "60000"
+      ],
+      [
+        "cache-control",
+        "no-store"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "server-timing",
+        "cfCacheStatus;desc=\"DYNAMIC\""
+      ],
+      [
+        "server-timing",
+        "cfEdge;dur=6,cfOrigin;dur=49"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=8DhyykTThohZmW%2Fy2njIRGtvNsaBCkQMWDi9Y40qLherwsgsgZVJZZYxFgWwNnNyAIXyjcESakGc7OjUvZPByzqJe1kZdLM%2FyETXjQprRuIRRSEeJALzkdVsPYYMdVl52VY%3D\"}]}"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a477be8ddd09f18a-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0002.response",
+    "decoded_from": "zstd"
+  }
+}

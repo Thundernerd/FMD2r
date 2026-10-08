@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "POST",
+      "url": "https://online.seinagi.org.es/read/frantic/es/0/1/",
+      "status": 200
+    }
+  ]
+}

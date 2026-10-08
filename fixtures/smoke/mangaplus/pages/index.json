@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://jumpg-webapi.tokyo-cdn.com/api/manga_viewer?chapter_id=1001834&img_quality=super_high&split=yes",
+      "status": 200
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://3asq.online/manga/dig-it/1/?style=list",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:00:02 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "set-cookie",
+        "wpmanga-reading-history=W3siaWQiOjIzNjU5LCJjIjoiMjI1NjEiLCJwIjoxLCJpIjoiIiwidCI6MTc5MTUwMDQwMn1d.f6d05b1c02cec67ed291e6c537c54ed89f841b8c692ffe6dc91b13d7793ace4a; expires=Sat, 07 Nov 2026 20:00:02 GMT; Max-Age=2592000; path=/; secure; HttpOnly; SameSite=Lax"
+      ],
+      [
+        "link",
+        "<https://3asq.online/wp-json/>; rel=\"https://api.w.org/\""
+      ],
+      [
+        "link",
+        "<https://3asq.online/?p=23659>; rel=shortlink"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "x-turbo-charged-by",
+        "LiteSpeed"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=%2B18jBdvQwzaBw9yGgcl%2BUQMGeWE1SwV7xP7oRElXOjLIK4ED4VbigfvXj1bhp1FdbppIicJvWHXdzlkm0tch0WdpW01cHeLwtRp9XXBJRJSsk98OtZPJyjGS0e1azw%3D%3D\"}]}"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a477babf880493e5-LHR"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "zstd"
+  }
+}

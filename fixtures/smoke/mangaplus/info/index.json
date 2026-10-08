@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://jumpg-webapi.tokyo-cdn.com/api/title_detailV3?title_id=100056",
+      "status": 200
+    }
+  ]
+}

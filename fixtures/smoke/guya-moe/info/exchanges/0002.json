@@ -1,0 +1,125 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://guya.cubari.moe/api/series/Original-Hinatazaka/",
+    "headers": [
+      [
+        "User-Agent",
+        "FreeMangaDownloader"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ],
+      [
+        "Referer",
+        "https://guya.cubari.moe/api/series/Original-Hinatazaka"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Thu, 08 Oct 2026 20:00:37 GMT"
+      ],
+      [
+        "content-type",
+        "application/json"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "cache-control",
+        "public, max-age=30, s-maxage=30"
+      ],
+      [
+        "x-frame-options",
+        "ALLOW"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=3600; includeSubDomains; preload"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-xss-protection",
+        "1; mode=block"
+      ],
+      [
+        "referrer-policy",
+        "same-origin"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=w5B9jpyNbl67XwVyjA3GjGmYVEZ31TcY7rOiixsi0usu0dM4th3tcS6s3IPujD%2FBeAcUNJWonyND%2FHDtwVoI4trwdR1o4bdqsVzUM91Gr4J1s9mWWdIDF024ScHsn95TQos%3D\"}]}"
+      ],
+      [
+        "age",
+        "15"
+      ],
+      [
+        "last-modified",
+        "Thu, 08 Oct 2026 20:00:22 GMT"
+      ],
+      [
+        "cf-cache-status",
+        "HIT"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a477bb9a2899b192-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0002.response",
+    "decoded_from": "zstd"
+  }
+}

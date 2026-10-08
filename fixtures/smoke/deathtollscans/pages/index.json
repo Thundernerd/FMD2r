@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "POST",
+      "url": "https://reader.deathtollscans.net/read/a_gentle_time/en/0/0/",
+      "status": 200
+    }
+  ]
+}
