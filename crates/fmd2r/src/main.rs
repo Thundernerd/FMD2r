@@ -43,10 +43,10 @@ enum Command {
 #[derive(Args)]
 struct ServeArgs {
     /// Address to listen on.
-    #[arg(long, default_value = "127.0.0.1:8080")]
+    #[arg(long, env = "FMD2R_BIND", default_value = "127.0.0.1:8080")]
     bind: SocketAddr,
     /// Directory holding the databases.
-    #[arg(long, default_value = "data")]
+    #[arg(long, env = "FMD2R_DATA_DIR", default_value = "data")]
     data_dir: PathBuf,
     /// Password/token required for the API; leave unset for no auth.
     #[arg(long, env = "FMD2R_PASSWORD", hide_env_values = true)]

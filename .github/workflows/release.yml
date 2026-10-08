@@ -1,0 +1,118 @@
+name: Release
+
+# On a version tag: the container image (smoke-tested, then pushed to GHCR) and a Linux tarball
+# with the binary and libfmdxpath.so, attached to a GitHub release with SHA-256 checksums.
+#
+# amd64 only: libfmdxpath.so's float-environment code (crates/xpath-fpc/pascal/fxfpu.pas) is x86
+# assembly, so FMD2's XPath engine doesn't build for arm64.
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: fmd2r:smoke
+          build-args: FMD2R_GIT_REVISION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: scripts/docker-smoke.sh fmd2r:smoke
+      # Same inputs as the build above, so every layer comes from the cache.
+      - name: Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: FMD2R_GIT_REVISION=${{ github.sha }}
+          cache-from: type=gha
+
+  # Built on the oldest supported Ubuntu runner, so the binary needs only glibc 2.35.
+  tarball:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build the web UI
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Build libfmdxpath.so
+        run: |
+          sudo apt-get update && sudo apt-get install -y fpc
+          crates/xpath-fpc/build.sh
+      - run: rustup toolchain install
+      - name: Build fmd2r
+        env:
+          FMDXPATH_LIB_DIR: ${{ github.workspace }}/crates/xpath-fpc/build
+          FMD2R_GIT_REVISION: ${{ github.sha }}
+          # Finds libfmdxpath.so next to the binary.
+          RUSTFLAGS: -C link-arg=-Wl,-rpath,$ORIGIN
+        run: cargo build --release --locked -p fmd2r
+      - name: Package
+        run: |
+          name=fmd2r-${GITHUB_REF_NAME}-x86_64-linux-gnu
+          mkdir -p "dist/$name"
+          cp target/release/fmd2r crates/xpath-fpc/build/libfmdxpath.so README.md LICENSE "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [image, tarball]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tarball
+          path: dist
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum *.tar.gz > SHA256SUMS
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes \
+            --notes "Image: \`ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_REF_NAME#v}\`"
