@@ -11,7 +11,8 @@ use mlua::{Lua, LuaString, Table, Value, Variadic};
 pub struct Globals {
     /// The website module the state runs, recorded with every `print`.
     pub module: Option<String>,
-    /// The worker's cancellation: terminating it cuts a running `sleep` short.
+    /// The worker's cancellation: terminating it cuts a running `sleep` short. When `None`,
+    /// the runtime's token (`Runtime::set_terminate_token`) does.
     pub terminate: Option<TerminateToken>,
 }
 
@@ -29,9 +30,15 @@ pub(crate) fn install(lua: &Lua, globals: Globals) -> mlua::Result<()> {
             // an integer or a string holding one. FPC's `Sleep` takes a Cardinal, so a negative
             // value would wrap to weeks; it is 0 here instead.
             let ms = lua.coerce_integer(ms).ok().flatten().unwrap_or(0);
+            // Without a token of its own, `sleep` stops with the runtime's job
+            // (`Runtime::set_terminate_token`).
+            let job = || {
+                lua.app_data_ref::<crate::duktape::JsSettings>()
+                    .map(|s| s.terminate.clone())
+            };
             sleep(
                 Duration::from_millis(u64::try_from(ms).unwrap_or(0)),
-                terminate.as_ref(),
+                terminate.clone().or_else(job).as_ref(),
             );
             Ok(())
         })?,

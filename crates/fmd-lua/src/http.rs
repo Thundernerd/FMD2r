@@ -117,6 +117,14 @@ impl LuaHttp {
         }
     }
 
+    /// The session, holding what Lua last put in `Headers`, `Cookies` and `Document`.
+    /// `placeholder` takes its place behind the Lua objects built over this one.
+    pub(crate) fn into_session(self, placeholder: HttpSession) -> mlua::Result<HttpSession> {
+        let mut object = borrow(&self.object)?;
+        object.with_session(|_| ())?;
+        Ok(std::mem::replace(&mut object.session, placeholder))
+    }
+
     /// Creates the Lua `HTTP` object (`luaHTTPSendThreadAddMetaTable`,
     /// baseunits/lua/LuaHTTPSend.pas:153-168).
     pub fn build(&self, lua: &Lua) -> crate::Result<AnyUserData> {
