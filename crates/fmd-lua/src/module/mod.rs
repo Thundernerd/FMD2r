@@ -275,6 +275,12 @@ impl Module {
         }
     }
 
+    /// Sets `MODULE.CurrentDirectoryIndex`, as the update-list manager does before it walks a
+    /// directory's pages (baseunits/uUpdateThread.pas:695).
+    pub fn set_current_directory_index(&self, index: i32) {
+        self.def_write().current_directory_index = index;
+    }
+
     /// The module's shared HTTP state: its cookie jar and connection queue.
     pub fn http(&self) -> &ModuleHttp {
         &self.http
