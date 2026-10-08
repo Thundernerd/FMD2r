@@ -61,9 +61,9 @@ pub enum InfoError {
     Failed(String),
 }
 
-/// `net_problem` (baseunits/uBaseUnit.pas, `NET_PROBLEM`).
+/// `net_problem` (`NET_PROBLEM`, baseunits/uBaseUnit.pas:192).
 const NET_PROBLEM: u8 = 1;
-/// `no_error`.
+/// `no_error` (`NO_ERROR`, baseunits/uBaseUnit.pas:191).
 const NO_ERROR: u8 = 0;
 
 /// Runs `module`'s `OnGetInfo` for the series at `link` on `pool` and cleans up what it reports

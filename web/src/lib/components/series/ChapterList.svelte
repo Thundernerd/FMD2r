@@ -108,6 +108,7 @@
 			onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
 			bind:clientHeight={viewport}
 			style:--rows={order.length}
+			style:--row="{ROW}px"
 		>
 			<!-- Gives the list its full scroll height; rows are positioned within it. -->
 			<li class="sizer" aria-hidden="true" style:height="{order.length * ROW}px"></li>
@@ -199,7 +200,7 @@
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		height: min(calc(var(--rows) * 36px), 480px);
+		height: min(calc(var(--rows) * var(--row)), 480px);
 		overflow-y: auto;
 		overscroll-behavior: contain;
 	}
@@ -213,7 +214,7 @@
 		position: absolute;
 		left: 0;
 		right: 0;
-		height: 36px;
+		height: var(--row);
 		border-bottom: 1px solid var(--line);
 	}
 	.row label {
@@ -244,7 +245,7 @@
 	}
 	@media (max-width: 860px) {
 		.rows {
-			height: min(calc(var(--rows) * 36px), 60vh);
+			height: min(calc(var(--rows) * var(--row)), 60vh);
 		}
 		.mark {
 			font-size: 0;

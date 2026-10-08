@@ -28,6 +28,7 @@ pub struct SeriesRef {
     pub link: String,
 }
 
+/// Find the module that handles a manga URL.
 #[utoipa::path(post, path = "/api/resolve", tag = "series", operation_id = "resolveUrl",
     request_body = ResolveRequest,
     responses(

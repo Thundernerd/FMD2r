@@ -9,7 +9,8 @@
 		selected,
 		saveTo = $bindable(),
 		format = $bindable(),
-		onqueued
+		onqueued,
+		onformat
 	}: {
 		api: Api;
 		series: SeriesInfo;
@@ -17,6 +18,8 @@
 		saveTo: string;
 		format: OutputFormat;
 		onqueued: (task: TaskProgress) => void;
+		/** The user picked a format. */
+		onformat?: () => void;
 	} = $props();
 
 	const FORMATS: { value: OutputFormat; label: string }[] = [
@@ -62,9 +65,11 @@
 			error =
 				e instanceof ValidationError
 					? e.detail
-					: e instanceof ApiError
-						? `The download could not be queued (HTTP ${e.status}).`
-						: 'Could not reach FMD2r. Try again.';
+					: e instanceof ApiError && [404, 405, 501].includes(e.status)
+						? 'This FMD2r build cannot queue downloads yet.'
+						: e instanceof ApiError
+							? `The download could not be queued (HTTP ${e.status}).`
+							: 'Could not reach FMD2r. Try again.';
 		} finally {
 			busy = false;
 		}
@@ -89,7 +94,7 @@
 		</label>
 		<label class="field">
 			<span class="label">Format</span>
-			<select class="input" bind:value={format}>
+			<select class="input" bind:value={format} onchange={() => onformat?.()}>
 				{#each FORMATS as f (f.value)}
 					<option value={f.value}>{f.label}</option>
 				{/each}

@@ -75,7 +75,7 @@
 					"422": {
 						"description": "The request is invalid (e.g. no chapters)",
 						"content": {
-							"application/problem+json": {
+							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/Problem"
 								}
@@ -90,6 +90,7 @@
 				"tags": [
 					"series"
 				],
+				"summary": "Find the module that handles a manga URL.",
 				"operationId": "resolveUrl",
 				"requestBody": {
 					"content": {

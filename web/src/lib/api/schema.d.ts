@@ -65,6 +65,7 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
+		/** Find the module that handles a manga URL. */
 		post: operations['resolveUrl'];
 		delete?: never;
 		options?: never;
@@ -1326,7 +1327,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/problem+json': components['schemas']['Problem'];
+					'application/json': components['schemas']['Problem'];
 				};
 			};
 		};

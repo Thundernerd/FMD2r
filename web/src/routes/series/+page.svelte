@@ -16,6 +16,8 @@
 	let selected = $state(new Set<number>());
 	let saveTo = $state('');
 	let format = $state<OutputFormat>('folder');
+	/** Set once the user picks a format, so the settings default arriving late does not undo it. */
+	let formatChosen = $state(false);
 
 	$effect(() => {
 		const [m, l] = [module, link];
@@ -40,7 +42,9 @@
 			.then((modules) => {
 				if (current) website = modules.find((x) => x.id === m)?.name ?? m;
 			})
-			.catch(() => (website = m));
+			.catch(() => {
+				if (current) website = m;
+			});
 		return () => (current = false);
 	});
 
@@ -50,7 +54,7 @@
 			.getSettings()
 			.then((settings) => {
 				saveTo ||= settings.saveto.default_dir;
-				format = settings.output.format;
+				if (!formatChosen) format = settings.output.format;
 			})
 			.catch(() => {});
 	});
@@ -86,6 +90,7 @@
 					{selected}
 					bind:saveTo
 					bind:format
+					onformat={() => (formatChosen = true)}
 					onqueued={(task) => events.seed({ tasks: [task] })}
 				/>
 			</aside>
