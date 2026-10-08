@@ -1,6 +1,7 @@
 //! Services later tickets plug into [`crate::AppState`], kept behind traits so the server does
 //! not depend on the engine crates.
 
+use fmd_core::modules::ModuleInfo;
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -10,10 +11,20 @@ use crate::covers::{CoverModules, CoverSession};
 pub trait DownloadEngine: Send + Sync + 'static {}
 
 /// The loaded website modules (T06, T14) and their upstream sync state (T29), for
-/// `GET /api/about`.
+/// `GET /api/about` and the per-module settings.
 pub trait ModuleCatalog: Send + Sync + 'static {
     /// Must be cheap: it is called on the async threads.
     fn report(&self) -> ModulesReport;
+
+    /// Every loaded module, sorted by ID. Must be cheap: it is called on the async threads.
+    fn modules(&self) -> Vec<ModuleInfo> {
+        Vec::new()
+    }
+
+    /// The loaded module with ID `id`.
+    fn module(&self, id: &str) -> Option<ModuleInfo> {
+        self.modules().into_iter().find(|m| m.id == id)
+    }
 }
 
 /// What [`ModuleCatalog::report`] knows about the Lua modules.

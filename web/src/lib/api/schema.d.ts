@@ -177,6 +177,86 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/settings': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** All settings. */
+		get: operations['getSettings'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		/**
+		 * Update settings with a JSON merge patch (RFC 7396) over [`Settings`]; `null` resets a setting
+		 *     to its default. Nothing is stored unless the whole result is valid.
+		 */
+		patch: operations['patchSettings'];
+		trace?: never;
+	};
+	'/api/preview-rename': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Preview the rename templates of a (possibly unsaved) `saveto` group on a sample series, the
+		 *     way downloads will name their folders and files.
+		 */
+		post: operations['previewRename'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/modules': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Every loaded module, sorted by ID. */
+		get: operations['listModules'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/modules/{id}/settings': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** A module's options, limits and overrides. */
+		get: operations['getModuleSettings'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		/**
+		 * Update a module's settings with a JSON merge patch (RFC 7396) over `enabled`, `limits`,
+		 *     `http` and `options` (option values keyed by `key`; `null` resets one to its default).
+		 *     Nothing is stored unless the whole patch is valid.
+		 */
+		patch: operations['patchModuleSettings'];
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -309,6 +389,11 @@ export interface components {
 		/** @description RFC 9457 problem details body. */
 		Problem: {
 			detail: string;
+			/**
+			 * @description The setting a validation error (422) is about, as a dotted path such as
+			 *     `connections.timeout_secs` or `options.server`.
+			 */
+			field?: string | null;
 			/** Format: int32 */
 			status: number;
 			/** @description The status code's reason phrase. */
@@ -321,6 +406,717 @@ export interface components {
 			module: string;
 			/** @description Series link relative to the module's RootURL */
 			link: string;
+		};
+		ConnectionSettings: {
+			/**
+			 * @description Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,
+			 *     baseunits/FMDOptions.pas:137).
+			 * @default true
+			 */
+			always_start_from_failed_chapters: boolean;
+			/**
+			 * Format: int32
+			 * @description Times a failed task is restarted automatically (`connections/NumberOfAutoRetryFailedTask`,
+			 *     `OptionRetryFailedTask` = 1, baseunits/FMDOptions.pas:136). Range 0..=100, the TSpinEdit default (no bounds
+			 *     set, mangadownloader/forms/frmMain.lfm:3669-3681).
+			 * @default 1
+			 */
+			auto_retry_failed_tasks: number;
+			/**
+			 * Format: int32
+			 * @description Threads checking favorites (`connections/MaxFavoriteThreads`,
+			 *     baseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).
+			 * @default 1
+			 */
+			max_favorite_threads: number;
+			/**
+			 * Format: int32
+			 * @description Tasks downloading at once, over all modules (`connections/NumberOfTasks`,
+			 *     `OptionMaxParallel` = 1, baseunits/FMDOptions.pas:133). Range 1..=64: the Win64
+			 *     `MAX_TASKLIMIT` (baseunits/FMDOptions.pas:42), so any FMD2 value imports.
+			 * @default 1
+			 */
+			max_parallel_tasks: number;
+			/**
+			 * Format: int32
+			 * @description Threads updating manga lists (`connections/MaxUpdateListThreads`,
+			 *     baseunits/FMDOptions.pas:131). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3827-3828).
+			 * @default 1
+			 */
+			max_update_list_threads: number;
+			/**
+			 * @default {
+			 *       "enabled": false,
+			 *       "host": "",
+			 *       "password": "",
+			 *       "port": null,
+			 *       "type": "http",
+			 *       "username": ""
+			 *     }
+			 */
+			proxy: components['schemas']['ProxySettings'];
+			/**
+			 * Format: int32
+			 * @description HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,
+			 *     baseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;
+			 *     meaning in baseunits/httpsendthread.pas:626).
+			 * @default 5
+			 */
+			retry_count: number;
+			/**
+			 * Format: int32
+			 * @description Page download threads per task (`connections/NumberOfThreadsPerTask`, `OptionMaxThreads`
+			 *     = 1, baseunits/FMDOptions.pas:134). Range 1..=256: the Win64 `MAX_CONNECTIONPERHOSTLIMIT`
+			 *     (baseunits/FMDOptions.pas:43).
+			 * @default 1
+			 */
+			threads_per_task: number;
+			/**
+			 * Format: int32
+			 * @description Connection timeout in seconds (`connections/ConnectionTimeout`, `OptionConnectionTimeout`
+			 *     = 30, baseunits/FMDOptions.pas:129). Range 1..=300
+			 *     (mangadownloader/forms/frmMain.lfm:3387-3388).
+			 * @default 30
+			 */
+			timeout_secs: number;
+			/**
+			 * @description Default user agent; an empty value resets to [`DEFAULT_USER_AGENT`]
+			 *     (`connections/DefaultUserAgent`, mangadownloader/forms/frmMain.pas:5867-5871).
+			 * @default Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36
+			 */
+			user_agent: string;
+		};
+		/** @description New-chapter checks for the library (mangadownloader/forms/frmMain.pas:5946-5955). */
+		FavoriteSettings: {
+			/**
+			 * @description Queue new chapters automatically (`update/AutoCheckFavAutoDownload`, default false).
+			 * @default false
+			 */
+			auto_download: boolean;
+			/**
+			 * @description `update/AutoCheckFavStartup`, default true.
+			 * @default true
+			 */
+			check_at_startup: boolean;
+			/**
+			 * Format: int32
+			 * @description `update/AutoCheckFavIntervalMinutes`, default 60. Range 1..=1440
+			 *     (mangadownloader/forms/frmMain.lfm:4648-4649).
+			 * @default 60
+			 */
+			check_interval_minutes: number;
+			/**
+			 * @description `update/AutoCheckFavInterval`, default true.
+			 * @default true
+			 */
+			check_on_interval: boolean;
+			/**
+			 * @description `update/AutoCheckFavAutoRemoveCompletedManga`, default false.
+			 * @default false
+			 */
+			remove_completed: boolean;
+		};
+		GeneralSettings: {
+			/**
+			 * @description Add new tasks stopped instead of waiting (`general/AddAsStopped`,
+			 *     mangadownloader/forms/frmMain.pas:5819).
+			 * @default false
+			 */
+			add_as_stopped: boolean;
+			/**
+			 * @description Folder for the list databases, relative to the app data directory (`DATA_FOLDER`,
+			 *     baseunits/FMDOptions.pas:285).
+			 * @default data
+			 */
+			data_dir: string;
+			/**
+			 * @description UI language code (`languages/Selected`, default `en`,
+			 *     mangadownloader/forms/frmMain.pas:6897).
+			 * @default en
+			 */
+			language: string;
+			/**
+			 * @description Load manga covers (`view/LoadMangaCover`, mangadownloader/forms/frmMain.pas:5831).
+			 * @default true
+			 */
+			load_covers: boolean;
+			/**
+			 * @description Folder holding the Lua tree (`LUA_REPO_FOLDER`, baseunits/FMDOptions.pas:297).
+			 * @default lua
+			 */
+			lua_dir: string;
+		};
+		/** @description HTTP overrides applied in `PrepareHTTP` (baseunits/WebsiteModules.pas:353-379). */
+		HttpOverrides: {
+			/**
+			 * @description Cookies merged into every request (`HTTP.Cookies`,
+			 *     baseunits/WebsiteModulesSettings.pas:41).
+			 * @default
+			 */
+			cookies: string;
+			/**
+			 * @default {
+			 *       "host": "",
+			 *       "password": "",
+			 *       "port": "",
+			 *       "type": "default",
+			 *       "username": ""
+			 *     }
+			 */
+			proxy: components['schemas']['ProxyOverride'];
+			/**
+			 * @description Replaces the default user agent when non-empty.
+			 * @default
+			 */
+			user_agent: string;
+		};
+		/** @description Optional ImageMagick conversion (mangadownloader/forms/frmMain.pas:5925-5942). */
+		ImageMagickSettings: {
+			/**
+			 * @description `-compress` type (`imagemagick/ImageMagickCompression`, default `None`).
+			 * @default None
+			 */
+			compression: string;
+			/**
+			 * @description `imagemagick/ImageMagickEnabled`, default false.
+			 * @default false
+			 */
+			enabled: boolean;
+			/**
+			 * Format: int32
+			 * @description `imagemagick/ImageMagickQuality`, default 75. Range 1..=100
+			 *     (mangadownloader/forms/frmMain.lfm:4555-4556).
+			 * @default 75
+			 */
+			quality: number;
+			/**
+			 * @description Target format (`imagemagick/ImageMagickSaveAs`, default `JPEG`).
+			 * @default JPEG
+			 */
+			save_as: string;
+		};
+		ImageSettings: {
+			/**
+			 * @default {
+			 *       "compression": "None",
+			 *       "enabled": false,
+			 *       "quality": 75,
+			 *       "save_as": "JPEG"
+			 *     }
+			 */
+			imagemagick: components['schemas']['ImageMagickSettings'];
+			/**
+			 * Format: int32
+			 * @description `saveto/JPEGQuality`, `OptionJPEGQuality` = 80 (baseunits/FMDOptions.pas:126). Range
+			 *     1..=100 (mangadownloader/forms/frmMain.lfm:4426-4427).
+			 * @default 80
+			 */
+			jpeg_quality: number;
+			/** @default fastest */
+			png_compression: components['schemas']['PngCompression'];
+			/**
+			 * @description `saveto/PNGSaveAsJPEG`, `OptionPNGSaveAsJPEG` = false (baseunits/FMDOptions.pas:123).
+			 * @default false
+			 */
+			png_to_jpeg: boolean;
+			/** @default png */
+			webp_save_as: components['schemas']['WebpSaveAs'];
+		};
+		/**
+		 * @description Limit overrides; 0 means "not overridden" for tasks and threads
+		 *     (baseunits/WebsiteModulesSettings.pas:81-83).
+		 */
+		LimitOverrides: {
+			/**
+			 * Format: int32
+			 * @description Replaces the module's connection limit while enabled, 0 (unlimited) included
+			 *     (baseunits/WebsiteModulesSettings.pas:126-155).
+			 * @default 0
+			 */
+			max_connection_limit: number;
+			/**
+			 * Format: int32
+			 * @default 0
+			 */
+			max_task_limit: number;
+			/**
+			 * Format: int32
+			 * @default 0
+			 */
+			max_thread_per_task_limit: number;
+		};
+		/**
+		 * @description The limits a module declares (`MaxTaskLimit`, `MaxThreadPerTaskLimit`, `MaxConnectionLimit`
+		 *     on the Lua `MODULE` object); 0 means unlimited.
+		 */
+		ModuleLimits: {
+			/** Format: int32 */
+			max_connection_limit: number;
+			/** Format: int32 */
+			max_task_limit: number;
+			/** Format: int32 */
+			max_thread_per_task_limit: number;
+		};
+		/**
+		 * @description One declared option, its default and the value `MODULE.GetOption` returns for it.
+		 *
+		 *     `key` is the name the value is stored and patched under.
+		 */
+		ModuleOptionSetting:
+			| {
+					caption: string;
+					default: boolean;
+					key: string;
+					/** @enum {string} */
+					kind: 'checkbox';
+					value: boolean;
+			  }
+			| {
+					caption: string;
+					default: string;
+					key: string;
+					/** @enum {string} */
+					kind: 'edit';
+					value: string;
+			  }
+			| {
+					caption: string;
+					/** Format: int32 */
+					default: number;
+					key: string;
+					/** @enum {string} */
+					kind: 'spinedit';
+					/** Format: int32 */
+					max: number;
+					/** Format: int32 */
+					min: number;
+					/** Format: int32 */
+					value: number;
+			  }
+			| {
+					caption: string;
+					/** Format: int32 */
+					default: number;
+					items: string[];
+					key: string;
+					/** @enum {string} */
+					kind: 'combobox';
+					/** Format: int32 */
+					value: number;
+			  };
+		/** @description A module's settings. */
+		ModuleSettingsView: {
+			/** @description Whether `limits` and `http` apply (`Settings.Enabled`); options always do. */
+			enabled: boolean;
+			http: components['schemas']['HttpOverrides'];
+			id: string;
+			/** @description The user's limit overrides. */
+			limits: components['schemas']['LimitOverrides'];
+			/** @description The limits the module itself declares; 0 means unlimited. */
+			module_limits: components['schemas']['ModuleLimits'];
+			name: string;
+			/** @description The options the module declares with `AddOption*`, in declaration order. */
+			options: components['schemas']['ModuleOptionSetting'][];
+		};
+		/** @description A loaded module, for the module picker. */
+		ModuleSummary: {
+			category: string;
+			id: string;
+			name: string;
+			/** @description How many options the module declares. */
+			option_count: number;
+		};
+		/**
+		 * @description Lua module sync from GitHub. The repo defaults are FMD2's `GitHub` section
+		 *     (dist/config.json:8-15).
+		 */
+		ModuleUpdaterSettings: {
+			/**
+			 * @description Sync at startup and on the interval. No FMD2 counterpart: FMD2 checks when the user
+			 *     clicks "Check update" (`btCheckUpdateClick`, mangadownloader/forms/frmLuaModulesUpdater.pas:70).
+			 * @default true
+			 */
+			auto_update: boolean;
+			/**
+			 * @description Optional GitHub token to raise the API rate limit. No FMD2 counterpart.
+			 * @default null
+			 */
+			github_token: string | null;
+			/**
+			 * Format: int32
+			 * @description Minutes between syncs. No FMD2 counterpart. Minimum 1.
+			 * @default 60
+			 */
+			interval_minutes: number;
+			/**
+			 * @description Keep the previous version of a module that fails to load after an update. No FMD2
+			 *     counterpart.
+			 * @default true
+			 */
+			keep_last_good: boolean;
+			/** @default FMD2 */
+			repo_name: string;
+			/** @default dazedcat19 */
+			repo_owner: string;
+			/** @default lua */
+			repo_path: string;
+			/** @default master */
+			repo_ref: string;
+		};
+		/**
+		 * @description `rgOptionCompress` items None/ZIP/CBZ/PDF/EPUB (mangadownloader/forms/frmMain.lfm:3912-3918).
+		 * @enum {string}
+		 */
+		OutputFormat: 'folder' | 'zip' | 'cbz' | 'pdf' | 'epub';
+		OutputSettings: {
+			/** @default folder */
+			format: components['schemas']['OutputFormat'];
+			/**
+			 * Format: int32
+			 * @description JPEG quality of PDF pages (`saveto/PDFQuality`, default 100,
+			 *     mangadownloader/forms/frmMain.pas:5888). Range 5..=100
+			 *     (mangadownloader/forms/frmMain.lfm:4245-4246).
+			 * @default 100
+			 */
+			pdf_quality: number;
+		};
+		/**
+		 * @description `cbPNGCompressionLevel` items (mangadownloader/forms/frmMain.lfm:4395-4400).
+		 * @enum {string}
+		 */
+		PngCompression: 'none' | 'fastest' | 'default' | 'maximum';
+		ProxyOverride: {
+			/** @default  */
+			host: string;
+			/** @default  */
+			password: string;
+			/** @default  */
+			port: string;
+			/** @default default */
+			type: components['schemas']['ProxyOverrideType'];
+			/** @default  */
+			username: string;
+		};
+		/**
+		 * @description `TProxyType` (baseunits/WebsiteModulesSettings.pas:11).
+		 * @enum {string}
+		 */
+		ProxyOverrideType: 'default' | 'direct' | 'http' | 'socks4' | 'socks5';
+		/**
+		 * @description Global proxy. Unlike FMD2 (which encrypts `User`/`Pass` with `EncryptString`), the
+		 *     credentials are stored as plain JSON in `app.db`.
+		 */
+		ProxySettings: {
+			/**
+			 * @description `connections/UseProxy`, default false.
+			 * @default false
+			 */
+			enabled: boolean;
+			/** @default  */
+			host: string;
+			/** @default  */
+			password: string;
+			/**
+			 * Format: int32
+			 * @description `connections/Port`, default empty.
+			 * @default null
+			 */
+			port: number | null;
+			/** @default http */
+			type: components['schemas']['ProxyType'];
+			/** @default  */
+			username: string;
+		};
+		/**
+		 * @description `cbOptionProxyType` items (mangadownloader/forms/frmMain.lfm:3559-3563).
+		 * @enum {string}
+		 */
+		ProxyType: 'http' | 'socks4' | 'socks5';
+		/** @description The names the rename templates of a draft produce for a sample series. */
+		RenamePreview: {
+			/** @description The chapter folder or archive name (`chapter_rename`). */
+			chapter: string;
+			/** @description The first page's file name, without extension (`filename_rename`). */
+			filename: string;
+			/** @description The manga folder name (`manga_rename`). */
+			manga: string;
+		};
+		/**
+		 * @description Where and under which names downloads are saved. The templates take the tokens `%MANGA%`,
+		 *     `%CHAPTER%`, `%NUMBERING%`, `%WEBSITE%`, `%AUTHOR%`, `%ARTIST%` and `%FILENAME%`
+		 *     (baseunits/uBaseUnit.pas:251-257); an empty template resets to its default
+		 *     (mangadownloader/forms/frmMain.pas:5894-5917).
+		 */
+		SaveToSettings: {
+			/**
+			 * @description `saveto/ChapterCustomRename` (mangadownloader/forms/frmMain.pas:5901).
+			 * @default %CHAPTER%
+			 */
+			chapter_rename: string;
+			/**
+			 * @description `saveto/ConvertDigitChapter`, default true (mangadownloader/forms/frmMain.pas:5910).
+			 * @default true
+			 */
+			convert_digit_chapter: boolean;
+			/**
+			 * @description `saveto/ConvertDigitVolume`, default true (mangadownloader/forms/frmMain.pas:5907).
+			 * @default true
+			 */
+			convert_digit_volume: boolean;
+			/**
+			 * @description Download directory; empty resets to the default (`saveto/SaveTo`, `DEFAULT_PATH`,
+			 *     baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886).
+			 * @default downloads
+			 */
+			default_dir: string;
+			/**
+			 * Format: int32
+			 * @description `saveto/DigitChapterLength`, default 3 (mangadownloader/forms/frmMain.pas:5911). Range
+			 *     1..=10 (mangadownloader/forms/frmMain.lfm:4138-4139).
+			 * @default 3
+			 */
+			digit_chapter_length: number;
+			/**
+			 * Format: int32
+			 * @description `saveto/DigitVolumeLength`, default 2 (mangadownloader/forms/frmMain.pas:5908). Range
+			 *     1..=10 (mangadownloader/forms/frmMain.lfm:4111-4112).
+			 * @default 2
+			 */
+			digit_volume_length: number;
+			/**
+			 * @description `saveto/FilenameCustomRename` (mangadownloader/forms/frmMain.pas:5913).
+			 * @default %FILENAME%
+			 */
+			filename_rename: string;
+			/**
+			 * @description `saveto/GenerateChapterFolder`, default true (mangadownloader/forms/frmMain.pas:5900).
+			 * @default true
+			 */
+			generate_chapter_folder: boolean;
+			/**
+			 * @description `saveto/GenerateMangaFolder`, default true (mangadownloader/forms/frmMain.pas:5893).
+			 * @default true
+			 */
+			generate_manga_folder: boolean;
+			/** @default posix */
+			illegal_chars: components['schemas']['SymbolMode'];
+			/**
+			 * @description `saveto/MangaCustomRename` (mangadownloader/forms/frmMain.pas:5894).
+			 * @default %MANGA%
+			 */
+			manga_rename: string;
+			/**
+			 * @description `saveto/RemoveMangaNameFromChapter`, default false
+			 *     (mangadownloader/forms/frmMain.pas:5892).
+			 * @default false
+			 */
+			remove_manga_name_from_chapter: boolean;
+			/**
+			 * @description Replace non-ASCII characters in names (`saveto/ChangeUnicodeCharacter`, default false,
+			 *     mangadownloader/forms/frmMain.pas:5890).
+			 * @default false
+			 */
+			replace_unicode: boolean;
+			/**
+			 * @description Replacement for non-ASCII characters (`saveto/ChangeUnicodeCharacterStr`,
+			 *     `OptionChangeUnicodeCharacterStr` = `_`, baseunits/FMDOptions.pas:109).
+			 * @default _
+			 */
+			replace_unicode_with: string;
+		};
+		/** @description The HTTP server. No FMD2 counterpart. */
+		ServerSettings: {
+			/**
+			 * @description Password/bearer token clients must present; `None` disables auth. Stored as plain JSON.
+			 * @default null
+			 */
+			auth_token: string | null;
+			/**
+			 * @description Socket address to listen on.
+			 * @default 0.0.0.0:8080
+			 */
+			bind: string;
+		};
+		/** @description Every application setting. Stored one group per key in `app.db`'s `settings` table. */
+		Settings: {
+			/**
+			 * @default {
+			 *       "always_start_from_failed_chapters": true,
+			 *       "auto_retry_failed_tasks": 1,
+			 *       "max_favorite_threads": 1,
+			 *       "max_parallel_tasks": 1,
+			 *       "max_update_list_threads": 1,
+			 *       "proxy": {
+			 *         "enabled": false,
+			 *         "host": "",
+			 *         "password": "",
+			 *         "port": null,
+			 *         "type": "http",
+			 *         "username": ""
+			 *       },
+			 *       "retry_count": 5,
+			 *       "threads_per_task": 1,
+			 *       "timeout_secs": 30,
+			 *       "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+			 *     }
+			 */
+			connections: components['schemas']['ConnectionSettings'];
+			/**
+			 * @default {
+			 *       "auto_download": false,
+			 *       "check_at_startup": true,
+			 *       "check_interval_minutes": 60,
+			 *       "check_on_interval": true,
+			 *       "remove_completed": false
+			 *     }
+			 */
+			favorites: components['schemas']['FavoriteSettings'];
+			/**
+			 * @default {
+			 *       "add_as_stopped": false,
+			 *       "data_dir": "data",
+			 *       "language": "en",
+			 *       "load_covers": true,
+			 *       "lua_dir": "lua"
+			 *     }
+			 */
+			general: components['schemas']['GeneralSettings'];
+			/**
+			 * @default {
+			 *       "imagemagick": {
+			 *         "compression": "None",
+			 *         "enabled": false,
+			 *         "quality": 75,
+			 *         "save_as": "JPEG"
+			 *       },
+			 *       "jpeg_quality": 80,
+			 *       "png_compression": "fastest",
+			 *       "png_to_jpeg": false,
+			 *       "webp_save_as": "png"
+			 *     }
+			 */
+			images: components['schemas']['ImageSettings'];
+			/**
+			 * @default {
+			 *       "auto_update": true,
+			 *       "github_token": null,
+			 *       "interval_minutes": 60,
+			 *       "keep_last_good": true,
+			 *       "repo_name": "FMD2",
+			 *       "repo_owner": "dazedcat19",
+			 *       "repo_path": "lua",
+			 *       "repo_ref": "master"
+			 *     }
+			 */
+			module_updater: components['schemas']['ModuleUpdaterSettings'];
+			/**
+			 * @default {
+			 *       "format": "folder",
+			 *       "pdf_quality": 100
+			 *     }
+			 */
+			output: components['schemas']['OutputSettings'];
+			/**
+			 * @default {
+			 *       "chapter_rename": "%CHAPTER%",
+			 *       "convert_digit_chapter": true,
+			 *       "convert_digit_volume": true,
+			 *       "default_dir": "downloads",
+			 *       "digit_chapter_length": 3,
+			 *       "digit_volume_length": 2,
+			 *       "filename_rename": "%FILENAME%",
+			 *       "generate_chapter_folder": true,
+			 *       "generate_manga_folder": true,
+			 *       "illegal_chars": "posix",
+			 *       "manga_rename": "%MANGA%",
+			 *       "remove_manga_name_from_chapter": false,
+			 *       "replace_unicode": false,
+			 *       "replace_unicode_with": "_"
+			 *     }
+			 */
+			saveto: components['schemas']['SaveToSettings'];
+			/**
+			 * @default {
+			 *       "auth_token": null,
+			 *       "bind": "0.0.0.0:8080"
+			 *     }
+			 */
+			server: components['schemas']['ServerSettings'];
+			/**
+			 * @default {
+			 *       "auto_update": false,
+			 *       "db_url": "https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z",
+			 *       "interval_hours": 24,
+			 *       "new_manga_days": 1,
+			 *       "no_manga_info": false,
+			 *       "remove_duplicate_local_data": false
+			 *     }
+			 */
+			update_lists: components['schemas']['UpdateListSettings'];
+			/**
+			 * @default {
+			 *       "backend": "fpc"
+			 *     }
+			 */
+			xpath: components['schemas']['XPathSettings'];
+		};
+		/**
+		 * @description How characters that are illegal in file names are handled (mirrors `fmd_pack::SymbolMode`).
+		 * @enum {string}
+		 */
+		SymbolMode: 'posix' | 'windows';
+		UpdateListSettings: {
+			/**
+			 * @description Update the selected modules' lists on a timer. No FMD2 counterpart (FMD2 only updates
+			 *     lists on demand); off by default.
+			 * @default false
+			 */
+			auto_update: boolean;
+			/**
+			 * @description FMD2-DB URL template ([`DEFAULT_DB_URL`]).
+			 * @default https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z
+			 */
+			db_url: string;
+			/**
+			 * Format: int32
+			 * @description Hours between automatic list updates. No FMD2 counterpart. Minimum 1.
+			 * @default 24
+			 */
+			interval_hours: number;
+			/**
+			 * Format: int32
+			 * @description Days a list entry counts as new (`update/NewMangaTime`, default 1,
+			 *     mangadownloader/forms/frmMain.pas:5953). Range 1..=365
+			 *     (mangadownloader/forms/frmMain.lfm:2950-2951).
+			 * @default 1
+			 */
+			new_manga_days: number;
+			/**
+			 * @description `update/UpdateListNoMangaInfo`, default false (mangadownloader/forms/frmMain.pas:5956).
+			 * @default false
+			 */
+			no_manga_info: boolean;
+			/**
+			 * @description `update/UpdateListRemoveDuplicateLocalData`, default false
+			 *     (mangadownloader/forms/frmMain.pas:5957).
+			 * @default false
+			 */
+			remove_duplicate_local_data: boolean;
+		};
+		/**
+		 * @description `cbWebPSaveAs` items (mangadownloader/forms/frmMain.lfm:4363-4367).
+		 * @enum {string}
+		 */
+		WebpSaveAs: 'webp' | 'png' | 'jpeg';
+		/**
+		 * @description The `fmd-xpath` backends.
+		 * @enum {string}
+		 */
+		XPathBackend: 'fpc' | 'native';
+		/** @description Module XPath evaluation. No FMD2 counterpart: FMD2 always uses its own engine. */
+		XPathSettings: {
+			/** @default fpc */
+			backend: components['schemas']['XPathBackend'];
 		};
 	};
 	responses: never;
@@ -598,6 +1394,211 @@ export interface operations {
 				};
 				content: {
 					'text/event-stream': unknown;
+				};
+			};
+		};
+	};
+	getSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Every setting */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Settings'];
+				};
+			};
+		};
+	};
+	patchSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': {
+					[key: string]: unknown;
+				};
+			};
+		};
+		responses: {
+			/** @description The updated settings */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Settings'];
+				};
+			};
+			/** @description The patch is not a JSON object */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A value is invalid or a setting unknown; `field` names it */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	previewRename: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['SaveToSettings'];
+			};
+		};
+		responses: {
+			/** @description The expanded names */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['RenamePreview'];
+				};
+			};
+			/** @description Malformed body */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	listModules: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The loaded modules */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ModuleSummary'][];
+				};
+			};
+		};
+	};
+	getModuleSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The module's settings */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ModuleSettingsView'];
+				};
+			};
+			/** @description No module with that ID is loaded */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	patchModuleSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Module ID */
+				id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': {
+					[key: string]: unknown;
+				};
+			};
+		};
+		responses: {
+			/** @description The updated settings */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ModuleSettingsView'];
+				};
+			};
+			/** @description The patch is not a JSON object */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description No module with that ID is loaded */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A value is invalid or a setting unknown; `field` names it */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
 				};
 			};
 		};

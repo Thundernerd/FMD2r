@@ -9,6 +9,7 @@ publish = false
 axum = { version = "0.8", features = ["macros"] }
 fmd-core = { path = "../fmd-core" }
 fmd-http = { path = "../fmd-http" }
+fmd-pack = { path = "../fmd-pack" }
 fmd-store = { path = "../fmd-store" }
 futures-util = "0.3"
 getrandom = "0.3"
@@ -30,6 +31,7 @@ utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.2"
 
 [dev-dependencies]
+fmd-lua = { path = "../fmd-lua" }
 http-body-util = "0.1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 tempfile.workspace = true

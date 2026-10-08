@@ -8,7 +8,9 @@ use utoipa::ToSchema;
 use fmd_store::{ModuleSettings, ModuleSettingsRepo};
 
 use super::model::ConnectionSettings;
-use super::service::{SettingsError, merge};
+use super::service::{SettingsError, apply_merge_patch, check_known_keys, merge};
+use super::validate::invalid;
+use crate::modules::{OptionDef, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
 
 /// A user's overrides for one module. Everything except `options` only applies while `enabled`
 /// is set (`Settings.Enabled`, baseunits/WebsiteModules.pas:362, :400, :408).
@@ -59,6 +61,83 @@ impl ModuleOverrides {
         stored.options = Value::Object(self.options.clone());
         repo.upsert(&stored)?;
         Ok(())
+    }
+}
+
+impl ModuleOverrides {
+    /// Applies `patch`, a JSON merge patch over these overrides, checking option values against
+    /// the module's declared `options`: an option must be declared, a checkbox takes a boolean,
+    /// an edit a string, a spin edit an integer in [`SPIN_EDIT_RANGE`] and a combo box the index
+    /// of one of its items (`csDropDownList`,
+    /// mangadownloader/forms/frmWebsiteOptionCustom.pas:187-191). `null` resets an option to
+    /// its default.
+    ///
+    /// On error `self` is unchanged; the error names the offending field as a dotted path.
+    pub fn apply_patch(
+        &mut self,
+        options: &[OptionDef],
+        patch: Value,
+    ) -> Result<(), SettingsError> {
+        let Value::Object(mut patch) = patch else {
+            return Err(invalid("", "expected a JSON object"));
+        };
+        let option_patch = patch.remove("options");
+        let mut tree = serde_json::to_value(&*self)?;
+        if let Some(map) = tree.as_object_mut() {
+            map.remove("options");
+        }
+        let patch = Value::Object(patch);
+        check_known_keys(&tree, &patch, "")?;
+        apply_merge_patch(&mut tree, patch);
+        let mut next: ModuleOverrides = serde_path_to_error::deserialize(tree)
+            .map_err(|e| invalid(&e.path().to_string(), &e.inner().to_string()))?;
+        next.options = self.options.clone();
+        match option_patch {
+            None | Some(Value::Null) => {}
+            Some(Value::Object(values)) => {
+                for (key, value) in values {
+                    let field = format!("options.{key}");
+                    let def = options
+                        .iter()
+                        .find(|o| o.key == key)
+                        .ok_or(SettingsError::UnknownKey(field.clone()))?;
+                    if value.is_null() {
+                        next.options.remove(&key);
+                    } else {
+                        check_option(def, &value).map_err(|reason| invalid(&field, &reason))?;
+                        next.options.insert(key, value);
+                    }
+                }
+            }
+            Some(_) => return Err(invalid("options", "expected a JSON object")),
+        }
+        *self = next;
+        Ok(())
+    }
+}
+
+/// Why `value` is not a valid value of option `def`, if it is not.
+fn check_option(def: &OptionDef, value: &Value) -> Result<(), String> {
+    match &def.kind {
+        OptionDefKind::CheckBox { .. } if value.is_boolean() => Ok(()),
+        OptionDefKind::CheckBox { .. } => Err("expected true or false".into()),
+        OptionDefKind::Edit { .. } if value.is_string() => Ok(()),
+        OptionDefKind::Edit { .. } => Err("expected a string".into()),
+        OptionDefKind::SpinEdit { .. } => match as_i32(value) {
+            Some(n) if SPIN_EDIT_RANGE.contains(&n) => Ok(()),
+            _ => Err(format!(
+                "expected an integer in {}..={}",
+                SPIN_EDIT_RANGE.start(),
+                SPIN_EDIT_RANGE.end()
+            )),
+        },
+        OptionDefKind::ComboBox { items, .. } => match as_i32(value) {
+            Some(n) if usize::try_from(n).is_ok_and(|i| i < items.len()) => Ok(()),
+            _ => Err(format!(
+                "expected the index of an item, 0..={}",
+                items.len().saturating_sub(1)
+            )),
+        },
     }
 }
 
@@ -113,7 +192,7 @@ pub enum ProxyOverrideType {
 
 /// The limits a module declares (`MaxTaskLimit`, `MaxThreadPerTaskLimit`, `MaxConnectionLimit`
 /// on the Lua `MODULE` object); 0 means unlimited.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, ToSchema)]
 pub struct ModuleLimits {
     pub max_task_limit: u32,
     pub max_thread_per_task_limit: u32,

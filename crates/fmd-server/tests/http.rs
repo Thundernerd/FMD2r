@@ -26,7 +26,7 @@ fn harness() -> Harness {
     let db = AppDb::open(dir.path().join("app.db")).unwrap();
     Harness {
         _dir: dir,
-        state: AppState::new(db.clone()),
+        state: AppState::new(db.clone()).unwrap(),
         db,
     }
 }
@@ -258,10 +258,14 @@ async fn openapi_document_is_3_1_and_lists_the_api_paths() {
         "/api/about",
         "/api/settings",
         "/api/covers",
+        "/api/preview-rename",
+        "/api/modules",
+        "/api/modules/{id}/settings",
     ] {
         assert!(paths.contains_key(path), "missing {path}");
     }
     assert!(paths["/api/settings"]["patch"].is_object());
+    assert!(paths["/api/modules/{id}/settings"]["patch"].is_object());
 }
 
 #[test]
@@ -424,25 +428,55 @@ fn patch_json(uri: &str, body: serde_json::Value) -> Request<Body> {
 }
 
 #[tokio::test]
-async fn settings_are_read_and_merge_patched() {
+async fn settings_are_typed_with_fmd2_defaults_and_merge_patched() {
     let h = harness();
     let res = send(&h.state, get("/api/settings")).await;
     assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(body_json(res).await, serde_json::json!({}));
+    let body = body_json(res).await;
+    // `OptionMaxParallel` = 1 and `OptionConnectionTimeout` = 30 (baseunits/FMDOptions.pas:129-133).
+    assert_eq!(body["connections"]["max_parallel_tasks"], 1);
+    assert_eq!(body["connections"]["timeout_secs"], 30);
 
-    let patch =
-        serde_json::json!({ "downloads": { "max_tasks": 2, "dir": "/manga" }, "theme": "dark" });
+    let patch = serde_json::json!({ "connections": { "max_parallel_tasks": 4 } });
     let res = send(&h.state, patch_json("/api/settings", patch)).await;
     assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(body_json(res).await["connections"]["max_parallel_tasks"], 4);
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(body["connections"]["max_parallel_tasks"], 4);
+    assert_eq!(body["connections"]["timeout_secs"], 30);
 
-    let patch = serde_json::json!({ "downloads": { "max_tasks": 4 }, "theme": null });
+    let patch = serde_json::json!({ "connections": { "max_parallel_tasks": null } });
     let res = send(&h.state, patch_json("/api/settings", patch)).await;
-    let expected = serde_json::json!({ "downloads": { "max_tasks": 4, "dir": "/manga" } });
-    assert_eq!(body_json(res).await, expected);
-    assert_eq!(
-        body_json(send(&h.state, get("/api/settings")).await).await,
-        expected
-    );
+    assert_eq!(body_json(res).await["connections"]["max_parallel_tasks"], 1);
+}
+
+#[tokio::test]
+async fn an_invalid_setting_is_a_422_naming_the_field_and_changes_nothing() {
+    let h = harness();
+    // The timeout spin edit spans 1..=300 (mangadownloader/forms/frmMain.lfm:3387-3388).
+    let patch = serde_json::json!({
+        "connections": { "timeout_secs": 0, "max_parallel_tasks": 3 }
+    });
+    let res = send(&h.state, patch_json("/api/settings", patch)).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(res.headers()["content-type"], "application/problem+json");
+    let problem = body_json(res).await;
+    assert_eq!(problem["field"], "connections.timeout_secs");
+    assert_eq!(problem["status"], 422);
+
+    let res = send(
+        &h.state,
+        patch_json(
+            "/api/settings",
+            serde_json::json!({ "connections": { "nope": 1 } }),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body_json(res).await["field"], "connections.nope");
+
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(body["connections"]["max_parallel_tasks"], 1);
 }
 
 #[tokio::test]
@@ -519,4 +553,32 @@ async fn debug_lines_are_buffered_but_not_streamed() {
     assert_eq!(lines.as_array().unwrap().len(), 2);
     let seen = read_sse_until(res, "worth streaming").await;
     assert!(!seen.contains("chatty"), "{seen}");
+}
+
+#[tokio::test]
+async fn rename_templates_are_previewed_on_sample_values() {
+    let h = harness();
+    let draft = serde_json::json!({
+        "manga_rename": "%WEBSITE% - %MANGA%",
+        "chapter_rename": "%NUMBERING% %CHAPTER%",
+        "filename_rename": "page %FILENAME%",
+        "convert_digit_volume": true,
+        "digit_volume_length": 2,
+        "convert_digit_chapter": true,
+        "digit_chapter_length": 3,
+    });
+    let req = Request::post("/api/preview-rename")
+        .header("content-type", "application/json")
+        .body(Body::from(draft.to_string()))
+        .unwrap();
+    let res = send(&h.state, req).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    // CustomRename (baseunits/uBaseUnit.pas:1798-1859) with VolumeChapterPadZero
+    // (baseunits/uMisc.pas:119-259) on the sample "Vol. 1 Ch. 5", numbering "0005"; a page's
+    // file name is the template with `%FILENAME%` as the 1-based page number padded to 3
+    // (baseunits/uDownloadsManager.pas:530-552).
+    assert_eq!(body["manga"], "MangaDex - Sample Manga");
+    assert_eq!(body["chapter"], "0005 Vol. 01 Ch. 005");
+    assert_eq!(body["filename"], "page 001");
 }

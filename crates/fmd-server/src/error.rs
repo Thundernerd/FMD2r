@@ -21,6 +21,13 @@ pub enum ApiError {
     MethodNotAllowed,
     #[error("{0}")]
     BadRequest(String),
+    /// A well-formed request with a value that fails validation; `field` names the offending
+    /// setting (dotted path) so the UI can show the error next to it.
+    #[error("{detail}")]
+    Invalid {
+        field: Option<String>,
+        detail: String,
+    },
     /// The resource is in a state that does not allow the request (e.g. a job already running).
     #[error("{0}")]
     Conflict(String),
@@ -46,6 +53,10 @@ pub struct Problem {
     pub title: String,
     pub status: u16,
     pub detail: String,
+    /// The setting a validation error (422) is about, as a dotted path such as
+    /// `connections.timeout_secs` or `options.server`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
 }
 
 impl ApiError {
@@ -55,6 +66,7 @@ impl ApiError {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::Invalid { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Rejected(status, _) => *status,
             Self::BadGateway(_) => StatusCode::BAD_GATEWAY,
@@ -82,6 +94,10 @@ impl IntoResponse for ApiError {
             title: status.canonical_reason().unwrap_or("Error").into(),
             status: status.as_u16(),
             detail,
+            field: match &self {
+                Self::Invalid { field, .. } => field.clone(),
+                _ => None,
+            },
         };
         let mut res = (
             status,

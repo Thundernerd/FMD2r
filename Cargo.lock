@@ -744,6 +744,7 @@ dependencies = [
 name = "fmd-core"
 version = "0.1.0"
 dependencies = [
+ "fmd-lua",
  "fmd-store",
  "serde",
  "serde_json",
@@ -832,6 +833,8 @@ dependencies = [
  "axum",
  "fmd-core",
  "fmd-http",
+ "fmd-lua",
+ "fmd-pack",
  "fmd-store",
  "futures-util",
  "getrandom 0.3.4",
