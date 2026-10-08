@@ -10,6 +10,7 @@ mod libs;
 mod memory_stream;
 mod module;
 mod package;
+mod pool;
 mod strings;
 pub mod xquery;
 
@@ -28,10 +29,15 @@ pub use memory_stream::{LuaMemoryStream, MemoryStream};
 pub use mlua;
 pub use module::{
     Account, AccountState, CriticalSection, LoadFailure, LoadReport, MemorySettingsStore, Module,
-    ModuleDef, ModuleOption, ModuleRegistry, ModuleSettingsStore, OptionKind, OptionValue,
-    SettingsStoreError,
+    ModuleDef, ModuleLimits, ModuleOption, ModuleRegistry, ModuleSettingsStore, OptionKind,
+    OptionValue, SettingsStoreError,
 };
 pub use package::PackageCache;
+pub use pool::{
+    Affinity, Answer, Call, Callback, CallbackError, Caller, HttpSettingsSource, InfoReply,
+    Invalidate, Job, JobError, JobResult, ListReply, MangaInfo, NamesAndLinks, PageCount, Pending,
+    PoolConfig, Reply, Task, TaskReply, UpdateList, WorkerPool, missing_host_api,
+};
 pub use strings::{ListIndexError, LuaStrings, StringList};
 
 /// Errors raised by the Lua runtime.
@@ -69,6 +75,15 @@ fn app_data_or_default<T: Clone + Default + 'static>(lua: &mlua::Lua) -> T {
 }
 
 /// One Lua state with the FMD2 Host API installed.
+///
+/// A state never leaves the thread that created it: like FMD2's per-thread handlers
+/// (baseunits/lua/LuaWebsiteModuleHandler.pas:56-64), and because `lua_close` must run on that
+/// thread for `__gc` to work (:77-78). The type is `!Send`:
+///
+/// ```compile_fail
+/// fn send<T: Send>() {}
+/// send::<fmd_lua::Runtime>();
+/// ```
 pub struct Runtime {
     lua: mlua::Lua,
 }
@@ -141,7 +156,8 @@ impl Runtime {
     }
 
     /// Ties the runtime to its worker's token: terminating it interrupts a running
-    /// `fmd.duktape.ExecJS` script, which then fails like a script error.
+    /// `fmd.duktape.ExecJS` script, which then fails like a script error, and cuts short a
+    /// `sleep` installed without a token of its own.
     pub fn set_terminate_token(&self, token: TerminateToken) {
         self.js_settings(|settings| settings.terminate = token);
     }

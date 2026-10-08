@@ -2,6 +2,7 @@
 //! makes them available under the `fmd.` prefix (baseunits/lua/LuaPackage.pas:62-79).
 
 mod fileutil;
+mod flaresolverr;
 mod gzip;
 mod imagepuzzle;
 mod logger;
@@ -34,6 +35,7 @@ pub(crate) fn register(lua: &Lua) -> mlua::Result<()> {
     for &(name, open) in LIBS {
         crate::package::add_lib(lua, name, open)?;
     }
+    subprocess::wrap_io_open(lua)?;
     let preload: Table = lua.globals().get::<Table>("package")?.get("preload")?;
     pb::register(lua, &preload)
 }

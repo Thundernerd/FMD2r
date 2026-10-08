@@ -423,6 +423,14 @@ export interface components {
 			 */
 			auto_retry_failed_tasks: number;
 			/**
+			 * @description FlareSolverr's URL, e.g. `http://flaresolverr:8191`, for Cloudflare challenges; empty
+			 *     for none. No FMD2 setting: FMD2r writes it into upstream's
+			 *     `lua/websitebypass/websitebypass_config.json` at startup
+			 *     ([`write_websitebypass_config`](super::write_websitebypass_config)).
+			 * @default
+			 */
+			flaresolverr_url: string;
+			/**
 			 * Format: int32
 			 * @description Threads checking favorites (`connections/MaxFavoriteThreads`,
 			 *     baseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).
@@ -963,6 +971,7 @@ export interface components {
 			 * @default {
 			 *       "always_start_from_failed_chapters": true,
 			 *       "auto_retry_failed_tasks": 1,
+			 *       "flaresolverr_url": "",
 			 *       "max_favorite_threads": 1,
 			 *       "max_parallel_tasks": 1,
 			 *       "max_update_list_threads": 1,

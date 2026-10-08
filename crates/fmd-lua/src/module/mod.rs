@@ -195,6 +195,16 @@ impl Account {
     }
 }
 
+/// The limits of a module's downloads, 0 meaning none: `MaxTaskLimit`, `MaxThreadPerTaskLimit`
+/// and `MaxConnectionLimit` (baseunits/WebsiteModules.pas:136-137,
+/// baseunits/lua/LuaWebsiteModules.pas:1001-1003).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ModuleLimits {
+    pub max_task_limit: i32,
+    pub max_thread_per_task_limit: i32,
+    pub max_connection_limit: i32,
+}
+
 /// The `Storage` of a module (`TStringsStorage`, baseunits/lua/LuaStringsStorage.pas:13-31).
 struct Storage {
     values: StringList,
@@ -223,6 +233,9 @@ pub struct Module {
     def: RwLock<ModuleDef>,
     storage: Mutex<Storage>,
     guardian: Arc<CriticalSection>,
+    /// `TWebsiteBypass.Guardian`: serialises the module's anti-bot bypasses
+    /// (baseunits/lua/LuaWebsiteBypass.pas:14-20, :161).
+    website_bypass: CriticalSection,
     account: Mutex<Option<Arc<Account>>>,
     http: ModuleHttp,
     active_task_count: AtomicI32,
@@ -231,11 +244,12 @@ pub struct Module {
 
 impl Module {
     /// A module created by `NewWebsiteModule()` in `file`'s `Init`.
-    fn new(file: PathBuf) -> Self {
+    pub(crate) fn new(file: PathBuf) -> Self {
         Module {
             def: RwLock::new(ModuleDef::new(file)),
             storage: Mutex::default(),
             guardian: Arc::default(),
+            website_bypass: CriticalSection::default(),
             account: Mutex::default(),
             http: ModuleHttp::default(),
             active_task_count: AtomicI32::new(0),
@@ -248,6 +262,19 @@ impl Module {
         self.def_read().clone()
     }
 
+    /// The limits the module declares, as its `MODULE` object holds them now. The user's
+    /// overrides and the global limits apply on top in `fmd_core::settings::effective_limits`,
+    /// with FMD2's precedence (`GetMaxTaskLimit`, `GetMaxThreadPerTaskLimit`,
+    /// baseunits/WebsiteModules.pas:398-412).
+    pub fn limits(&self) -> ModuleLimits {
+        let def = self.def_read();
+        ModuleLimits {
+            max_task_limit: def.max_task_limit,
+            max_thread_per_task_limit: def.max_thread_per_task_limit,
+            max_connection_limit: def.max_connection_limit,
+        }
+    }
+
     /// The module's shared HTTP state: its cookie jar and connection queue.
     pub fn http(&self) -> &ModuleHttp {
         &self.http
@@ -256,6 +283,12 @@ impl Module {
     /// The module's `Guardian` critical section.
     pub fn guardian(&self) -> &Arc<CriticalSection> {
         &self.guardian
+    }
+
+    /// The lock that serialises the module's anti-bot bypasses (`TWebsiteBypass.Guardian`,
+    /// baseunits/lua/LuaWebsiteBypass.pas:14-20, taken at :161).
+    pub(crate) fn website_bypass_guard(&self) -> &CriticalSection {
+        &self.website_bypass
     }
 
     /// The module's account, present while `AccountSupport` is true.
@@ -350,6 +383,6 @@ impl Module {
 }
 
 /// Locks `mutex`; a poisoned one still holds valid data.
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }

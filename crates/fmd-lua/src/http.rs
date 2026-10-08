@@ -1,6 +1,8 @@
 //! FMD2's `HTTP` object, reproducing baseunits/lua/LuaHTTPSend.pas over an `fmd-http`
 //! [`HttpSession`] (FMD2's `THTTPSendThread`).
 
+mod bypass;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -9,7 +11,7 @@ use fmd_http::{HttpClient, HttpSession, ModuleHttp, NameValueList, Proxy};
 use mlua::{AnyUserData, Lua, Value, Variadic};
 
 use crate::class::{borrow, to_bytes};
-use crate::{LuaClass, LuaMemoryStream, LuaStrings, StringList};
+use crate::{LuaClass, LuaMemoryStream, LuaStrings, Module, SettingsStoreError, StringList};
 
 /// The state behind one Lua `HTTP` object: the session plus the `Headers`, `Cookies` and
 /// `Document` objects that Lua reads and writes.
@@ -25,6 +27,9 @@ struct HttpObject {
     headers: LuaStrings,
     cookies: LuaStrings,
     document: LuaMemoryStream,
+    /// The module whose anti-bot hook runs after `GET`, `POST`, `HEAD` and `XHR`, as
+    /// `PrepareHTTP` sets `OnHTTPRequest` (baseunits/WebsiteModules.pas:359).
+    bypass: Option<Rc<bypass::WebsiteBypass>>,
 }
 
 impl HttpObject {
@@ -89,6 +94,28 @@ impl LuaHttp {
     /// separators: `:` for headers, `=` and delimiter `;` for cookies
     /// (baseunits/httpsendthread.pas:503-509).
     pub fn new(session: HttpSession) -> LuaHttp {
+        LuaHttp::create(session, None)
+    }
+
+    /// Wraps `session`, a session of `module`, with the module's anti-bot hook: after every
+    /// `GET`, `POST`, `HEAD` and `XHR` (but not `Request`, which calls `HTTPRequest` directly,
+    /// baseunits/lua/LuaHTTPSend.pas:23) it runs upstream's `websitebypass/checkantibot.lua`
+    /// and, when that sees a challenge, `websitebypass/websitebypass.lua`, storing the cookies
+    /// and user agent obtained in `settings` (`WebsiteBypassHTTPRequest`,
+    /// baseunits/WebsiteModules.pas:272-276; baseunits/lua/LuaWebsiteBypass.pas:142-212).
+    ///
+    /// The scripts come from the `websitebypass/` folder of the runtime's lua dir; without both
+    /// of them requests run plainly (:151-155).
+    pub fn with_website_bypass(
+        session: HttpSession,
+        module: Arc<Module>,
+        settings: Arc<dyn ModuleHttpSettings>,
+    ) -> LuaHttp {
+        let bypass = bypass::WebsiteBypass { module, settings };
+        LuaHttp::create(session, Some(Rc::new(bypass)))
+    }
+
+    fn create(session: HttpSession, bypass: Option<Rc<bypass::WebsiteBypass>>) -> LuaHttp {
         let headers = LuaStrings::new();
         {
             let mut list = headers.list().borrow_mut();
@@ -113,8 +140,17 @@ impl LuaHttp {
                 headers,
                 cookies,
                 document,
+                bypass,
             })),
         }
+    }
+
+    /// The session, holding what Lua last put in `Headers`, `Cookies` and `Document`.
+    /// `placeholder` takes its place behind the Lua objects built over this one.
+    pub(crate) fn into_session(self, placeholder: HttpSession) -> mlua::Result<HttpSession> {
+        let mut object = borrow(&self.object)?;
+        object.with_session(|_| ())?;
+        Ok(std::mem::replace(&mut object.session, placeholder))
     }
 
     /// Creates the Lua `HTTP` object (`luaHTTPSendThreadAddMetaTable`,
@@ -140,32 +176,29 @@ impl LuaHttp {
             )
             // `http_get` (baseunits/lua/LuaHTTPSend.pas:27-31): true when the response body
             // is non-empty, whatever the status (baseunits/httpsendthread.pas:718, :725-728).
-            .method("GET", |lua, http: &mut HttpObject, url: Value| {
+            .method_with_object("GET", |lua, http, object, url: Value| {
                 let url = text(lua, url)?;
-                http.request(|s| s.get(&url))
+                bypass::request(lua, http, object, "GET", &url, |s| s.get(&url))
             })
             // `http_post` (baseunits/lua/LuaHTTPSend.pas:33-38): non-empty `data` replaces the
             // document; a `Content-Type` header moves into `MimeType`, and `text/html` is sent
             // as form-urlencoded (baseunits/httpsendthread.pas:730-747).
-            .method(
-                "POST",
-                |lua, http: &mut HttpObject, (url, data): (Value, Value)| {
-                    let url = text(lua, url)?;
-                    let data = to_bytes(lua, data)?;
-                    http.request(|s| s.post(&url, &data))
-                },
-            )
-            // `http_head` (baseunits/lua/LuaHTTPSend.pas:40-44, baseunits/httpsendthread.pas:720-723).
-            .method("HEAD", |lua, http: &mut HttpObject, url: Value| {
+            .method_with_object("POST", |lua, http, object, (url, data): (Value, Value)| {
                 let url = text(lua, url)?;
-                http.request(|s| s.head(&url))
+                let data = to_bytes(lua, data)?;
+                bypass::request(lua, http, object, "POST", &url, |s| s.post(&url, &data))
+            })
+            // `http_head` (baseunits/lua/LuaHTTPSend.pas:40-44, baseunits/httpsendthread.pas:720-723).
+            .method_with_object("HEAD", |lua, http, object, url: Value| {
+                let url = text(lua, url)?;
+                bypass::request(lua, http, object, "HEAD", &url, |s| s.head(&url))
             })
             // `http_xhr` (baseunits/lua/LuaHTTPSend.pas:46-50): resets stale response headers,
             // adds `X-Requested-With: XMLHttpRequest`, then GETs
-            // (baseunits/httpsendthread.pas:749-755).
-            .method("XHR", |lua, http: &mut HttpObject, url: Value| {
+            // (baseunits/httpsendthread.pas:749-755), so the hook sees a `GET`.
+            .method_with_object("XHR", |lua, http, object, url: Value| {
                 let url = text(lua, url)?;
-                http.request(|s| s.xhr(&url))
+                bypass::request(lua, http, object, "GET", &url, |s| s.xhr(&url))
             })
             // `http_reset` (baseunits/lua/LuaHTTPSend.pas:52-56): `ResetBasic` plus browser-like
             // default headers (baseunits/httpsendthread.pas:924-932).
@@ -351,6 +384,15 @@ pub trait ModuleHttpSettings: Send + Sync {
     /// (`Settings.Enabled`, baseunits/WebsiteModules.pas:280, :362). Read when a session is
     /// created and again for the cookies of every request.
     fn http_overrides(&self) -> Option<ModuleHttpOverrides>;
+
+    /// Clears the stored cookies, enabled or not (`m.Settings.HTTP.Cookies := ''`), as the
+    /// anti-bot hook does before it runs the bypass (baseunits/lua/LuaWebsiteBypass.pas:178).
+    fn clear_cookies(&self) -> Result<(), SettingsStoreError>;
+
+    /// Enables the settings and stores the cookies and user agent a successful bypass obtained
+    /// (baseunits/lua/LuaWebsiteBypass.pas:182-184), so every later session of the module sends
+    /// them.
+    fn store_bypass(&self, cookies: &str, user_agent: &str) -> Result<(), SettingsStoreError>;
 }
 
 /// What a session needs from the module it runs for: the module's shared HTTP state (cookie

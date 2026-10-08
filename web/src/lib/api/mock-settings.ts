@@ -35,6 +35,7 @@ export const defaultSettings = (): Settings => ({
 		max_update_list_threads: 1,
 		timeout_secs: 30,
 		user_agent: DEFAULT_USER_AGENT,
+		flaresolverr_url: '',
 		proxy: { enabled: false, type: 'http', host: '', port: null, username: '', password: '' }
 	},
 	saveto: {

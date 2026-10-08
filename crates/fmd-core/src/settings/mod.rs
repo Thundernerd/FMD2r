@@ -5,10 +5,12 @@ mod model;
 mod module_overrides;
 mod service;
 mod validate;
+mod websitebypass;
 
 pub use model::*;
 pub use module_overrides::{
     EffectiveLimits, HttpOverrides, LimitOverrides, ModuleLimits, ModuleOverrides, ProxyOverride,
-    ProxyOverrideType, effective_limits,
+    ProxyOverrideType, StoredModuleHttpSettings, effective_limits,
 };
 pub use service::{SettingsError, SettingsService};
+pub use websitebypass::write_websitebypass_config;

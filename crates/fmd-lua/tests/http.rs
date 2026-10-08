@@ -17,7 +17,7 @@ use fmd_http::{
 };
 use fmd_lua::{
     HttpModule, LuaHttp, ModuleHttpOverrides, ModuleHttpSettings, ProxyOverride, Runtime,
-    create_http,
+    SettingsStoreError, create_http,
 };
 
 /// A transport that records every request and answers from a script.
@@ -389,6 +389,14 @@ struct Settings(Mutex<Option<ModuleHttpOverrides>>);
 impl ModuleHttpSettings for Settings {
     fn http_overrides(&self) -> Option<ModuleHttpOverrides> {
         self.0.lock().unwrap().clone()
+    }
+
+    fn clear_cookies(&self) -> Result<(), SettingsStoreError> {
+        unreachable!("these sessions have no anti-bot hook")
+    }
+
+    fn store_bypass(&self, _: &str, _: &str) -> Result<(), SettingsStoreError> {
+        unreachable!("these sessions have no anti-bot hook")
     }
 }
 

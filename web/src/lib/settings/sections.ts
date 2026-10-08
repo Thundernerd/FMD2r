@@ -76,6 +76,11 @@ export const SETTINGS_SECTIONS: Section[] = [
 			number('connections.max_update_list_threads', 'List update threads', 1, 32),
 			number('connections.timeout_secs', 'Connection timeout (seconds)', 1, 300),
 			text('connections.user_agent', 'User agent', 'Leave empty for the default.'),
+			text(
+				'connections.flaresolverr_url',
+				'FlareSolverr URL',
+				'Solves Cloudflare challenges, e.g. http://flaresolverr:8191. Takes effect after a restart.'
+			),
 			checkbox('connections.proxy.enabled', 'Use a proxy'),
 			select('connections.proxy.type', 'Proxy type', [
 				{ value: 'http', label: 'HTTP' },

@@ -696,6 +696,11 @@
 						"maximum": 100,
 						"minimum": 0
 					},
+					"flaresolverr_url": {
+						"type": "string",
+						"description": "FlareSolverr's URL, e.g. `http://flaresolverr:8191`, for Cloudflare challenges; empty\nfor none. No FMD2 setting: FMD2r writes it into upstream's\n`lua/websitebypass/websitebypass_config.json` at startup\n([`write_websitebypass_config`](super::write_websitebypass_config)).",
+						"default": ""
+					},
 					"max_favorite_threads": {
 						"type": "integer",
 						"format": "int32",
@@ -1552,6 +1557,7 @@
 						"default": {
 							"always_start_from_failed_chapters": true,
 							"auto_retry_failed_tasks": 1,
+							"flaresolverr_url": "",
 							"max_favorite_threads": 1,
 							"max_parallel_tasks": 1,
 							"max_update_list_threads": 1,
