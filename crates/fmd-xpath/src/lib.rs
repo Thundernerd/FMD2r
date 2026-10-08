@@ -1,4 +1,4 @@
-//! `XPathEngine` trait and its backends: `fpc` (FFI to `libfmdxpath.so`), later `native`.
+//! `XPathEngine` trait and its backends: `fpc` (FFI to `libfmdxpath.so`) and `native` (pure Rust).
 //!
 //! The API is shaped after FMD2's `TXQueryEngineHTML` (baseunits/XQueryEngineHTML.pas) and the
 //! `IXQValue` operations its Lua binding exposes (baseunits/lua/LuaIXQValue.pas:37-160). It is
@@ -9,6 +9,31 @@ use std::rc::Rc;
 
 #[cfg(feature = "fpc")]
 pub mod fpc;
+#[cfg(feature = "native")]
+pub mod native;
+
+/// An XPath backend, as the `xpath.backend` setting names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Backend {
+    /// FMD2's own engine (internettools) through `libfmdxpath.so`.
+    Fpc,
+    /// The pure-Rust engine.
+    Native,
+}
+
+impl Backend {
+    /// The backend's engine, or `None` when this build leaves it out (its cargo feature is off).
+    pub fn engine(self) -> Option<Rc<dyn XPathEngine>> {
+        match self {
+            #[cfg(feature = "fpc")]
+            Backend::Fpc => Some(Rc::new(fpc::FpcEngine)),
+            #[cfg(feature = "native")]
+            Backend::Native => Some(Rc::new(native::NativeEngine)),
+            #[allow(unreachable_patterns)] // Unreachable when both backends are built.
+            _ => None,
+        }
+    }
+}
 
 /// Errors raised by an XPath backend.
 #[derive(Debug, thiserror::Error)]

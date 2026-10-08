@@ -6,10 +6,17 @@ license.workspace = true
 publish = false
 
 [features]
+default = ["native"]
 # The FFI backend over `libfmdxpath.so`. Building it needs `fpc` (see crates/xpath-fpc/README.md).
 fpc = ["dep:xpath-fpc"]
+# The pure-Rust backend: html5ever and an internettools-compatible XPath evaluator (README.md).
+native = ["dep:html5ever", "dep:indexmap", "dep:regex", "dep:rust_decimal"]
 
 [dependencies]
+html5ever = { version = "0.40", optional = true }
+indexmap = { version = "2", optional = true }
+regex = { version = "1", optional = true }
+rust_decimal = { version = "1", optional = true }
 thiserror.workspace = true
 xpath-fpc = { path = "../xpath-fpc", optional = true }
 

@@ -45,7 +45,7 @@ const JPEG_QUALITY: u8 = 75;
 
 /// Builds a `LuaClass` object inside a Lua callback, where errors are Lua errors.
 fn build_object<T: 'static>(lua: &Lua, class: crate::LuaClass<T>) -> mlua::Result<AnyUserData> {
-    class.build(lua).map_err(|crate::Error::Lua(e)| e)
+    class.build(lua).map_err(mlua::Error::from)
 }
 
 /// Registers `create` as both `New` and `Create`, the constructor pair FMD2's object libraries

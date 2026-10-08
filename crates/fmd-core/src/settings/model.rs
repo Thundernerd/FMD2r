@@ -25,6 +25,7 @@ pub struct Settings {
     pub update_lists: UpdateListSettings,
     pub module_updater: ModuleUpdaterSettings,
     pub server: ServerSettings,
+    pub xpath: XPathSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -459,4 +460,24 @@ impl Default for ServerSettings {
             auth_token: None,
         }
     }
+}
+
+/// Module XPath evaluation. No FMD2 counterpart: FMD2 always uses its own engine.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct XPathSettings {
+    /// Which `fmd-xpath` backend evaluates module XPath (`fmd_lua::Runtime::set_xpath_backend`).
+    pub backend: XPathBackend,
+}
+
+/// The `fmd-xpath` backends.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum XPathBackend {
+    /// FMD2's own engine (internettools) over FFI, so module XPath behaves exactly as in FMD2.
+    /// The default until the native backend reaches parity (T35).
+    #[default]
+    Fpc,
+    /// The pure-Rust engine.
+    Native,
 }

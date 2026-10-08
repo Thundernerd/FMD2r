@@ -1,4 +1,5 @@
-//! Without the `xpath-fpc` feature there is no XPath backend; say so instead of passing silently.
+//! Without the `xpath-fpc` feature the XQuery suite runs over `native` only; say so instead of
+//! passing silently.
 
 #[cfg(not(feature = "xpath-fpc"))]
 #[test]

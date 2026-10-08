@@ -6,14 +6,17 @@ license.workspace = true
 publish = false
 
 [features]
-# Installs `CreateTXQuery` over the `fpc` XPath backend (needs `fpc`, see crates/xpath-fpc/README.md).
+default = ["xpath-native"]
+# Builds the `fpc` XPath backend (needs `fpc`, see crates/xpath-fpc/README.md).
 xpath-fpc = ["fmd-xpath/fpc"]
+# Builds the pure-Rust `native` XPath backend.
+xpath-native = ["fmd-xpath/native"]
 
 [dependencies]
 aes = "0.8"
 chacha20 = "0.9"
 fmd-http = { path = "../fmd-http" }
-fmd-xpath = { path = "../fmd-xpath" }
+fmd-xpath = { path = "../fmd-xpath", default-features = false }
 flate2 = "1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 md-5 = "0.10"
