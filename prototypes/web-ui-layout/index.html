@@ -1,0 +1,817 @@
+<title>FMD2r UI Layouts</title>
+<!--
+  PROTOTYPE — throwaway. Answers map ticket "Prototype the web UI layout" (Thundernerd/FMD2r#13).
+  Plan: three structurally different layouts of the whole FMD2r web UI (every section on the
+  parity checklist), switchable via ?variant=A|B|C (or #A / #B / #C) and the floating bar at the bottom
+  (← / → keys also cycle). All data is mock data held in memory; nothing persists.
+    A  Workbench   – sidebar + dense multi-pane tables, closest to FMD2's mental model
+    B  Library     – media-server style: cover grid home, series pages, queue in a bottom dock
+    C  Command     – omnibox + "needs you" inbox home, queue always in a right rail, info in sheets
+  Run: open this file in a browser.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Schibsted+Grotesk:wght@600;700;800&display=swap">
+<style>
+/* Layout: one app shell per variant over shared mock data; tokens below are shared so variants differ in structure, not paint. */
+:root {
+  --bg: #f3f5f6; --surface: #ffffff; --surface-2: #e9edef; --line: #d6dde0;
+  --fg: #172226; --muted: #5a6a70; --accent: #0b6e7f; --accent-fg: #ffffff; --accent-soft: #d5ecef;
+  --ok: #2b7a45; --warn: #a86a12; --bad: #b8352a; --idle: #7a8790;
+  --ok-soft: #dcefe2; --warn-soft: #f6e9d2; --bad-soft: #f6dcd8; --idle-soft: #e6eaec;
+  --shadow: 0 1px 2px rgba(15,30,35,.08), 0 6px 20px rgba(15,30,35,.08);
+  --f-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101618; --surface: #172024; --surface-2: #1f2a2f; --line: #2b383e;
+  --fg: #e3eaec; --muted: #93a3a9; --accent: #3fb3c4; --accent-fg: #06272c; --accent-soft: #163a40;
+  --ok: #5cc27e; --warn: #e0a647; --bad: #f07a6e; --idle: #8c9aa0;
+  --ok-soft: #1b3324; --warn-soft: #3a2c14; --bad-soft: #3d1f1c; --idle-soft: #232d31;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #101618; --surface: #172024; --surface-2: #1f2a2f; --line: #2b383e;
+  --fg: #e3eaec; --muted: #93a3a9; --accent: #3fb3c4; --accent-fg: #06272c; --accent-soft: #163a40;
+  --ok: #5cc27e; --warn: #e0a647; --bad: #f07a6e; --idle: #8c9aa0;
+  --ok-soft: #1b3324; --warn-soft: #3a2c14; --bad-soft: #3d1f1c; --idle-soft: #232d31;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; }
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--f-body); }
+* { box-sizing: border-box; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+.mono { font-family: var(--f-mono); font-size: 12px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+
+/* shared leaf widgets */
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 5px 10px; font-size: 13px; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+.btn.danger { color: var(--bad); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.sm { padding: 2px 7px; font-size: 12px; }
+.input { border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 5px 9px; min-width: 0; }
+.pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.st-downloading { background: var(--accent-soft); color: var(--accent); }
+.st-queued, .st-stopped, .st-disabled { background: var(--idle-soft); color: var(--idle); }
+.st-failed { background: var(--bad-soft); color: var(--bad); }
+.st-completed { background: var(--ok-soft); color: var(--ok); }
+.st-new { background: var(--warn-soft); color: var(--warn); }
+.bar { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; min-width: 60px; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .6s; }
+.bar.failed i { background: var(--bad); } .bar.completed i { background: var(--ok); }
+.cover { flex: none; display: flex; align-items: flex-end; justify-content: flex-start; padding: 6px; border-radius: 4px; color: #fff; font: 700 13px/1.1 var(--f-display);
+  background: linear-gradient(160deg, hsl(var(--h) 45% 52%), hsl(calc(var(--h) + 40) 50% 28%)); text-shadow: 0 1px 2px rgba(0,0,0,.4); overflow: hidden; }
+.cover.xs { width: 28px; height: 40px; font-size: 9px; padding: 3px; }
+.cover.sm { width: 44px; height: 62px; font-size: 10px; }
+.cover.md { width: 120px; height: 170px; }
+.cover.lg { width: 180px; height: 255px; font-size: 18px; }
+.cover.fill { width: 100%; aspect-ratio: 5/7; height: auto; max-width: 100%; }
+.tbl-wrap { overflow-x: auto; min-width: 0; }
+table.tbl { border-collapse: collapse; width: 100%; font-size: 13px; }
+.tbl th { text-align: left; font-weight: 600; font-size: 11.5px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--surface); }
+.tbl td { padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tbl tr.sel td { background: var(--accent-soft); }
+.tbl tbody tr:hover td { background: var(--surface-2); cursor: default; }
+.tbl tr.sel:hover td { background: var(--accent-soft); }
+.chk { width: 15px; height: 15px; accent-color: var(--accent); }
+.tri { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; font-size: 12px; background: var(--surface); }
+.tri.inc { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.tri.exc { background: var(--bad-soft); color: var(--bad); border-color: transparent; text-decoration: line-through; }
+.chap { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.chap.dl { color: var(--muted); }
+.chap.dl .chap-t::after { content: " ✓ downloaded"; color: var(--ok); font-size: 11px; }
+.field { display: flex; gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.field .f-l { flex: 1 1 220px; min-width: 0; }
+.field .f-hint { font-size: 12px; color: var(--muted); }
+.toggle { appearance: none; width: 34px; height: 19px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; flex: none; transition: background .15s; }
+.toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--surface); transition: left .15s; }
+.toggle:checked { background: var(--accent); } .toggle:checked::after { left: 17px; }
+.log { font-family: var(--f-mono); font-size: 12px; display: flex; gap: 10px; padding: 3px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.log .lv-WARN { color: var(--warn); } .log .lv-ERROR { color: var(--bad); } .log .lv-INFO { color: var(--accent); } .log .lv-DEBUG { color: var(--idle); }
+.graph svg { display: block; width: 100%; height: 100%; }
+.fog { border: 1px dashed var(--warn); background: var(--warn-soft); color: var(--warn); border-radius: var(--r); padding: 8px 10px; font-size: 12.5px; }
+.toast { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: var(--r); box-shadow: var(--shadow); z-index: 60; font-size: 13px; }
+.job { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+
+/* prototype switcher – deliberately not part of the design */
+.pswitch { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 100;
+  display: flex; align-items: center; gap: 4px; background: #111; color: #fff; border-radius: 999px; padding: 4px; box-shadow: 0 4px 18px rgba(0,0,0,.45); font: 600 13px/1 var(--f-mono); border: 2px solid #ffd400; }
+.pswitch button { background: #2a2a2a; color: #fff; border: 0; border-radius: 999px; width: 30px; height: 30px; font-size: 15px; }
+.pswitch span { padding: 0 12px; white-space: nowrap; }
+
+/* ============ VARIANT A: Workbench ============ */
+.vA { display: flex; height: 100%; }
+.a-nav { width: 200px; flex: none; background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 14px 10px; gap: 2px; }
+.a-brand { font: 800 18px var(--f-display); padding: 0 8px 14px; letter-spacing: -.01em; }
+.a-brand small { font: 500 11px var(--f-mono); color: var(--muted); margin-left: 4px; }
+.a-nav button { display: flex; justify-content: space-between; align-items: center; text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: var(--r); font-weight: 500; }
+.a-nav button:hover { background: var(--surface-2); }
+.a-nav button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.a-nav .cnt { font: 500 11px var(--f-mono); color: var(--muted); }
+.a-nav .cnt.hot { background: var(--warn); color: var(--surface); border-radius: 999px; padding: 1px 6px; }
+.a-jobs { margin-top: auto; border-top: 1px solid var(--line); padding: 10px 8px 60px; display: flex; flex-direction: column; gap: 10px; }
+.a-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.a-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+.a-head h1 { font-size: 18px; margin-right: auto; }
+.a-body { flex: 1; min-height: 0; overflow: auto; }
+.a-dl { display: flex; height: 100%; min-height: 0; }
+.a-tree { width: 190px; flex: none; border-right: 1px solid var(--line); padding: 10px; overflow: auto; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.a-tree button { text-align: left; border: 0; background: transparent; padding: 4px 8px; border-radius: 4px; display: flex; justify-content: space-between; }
+.a-tree button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.a-tree .label { padding: 10px 8px 4px; }
+.a-dlmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.a-tools { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; align-items: center; }
+.a-dlmain .tbl-wrap { flex: 1; overflow: auto; }
+.a-graph { height: 84px; border-top: 1px solid var(--line); padding: 6px 10px; display: flex; gap: 12px; align-items: stretch; }
+.a-graph .graph { flex: 1; min-width: 0; }
+.a-detail { width: 280px; flex: none; border-left: 1px solid var(--line); background: var(--surface); padding: 14px; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.a-detail dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 12.5px; }
+.a-detail dt { color: var(--muted); } .a-detail dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.a-browse { display: flex; height: 100%; min-height: 0; }
+.a-list { width: 290px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.a-list .a-listbody { flex: 1; overflow: auto; }
+.a-li { display: flex; gap: 8px; align-items: center; padding: 4px 10px; font-size: 13px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.a-li:hover { background: var(--surface-2); } .a-li.on { background: var(--accent-soft); }
+.a-li .new { color: var(--warn); font-size: 11px; font-weight: 600; }
+.a-info { flex: 1; min-width: 0; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.a-chap { width: 360px; flex: none; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
+.a-chap .a-chaplist { flex: 1; overflow: auto; }
+.a-dlbox { border-top: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.a-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.a-tabs button { border: 0; background: transparent; padding: 8px 12px; border-bottom: 2px solid transparent; font-weight: 500; }
+.a-tabs button.on { border-bottom-color: var(--accent); color: var(--accent); }
+.a-settings { display: flex; height: 100%; min-height: 0; }
+.a-subnav { width: 190px; flex: none; border-right: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+.a-subnav button { text-align: left; border: 0; background: transparent; padding: 6px 10px; border-radius: 4px; }
+.a-subnav button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.a-form { flex: 1; min-width: 0; overflow: auto; padding: 8px 20px 80px; max-width: 860px; }
+.a-form h3 { font-size: 14px; margin: 18px 0 2px; }
+.a-pad { padding: 14px 16px 80px; display: flex; flex-direction: column; gap: 10px; }
+.a-inbox { display: flex; gap: 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: var(--r); align-items: flex-start; flex-wrap: wrap; }
+@media (max-width: 1100px) { .a-chap { width: 300px; } .a-detail { width: 240px; } }
+@media (max-width: 860px) {
+  .vA { flex-direction: column; height: auto; }
+  .a-nav { width: auto; flex-direction: row; overflow-x: auto; padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .a-brand { padding: 6px 8px; } .a-jobs { display: none; }
+  .a-dl, .a-browse, .a-settings { flex-direction: column; height: auto; }
+  .a-tree, .a-list, .a-chap, .a-detail, .a-subnav { width: auto; border: 0; border-bottom: 1px solid var(--line); }
+  .a-tree, .a-subnav { flex-direction: row; flex-wrap: wrap; }
+  .a-list .a-listbody, .a-chap .a-chaplist { max-height: 320px; }
+  .a-head, .a-tools, .a-pad, .a-form, .a-info { padding-left: 16px; padding-right: 16px; }
+}
+
+/* ============ VARIANT B: Library ============ */
+.vB { min-height: 100%; padding-bottom: 130px; }
+.b-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 18px; padding: 10px 24px; flex-wrap: wrap; }
+.b-brand { font: 800 20px var(--f-display); letter-spacing: -.02em; }
+.b-nav { display: flex; gap: 2px; flex-wrap: wrap; }
+.b-nav button { border: 0; background: transparent; padding: 6px 12px; border-radius: 999px; font-weight: 500; }
+.b-nav button.on { background: var(--fg); color: var(--bg); }
+.b-add { flex: 1; display: flex; gap: 6px; min-width: 200px; max-width: 460px; margin-left: auto; }
+.b-add .input { flex: 1; }
+.b-bell { position: relative; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; }
+.b-bell b { position: absolute; top: -5px; right: -5px; background: var(--warn); color: var(--surface); border-radius: 999px; font-size: 10.5px; padding: 1px 6px; }
+.b-pop { position: absolute; right: 24px; top: 58px; width: min(420px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); z-index: 30; padding: 6px; }
+.b-pop .b-pi { padding: 10px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.b-pop .b-pi:last-child { border-bottom: 0; }
+.b-page { max-width: 1280px; margin: 0 auto; padding: 22px 24px; display: flex; flex-direction: column; gap: 18px; }
+.b-page > h1 { font-size: 30px; letter-spacing: -.02em; }
+.b-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.b-chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+.b-chip.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.b-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px 16px; }
+.b-card { display: flex; flex-direction: column; gap: 6px; cursor: pointer; position: relative; border: 0; background: transparent; text-align: left; padding: 0; }
+.b-card .t { font-weight: 600; font-size: 13.5px; line-height: 1.25; }
+.b-card .badge { position: absolute; top: 6px; right: 6px; }
+.b-card.off { opacity: .45; }
+.b-card:hover .cover { outline: 2px solid var(--accent); outline-offset: 2px; }
+.b-hero { display: flex; gap: 28px; flex-wrap: wrap; }
+.b-hero .meta { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.b-hero h1 { font-size: 34px; letter-spacing: -.02em; }
+.b-kv { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13px; }
+.b-kv div { display: flex; flex-direction: column; }
+.b-section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.b-section > header { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.b-section > header h2 { font-size: 16px; margin-right: auto; }
+.b-chapgrid { max-height: 420px; overflow: auto; }
+.b-discover { display: flex; gap: 22px; align-items: flex-start; }
+.b-facets { width: 250px; flex: none; position: sticky; top: 76px; display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.b-results { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.b-qgroup h2 { font-size: 15px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+.b-qrow { display: flex; gap: 12px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.b-qrow:last-child { border-bottom: 0; }
+.b-qrow .bar { flex: 1 1 140px; }
+.b-dock { position: fixed; left: 16px; right: 16px; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 900px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); z-index: 25; padding: 10px 14px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.b-dock .graph { width: 140px; height: 34px; }
+.b-settings { display: flex; gap: 28px; align-items: flex-start; }
+.b-toc { width: 180px; flex: none; position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; }
+.b-toc a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-left: 2px solid var(--line); font-size: 13px; }
+.b-toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+.b-setbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+.b-setbody .b-section > div { padding: 0 14px; }
+.b-jobstrip { display: flex; gap: 18px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; align-items: center; }
+@media (max-width: 860px) {
+  .b-top, .b-page { padding-left: 16px; padding-right: 16px; }
+  .b-discover, .b-settings { flex-direction: column; align-items: stretch; }
+  .b-facets, .b-toc { width: auto; position: static; }
+  .b-toc { flex-direction: row; flex-wrap: wrap; }
+  .b-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+  .b-dock .graph { display: none; }
+}
+
+/* ============ VARIANT C: Command ============ */
+.vC { height: 100%; display: flex; flex-direction: column; }
+.c-bar { display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: var(--fg); color: var(--bg); position: relative; z-index: 30; flex-wrap: wrap; }
+.c-mark { font: 800 17px var(--f-display); letter-spacing: -.01em; white-space: nowrap; }
+.c-omni { flex: 1; position: relative; min-width: 220px; max-width: 720px; margin: 0 auto; }
+.c-omni input { width: 100%; border: 0; border-radius: 8px; padding: 9px 14px 9px 34px; background: var(--surface); color: var(--fg); font-size: 14px; }
+.c-omni::before { content: "⌕"; position: absolute; left: 12px; top: 6px; color: var(--muted); font-size: 18px; z-index: 1; }
+.c-omni kbd { position: absolute; right: 10px; top: 9px; font: 11px var(--f-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.c-drop { position: absolute; left: 0; right: 0; top: calc(100% + 6px); background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 6px; display: flex; flex-direction: column; }
+.c-drop .label { padding: 6px 8px 2px; }
+.c-drop button { display: flex; gap: 10px; align-items: center; border: 0; background: transparent; text-align: left; padding: 6px 8px; border-radius: 6px; }
+.c-drop button:hover, .c-drop button.hl { background: var(--accent-soft); }
+.c-bar .btn { background: transparent; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 30%, transparent); }
+.c-body { flex: 1; min-height: 0; display: flex; }
+.c-rail { width: 76px; flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 10px 6px; border-right: 1px solid var(--line); background: var(--surface); }
+.c-rail button { border: 0; background: transparent; border-radius: 8px; padding: 8px 2px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; font-weight: 500; position: relative; }
+.c-rail button i { font-style: normal; font-size: 18px; line-height: 1; }
+.c-rail button.on { background: var(--accent-soft); color: var(--accent); }
+.c-rail button b { position: absolute; top: 3px; right: 10px; background: var(--warn); color: var(--surface); border-radius: 999px; font-size: 10px; padding: 0 5px; }
+.c-main { flex: 1; min-width: 0; overflow: auto; padding: 20px 24px 90px; display: flex; flex-direction: column; gap: 18px; }
+.c-main > h1 { font-size: 22px; }
+.c-cols { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+.c-cols > * { flex: 1 1 340px; min-width: 0; }
+.c-need { display: flex; flex-direction: column; gap: 10px; }
+.c-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.c-card.warn { border-color: var(--warn); box-shadow: inset 4px 0 0 var(--warn); }
+.c-card.bad { border-color: var(--bad); box-shadow: inset 4px 0 0 var(--bad); }
+.c-card h3 { font-size: 14.5px; }
+.c-feed { display: flex; flex-direction: column; }
+.c-ev { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.c-ev time { font: 11.5px var(--f-mono); color: var(--muted); width: 44px; flex: none; padding-top: 2px; }
+.c-queue { width: 330px; flex: none; border-left: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; min-height: 0; }
+.c-qhead { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.c-qhead .graph { height: 44px; }
+.c-qlist { flex: 1; overflow: auto; padding: 6px 8px 90px; display: flex; flex-direction: column; gap: 6px; }
+.c-qi { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; cursor: pointer; background: var(--bg); }
+.c-qi.open { border-color: var(--accent); background: var(--surface); }
+.c-qi .t { font-weight: 600; font-size: 13px; }
+.c-group { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; padding: 8px 4px 2px; }
+.c-watch { display: flex; flex-direction: column; }
+.c-wi { display: flex; gap: 12px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.c-scrim { position: fixed; inset: 0; background: rgba(5,15,18,.45); z-index: 40; }
+.c-sheet { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100%); background: var(--bg); z-index: 45; box-shadow: var(--shadow); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); }
+.c-sheet header { display: flex; gap: 10px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.c-sheet header h2 { font-size: 18px; margin-right: auto; min-width: 0; }
+.c-sheet .c-sbody { flex: 1; overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+.c-modal { position: fixed; z-index: 45; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, calc(100% - 32px)); height: min(680px, calc(100% - 48px)); background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+.c-modal header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+.c-modal .c-mbody { flex: 1; overflow: auto; padding: 0 18px 30px; }
+.c-modal h3 { font-size: 13px; margin: 18px 0 0; color: var(--accent); }
+.c-builder { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.c-cond { display: inline-flex; gap: 4px; align-items: center; background: var(--surface-2); border-radius: 6px; padding: 3px 4px 3px 9px; font-size: 13px; }
+.c-cond button { border: 0; background: transparent; color: var(--muted); padding: 0 4px; }
+.c-term { background: #0b1214; color: #cfe3e6; border-radius: 10px; padding: 8px 0; overflow: auto; max-height: 560px; }
+.c-term .log { border-bottom-color: #1b2629; }
+@media (max-width: 1000px) { .c-queue { width: 280px; } }
+@media (max-width: 860px) {
+  .vC { height: auto; }
+  .c-body { flex-direction: column; }
+  .c-rail { width: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 6px 16px; }
+  .c-rail button { flex: 1; }
+  .c-main { padding: 16px; overflow: visible; }
+  .c-queue { width: auto; border-left: 0; border-top: 1px solid var(--line); }
+  .c-qlist { max-height: 420px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div id="app"></div>
+<div id="toast" class="toast" hidden></div>
+<div class="pswitch" role="toolbar" aria-label="Prototype variant switcher">
+  <button id="pPrev" aria-label="Previous variant">←</button>
+  <span id="pLabel">A</span>
+  <button id="pNext" aria-label="Next variant">→</button>
+</div>
+
+<script>
+// ---------------- mock data (in memory only) ----------------
+const SITES = [
+  { id: 'mangadex', name: 'MangaDex', on: true, list: 84213, upd: '2026-10-07', acct: 'reader_42', ver: '2.4.1', upd2: true },
+  { id: 'comick', name: 'ComicK', on: true, list: 61877, upd: '2026-10-06', acct: null, ver: '1.9.0', upd2: true },
+  { id: 'batoto', name: 'Bato.to', on: true, list: 0, upd: '—', acct: null, ver: '3.1.2', upd2: false },
+  { id: 'webtoons', name: 'Webtoons', on: true, list: 4120, upd: '2026-10-01', acct: null, ver: '1.2.7', upd2: false },
+  { id: 'asura', name: 'Asura Scans', on: true, list: 512, upd: '2026-10-08', acct: null, ver: '1.0.14', upd2: true, cf: true },
+  { id: 'mangaplus', name: 'MANGA Plus', on: false, list: 1180, upd: '2026-09-20', acct: null, ver: '1.6.0', upd2: false },
+  { id: 'kakalot', name: 'MangaKakalot', on: false, list: 50433, upd: '2026-08-11', acct: null, ver: '2.0.3', upd2: false },
+];
+const site = id => SITES.find(s => s.id === id);
+const GENRES = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mystery','Psychological','Romance','School Life','Sci-fi','Seinen','Shoujo','Shounen','Slice of Life','Sports','Supernatural','Tragedy'];
+const M = [
+  { id: 'frieren', t: "Frieren: Beyond Journey's End", alt: 'Sousou no Frieren', au: 'Kanehito Yamada', ar: 'Tsukasa Abe', g: ['Adventure','Drama','Fantasy','Shounen'], st: 'Ongoing', s: 'mangadex', n: 142, dl: 138, h: 190, nw: false,
+    sum: 'The demon king is dead and the hero party has gone home. Frieren, the elf mage who outlives them all, sets out to understand the people she travelled with.' },
+  { id: 'dandadan', t: 'Dandadan', alt: 'ダンダダン', au: 'Yukinobu Tatsu', ar: 'Yukinobu Tatsu', g: ['Action','Comedy','Supernatural','Shounen'], st: 'Ongoing', s: 'mangadex', n: 211, dl: 205, h: 330, nw: false,
+    sum: 'A girl who believes in ghosts and a boy who believes in aliens bet on who is right. Both turn out to be.' },
+  { id: 'kagura', t: 'Kagurabachi', alt: 'カグラバチ', au: 'Takeru Hokazono', ar: 'Takeru Hokazono', g: ['Action','Supernatural','Shounen'], st: 'Ongoing', s: 'comick', n: 98, dl: 96, h: 10, nw: true,
+    sum: 'Chihiro hunts the sorcerers who murdered his swordsmith father and stole the enchanted blades they forged together.' },
+  { id: 'witch', t: 'Witch Hat Atelier', alt: 'Tongari Boushi no Atelier', au: 'Kamome Shirahama', ar: 'Kamome Shirahama', g: ['Adventure','Fantasy','Seinen'], st: 'Ongoing', s: 'mangadex', n: 79, dl: 79, h: 260, nw: false,
+    sum: 'Coco has always wanted to be a witch. After she sees a magic spell being drawn, she learns that magic is something anyone can do, and that is exactly the secret witches keep.' },
+  { id: 'meshi', t: 'Delicious in Dungeon', alt: 'Dungeon Meshi', au: 'Ryoko Kui', ar: 'Ryoko Kui', g: ['Adventure','Comedy','Fantasy','Seinen'], st: 'Completed', s: 'mangadex', n: 97, dl: 97, h: 40, nw: false,
+    sum: 'A party short on money dives back into the dungeon to save a friend, cooking the monsters they kill along the way.' },
+  { id: 'sakamoto', t: 'Sakamoto Days', alt: 'サカモトデイズ', au: 'Yuto Suzuki', ar: 'Yuto Suzuki', g: ['Action','Comedy','Shounen'], st: 'Ongoing', s: 'comick', n: 188, dl: 180, h: 15, nw: false,
+    sum: 'The greatest hitman alive retired, got married and gained weight. Now he runs a corner shop and the underworld wants him back.' },
+  { id: 'apoth', t: 'The Apothecary Diaries', alt: 'Kusuriya no Hitorigoto', au: 'Natsu Hyuuga', ar: 'Nekokurage', g: ['Drama','Mystery','Romance'], st: 'Ongoing', s: 'mangadex', n: 76, dl: 60, h: 300, nw: false,
+    sum: 'Maomao, kidnapped and sold to the imperial palace as a servant, keeps her head down until she cannot stop herself from solving its poisonings.' },
+  { id: 'omniscient', t: "Omniscient Reader's Viewpoint", alt: '전지적 독자 시점', au: 'Sing Shong', ar: 'Sleepy-C', g: ['Action','Fantasy','Drama'], st: 'Ongoing', s: 'asura', n: 241, dl: 238, h: 210, nw: true,
+    sum: 'The only reader of an endless web novel watches its story come true around him, and he is the only one who knows how it ends.' },
+  { id: 'lore', t: 'Lore Olympus', alt: '', au: 'Rachel Smythe', ar: 'Rachel Smythe', g: ['Drama','Fantasy','Romance'], st: 'Completed', s: 'webtoons', n: 278, dl: 278, h: 345, nw: false,
+    sum: 'A modern retelling of Hades and Persephone.' },
+  { id: 'blue', t: 'Blue Lock', alt: 'ブルーロック', au: 'Muneyuki Kaneshiro', ar: 'Yusuke Nomura', g: ['Drama','Sports','Shounen'], st: 'Ongoing', s: 'comick', n: 317, dl: 0, h: 220, nw: true,
+    sum: 'Three hundred strikers are locked in a facility. One will become the egotist Japan needs.' },
+  { id: 'vinland', t: 'Vinland Saga', alt: 'ヴィンランド・サガ', au: 'Makoto Yukimura', ar: 'Makoto Yukimura', g: ['Action','Adventure','Drama','Seinen'], st: 'Completed', s: 'mangadex', n: 221, dl: 0, h: 25, nw: false,
+    sum: 'A young Icelander raised among Viking mercenaries searches for revenge, and then for a land without war.' },
+  { id: 'mashle', t: 'Mashle: Magic and Muscles', alt: 'マッシュル', au: 'Hajime Komoto', ar: 'Hajime Komoto', g: ['Action','Comedy','Fantasy','Shounen'], st: 'Completed', s: 'mangadex', n: 162, dl: 0, h: 280, nw: false,
+    sum: 'In a world run by magic, a boy with none punches his way through wizard school.' },
+];
+const manga = id => M.find(m => m.id === id);
+const chapters = m => Array.from({ length: Math.min(m.n, 40) }, (_, i) => { const no = m.n - i; return { no, t: `Chapter ${no}`, dl: no <= m.dl, date: dateFor(i) }; });
+function dateFor(i) { const d = new Date(2026, 9, 8 - i * 7); return d.toISOString().slice(0, 10); }
+
+const TASKS = [
+  { id: 1, m: 'kagura', ch: 'Ch. 97–98', st: 'downloading', done: 22, tot: 38, rate: 1.8, added: '2026-10-08 09:12', last: '2026-10-08 09:40', hist: 'today' },
+  { id: 2, m: 'omniscient', ch: 'Ch. 239–241', st: 'downloading', done: 51, tot: 120, rate: 2.6, added: '2026-10-08 09:12', last: '2026-10-08 09:41', hist: 'today' },
+  { id: 3, m: 'blue', ch: 'Ch. 1–40', st: 'queued', done: 0, tot: 840, rate: 0, added: '2026-10-08 08:55', last: '—', hist: 'today' },
+  { id: 4, m: 'sakamoto', ch: 'Ch. 181–188', st: 'queued', done: 0, tot: 152, rate: 0, added: '2026-10-08 08:55', last: '—', hist: 'today' },
+  { id: 5, m: 'apoth', ch: 'Ch. 61–76', st: 'failed', done: 140, tot: 310, rate: 0, added: '2026-10-07 21:03', last: '2026-10-07 21:30', hist: 'yesterday', err: 'HTTP 403 from uploads.mangadex.network after 3 retries' },
+  { id: 6, m: 'vinland', ch: 'Ch. 1–221', st: 'stopped', done: 1204, tot: 4410, rate: 0, added: '2026-10-05 18:20', last: '2026-10-05 19:02', hist: 'week' },
+  { id: 7, m: 'dandadan', ch: 'Ch. 205', st: 'completed', done: 21, tot: 21, rate: 0, added: '2026-10-07 07:00', last: '2026-10-07 07:01', hist: 'yesterday' },
+  { id: 8, m: 'frieren', ch: 'Ch. 137–138', st: 'completed', done: 36, tot: 36, rate: 0, added: '2026-10-02 07:00', last: '2026-10-02 07:02', hist: 'week' },
+  { id: 9, m: 'mashle', ch: 'Ch. 1–162', st: 'disabled', done: 0, tot: 3100, rate: 0, added: '2026-09-12 12:40', last: '—', hist: 'month' },
+];
+const ST_LABEL = { downloading: 'Downloading', queued: 'Waiting', stopped: 'Stopped', failed: 'Failed', completed: 'Completed', disabled: 'Disabled' };
+const HIST = [['all','All time'],['today','Today'],['yesterday','Yesterday'],['week','Last 7 days'],['month','This month'],['6m','Last 6 months'],['older','Older than 6 months'],['custom','Custom range…']];
+const STATUS_F = [['all','All downloads'],['downloading','In progress'],['completed','Completed'],['stopped','Stopped'],['failed','Failed'],['disabled','Disabled']];
+
+const FAVS = [
+  { m: 'kagura', cur: 96, newc: 2, added: '2025-02-11', checked: '09:12', on: true },
+  { m: 'omniscient', cur: 238, newc: 3, added: '2024-06-30', checked: '09:12', on: true },
+  { m: 'frieren', cur: 138, newc: 0, added: '2023-11-02', checked: '09:12', on: true },
+  { m: 'dandadan', cur: 205, newc: 0, added: '2024-01-15', checked: '09:12', on: true },
+  { m: 'sakamoto', cur: 180, newc: 8, added: '2025-01-03', checked: '09:12', on: true },
+  { m: 'witch', cur: 79, newc: 0, added: '2023-08-19', checked: '09:12', on: true },
+  { m: 'apoth', cur: 60, newc: 0, added: '2025-05-22', checked: '09:12', on: true },
+  { m: 'meshi', cur: 97, newc: 0, added: '2022-04-08', checked: '09:12', on: true, done: true },
+  { m: 'lore', cur: 278, newc: 0, added: '2021-10-10', checked: '09:12', on: true, done: true },
+  { m: 'mashle', cur: 0, newc: 0, added: '2025-09-12', checked: '2026-09-12', on: false, done: true },
+];
+const INBOX = [
+  { id: 'new', kind: 'warn', title: 'New chapters for 3 favorites', body: 'Kagurabachi (+2), Omniscient Reader’s Viewpoint (+3), Sakamoto Days (+8). Auto-download is off.', acts: [['Download all 13', 'primary'], ['Choose…', ''], ['Dismiss', 'ghost']], when: '09:12' },
+  { id: 'mods', kind: 'warn', title: '14 module updates ready', body: 'Updates apply live. Modules in use by a running download switch over when that download finishes.', acts: [['Apply when idle', 'primary'], ['Apply now', ''], ['Show changes', 'ghost']], when: '08:00' },
+  { id: 'cmp', kind: 'warn', title: '2 favorites are completed', body: 'Delicious in Dungeon and Lore Olympus have no more chapters coming. Remove them from favorites?', acts: [['Remove both', 'primary'], ['Keep', 'ghost']], when: '08:00' },
+  { id: 'newer', kind: 'bad', title: 'Bato.to module needs a newer FMD2r', body: 'Module 3.1.2 calls fmd.net.ResolveRedirect, which this build (Host API ad3a5b63) does not provide. Bato.to is paused until FMD2r is updated.', acts: [['See release notes', ''], ['Dismiss', 'ghost']], when: 'Yesterday' },
+  { id: 'list', kind: 'warn', title: 'Bato.to has no manga list yet', body: 'Download the prebuilt list from FMD2-DB (about 92,000 titles) or build it from the website (slow).', acts: [['Get from FMD2-DB', 'primary'], ['Build from website', '']], when: 'Yesterday' },
+];
+const FEED = [
+  ['09:41', 'Downloading Kagurabachi Ch. 97–98', 'downloading'],
+  ['09:12', 'Favorites check found 13 new chapters in 3 series', 'new'],
+  ['08:00', 'Module check: 14 updates available', ''],
+  ['07:01', 'Finished Dandadan Ch. 205 (21 pages, CBZ)', 'completed'],
+  ['Yest.', 'Apothecary Diaries Ch. 61–76 failed: HTTP 403', 'failed'],
+  ['Yest.', 'Updated MangaDex list: +412 titles', ''],
+];
+const LOGS = [
+  ['09:41:07', 'INFO', 'download', 'Kagurabachi: page 22/38 saved (412 KB)'],
+  ['09:41:05', 'DEBUG', 'comick', 'GET https://api.comick.io/chapter/kb-97 200 (184 ms)'],
+  ['09:40:58', 'INFO', 'asura', 'Cloudflare challenge solved via FlareSolverr (2.3 s)'],
+  ['09:12:30', 'INFO', 'favorites', 'Check finished: 48 series, 13 new chapters'],
+  ['09:12:02', 'WARN', 'batoto', 'Module requires fmd.net.ResolveRedirect (unknown Host API function)'],
+  ['08:00:11', 'INFO', 'modules', 'Fetched upstream module index: 14 newer modules'],
+  ['21:30:44', 'ERROR', 'mangadex', 'Apothecary Diaries Ch. 66 p. 3: HTTP 403 after 3 retries'],
+  ['21:30:40', 'WARN', 'mangadex', 'print: "at-home server rotated, retrying"'],
+  ['21:03:00', 'INFO', 'download', 'Task added: The Apothecary Diaries Ch. 61–76'],
+  ['07:00:00', 'INFO', 'scheduler', 'Startup: data-dir lock acquired, 9 tasks restored'],
+];
+const JOBS = [
+  { id: 'fav', t: 'Checking favorites', done: 31, tot: 48 },
+  { id: 'list', t: 'Updating ComicK list', done: 3400, tot: 12000 },
+];
+// settings model (every option from the parity checklist)
+const SETTINGS = [
+  { id: 'general', name: 'General', groups: [
+    { name: 'Appearance', f: [['Theme', 'sel', 'System', 'System, Light or Dark'], ['Load covers', 'tog', true, 'Show cover images in lists and info']] },
+    { name: 'Lists', f: [['Highlight new manga for', 'num', 3, 'days', 'Titles added to a website list in this window are marked new'], ['Live search', 'tog', true, 'Filter while typing'], ['Show manga info when updating lists', 'tog', false, '']] },
+    { name: 'Queue', f: [['Sort queue when a task is added', 'tog', false, ''], ['Remove completed tasks automatically', 'tog', false, ''], ['Open the queue after adding a download', 'tog', true, ''], ['Add new downloads as stopped', 'tog', false, '']] },
+    { name: 'Confirmations', f: [['Ask before deleting tasks or favorites', 'tog', true, ''], ['Offer to fetch a list when a website has none', 'tog', true, 'Shows up in the inbox']] },
+  ]},
+  { id: 'conn', name: 'Connections', groups: [
+    { name: 'Network', f: [['Timeout', 'num', 15, 's'], ['Retries per request', 'num', 3, ''], ['User agent', 'txt', 'Mozilla/5.0 (X11; Linux x86_64) FMD2r/0.1', 'Modules can override this']] },
+    { name: 'Proxy', f: [['Proxy type', 'sel', 'None', 'None, HTTP, SOCKS4 or SOCKS5'], ['Host and port', 'txt', '', ''], ['Username and password', 'txt', '', 'Stored encrypted']] },
+    { name: 'Limits', f: [['Simultaneous downloads', 'num', 4, 'of 8 max'], ['Connections per download', 'num', 8, 'of 32 max'], ['Favorites checked at once', 'num', 4, ''], ['List update connections', 'num', 4, ''], ['Background jobs at once', 'num', 2, '']] },
+    { name: 'Failures', f: [['Retry a failed download', 'num', 2, 'times'], ['Resume from the failed chapter', 'tog', true, '']] },
+  ]},
+  { id: 'save', name: 'Saving', groups: [
+    { name: 'Location', f: [['Download folder', 'txt', '/downloads', 'Inside the container volume'], ['Format', 'sel', 'CBZ', 'Folder, ZIP, CBZ, PDF or EPUB'], ['PDF quality', 'num', 95, '%']] },
+    { name: 'Naming', f: [['Series folder', 'txt', '%MANGA%', '%MANGA% %WEBSITE% %AUTHOR% %ARTIST%'], ['Chapter file', 'txt', '%CHAPTER%', '%CHAPTER% %NUMBERING% %VOLUME%'], ['Pad numbers to', 'num', 3, 'digits'], ['Replace characters not allowed in file names', 'tog', true, ''], ['Replace with', 'txt', '_', '']] },
+    { name: 'Images', f: [['Convert images to', 'sel', 'Keep original', 'Keep original, PNG, JPEG or WebP'], ['JPEG/WebP quality', 'num', 90, '%'], ['Use ImageMagick for conversion', 'tog', false, '']] },
+  ]},
+  { id: 'fav', name: 'Favorites', groups: [
+    { name: 'Checking', f: [['Check when FMD2r starts', 'tog', true, ''], ['Check every', 'num', 60, 'minutes'], ['Download new chapters automatically', 'tog', false, ''], ['Remove completed series automatically', 'tog', false, ''], ['Click on a favorite', 'sel', 'Open info', 'Open info, Check now or Download new']] },
+  ]},
+  { id: 'web', name: 'Websites', special: 'web' },
+  { id: 'notif', name: 'Notifications', special: 'notif' },
+  { id: 'access', name: 'Access & data', special: 'access' },
+  { id: 'logs', name: 'Logs', special: 'logs' },
+  { id: 'about', name: 'About', special: 'about' },
+];
+const NOTIF = [['A download finished', true, false], ['A download failed', true, true], ['New chapters found', true, true], ['Queue finished', false, false], ['FMD2r release available', true, false], ['Something needs you (inbox)', true, true]];
+
+// ---------------- state ----------------
+const VARIANTS = ['A', 'B', 'C'];
+const VNAME = { A: 'Workbench', B: 'Library', C: 'Command' };
+const S = { v: 'A', page: 'downloads', manga: 'kagura', site: 'mangadex', dlSt: 'all', dlHist: 'all', dlQ: '', task: 1, favF: 'all', favQ: '', setSec: 'general', checked: new Set(), listQ: '', browseTab: 'list',
+  tri: { Action: 1, Romance: -1 }, any: false, bell: false, sheet: false, settings: false, setQ: '', omni: '', qOpen: 2, qHist: false, logLv: 'all', bTab: 'logs', inbox: INBOX.map(i => i.id), rates: Array.from({ length: 60 }, (_, i) => 2 + Math.sin(i / 5) * 1.2 + Math.random()) };
+
+// ---------------- helpers ----------------
+const h = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const initials = t => t.replace(/[^A-Za-z ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('');
+const cover = (m, size) => `<div class="cover ${size}" style="--h:${m.h}" aria-hidden="true">${size === 'xs' ? initials(m.t) : h(m.t)}</div>`;
+const pill = st => `<span class="pill st-${st}">${ST_LABEL[st]}</span>`;
+const pct = t => Math.round(t.done / t.tot * 100);
+const prog = t => `<div class="bar ${t.st}"><i data-prog="${t.id}" style="width:${pct(t)}%"></i></div>`;
+const progTxt = t => `<span class="num mono" data-progt="${t.id}">${t.done}/${t.tot}</span>`;
+const rateTxt = t => t.st === 'downloading' ? `<span class="num mono" data-rate="${t.id}">${t.rate.toFixed(1)} MB/s</span>` : '<span class="muted">—</span>';
+const saveTo = t => `/downloads/${manga(t.m).t.replace(/[:'’]/g, '')}`;
+const graph = () => { const max = 5; const pts = S.rates.map((r, i) => `${(i / 59 * 100).toFixed(2)},${(40 - r / max * 38).toFixed(2)}`).join(' ');
+  return `<svg viewBox="0 0 100 40" preserveAspectRatio="none" aria-label="Transfer rate, last 60 seconds"><line x1="0" y1="20" x2="100" y2="20" stroke="var(--line)" stroke-width=".4" vector-effect="non-scaling-stroke"/><polygon points="0,40 ${pts} 100,40" fill="var(--accent-soft)"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`; };
+const totalRate = () => TASKS.filter(t => t.st === 'downloading').reduce((a, t) => a + t.rate, 0);
+const filtTasks = () => TASKS.filter(t => (S.dlSt === 'all' || t.st === S.dlSt || (S.dlSt === 'downloading' && t.st === 'queued')) && (S.dlHist === 'all' || S.dlHist === 'custom' || t.hist === S.dlHist) && manga(t.m).t.toLowerCase().includes(S.dlQ.toLowerCase()));
+const inbox = () => INBOX.filter(i => S.inbox.includes(i.id));
+const listFor = () => M.filter(m => (S.site === 'all' || m.s === S.site) && m.t.toLowerCase().includes(S.listQ.toLowerCase()) && Object.entries(S.tri).every(([g, v]) => v === 1 ? m.g.includes(g) : v === -1 ? !m.g.includes(g) : true));
+const favs = () => FAVS.filter(f => (S.favF === 'all' || (S.favF === 'on' ? f.on : S.favF === 'off' ? !f.on : S.favF === 'new' ? f.newc > 0 : f.done)) && manga(f.m).t.toLowerCase().includes(S.favQ.toLowerCase()));
+const jobsHtml = (cls = 'job') => JOBS.map(j => `<div class="${cls}"><div class="row"><span class="grow">${j.t}</span><span class="mono num muted">${j.done}/${j.tot}</span><button class="btn sm ghost" data-act="cancelJob" data-id="${j.id}" aria-label="Cancel ${j.t}">✕</button></div><div class="bar"><i style="width:${Math.round(j.done / j.tot * 100)}%"></i></div></div>`).join('');
+const triChips = () => GENRES.map(g => { const v = S.tri[g] || 0; return `<button class="tri ${v === 1 ? 'inc' : v === -1 ? 'exc' : ''}" data-act="tri" data-g="${g}" title="Click: include → exclude → ignore">${v === 1 ? '+' : v === -1 ? '−' : ''}${g}</button>`; }).join(' ');
+const advFilter = (compact) => `
+  <div class="stack">
+    <div class="label">Search in</div>
+    <div class="row small">${['Title','Alt. titles','Authors','Artists','Summary'].map((x, i) => `<label class="row" style="gap:4px"><input type="checkbox" class="chk" ${i < 2 ? 'checked' : ''}> ${x}</label>`).join('')}</div>
+    <input class="input" placeholder="Text, or a regular expression" id="advText">
+    <label class="row small" style="gap:4px"><input type="checkbox" class="chk"> Use regular expression</label>
+    <div class="label">Genres <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· click to include, again to exclude</span></div>
+    <div class="row" style="gap:5px">${triChips()}</div>
+    <input class="input" placeholder="Custom genres, comma separated" id="advCustom">
+    <div class="row small">
+      <label class="row" style="gap:4px"><input type="radio" name="anyall" ${S.any ? '' : 'checked'}> Match all</label>
+      <label class="row" style="gap:4px"><input type="radio" name="anyall" ${S.any ? 'checked' : ''}> Match any</label>
+    </div>
+    <div class="row small"><span class="label">Status</span><select class="input" id="advStatus"><option>Any</option><option>Ongoing</option><option>Completed</option></select></div>
+    <label class="row small" style="gap:4px"><input type="checkbox" class="chk"> Only new titles</label>
+    <label class="row small" style="gap:4px"><input type="checkbox" class="chk" ${S.site === 'all' ? 'checked' : ''} data-act="allSites"> Search all websites</label>
+    ${compact ? '' : '<div class="row"><button class="btn primary" data-act="toast" data-msg="Filter applied">Apply filter</button><button class="btn" data-act="clearTri">Reset</button></div>'}
+  </div>`;
+const chapList = m => chapters(m).map(c => `<label class="chap ${c.dl ? 'dl' : ''}"><input type="checkbox" class="chk" data-act="chk" data-no="${c.no}" ${S.checked.has(c.no) ? 'checked' : ''}><span class="chap-t grow">${c.t}</span><span class="mono muted">${c.date}</span></label>`).join('');
+const chapTools = m => `<div class="row small"><button class="btn sm" data-act="chkNew">Check not downloaded</button><button class="btn sm" data-act="chkAll">Check all</button><button class="btn sm" data-act="chkNone">Uncheck all</button><label class="row" style="gap:4px"><input type="checkbox" class="chk" checked> Highlight downloaded</label><label class="row" style="gap:4px"><input type="checkbox" class="chk"> Hide downloaded</label><select class="input" style="padding:2px 6px" aria-label="Sort chapters"><option>Newest first</option><option>Oldest first</option></select></div>`;
+const dlBox = m => `
+  <div class="row small"><span class="label">Save to</span><input class="input grow mono" id="saveTo" value="/downloads/${h(m.t.replace(/[:'’]/g, ''))}"></div>
+  <div class="row small"><label class="row" style="gap:4px">Split into <input class="input num" type="number" min="1" value="1" style="width:56px" id="split"> tasks</label><label class="row" style="gap:4px"><input type="checkbox" class="chk"> Add as stopped</label></div>
+  <div class="row"><button class="btn primary" data-act="download">Download ${S.checked.size || ''} ${S.checked.size === 1 ? 'chapter' : 'chapters'}</button><button class="btn" data-act="fav">☆ Add to favorites</button><a class="btn" href="https://mangadex.org" target="_blank" rel="noopener">Read online ↗</a></div>`;
+const metaDl = m => `<dl style="display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:0;font-size:13px"><dt class="muted">Website</dt><dd style="margin:0">${site(m.s).name}</dd><dt class="muted">Alt. titles</dt><dd style="margin:0">${h(m.alt || '—')}</dd><dt class="muted">Author</dt><dd style="margin:0">${h(m.au)}</dd><dt class="muted">Artist</dt><dd style="margin:0">${h(m.ar)}</dd><dt class="muted">Genres</dt><dd style="margin:0">${m.g.join(', ')}</dd><dt class="muted">Status</dt><dd style="margin:0">${m.st}</dd><dt class="muted">Chapters</dt><dd style="margin:0" class="num">${m.n} (${m.dl} downloaded)</dd></dl>`;
+const fieldHtml = ([l, type, val, unit, hint]) => {
+  if (type === 'num' && typeof hint === 'undefined' && typeof unit === 'string' && unit.length > 12) { hint = unit; unit = ''; }
+  const ctl = type === 'tog' ? `<input type="checkbox" class="toggle" ${val ? 'checked' : ''} aria-label="${h(l)}">`
+    : type === 'sel' ? `<select class="input" aria-label="${h(l)}"><option>${h(val)}</option></select>`
+    : type === 'num' ? `<span class="row" style="gap:5px"><input class="input num" type="number" value="${val}" style="width:80px" aria-label="${h(l)}"><span class="small muted">${h(unit || '')}</span></span>`
+    : `<input class="input mono" value="${h(val)}" style="width:min(320px,100%)" aria-label="${h(l)}">`;
+  const hn = type === 'tog' || type === 'sel' || type === 'txt' ? unit : hint;
+  return `<div class="field" data-search="${h((l + ' ' + (hn || '')).toLowerCase())}"><div class="f-l"><div>${h(l)}</div>${hn ? `<div class="f-hint">${h(hn)}</div>` : ''}</div>${ctl}</div>`;
+};
+const siteTable = () => `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Use</th><th>Website</th><th>Manga list</th><th>Account</th><th>Module</th><th></th></tr></thead><tbody>${SITES.map(s => `<tr><td><input type="checkbox" class="toggle" ${s.on ? 'checked' : ''} aria-label="Use ${s.name}"></td><td><b>${s.name}</b>${s.cf ? ' <span class="pill st-queued" title="Needs the FlareSolverr sidecar">Cloudflare</span>' : ''}</td><td class="num">${s.list ? s.list.toLocaleString('en') + ` <span class="muted small">· ${s.upd}</span>` : '<span class="pill st-failed">Empty</span>'}</td><td>${s.acct ? `<span class="pill st-completed">${s.acct}</span>` : `<button class="btn sm">Sign in</button>`}</td><td class="mono">${s.ver}${s.upd2 ? ' <span class="pill st-new">update</span>' : ''}${s.id === 'batoto' ? ' <span class="pill st-failed">needs newer FMD2r</span>' : ''}</td><td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-act="toast" data-msg="${s.name} options: language, data saver, scanlator groups">Options</button><button class="btn sm" data-act="toast" data-msg="Advanced overrides: save-to path, connection limits, user agent, cookies">Advanced</button><button class="btn sm" data-act="toast" data-msg="Updating ${s.name} list from the website">Update list</button><button class="btn sm" data-act="toast" data-msg="Fetching ${s.name} list from FMD2-DB">From FMD2-DB</button></div></td></tr>`).join('')}</tbody></table></div>`;
+const moduleUpdater = () => `<div class="row" style="padding:10px 0"><div class="grow"><b>Modules</b> <span class="muted small">from upstream FMD2 · last checked 08:00 · 14 updates</span></div><button class="btn primary" data-act="toast" data-msg="Updates will apply as downloads finish">Apply when idle</button><button class="btn" data-act="toast" data-msg="Checking upstream for module updates">Check now</button><button class="btn" data-act="toast" data-msg="Running every module's self-test (Check Modules)">Test modules</button></div>
+  <div class="field"><div class="f-l"><div>Check for module updates</div><div class="f-hint">Separate from the FMD2r release check</div></div><select class="input" aria-label="Module update check"><option>Every 6 hours</option></select></div>`;
+const notifTable = () => `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Event</th><th>In the app</th><th>Webhook</th></tr></thead><tbody>${NOTIF.map(([e, a, w]) => `<tr><td>${e}</td><td><input type="checkbox" class="toggle" ${a ? 'checked' : ''} aria-label="${e} in app"></td><td><input type="checkbox" class="toggle" ${w ? 'checked' : ''} aria-label="${e} webhook"></td></tr>`).join('')}</tbody></table></div>
+  <div class="field"><div class="f-l"><div>Webhook URL</div><div class="f-hint">Receives a JSON POST per event (ntfy, Gotify, Discord, Home Assistant…)</div></div><input class="input mono" value="https://ntfy.example.net/fmd2r" style="width:min(320px,100%)" aria-label="Webhook URL"></div>
+  <div class="fog">Not decided yet: which events and targets (map fog "Notifications &amp; webhooks").</div>`;
+const accessHtml = () => `<div class="fog">Placeholder. Auth, TLS and backups are still fog on the map.</div>
+  ${fieldHtml(['Require a password', 'tog', true, 'Basic auth for the web UI'])}${fieldHtml(['Username', 'txt', 'admin', ''])}
+  ${fieldHtml(['Daily data snapshot', 'tog', true, 'Keeps 7'])}
+  <div class="row" style="padding:10px 0"><button class="btn" data-act="toast" data-msg="Importer: choose an FMD2 userdata folder">Import from FMD2…</button><button class="btn" data-act="toast" data-msg="Snapshot created">Snapshot now</button></div>`;
+const aboutHtml = () => `<div class="stack" style="padding:10px 0"><div class="row"><b style="font:700 18px var(--f-display)">FMD2r 0.1.0</b><span class="pill st-new">0.1.1 available</span></div>
+  <div class="small muted mono">Host API baseline ad3a5b63 · reports Revision 6920 to modules · Lua 5.4 · QuickJS</div>
+  <div class="small">Rust port of Free Manga Downloader 2. Modules come from upstream FMD2 and run unmodified.</div>
+  <div class="row"><button class="btn">Release notes</button><button class="btn">Module changelog</button></div></div>`;
+const logsHtml = (term) => `<div class="row" style="padding:8px 0">${['all','ERROR','WARN','INFO','DEBUG'].map(l => `<button class="btn sm ${S.logLv === l ? 'primary' : ''}" data-act="logLv" data-lv="${l}">${l === 'all' ? 'All' : l}</button>`).join('')}<input class="input grow" placeholder="Filter by module or text" id="logQ"><button class="btn sm">Download log</button></div>
+  <div class="${term ? 'c-term' : ''}">${LOGS.filter(l => S.logLv === 'all' || l[1] === S.logLv).map(([t, lv, mod, msg]) => `<div class="log"><span class="muted">${t}</span><span class="lv-${lv}" style="width:44px">${lv}</span><span style="width:76px;color:var(--accent)">${mod}</span><span>${h(msg)}</span></div>`).join('')}</div>`;
+const specialHtml = (sp) => sp === 'web' ? siteTable() + moduleUpdater() : sp === 'notif' ? notifTable() : sp === 'access' ? accessHtml() : sp === 'logs' ? logsHtml(false) : aboutHtml();
+
+// ============ VARIANT A: Workbench ============
+const A = {
+  render() {
+    const nav = [['downloads', 'Downloads', TASKS.filter(t => t.st === 'downloading').length + ' active'], ['browse', 'Browse & info', ''], ['favorites', 'Favorites', FAVS.length], ['inbox', 'Inbox', inbox().length], ['settings', 'Settings', ''], ['logs', 'Logs', '']];
+    return `<div class="vA">
+      <aside class="a-nav"><div class="a-brand">FMD2r<small>0.1.0</small></div>
+        ${nav.map(([id, l, c]) => `<button class="${S.page === id || (id === 'browse' && S.page === 'info') ? 'on' : ''}" data-go="${id}">${l}<span class="cnt ${id === 'inbox' && c ? 'hot' : ''}">${c}</span></button>`).join('')}
+        <div class="a-jobs"><div class="label">Background</div>${jobsHtml()}</div>
+      </aside>
+      <main class="a-main">${this[S.page === 'info' ? 'browse' : S.page]()}</main></div>`;
+  },
+  downloads() {
+    const ts = filtTasks(), t = TASKS.find(x => x.id === S.task);
+    return `<div class="a-head"><h1>Downloads</h1><input class="input" placeholder="Paste a manga URL to add" style="width:min(340px,100%)" id="aUrl"><button class="btn primary" data-act="paste">Add</button></div>
+    <div class="a-body"><div class="a-dl">
+      <nav class="a-tree" aria-label="Filter downloads"><div class="label">Status</div>${STATUS_F.map(([k, l]) => `<button class="${S.dlSt === k ? 'on' : ''}" data-act="dlSt" data-k="${k}">${l}<span class="mono muted">${k === 'all' ? TASKS.length : TASKS.filter(x => x.st === k || (k === 'downloading' && x.st === 'queued')).length}</span></button>`).join('')}
+        <div class="label">Added</div>${HIST.map(([k, l]) => `<button class="${S.dlHist === k ? 'on' : ''}" data-act="dlHist" data-k="${k}">${l}</button>`).join('')}
+        ${S.dlHist === 'custom' ? `<div class="stack small" style="padding:6px 8px"><label>From <input class="input" type="date" value="2026-09-01" id="aFrom"></label><label>To <input class="input" type="date" value="2026-10-08" id="aTo"></label><button class="btn sm">Apply</button></div>` : ''}
+      </nav>
+      <div class="a-dlmain">
+        <div class="a-tools"><input class="input" placeholder="Search downloads" id="dlQ" data-bind="dlQ" value="${h(S.dlQ)}" style="width:200px"><span class="grow"></span>
+          <button class="btn" data-act="resumeAll">▶ Resume all</button><button class="btn" data-act="stopAll">■ Stop all</button><button class="btn" data-act="clearDone">Delete completed</button><button class="btn" data-act="toast" data-msg="Merged 2 completed tasks">Merge completed</button>
+          <span class="row" style="gap:2px" aria-label="Reorder"><button class="btn sm" data-act="move" data-d="top" title="Move to top">⤒</button><button class="btn sm" data-act="move" data-d="up" title="Move up">↑</button><button class="btn sm" data-act="move" data-d="down" title="Move down">↓</button><button class="btn sm" data-act="move" data-d="bottom" title="Move to bottom">⤓</button></span></div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Manga</th><th>Status</th><th>Progress</th><th>Speed</th><th>Website</th><th>Save to</th><th>Added</th><th>Last downloaded</th></tr></thead>
+        <tbody>${ts.map((x, i) => `<tr class="${x.id === S.task ? 'sel' : ''}" data-act="selTask" data-id="${x.id}"><td class="mono muted">${i + 1}</td><td><div class="row" style="flex-wrap:nowrap">${cover(manga(x.m), 'xs')}<div><div><b>${h(manga(x.m).t)}</b></div><div class="small muted">${x.ch}</div></div></div></td><td>${pill(x.st)}</td><td><div class="row" style="flex-wrap:nowrap">${prog(x)}${progTxt(x)}</div></td><td>${rateTxt(x)}</td><td>${site(manga(x.m).s).name}</td><td class="mono muted">${h(saveTo(x))}</td><td class="mono muted">${x.added}</td><td class="mono muted">${x.last}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">No downloads match these filters.</td></tr>'}</tbody></table></div>
+        <div class="a-graph"><div class="stack" style="gap:0;justify-content:center"><span class="label">Transfer</span><b class="num mono" data-total>${totalRate().toFixed(1)} MB/s</b></div><div class="graph">${graph()}</div></div>
+      </div>
+      ${t ? `<aside class="a-detail"><div class="row" style="flex-wrap:nowrap">${cover(manga(t.m), 'sm')}<div class="grow"><b>${h(manga(t.m).t)}</b><div class="small muted">${t.ch}</div>${pill(t.st)}</div></div>
+        ${t.err ? `<div class="small" style="color:var(--bad)">${h(t.err)}</div>` : ''}
+        <dl><dt>Progress</dt><dd class="num">${pct(t)}% · ${t.done}/${t.tot} pages</dd><dt>Website</dt><dd>${site(manga(t.m).s).name}</dd><dt>Save to</dt><dd class="mono">${h(saveTo(t))}</dd><dt>Added</dt><dd>${t.added}</dd><dt>Last</dt><dd>${t.last}</dd></dl>
+        <div class="label">Task</div><div class="row"><button class="btn sm" data-act="toast" data-msg="Stopped">Stop</button><button class="btn sm" data-act="toast" data-msg="Resumed">Resume</button><button class="btn sm" data-act="toast" data-msg="Redownloading">Redownload</button><button class="btn sm" data-act="toast" data-msg="Enabled">Enable</button><button class="btn sm" data-act="toast" data-msg="Disabled">Disable</button></div>
+        <div class="label">Files</div><div class="row"><button class="btn sm" data-act="toast" data-msg="Preparing ZIP of downloaded chapters">Download files</button><button class="btn sm" data-act="toast" data-msg="Opening file browser">Browse files</button><button class="btn sm" data-open="${t.m}">Manga info</button></div>
+        <div class="label">Delete</div><div class="row"><button class="btn sm danger">Task</button><button class="btn sm danger">Task + files</button><button class="btn sm danger">Task + files + favorite</button></div></aside>` : ''}
+    </div></div>`;
+  },
+  browse() {
+    const m = manga(S.manga), list = listFor();
+    return `<div class="a-head"><h1>Browse &amp; info</h1><input class="input" placeholder="Paste a manga URL and press Enter" style="width:min(380px,100%)" id="aUrl2"><button class="btn primary" data-act="paste">Go</button></div>
+    <div class="a-body"><div class="a-browse">
+      <section class="a-list" aria-label="Manga list">
+        <div class="stack" style="padding:10px">
+          <div class="row"><select class="input grow" data-bind="site" id="aSite" aria-label="Website"><option value="all" ${S.site === 'all' ? 'selected' : ''}>All websites</option>${SITES.filter(s => s.on).map(s => `<option value="${s.id}" ${S.site === s.id ? 'selected' : ''}>${s.name} (${s.list.toLocaleString('en')})</option>`).join('')}</select>
+            <select class="input" aria-label="Update list" data-act="noop"><option>Update ▾</option><option>Update this list</option><option>Get this list from FMD2-DB</option><option>Update all lists</option><option>Get all lists from FMD2-DB</option></select></div>
+        </div>
+        <div class="a-tabs"><button class="${S.browseTab === 'list' ? 'on' : ''}" data-act="bTab" data-k="list">List</button><button class="${S.browseTab === 'filter' ? 'on' : ''}" data-act="bTab" data-k="filter">Advanced filter</button></div>
+        ${S.browseTab === 'filter' ? `<div class="a-listbody" style="padding:10px">${advFilter()}</div>` : `
+        <div class="row" style="padding:8px 10px"><input class="input grow" placeholder="Search titles" id="listQ" data-bind="listQ" value="${h(S.listQ)}"></div>
+        <div class="row small" style="padding:0 10px 6px"><span class="muted">${Object.keys(S.tri).length ? 'Filtered' : 'Show all'} (${list.length})</span>${Object.keys(S.tri).length ? '<button class="btn sm" data-act="clearTri">Remove filter</button>' : ''}</div>
+        <div class="a-listbody">${list.map(x => `<div class="a-li ${x.id === S.manga ? 'on' : ''}" data-open="${x.id}" title="${h(x.au)} · ${x.g.join(', ')}"><span class="grow">${h(x.t)}</span>${x.nw ? '<span class="new">NEW</span>' : ''}<span class="muted small">${site(x.s).name}</span></div>`).join('')}</div>`}
+      </section>
+      <section class="a-info" aria-label="Manga info">
+        <div class="row" style="align-items:flex-start;flex-wrap:nowrap">${cover(m, 'md')}<div class="stack grow"><h2 style="font-size:20px">${h(m.t)}</h2>${metaDl(m)}</div></div>
+        <p style="margin:0;max-width:65ch">${h(m.sum)}</p>
+        <div class="row"><button class="btn" data-act="fav">☆ Add to favorites</button><button class="btn" data-act="download">Download all</button><button class="btn danger" data-act="toast" data-msg="Removed from the local list">Remove from list</button></div>
+      </section>
+      <section class="a-chap" aria-label="Chapters">
+        <div class="stack" style="padding:10px;border-bottom:1px solid var(--line)"><div class="row"><b class="grow">Chapters</b><input class="input" placeholder="Filter" style="width:120px" id="chapQ"></div>${chapTools(m)}</div>
+        <div class="a-chaplist">${chapList(m)}</div>
+        <div class="a-dlbox">${dlBox(m)}</div>
+      </section>
+    </div></div>`;
+  },
+  favorites() {
+    return `<div class="a-head"><h1>Favorites</h1><button class="btn primary" data-act="toast" data-msg="Checking 48 favorites for new chapters">Check for new chapters</button><button class="btn" data-act="toast" data-msg="Checking for missing chapters">Check missing</button><button class="btn" data-act="toast" data-msg="Importer: choose an FMD2 userdata folder">Import from FMD2</button></div>
+    <div class="a-body"><div class="a-tools">${[['all','All'],['on','Enabled'],['off','Disabled'],['new','New chapters'],['done','Completed']].map(([k, l]) => `<button class="btn sm ${S.favF === k ? 'primary' : ''}" data-act="favF" data-k="${k}">${l}</button>`).join('')}<span class="grow"></span><input class="input" placeholder="Search favorites" id="favQ" data-bind="favQ" value="${h(S.favQ)}"></div>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Title</th><th>Current</th><th>New</th><th>Website</th><th>Save to</th><th>Status</th><th>Added</th><th>Last checked</th><th>Enabled</th><th></th></tr></thead><tbody>
+    ${favs().map(f => { const m = manga(f.m); return `<tr><td><div class="row" style="flex-wrap:nowrap">${cover(m, 'xs')}<b>${h(m.t)}</b></div></td><td class="num">${f.cur}</td><td>${f.newc ? `<span class="pill st-new">+${f.newc}</span>` : ''}</td><td>${site(m.s).name}</td><td class="mono muted">/downloads/${h(m.t.replace(/[:'’]/g, ''))}</td><td>${f.done ? pill('completed') : m.st}</td><td class="mono muted">${f.added}</td><td class="mono muted">${f.checked}</td><td><input type="checkbox" class="toggle" ${f.on ? 'checked' : ''} aria-label="Enabled"></td>
+      <td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${f.m}">Info</button><button class="btn sm">Download all</button><button class="btn sm">Rename</button><button class="btn sm">Move site</button><button class="btn sm">Save to…</button><button class="btn sm danger">Delete</button></div></td></tr>`; }).join('')}
+    </tbody></table></div></div>`;
+  },
+  inbox() {
+    return `<div class="a-head"><h1>Inbox</h1><span class="muted small">Things FMD2 used to ask in pop-up dialogs wait here.</span></div>
+    <div class="a-body"><div class="a-pad">${inbox().map(i => `<div class="a-inbox" style="${i.kind === 'bad' ? 'border-left-color:var(--bad)' : ''}"><div class="grow" style="flex-basis:280px"><b>${i.title}</b><div class="small muted">${i.when}</div><div style="max-width:70ch">${h(i.body)}</div></div><div class="row">${i.acts.map(([l, c]) => `<button class="btn ${c}" data-act="inbox" data-id="${i.id}">${l}</button>`).join('')}</div></div>`).join('') || '<p class="muted">Nothing needs you right now.</p>'}</div></div>`;
+  },
+  settings() {
+    const sec = SETTINGS.find(s => s.id === S.setSec);
+    return `<div class="a-head"><h1>Settings</h1><input class="input" placeholder="Search settings" style="width:220px" id="aSetQ"></div>
+    <div class="a-body"><div class="a-settings"><nav class="a-subnav">${SETTINGS.filter(s => s.id !== 'logs').map(s => `<button class="${s.id === S.setSec ? 'on' : ''}" data-act="setSec" data-k="${s.id}">${s.name}</button>`).join('')}</nav>
+      <div class="a-form"><h2 style="font-size:17px;margin-top:12px">${sec.name}</h2>${sec.special ? specialHtml(sec.special) : sec.groups.map(g => `<h3>${g.name}</h3>${g.f.map(fieldHtml).join('')}`).join('')}</div></div></div>`;
+  },
+  logs() { return `<div class="a-head"><h1>Logs</h1></div><div class="a-body"><div class="a-pad">${logsHtml(false)}</div></div>`; },
+};
+
+// ============ VARIANT B: Library ============
+const B = {
+  render() {
+    const nav = [['favorites', 'Library'], ['browse', 'Discover'], ['downloads', 'Queue'], ['settings', 'Settings'], ['logs', 'System']];
+    const pg = S.page === 'info' ? 'series' : S.page === 'inbox' ? 'favorites' : S.page;
+    const active = TASKS.filter(t => t.st === 'downloading'), waiting = TASKS.filter(t => t.st === 'queued').length;
+    return `<div class="vB">
+      <header class="b-top"><div class="b-brand">FMD2r</div>
+        <nav class="b-nav">${nav.map(([id, l]) => `<button class="${pg === id || (pg === 'series' && id === 'favorites') ? 'on' : ''}" data-go="${id}">${l}</button>`).join('')}</nav>
+        <div class="b-add"><input class="input" placeholder="Paste a manga URL" id="bUrl"><button class="btn primary" data-act="paste">Add</button></div>
+        <button class="b-bell" data-act="bell" aria-label="Inbox">Inbox${inbox().length ? `<b>${inbox().length}</b>` : ''}</button>
+      </header>
+      ${S.bell ? `<div class="b-pop" role="dialog" aria-label="Inbox">${inbox().map(i => `<div class="b-pi"><div class="row"><b class="grow" style="${i.kind === 'bad' ? 'color:var(--bad)' : ''}">${i.title}</b><span class="small muted">${i.when}</span></div><div class="small">${h(i.body)}</div><div class="row">${i.acts.map(([l, c]) => `<button class="btn sm ${c}" data-act="inbox" data-id="${i.id}">${l}</button>`).join('')}</div></div>`).join('') || '<div class="b-pi muted">Nothing needs you.</div>'}</div>` : ''}
+      <main class="b-page">${this[pg]()}</main>
+      ${pg !== 'downloads' ? `<div class="b-dock" aria-label="Download queue"><div class="stack grow" style="gap:4px;min-width:180px">${active.map(t => `<div class="row small" style="flex-wrap:nowrap"><span class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${h(manga(t.m).t)}</b> ${t.ch}</span>${progTxt(t)}</div>${prog(t)}`).join('')}</div>
+        <div class="stack" style="gap:0"><b class="mono num" data-total>${totalRate().toFixed(1)} MB/s</b><span class="small muted">${active.length} active · ${waiting} waiting</span></div><div class="graph">${graph()}</div>
+        <div class="row"><button class="btn sm" data-act="stopAll">Pause all</button><button class="btn sm primary" data-go="downloads">Open queue</button></div></div>` : ''}
+    </div>`;
+  },
+  favorites() {
+    const list = favs();
+    return `<div class="row" style="align-items:flex-end"><h1 class="grow" style="font-size:30px;letter-spacing:-.02em">Library</h1><button class="btn primary" data-act="toast" data-msg="Checking 48 favorites for new chapters">Check for new chapters</button><button class="btn" data-act="toast" data-msg="Checking for missing chapters">Check missing</button><button class="btn" data-act="toast" data-msg="Importer: choose an FMD2 userdata folder">Import from FMD2</button></div>
+    <div class="b-jobstrip">${jobsHtml('job grow')}</div>
+    <div class="row"><div class="b-chips">${[['all','All ' + FAVS.length],['new','New chapters'],['on','Enabled'],['off','Disabled'],['done','Completed']].map(([k, l]) => `<button class="b-chip ${S.favF === k ? 'on' : ''}" data-act="favF" data-k="${k}">${l}</button>`).join('')}</div><span class="grow"></span><input class="input" placeholder="Search library" id="favQ" data-bind="favQ" value="${h(S.favQ)}"></div>
+    <div class="b-grid">${list.map(f => { const m = manga(f.m); return `<button class="b-card ${f.on ? '' : 'off'}" data-open="${f.m}">${cover(m, 'fill')}<span class="badge">${f.newc ? `<span class="pill st-new">+${f.newc} new</span>` : f.done ? pill('completed') : ''}</span><span class="t">${h(m.t)}</span><span class="small muted">Ch. ${f.cur} · ${site(m.s).name}${f.on ? '' : ' · disabled'}</span></button>`; }).join('')}</div>`;
+  },
+  series() {
+    const m = manga(S.manga), f = FAVS.find(x => x.m === m.id);
+    return `<button class="btn ghost" data-go="favorites" style="align-self:flex-start">← Library</button>
+    <div class="b-hero">${cover(m, 'lg')}<div class="meta">
+      <div class="label">${site(m.s).name} · ${m.st}</div><h1>${h(m.t)}</h1><div class="muted">${h(m.alt)}</div>
+      <div class="b-kv"><div><span class="label">Author</span>${h(m.au)}</div><div><span class="label">Artist</span>${h(m.ar)}</div><div><span class="label">Chapters</span><span class="num">${m.n} · ${m.dl} downloaded</span></div></div>
+      <div class="b-chips">${m.g.map(g => `<span class="b-chip">${g}</span>`).join('')}</div>
+      <p style="margin:0;max-width:65ch">${h(m.sum)}</p>
+      <div class="row">${f ? `<button class="btn primary" data-act="download">Download ${f.newc || 'new'} new</button><button class="btn">★ In library</button><button class="btn">Rename</button><button class="btn">Move to another site</button><button class="btn">Change save folder</button><button class="btn danger">Remove</button>` : `<button class="btn primary" data-act="fav">＋ Add to library</button>`}<a class="btn" href="https://mangadex.org" target="_blank" rel="noopener">Read online ↗</a></div>
+    </div></div>
+    <section class="b-section"><header><h2>Chapters</h2><input class="input" placeholder="Filter chapters" id="chapQ" style="width:160px"></header><div style="padding:8px 14px;border-bottom:1px solid var(--line)">${chapTools(m)}</div><div class="b-chapgrid">${chapList(m)}</div><div class="stack" style="padding:12px 14px;border-top:1px solid var(--line)">${dlBox(m)}</div></section>`;
+  },
+  browse() {
+    const list = listFor();
+    return `<h1>Discover</h1>
+    <div class="b-discover"><aside class="b-facets"><div class="stack"><span class="label">Website</span><select class="input" data-bind="site" id="bSite" aria-label="Website"><option value="all" ${S.site === 'all' ? 'selected' : ''}>All websites</option>${SITES.filter(s => s.on).map(s => `<option value="${s.id}" ${S.site === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}</select>
+      <div class="small muted">${S.site === 'all' ? 'Searching every enabled list' : site(S.site).list.toLocaleString('en') + ' titles · updated ' + site(S.site).upd}</div><div class="row"><button class="btn sm" data-act="toast" data-msg="Fetching from FMD2-DB">Get from FMD2-DB</button><button class="btn sm" data-act="toast" data-msg="Updating list from the website">Update</button></div></div>${advFilter(true)}</aside>
+      <div class="b-results"><div class="row"><input class="input grow" placeholder="Search titles" id="listQ" data-bind="listQ" value="${h(S.listQ)}" style="font-size:15px;padding:8px 12px"><span class="muted small">${list.length} results</span></div>
+        <div class="b-grid">${list.map(m => `<button class="b-card" data-open="${m.id}">${cover(m, 'fill')}<span class="badge">${m.nw ? '<span class="pill st-new">New</span>' : ''}</span><span class="t">${h(m.t)}</span><span class="small muted">${site(m.s).name} · ${m.st}</span></button>`).join('') || '<p class="muted">No titles match. Loosen the genre filter.</p>'}</div></div></div>`;
+  },
+  downloads() {
+    const groups = [['downloading', 'Downloading'], ['queued', 'Waiting'], ['failed', 'Failed'], ['stopped', 'Stopped'], ['disabled', 'Disabled'], ['completed', 'Completed']];
+    return `<div class="row" style="align-items:flex-end"><h1 class="grow" style="font-size:30px;letter-spacing:-.02em">Queue</h1><input class="input" placeholder="Search queue" id="dlQ" data-bind="dlQ" value="${h(S.dlQ)}"><button class="btn" data-act="resumeAll">Resume all</button><button class="btn" data-act="stopAll">Pause all</button></div>
+    <div class="b-jobstrip"><div class="stack" style="gap:0"><span class="label">Speed</span><b class="mono num" data-total style="font-size:18px">${totalRate().toFixed(1)} MB/s</b></div><div class="graph grow" style="height:50px">${graph()}</div></div>
+    <div class="b-chips">${HIST.map(([k, l]) => `<button class="b-chip ${S.dlHist === k ? 'on' : ''}" data-act="dlHist" data-k="${k}">${l}</button>`).join('')}</div>
+    ${groups.map(([st, l]) => { const ts = filtTasks().filter(t => t.st === st); if (!ts.length) return ''; return `<div class="b-qgroup"><h2>${l} <span class="muted small mono">${ts.length}</span>${st === 'completed' ? '<span class="grow"></span><button class="btn sm" data-act="clearDone">Clear completed</button><button class="btn sm">Merge</button>' : ''}</h2><section class="b-section">${ts.map(t => `<div class="b-qrow">${cover(manga(t.m), 'xs')}<div style="min-width:160px;flex:1 1 200px"><b>${h(manga(t.m).t)}</b><div class="small muted">${t.ch} · ${site(manga(t.m).s).name}</div>${t.err ? `<div class="small" style="color:var(--bad)">${h(t.err)}</div>` : ''}</div>${prog(t)}${progTxt(t)}${rateTxt(t)}
+      <div class="row">${st === 'downloading' || st === 'queued' ? '<button class="btn sm">Pause</button><button class="btn sm" title="Move up">↑</button><button class="btn sm" title="Move down">↓</button>' : st === 'completed' ? '<button class="btn sm" data-act="toast" data-msg="Preparing CBZ download">Get files</button>' : '<button class="btn sm">Resume</button><button class="btn sm">Redownload</button>'}<button class="btn sm" data-open="${t.m}">Info</button><select class="input" style="padding:2px 4px;font-size:12px" aria-label="More actions"><option>More…</option><option>Enable</option><option>Disable</option><option>Delete task</option><option>Delete task + files</option><option>Delete task + files + favorite</option></select></div></div>`).join('')}</section></div>`; }).join('')}`;
+  },
+  settings() {
+    return `<h1>Settings</h1><div class="b-settings"><nav class="b-toc">${SETTINGS.filter(s => s.id !== 'logs' && s.id !== 'about').map(s => `<a href="#set-${s.id}">${s.name}</a>`).join('')}</nav>
+      <div class="b-setbody">${SETTINGS.filter(s => s.id !== 'logs' && s.id !== 'about').map(s => `<section class="b-section" id="set-${s.id}"><header><h2>${s.name}</h2></header><div>${s.special ? specialHtml(s.special) : s.groups.map(g => `<div class="label" style="padding-top:14px">${g.name}</div>${g.f.map(fieldHtml).join('')}`).join('')}</div></section>`).join('')}</div></div>`;
+  },
+  logs() {
+    return `<h1>System</h1><div class="b-chips">${[['logs','Logs'],['about','About'],['jobs','Background jobs']].map(([k, l]) => `<button class="b-chip ${S.bTab === k ? 'on' : ''}" data-act="bSys" data-k="${k}">${l}</button>`).join('')}</div>
+      <section class="b-section"><div style="padding:0 14px">${S.bTab === 'logs' ? logsHtml(false) : S.bTab === 'about' ? aboutHtml() : `<div class="stack" style="padding:14px 0">${jobsHtml()}<div class="small muted">Next favorites check 10:12 · next module check 14:00 · next snapshot 03:00</div></div>`}</div></section>`;
+  },
+};
+
+// ============ VARIANT C: Command ============
+const C = {
+  render() {
+    const rail = [['home', '⌂', 'Home', inbox().length], ['favorites', '★', 'Watching', 0], ['browse', '☰', 'Browse', 0], ['logs', '≡', 'Logs', 0]];
+    const pg = ['home', 'favorites', 'browse', 'logs'].includes(S.page) ? S.page : 'home';
+    const q = S.omni.trim().toLowerCase();
+    const hits = q ? M.filter(m => m.t.toLowerCase().includes(q)).slice(0, 5) : [];
+    const isUrl = /^https?:\/\//.test(q);
+    const cmds = q ? [['Check favorites now', 'toast'], ['Resume all downloads', 'resumeAll'], ['Pause all downloads', 'stopAll'], ['Open settings: ' + (SETTINGS.find(s => s.name.toLowerCase().startsWith(q))?.name || 'Saving'), 'openSet']].filter(c => c[0].toLowerCase().includes(q) || isUrl === false && q.length < 3) : [];
+    return `<div class="vC">
+      <header class="c-bar"><div class="c-mark">FMD2r</div>
+        <div class="c-omni"><input id="omni" data-bind="omni" value="${h(S.omni)}" placeholder="Paste a URL, search all websites, or type a command" autocomplete="off"><kbd>/</kbd>
+          ${q ? `<div class="c-drop">${isUrl ? `<div class="label">URL</div><button class="hl" data-open="kagura">↵ Open <b>Kagurabachi</b> from ComicK</button>` : ''}
+            ${hits.length ? `<div class="label">Titles in website lists</div>${hits.map((m, i) => `<button class="${i === 0 && !isUrl ? 'hl' : ''}" data-open="${m.id}">${cover(m, 'xs')}<span class="grow">${h(m.t)}</span><span class="small muted">${site(m.s).name}</span></button>`).join('')}` : ''}
+            ${cmds.length ? `<div class="label">Commands</div>${cmds.map(([l, a]) => `<button data-act="${a}" data-msg="${l}">› ${l}</button>`).join('')}` : ''}
+            ${!isUrl && !hits.length && !cmds.length ? '<div class="small muted" style="padding:8px">No matches. Try a title or paste a manga URL.</div>' : ''}</div>` : ''}
+        </div>
+        <button class="btn" data-act="openSet">Settings</button>
+      </header>
+      <div class="c-body">
+        <nav class="c-rail">${rail.map(([id, ic, l, c]) => `<button class="${pg === id ? 'on' : ''}" data-go="${id}"><i>${ic}</i>${l}${c ? `<b>${c}</b>` : ''}</button>`).join('')}</nav>
+        <main class="c-main">${this[pg]()}</main>
+        ${this.queue()}
+      </div>
+      ${S.sheet ? `<div class="c-scrim" data-act="closeSheet"></div>${this.sheet()}` : ''}
+      ${S.settings ? `<div class="c-scrim" data-act="closeSet"></div>${this.settingsModal()}` : ''}
+    </div>`;
+  },
+  home() {
+    return `<div class="c-cols">
+      <section class="c-need"><h1 style="font-size:22px">Needs you <span class="muted mono" style="font-size:14px">${inbox().length}</span></h1>
+        ${inbox().map(i => `<div class="c-card ${i.kind}"><div class="row"><h3 class="grow">${i.title}</h3><span class="small muted">${i.when}</span></div><div class="small">${h(i.body)}</div><div class="row">${i.acts.map(([l, c]) => `<button class="btn sm ${c}" data-act="inbox" data-id="${i.id}">${l}</button>`).join('')}</div></div>`).join('') || '<div class="c-card"><b>All clear.</b><span class="small muted">New chapters, module updates and questions show up here.</span></div>'}
+      </section>
+      <section class="stack"><h1 style="font-size:22px">Activity</h1>
+        <div class="c-card">${jobsHtml()}</div>
+        <div class="c-feed">${FEED.map(([t, x, st]) => `<div class="c-ev"><time>${t}</time><span class="grow">${h(x)}</span>${st ? `<span class="pill st-${st}">${st === 'new' ? 'new' : ST_LABEL[st]}</span>` : ''}</div>`).join('')}</div>
+      </section></div>`;
+  },
+  favorites() {
+    const groups = [['New chapters', f => f.on && f.newc > 0], ['Up to date', f => f.on && !f.newc && !f.done], ['Completed', f => f.on && f.done], ['Disabled', f => !f.on]];
+    return `<div class="row"><h1 class="grow" style="font-size:22px">Watching</h1><input class="input" placeholder="Filter" id="favQ" data-bind="favQ" value="${h(S.favQ)}"><button class="btn primary" data-act="toast" data-msg="Checking 48 favorites">Check now</button><button class="btn" data-act="toast" data-msg="Checking for missing chapters">Check missing</button><button class="btn" data-act="toast" data-msg="Importer: choose an FMD2 userdata folder">Import from FMD2</button></div>
+    ${groups.map(([l, fn]) => { const fs = favs().filter(fn); if (!fs.length) return ''; return `<section><div class="c-group">${l} · ${fs.length}</div><div class="c-watch">${fs.map(f => { const m = manga(f.m); return `<div class="c-wi">${cover(m, 'sm')}<div class="grow" style="flex-basis:200px"><b style="cursor:pointer" data-open="${f.m}">${h(m.t)}</b><div class="small muted">Ch. ${f.cur} of ${m.n} · ${site(m.s).name} · checked ${f.checked}</div></div>${f.newc ? `<span class="pill st-new">+${f.newc}</span><button class="btn sm primary" data-act="toast" data-msg="Queued ${f.newc} chapters">Download</button>` : ''}<button class="btn sm" data-open="${f.m}">Open</button><select class="input" style="padding:2px 4px;font-size:12px" aria-label="More"><option>More…</option><option>${f.on ? 'Disable' : 'Enable'}</option><option>Rename</option><option>Move to another site</option><option>Change save folder</option><option>Download all</option><option>Delete</option></select></div>`; }).join('')}</div></section>`; }).join('')}`;
+  },
+  browse() {
+    const list = listFor();
+    return `<div class="row"><h1 class="grow" style="font-size:22px">Browse lists</h1><select class="input" data-bind="site" id="cSite" aria-label="Website"><option value="all" ${S.site === 'all' ? 'selected' : ''}>All websites</option>${SITES.filter(s => s.on).map(s => `<option value="${s.id}" ${S.site === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}</select><button class="btn" data-act="toast" data-msg="Fetching lists from FMD2-DB">Get lists from FMD2-DB</button><button class="btn" data-act="toast" data-msg="Updating list">Update</button></div>
+    <div class="c-builder"><span class="label">Where</span><input class="input" placeholder="title contains…" id="listQ" data-bind="listQ" value="${h(S.listQ)}" style="width:180px">
+      ${Object.entries(S.tri).map(([g, v]) => `<span class="c-cond">genre ${v === 1 ? 'is' : 'is not'} <b>${g}</b><button data-act="tri0" data-g="${g}" aria-label="Remove">✕</button></span>`).join('')}
+      <select class="input" data-act="noop" id="cAddCond" aria-label="Add condition"><option>＋ condition</option><option>genre is…</option><option>genre is not…</option><option>author contains…</option><option>status is…</option><option>only new</option><option>matches regex…</option></select>
+      <span class="grow"></span><label class="row small" style="gap:4px"><input type="radio" name="anyall2" checked> all</label><label class="row small" style="gap:4px"><input type="radio" name="anyall2"> any</label></div>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Title</th><th>Website</th><th>Author</th><th>Genres</th><th>Status</th><th>Chapters</th><th></th></tr></thead><tbody>${list.map(m => `<tr><td><div class="row" style="flex-wrap:nowrap">${cover(m, 'xs')}<b>${h(m.t)}</b>${m.nw ? '<span class="pill st-new">New</span>' : ''}</div></td><td>${site(m.s).name}</td><td>${h(m.au)}</td><td class="muted">${m.g.join(', ')}</td><td>${m.st}</td><td class="num">${m.n}</td><td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${m.id}">Open</button><button class="btn sm" data-act="fav">☆</button><button class="btn sm" title="Remove from local list">✕</button></div></td></tr>`).join('')}</tbody></table></div>`;
+  },
+  logs() { return `<h1 style="font-size:22px">Logs</h1>${logsHtml(true)}`; },
+  queue() {
+    const ts = TASKS.filter(t => manga(t.m).t.toLowerCase().includes(S.dlQ.toLowerCase()));
+    const order = ['downloading', 'queued', 'failed', 'stopped', 'disabled', 'completed'];
+    const groups = S.qHist ? HIST.slice(1, 6).map(([k, l]) => [l, ts.filter(t => t.hist === k)]) : [['Now', ts.filter(t => t.st === 'downloading' || t.st === 'queued')], ['Needs attention', ts.filter(t => t.st === 'failed' || t.st === 'stopped' || t.st === 'disabled')], ['Done', ts.filter(t => t.st === 'completed')]];
+    return `<aside class="c-queue" aria-label="Download queue"><div class="c-qhead"><div class="row"><b class="grow" style="font:700 15px var(--f-display)">Queue</b><b class="mono num" data-total>${totalRate().toFixed(1)} MB/s</b></div><div class="graph">${graph()}</div>
+      <div class="row"><button class="btn sm" data-act="resumeAll">▶ All</button><button class="btn sm" data-act="stopAll">■ All</button><button class="btn sm" data-act="clearDone">Clear done</button><span class="grow"></span><button class="btn sm ${S.qHist ? 'primary' : ''}" data-act="qHist" title="Group by date added">By date</button></div>
+      <input class="input" placeholder="Search queue" id="dlQ" data-bind="dlQ" value="${h(S.dlQ)}"></div>
+      <div class="c-qlist">${groups.filter(g => g[1].length).map(([l, g]) => `<div class="c-group">${l}</div>${g.sort((a, b) => order.indexOf(a.st) - order.indexOf(b.st)).map(t => `<div class="c-qi ${S.qOpen === t.id ? 'open' : ''}" data-act="qOpen" data-id="${t.id}"><div class="row" style="flex-wrap:nowrap"><span class="t grow">${h(manga(t.m).t)}</span>${pill(t.st)}</div><div class="row small muted" style="flex-wrap:nowrap"><span class="grow">${t.ch} · ${site(manga(t.m).s).name}</span>${progTxt(t)}</div>${prog(t)}
+        ${S.qOpen === t.id ? `${t.err ? `<div class="small" style="color:var(--bad)">${h(t.err)}</div>` : ''}<div class="small mono muted">${h(saveTo(t))} · added ${t.added}</div><div class="row"><button class="btn sm">Pause</button><button class="btn sm">Resume</button><button class="btn sm">Redownload</button><button class="btn sm" title="Move to top">⤒</button><button class="btn sm" title="Up">↑</button><button class="btn sm" title="Down">↓</button><button class="btn sm" data-open="${t.m}">Info</button><button class="btn sm" data-act="toast" data-msg="Preparing files">Files</button><select class="input" style="padding:2px 4px;font-size:12px" aria-label="More"><option>More…</option><option>Enable</option><option>Disable</option><option>Merge completed</option><option>Delete task</option><option>Delete task + files</option><option>Delete task + files + favorite</option></select></div>` : ''}</div>`).join('')}`).join('')}</div></aside>`;
+  },
+  sheet() {
+    const m = manga(S.manga);
+    return `<section class="c-sheet" role="dialog" aria-label="${h(m.t)}"><header><h2>${h(m.t)}</h2><button class="btn" data-act="fav">☆ Favorite</button><button class="btn" data-act="closeSheet" aria-label="Close">✕</button></header>
+      <div class="c-sbody"><div class="row" style="align-items:flex-start;flex-wrap:nowrap">${cover(m, 'md')}<div class="stack grow">${metaDl(m)}<p style="margin:0" class="small">${h(m.sum)}</p></div></div>
+      <div class="c-card" style="padding:0"><div style="padding:10px 12px;border-bottom:1px solid var(--line)">${chapTools(m)}</div><div style="max-height:340px;overflow:auto">${chapList(m)}</div><div class="stack" style="padding:10px 12px;border-top:1px solid var(--line)">${dlBox(m)}</div></div></div></section>`;
+  },
+  settingsModal() {
+    const q = S.setQ.trim().toLowerCase();
+    const secs = SETTINGS.filter(s => s.id !== 'logs');
+    return `<section class="c-modal" role="dialog" aria-label="Settings"><header><b style="font:700 16px var(--f-display)">Settings</b><input class="input grow" placeholder="Find a setting (try “proxy” or “cbz”)" id="setQ" data-bind="setQ" value="${h(S.setQ)}"><button class="btn" data-act="closeSet" aria-label="Close">✕</button></header>
+      <div class="c-mbody">${secs.map(s => { if (s.special) { if (q && !s.name.toLowerCase().includes(q) && !(s.id === 'web' && 'website account module cloudflare update list'.includes(q))) return ''; return `<h3>${s.name}</h3>${specialHtml(s.special)}`; }
+        const fs = s.groups.flatMap(g => g.f.map(f => [g.name, f])).filter(([g, f]) => !q || (f[0] + ' ' + g + ' ' + s.name + ' ' + f.slice(2).join(' ')).toLowerCase().includes(q));
+        return fs.length ? `<h3>${s.name}</h3>${fs.map(([, f]) => fieldHtml(f)).join('')}` : ''; }).join('') || '<p class="muted">No setting matches that.</p>'}</div></section>`;
+  },
+};
+
+const IMPL = { A, B, C };
+
+// ---------------- wiring ----------------
+const app = document.getElementById('app');
+function render() {
+  const ae = document.activeElement, id = ae && ae.id, pos = ae && 'selectionStart' in ae ? ae.selectionStart : null;
+  app.innerHTML = IMPL[S.v].render();
+  document.getElementById('pLabel').textContent = `${S.v} (${VNAME[S.v]})`;
+  document.title = `FMD2r UI Layouts`;
+  if (id) { const el = document.getElementById(id); if (el) { el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch (e) {} } }
+}
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2400); }
+function setVariant(v, push = true) {
+  S.v = v; S.sheet = false; S.settings = false; S.bell = false;
+  if (v === 'C' && !['home', 'favorites', 'browse', 'logs'].includes(S.page)) S.page = 'home';
+  if (v !== 'C' && S.page === 'home') S.page = 'downloads';
+  if (push) { try { const u = new URL(location.href); u.searchParams.set('variant', v); u.hash = v; history.replaceState(null, '', u); } catch (e) { location.hash = v; } }
+  render();
+}
+const ACT = {
+  dlSt: d => S.dlSt = d.k, dlHist: d => S.dlHist = d.k, selTask: d => S.task = +d.id, favF: d => S.favF = d.k, setSec: d => S.setSec = d.k, bTab: d => S.browseTab = d.k, bSys: d => S.bTab = d.k,
+  tri: d => { const v = S.tri[d.g] || 0; const n = v === 0 ? 1 : v === 1 ? -1 : 0; if (n) S.tri[d.g] = n; else delete S.tri[d.g]; },
+  tri0: d => delete S.tri[d.g], clearTri: () => S.tri = {}, allSites: () => S.site = S.site === 'all' ? 'mangadex' : 'all',
+  chk: (d, el) => { el.checked ? S.checked.add(+d.no) : S.checked.delete(+d.no); return 'soft'; },
+  chkAll: () => chapters(manga(S.manga)).forEach(c => S.checked.add(c.no)), chkNone: () => S.checked.clear(),
+  chkNew: () => { S.checked.clear(); chapters(manga(S.manga)).filter(c => !c.dl).forEach(c => S.checked.add(c.no)); },
+  download: () => { toast(`Queued ${S.checked.size || 'all'} chapters of ${manga(S.manga).t}`); S.checked.clear(); },
+  fav: () => toast('Added to favorites'), paste: () => { S.manga = 'kagura'; openManga(); toast('Resolved URL with the ComicK module'); },
+  resumeAll: () => toast('Resumed all downloads'), stopAll: () => toast('Paused all downloads'),
+  clearDone: () => toast('Deleted completed tasks'), move: d => toast('Moved ' + d.d), cancelJob: d => toast('Cancelled'),
+  inbox: (d, el) => { S.inbox = S.inbox.filter(x => x !== d.id); toast(el.textContent + ' ✓'); },
+  bell: () => S.bell = !S.bell, closeSheet: () => S.sheet = false, openSet: () => { S.settings = true; S.omni = ''; }, closeSet: () => S.settings = false,
+  qOpen: d => S.qOpen = S.qOpen === +d.id ? null : +d.id, qHist: () => S.qHist = !S.qHist, logLv: d => S.logLv = d.lv,
+  toast: d => { toast(d.msg); return 'soft'; }, noop: () => 'soft',
+};
+function openManga() { S.checked.clear(); if (S.v === 'C') { S.sheet = true; S.omni = ''; } else S.page = S.v === 'A' ? 'browse' : 'info'; S.bell = false; }
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]'), op = e.target.closest('[data-open]'), act = e.target.closest('[data-act]');
+  if (act && act.tagName === 'SELECT') return;
+  if (op && (!act || op.contains(act) === false || act === op)) { S.manga = op.dataset.open; openManga(); render(); return; }
+  if (go) { S.page = go.dataset.go; S.bell = false; S.sheet = false; render(); window.scrollTo(0, 0); return; }
+  if (act && ACT[act.dataset.act]) { const r = ACT[act.dataset.act](act.dataset, act); if (r !== 'soft') render(); }
+});
+document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.bind; if (k) { S[k] = e.target.value; render(); } });
+document.addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (e.key === 'Escape') { S.sheet = false; S.settings = false; S.bell = false; S.omni = ''; render(); return; }
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) {
+    if (e.key === 'Enter' && e.target.id === 'omni') { const b = document.querySelector('.c-drop .hl, .c-drop button'); if (b) b.click(); }
+    return;
+  }
+  if (e.key === '/' && S.v === 'C') { e.preventDefault(); document.getElementById('omni')?.focus(); return; }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const i = VARIANTS.indexOf(S.v); setVariant(VARIANTS[(i + (e.key === 'ArrowRight' ? 1 : VARIANTS.length - 1)) % VARIANTS.length]); }
+});
+document.getElementById('pPrev').onclick = () => setVariant(VARIANTS[(VARIANTS.indexOf(S.v) + VARIANTS.length - 1) % VARIANTS.length]);
+document.getElementById('pNext').onclick = () => setVariant(VARIANTS[(VARIANTS.indexOf(S.v) + 1) % VARIANTS.length]);
+window.addEventListener('hashchange', () => { const v = location.hash.slice(1).toUpperCase(); if (VARIANTS.includes(v) && v !== S.v) setVariant(v, false); });
+
+// live progress without re-rendering
+setInterval(() => {
+  TASKS.filter(t => t.st === 'downloading').forEach(t => {
+    t.rate = Math.max(.3, t.rate + (Math.random() - .5) * .6); t.done = Math.min(t.tot, t.done + 1);
+    if (t.done === t.tot) { t.st = 'completed'; t.last = '2026-10-08 09:4' + (t.id % 10); const q = TASKS.find(x => x.st === 'queued'); if (q) q.st = 'downloading', q.rate = 1.5; render(); return; }
+    document.querySelectorAll(`[data-prog="${t.id}"]`).forEach(el => el.style.width = pct(t) + '%');
+    document.querySelectorAll(`[data-progt="${t.id}"]`).forEach(el => el.textContent = `${t.done}/${t.tot}`);
+    document.querySelectorAll(`[data-rate="${t.id}"]`).forEach(el => el.textContent = t.rate.toFixed(1) + ' MB/s');
+  });
+  S.rates.shift(); S.rates.push(totalRate());
+  document.querySelectorAll('[data-total]').forEach(el => el.textContent = totalRate().toFixed(1) + ' MB/s');
+  document.querySelectorAll('.graph').forEach(el => el.innerHTML = graph());
+}, 1000);
+
+// boot
+(() => { let v = null; try { v = new URL(location.href).searchParams.get('variant'); } catch (e) {} v = (v || location.hash.slice(1) || 'A').toUpperCase(); setVariant(VARIANTS.includes(v) ? v : 'A', false); })();
+</script>
