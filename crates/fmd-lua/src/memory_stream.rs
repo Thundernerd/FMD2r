@@ -2,12 +2,12 @@
 //! baseunits/lua/LuaMemoryStream.pas over FPC 3.2.2's `TMemoryStream`.
 
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use mlua::{AnyUserData, Lua, Value};
 
 use crate::LuaClass;
+use crate::file::{file_path, read_file, write_file};
 
 /// An FPC `TMemoryStream`: bytes with a read/write position.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -139,7 +139,7 @@ impl LuaMemoryStream {
             .method(
                 "SaveToFile",
                 |lua, stream: &mut MemoryStream, path: Value| {
-                    write_file(&file_path(lua, path)?, &stream.data)
+                    write_file(&file_path(lua, path)?, stream.bytes())
                 },
             )
             // baseunits/lua/LuaMemoryStream.pas:61-65, :74
@@ -150,7 +150,7 @@ impl LuaMemoryStream {
             // baseunits/lua/LuaMemoryStream.pas:49-59, :78
             .property(
                 "Size",
-                |_, stream: &mut MemoryStream| Ok(stream.data.len()),
+                |_, stream: &mut MemoryStream| Ok(stream.bytes().len()),
                 |lua, stream: &mut MemoryStream, size: Value| {
                     // `lua_tointeger`: anything but a number is 0. FPC stores a negative size
                     // as is, leaving a broken stream; it is empty here.
@@ -168,26 +168,4 @@ impl LuaMemoryStream {
 /// the end.
 fn to_string(lua: &Lua, stream: &mut MemoryStream, (): ()) -> mlua::Result<mlua::LuaString> {
     lua.create_string(stream.remaining())
-}
-
-/// A file name argument, converted like `luaToString` (baseunits/lua/LuaUtils.pas:206).
-pub(crate) fn file_path(lua: &Lua, value: Value) -> mlua::Result<PathBuf> {
-    Ok(match lua.coerce_string(value)? {
-        Some(s) => PathBuf::from(s.to_string_lossy()),
-        None => PathBuf::new(),
-    })
-}
-
-/// Reads a whole file, failing with FPC's `EFOpenError` message (`SFOpenErrorEx`).
-pub(crate) fn read_file(path: &Path) -> mlua::Result<Vec<u8>> {
-    std::fs::read(path).map_err(|e| {
-        mlua::Error::runtime(format!("Unable to open file \"{}\": {e}", path.display()))
-    })
-}
-
-/// Creates or replaces a file, failing with FPC's `EFCreateError` message (`SFCreateErrorEx`).
-pub(crate) fn write_file(path: &Path, bytes: &[u8]) -> mlua::Result<()> {
-    std::fs::write(path, bytes).map_err(|e| {
-        mlua::Error::runtime(format!("Unable to create file \"{}\": {e}", path.display()))
-    })
 }

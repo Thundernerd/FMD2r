@@ -232,11 +232,12 @@ fn index_of_is_case_insensitive() {
 
 #[test]
 fn sort_orders_ignoring_case() {
-    // FPC 3.2.2 sorts `b, a, _x, Z, 10, 9, a-b, ab` to this order.
+    // Plain letters and digits, where FPC's `AnsiCompareText` gives this order both on Linux
+    // (probed) and under Windows' locale collation; punctuation is where the two differ.
     run(
-        "for _, v in ipairs({'b', 'a', '_x', 'Z', '10', '9', 'a-b', 'ab'}) do s.Add(v) end
+        "for _, v in ipairs({'b', 'C', 'ab', 'a', 'B2'}) do s.Add(v) end
          s.Sort()
-         assert(s.CommaText == '10,9,_x,a,a-b,ab,b,Z', s.CommaText)",
+         assert(s.CommaText == 'a,ab,b,B2,C', s.CommaText)",
     );
 }
 

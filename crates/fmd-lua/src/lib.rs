@@ -1,13 +1,14 @@
 //! Lua runtime and the full FMD2 Host API that website modules see (the core of FMD2r).
 
 mod class;
+mod file;
 mod memory_stream;
 mod strings;
 
 pub use class::LuaClass;
 pub use memory_stream::{LuaMemoryStream, MemoryStream};
 pub use mlua;
-pub use strings::{LuaStrings, StringList};
+pub use strings::{ListIndexError, LuaStrings, StringList};
 
 /// Errors raised by the Lua runtime.
 #[derive(Debug, thiserror::Error)]

@@ -346,13 +346,13 @@ impl<T: 'static> LuaClass<T> {
 }
 
 /// Borrows the object's state for a callback; a conflicting borrow becomes a Lua error.
-fn borrow<T>(state: &Rc<RefCell<T>>) -> mlua::Result<std::cell::RefMut<'_, T>> {
+pub(crate) fn borrow<T>(state: &Rc<RefCell<T>>) -> mlua::Result<std::cell::RefMut<'_, T>> {
     state.try_borrow_mut().map_err(mlua::Error::external)
 }
 
 /// Converts a Lua value to bytes like `luaToString` (baseunits/lua/LuaUtils.pas:206): strings
 /// and numbers convert, anything else becomes empty. Unlike FMD2, NUL bytes are kept.
-fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
+pub(crate) fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
     Ok(match lua.coerce_string(value)? {
         Some(s) => s.as_bytes().to_vec(),
         None => Vec::new(),

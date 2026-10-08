@@ -7,7 +7,8 @@ use std::rc::Rc;
 
 use mlua::{AnyUserData, Lua, Value};
 
-use crate::memory_stream::{file_path, read_file, write_file};
+use crate::class::{borrow, to_bytes};
+use crate::file::{file_path, read_file, write_file};
 use crate::{LuaClass, LuaMemoryStream, MemoryStream};
 
 /// An FPC `TStringList`: a list of byte strings. Strings are kept binary-safe.
@@ -78,13 +79,13 @@ impl StringList {
     }
 
     /// Removes the item at `index` (`TStringList.Delete`); out of bounds is FPC's error.
-    pub fn delete(&mut self, index: i32) -> Result<(), String> {
+    pub fn delete(&mut self, index: i32) -> Result<(), ListIndexError> {
         match usize::try_from(index) {
             Ok(i) if i < self.items.len() => {
                 self.items.remove(i);
                 Ok(())
             }
-            _ => Err(list_index_error(index)),
+            _ => Err(ListIndexError(index)),
         }
     }
 
@@ -121,14 +122,14 @@ impl StringList {
     /// The index of the first item equal to `item`, ignoring ASCII case, or -1
     /// (`TStringList.IndexOf` with `CaseSensitive` off).
     pub fn index_of(&self, item: &[u8]) -> i32 {
-        position(self.items.iter().position(|i| i.eq_ignore_ascii_case(item)))
+        found_index(self.items.iter().position(|i| i.eq_ignore_ascii_case(item)))
     }
 
     /// The index of the first item whose name (the part before the first name/value
     /// separator) equals `name`, ignoring ASCII case, or -1 (`TStrings.IndexOfName`). Items
     /// without a separator have no name.
     pub fn index_of_name(&self, name: &[u8]) -> i32 {
-        position(self.items.iter().position(|item| {
+        found_index(self.items.iter().position(|item| {
             self.split_name(item)
                 .is_some_and(|(n, _)| n.eq_ignore_ascii_case(name))
         }))
@@ -192,6 +193,16 @@ impl StringList {
         &self.items
     }
 
+    /// The number of items (`TStrings.Count`).
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    /// Whether the list has no items.
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
     /// Appends `item` (`TStrings.Add`).
     pub fn add(&mut self, item: impl Into<Vec<u8>>) {
         self.items.push(item.into());
@@ -199,20 +210,20 @@ impl StringList {
 
     /// The item at `index`, or FPC's `EStringListError` message when it is out of bounds
     /// (`TStringList.Get`).
-    pub fn get(&self, index: i32) -> Result<&[u8], String> {
+    pub fn get(&self, index: i32) -> Result<&[u8], ListIndexError> {
         usize::try_from(index)
             .ok()
             .and_then(|i| self.items.get(i))
             .map(Vec::as_slice)
-            .ok_or_else(|| list_index_error(index))
+            .ok_or(ListIndexError(index))
     }
 
     /// Replaces the item at `index` (`TStringList.Put`); out of bounds is FPC's error.
-    pub fn set(&mut self, index: i32, item: impl Into<Vec<u8>>) -> Result<(), String> {
+    pub fn set(&mut self, index: i32, item: impl Into<Vec<u8>>) -> Result<(), ListIndexError> {
         let slot = usize::try_from(index)
             .ok()
             .and_then(|i| self.items.get_mut(i))
-            .ok_or_else(|| list_index_error(index))?;
+            .ok_or(ListIndexError(index))?;
         *slot = item.into();
         Ok(())
     }
@@ -304,9 +315,9 @@ fn split_delimited(text: &[u8], delimiter: u8) -> Vec<Vec<u8>> {
     let is_space = |b: u8| b <= b' ';
     let mut items = Vec::new();
     let mut i = 0;
-    let mut not_first = false;
+    let mut after_first_item = false;
     while i < text.len() {
-        if not_first && text[i] == delimiter {
+        if after_first_item && text[i] == delimiter {
             i += 1;
         }
         while i < text.len() && is_space(text[i]) {
@@ -340,26 +351,29 @@ fn split_delimited(text: &[u8], delimiter: u8) -> Vec<Vec<u8>> {
                 items.push(text[i..j].to_vec());
                 i = j;
             }
-        } else if not_first {
+        } else if after_first_item {
             items.push(Vec::new());
         }
         while i < text.len() && is_space(text[i]) {
             i += 1;
         }
-        not_first = true;
+        after_first_item = true;
     }
     items
 }
 
 /// An index found by `Iterator::position` as a TStrings index: -1 when there is none.
-fn position(index: Option<usize>) -> i32 {
+fn found_index(index: Option<usize>) -> i32 {
     index.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1)
 }
 
-/// FPC's `SListIndexError` message, raised for an out-of-bounds index.
-fn list_index_error(index: i32) -> String {
-    format!("List index ({index}) out of bounds")
-}
+/// An out-of-bounds index, with FPC's `EStringListError` message (`SListIndexError`).
+///
+/// In FMD2 this is a Pascal exception, which unwinds past Lua's `pcall` and fails the whole
+/// module call; here it becomes a Lua error, which `pcall` can catch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("List index ({0}) out of bounds")]
+pub struct ListIndexError(pub i32);
 
 /// A shareable handle to a [`StringList`] that can be exposed to Lua as a TStrings object, so a
 /// Host API object (e.g. MANGAINFO) can own a list and read back what modules put in it.
@@ -440,7 +454,7 @@ impl LuaStrings {
             // baseunits/lua/LuaStrings.pas:164-168
             .method("Delete", |lua, list: &mut StringList, index: Value| {
                 list.delete(to_index(lua, index)?)
-                    .map_err(mlua::Error::runtime)
+                    .map_err(mlua::Error::external)
             })
             // baseunits/lua/LuaStrings.pas:152-156
             .method("Sort", |_, list: &mut StringList, ()| {
@@ -453,15 +467,13 @@ impl LuaStrings {
                 Ok(())
             })
             // baseunits/lua/LuaStrings.pas:146-150, :233
-            .method("GetCount", |_, list: &mut StringList, ()| {
-                Ok(list.items.len())
-            })
+            .method("GetCount", |_, list: &mut StringList, ()| Ok(list.len()))
             .method("Get", get)
             .method("Set", |lua, list: &mut StringList, (index, item)| {
                 set(lua, list, index, item)
             })
             // baseunits/lua/LuaStrings.pas:146-150, :243
-            .read_only_property("Count", |_, list: &mut StringList| Ok(list.items.len()))
+            .read_only_property("Count", |_, list: &mut StringList| Ok(list.len()))
             // baseunits/lua/LuaStrings.pas:244
             .property("Text", get_text, set_text)
             // baseunits/lua/LuaStrings.pas:62-72, :245
@@ -536,7 +548,7 @@ fn set_text(lua: &Lua, list: &mut StringList, text: Value) -> mlua::Result<()> {
 fn get(lua: &Lua, list: &mut StringList, index: Value) -> mlua::Result<mlua::LuaString> {
     let item = list
         .get(to_index(lua, index)?)
-        .map_err(mlua::Error::runtime)?;
+        .map_err(mlua::Error::external)?;
     lua.create_string(item)
 }
 
@@ -544,7 +556,7 @@ fn get(lua: &Lua, list: &mut StringList, index: Value) -> mlua::Result<mlua::Lua
 fn set(lua: &Lua, list: &mut StringList, index: Value, item: Value) -> mlua::Result<()> {
     let index = to_index(lua, index)?;
     list.set(index, to_bytes(lua, item)?)
-        .map_err(mlua::Error::runtime)
+        .map_err(mlua::Error::external)
 }
 
 /// Converts an index argument like `lua_tointeger`: non-numbers become 0. The Pascal `Integer`
@@ -566,26 +578,12 @@ fn to_stream(value: Value) -> mlua::Result<Rc<RefCell<MemoryStream>>> {
     .ok_or_else(|| mlua::Error::runtime("expected a MemoryStream"))
 }
 
-/// Borrows a stream argument; a conflicting borrow becomes a Lua error.
-fn borrow(stream: &Rc<RefCell<MemoryStream>>) -> mlua::Result<std::cell::RefMut<'_, MemoryStream>> {
-    stream.try_borrow_mut().map_err(mlua::Error::external)
-}
-
 /// The first character of a string argument, as `String(luaToString(L, 1))[1]` takes it
 /// (baseunits/lua/LuaStrings.pas:119, :131). For an empty string that dereferences nil in
 /// FMD2, which fails the call; here it is a Lua error.
 fn first_char(lua: &Lua, value: Value) -> mlua::Result<u8> {
     to_bytes(lua, value)?.first().copied().ok_or_else(|| {
         mlua::Error::runtime("Access violation: empty string has no first character")
-    })
-}
-
-/// Converts a string argument like `luaToString` (baseunits/lua/LuaUtils.pas:206): strings and
-/// numbers convert, anything else becomes empty. Unlike FMD2, NUL bytes are kept.
-fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
-    Ok(match lua.coerce_string(value)? {
-        Some(s) => s.as_bytes().to_vec(),
-        None => Vec::new(),
     })
 }
 
