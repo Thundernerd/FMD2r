@@ -622,7 +622,7 @@ pub(crate) fn rename_options(saveto: &SaveToSettings) -> fmd_pack::RenameOptions
 
 /// A chapter's name: the chapter template with `%NUMBERING%` as four digits
 /// (mangadownloader/forms/frmMain.pas:2666-2675).
-fn chapter_name(
+pub(super) fn chapter_name(
     saveto: &SaveToSettings,
     website: &str,
     download: &NewDownload,
@@ -642,6 +642,23 @@ fn chapter_name(
     custom_rename(&saveto.chapter_rename, &ctx, &rename_options(saveto))
 }
 
+/// The manga folder's name: the manga template renamed for the download
+/// (mangadownloader/forms/frmMain.pas:2694-2703).
+pub(super) fn manga_folder(
+    saveto: &SaveToSettings,
+    website: &str,
+    download: &NewDownload,
+) -> String {
+    let ctx = RenameContext {
+        website,
+        manga: &download.title,
+        author: &download.authors,
+        artist: &download.artists,
+        ..RenameContext::default()
+    };
+    custom_rename(&saveto.manga_rename, &ctx, &rename_options(saveto))
+}
+
 /// The task's directory: the given or default download directory, plus the manga folder when
 /// generated and not already part of it, without trailing dots
 /// (mangadownloader/forms/frmMain.pas:2685-2710).
@@ -651,14 +668,7 @@ pub(crate) fn save_to(saveto: &SaveToSettings, website: &str, download: &NewDown
         dir => dir.to_owned(),
     };
     if saveto.generate_manga_folder {
-        let ctx = RenameContext {
-            website,
-            manga: &download.title,
-            author: &download.authors,
-            artist: &download.artists,
-            ..RenameContext::default()
-        };
-        let folder = custom_rename(&saveto.manga_rename, &ctx, &rename_options(saveto));
+        let folder = manga_folder(saveto, website, download);
         if !dir.contains(&folder) {
             dir = Path::new(&dir).join(folder).to_string_lossy().into_owned();
         }

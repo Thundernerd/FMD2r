@@ -35,6 +35,7 @@
 mod files;
 mod manager;
 mod page;
+mod preview;
 mod task;
 
 use std::sync::Arc;
@@ -49,6 +50,7 @@ use manager::Inner;
 pub(crate) use manager::{rename_options, save_to};
 
 pub use fmd_store::{ChapterStatus, Task, TaskChapter, TaskId, TaskStatus};
+pub use preview::{PagePlacement, SampleChapter, first_page};
 
 /// Finds a loaded module by ID.
 pub type ModuleLookup = dyn Fn(&str) -> Option<Arc<Module>> + Send + Sync;
