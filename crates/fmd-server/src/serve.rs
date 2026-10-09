@@ -88,10 +88,12 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let logs = config.logs.clone();
     let logs_dir = data_dir.join("logs");
     let rotation = LogRotation::from_settings(&settings.logs);
-    match tokio::task::spawn_blocking(move || logs.persist(&logs_dir, rotation)).await {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => tracing::warn!(target: "fmd_server", "persisting logs: {e}"),
-        Err(e) => tracing::warn!(target: "fmd_server", "persisting logs: {e}"),
+    let persisted = tokio::task::spawn_blocking(move || logs.persist(&logs_dir, rotation))
+        .await
+        .map_err(std::io::Error::other)
+        .and_then(|r| r);
+    if let Err(e) = persisted {
+        tracing::warn!(target: "fmd_server", "persisting logs: {e}");
     }
     let covers = CoverConfig::from_settings(data_dir.join("covers"), &settings.covers);
     let mut state = state

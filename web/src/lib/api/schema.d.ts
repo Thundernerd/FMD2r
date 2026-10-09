@@ -1407,13 +1407,13 @@ export interface components {
 		LogSettings: {
 			/**
 			 * Format: int32
-			 * @description Size in MiB a log file grows to before the next one is started. Minimum 1.
+			 * @description Size in MiB a log file grows to before the next one is started. 1 to 1024.
 			 * @default 10
 			 */
 			max_file_size_mb: number;
 			/**
 			 * Format: int32
-			 * @description Log files kept, the one being written included; the oldest is deleted past it. Minimum 1.
+			 * @description Log files kept, the one being written included; the oldest is deleted past it. 1 to 100.
 			 * @default 5
 			 */
 			max_files: number;

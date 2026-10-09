@@ -815,9 +815,12 @@ export function createMockBackend(): MockBackend {
 		return es;
 	};
 
+	let logsUrl: string | null = null;
 	const logsDownloadUrl = () => {
+		if (logsUrl) URL.revokeObjectURL(logsUrl);
 		const body = logs.map((line) => JSON.stringify(line)).join('\n') + '\n';
-		return URL.createObjectURL(new Blob([body], { type: 'application/x-ndjson' }));
+		logsUrl = URL.createObjectURL(new Blob([body], { type: 'application/x-ndjson' }));
+		return logsUrl;
 	};
 
 	return { fetch, eventSource, taskFilesUrl, logsDownloadUrl };

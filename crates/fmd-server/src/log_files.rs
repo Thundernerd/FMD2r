@@ -9,8 +9,9 @@ use fmd_core::settings::LogSettings;
 
 use crate::logs::LogLine;
 
-/// The file being written; older ones are `fmd2r.1.log` (newest) to `fmd2r.<max_files - 1>.log`.
-const CURRENT: &str = "fmd2r.log";
+/// Index of the file being written, `fmd2r.log`; older ones are `fmd2r.1.log` (newest) to
+/// `fmd2r.<max_files - 1>.log` (see [`file_name`]).
+const CURRENT: usize = 0;
 
 /// How big the log files grow and how many are kept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +38,8 @@ impl LogRotation {
         }
     }
 
-    fn max_files(&self) -> usize {
+    /// `max_files`, at least 1: there is always a file being written.
+    fn kept_files(&self) -> usize {
         self.max_files.max(1)
     }
 }
@@ -50,6 +52,8 @@ pub struct LogWriter {
     /// `None` only while rotating, or after a rotation failed to reopen the file.
     file: Option<File>,
     size: u64,
+    /// `open` found the current file ending in a partial line (a crash mid-write).
+    pub(crate) repaired: bool,
 }
 
 impl LogWriter {
@@ -57,8 +61,8 @@ impl LogWriter {
     /// left over from a larger setting.
     pub fn open(dir: &Path, rotation: LogRotation) -> io::Result<Self> {
         fs::create_dir_all(dir)?;
-        for (index, path) in numbered_files(dir)? {
-            if index >= rotation.max_files() {
+        for (index, path) in indexed_files(dir)? {
+            if index >= rotation.kept_files() {
                 fs::remove_file(path)?;
             }
         }
@@ -66,8 +70,9 @@ impl LogWriter {
             .create(true)
             .read(true)
             .append(true)
-            .open(dir.join(CURRENT))?;
+            .open(dir.join(file_name(CURRENT)))?;
         let mut size = file.metadata()?.len();
+        let mut repaired = false;
         // A crash can leave a partial line; end it so the next line parses.
         if size > 0 {
             let mut last = [0u8];
@@ -76,6 +81,7 @@ impl LogWriter {
             if last[0] != b'\n' {
                 file.write_all(b"\n")?;
                 size += 1;
+                repaired = true;
             }
         }
         Ok(Self {
@@ -83,12 +89,20 @@ impl LogWriter {
             rotation,
             file: Some(file),
             size,
+            repaired,
         })
     }
 
-    /// The directory written to.
-    pub fn dir(&self) -> &Path {
-        &self.dir
+    /// Every log file, oldest first, opened with its current length, so it can be read without
+    /// holding up writes: an open file stays readable when rotation renames or removes it.
+    pub(crate) fn snapshot(&self) -> io::Result<Vec<(File, u64)>> {
+        let mut files = Vec::new();
+        for path in files_oldest_first(&self.dir)? {
+            let file = File::open(path)?;
+            let len = file.metadata()?.len();
+            files.push((file, len));
+        }
+        Ok(files)
     }
 
     /// Appends `line`, rotating first when it would take the current file past the size limit.
@@ -101,7 +115,9 @@ impl LogWriter {
         }
         let file = match &mut self.file {
             Some(file) => file,
-            None => self.file.insert(append(&self.dir.join(CURRENT))?),
+            None => self
+                .file
+                .insert(append(&self.dir.join(file_name(CURRENT)))?),
         };
         file.write_all(&bytes)?;
         self.size = self.size.saturating_add(len);
@@ -111,23 +127,19 @@ impl LogWriter {
     fn rotate(&mut self) -> io::Result<()> {
         // Closed first: an open file can't be renamed on Windows.
         self.file = None;
-        let current = self.dir.join(CURRENT);
-        let max = self.rotation.max_files();
-        if max == 1 {
-            fs::remove_file(&current)?;
+        let kept = self.rotation.kept_files();
+        if kept == 1 {
+            fs::remove_file(self.dir.join(file_name(CURRENT)))?;
         }
-        for index in (1..max).rev() {
-            let from = if index == 1 {
-                current.clone()
-            } else {
-                self.dir.join(numbered(index - 1))
-            };
+        // Renaming onto the oldest kept index replaces (removes) the file there.
+        for index in (1..kept).rev() {
+            let from = self.dir.join(file_name(index - 1));
             if from.exists() {
-                fs::rename(from, self.dir.join(numbered(index)))?;
+                fs::rename(from, self.dir.join(file_name(index)))?;
             }
         }
         self.size = 0;
-        self.file = Some(append(&current)?);
+        self.file = Some(append(&self.dir.join(file_name(CURRENT)))?);
         Ok(())
     }
 }
@@ -137,36 +149,45 @@ fn append(path: &Path) -> io::Result<File> {
 }
 
 /// The log files in `dir`, oldest first.
-pub(crate) fn files(dir: &Path) -> io::Result<Vec<PathBuf>> {
-    let mut numbered = numbered_files(dir)?;
-    numbered.sort_by_key(|(index, _)| std::cmp::Reverse(*index));
-    let mut paths: Vec<PathBuf> = numbered.into_iter().map(|(_, path)| path).collect();
-    let current = dir.join(CURRENT);
-    if current.exists() {
-        paths.push(current);
-    }
-    Ok(paths)
+fn files_oldest_first(dir: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = indexed_files(dir)?;
+    files.sort_by_key(|(index, _)| std::cmp::Reverse(*index));
+    Ok(files.into_iter().map(|(_, path)| path).collect())
 }
 
-/// Every line in the log files in `dir`, oldest first, passed to `each`. Lines that don't parse
-/// (a partial line left by a crash) are skipped.
-pub(crate) fn read_lines(dir: &Path, mut each: impl FnMut(LogLine)) -> io::Result<()> {
-    for path in files(dir)? {
+/// The newest `count` (or more) lines in the log files in `dir`, oldest first, read from the
+/// newest file back, and the highest sequence number among them. Lines that don't parse (a
+/// partial line left by a crash) are skipped.
+pub(crate) fn read_tail(dir: &Path, count: usize) -> io::Result<(Vec<LogLine>, u64)> {
+    let mut tail: Vec<LogLine> = Vec::new();
+    for path in files_oldest_first(dir)?.into_iter().rev() {
+        if tail.len() >= count {
+            break;
+        }
+        let mut lines: Vec<LogLine> = Vec::new();
         for line in BufReader::new(File::open(path)?).lines() {
             if let Ok(line) = serde_json::from_str(&line?) {
-                each(line);
+                lines.push(line);
             }
         }
+        lines.append(&mut tail);
+        tail = lines;
     }
-    Ok(())
+    let last_seq = tail.iter().map(|l| l.seq).max().unwrap_or(0);
+    Ok((tail, last_seq))
 }
 
-fn numbered(index: usize) -> String {
-    format!("fmd2r.{index}.log")
+/// `fmd2r.log` for [`CURRENT`], else `fmd2r.<index>.log`.
+fn file_name(index: usize) -> String {
+    if index == CURRENT {
+        "fmd2r.log".to_owned()
+    } else {
+        format!("fmd2r.{index}.log")
+    }
 }
 
-/// The rotated files in `dir` with their index.
-fn numbered_files(dir: &Path) -> io::Result<Vec<(usize, PathBuf)>> {
+/// The log files in `dir` with their index, the inverse of [`file_name`].
+fn indexed_files(dir: &Path) -> io::Result<Vec<(usize, PathBuf)>> {
     let mut found = Vec::new();
     if !dir.exists() {
         return Ok(found);
@@ -174,11 +195,15 @@ fn numbered_files(dir: &Path) -> io::Result<Vec<(usize, PathBuf)>> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let name = entry.file_name();
-        let index = name
-            .to_str()
-            .and_then(|n| n.strip_prefix("fmd2r."))
-            .and_then(|n| n.strip_suffix(".log"))
-            .and_then(|n| n.parse::<usize>().ok());
+        let index = match name.to_str() {
+            Some("fmd2r.log") => Some(CURRENT),
+            Some(n) => n
+                .strip_prefix("fmd2r.")
+                .and_then(|n| n.strip_suffix(".log"))
+                .and_then(|n| n.parse().ok())
+                .filter(|&index| index != CURRENT),
+            None => None,
+        };
         if let Some(index) = index {
             found.push((index, entry.path()));
         }

@@ -3,9 +3,9 @@
 
 use std::collections::VecDeque;
 use std::fmt::{self, Write};
-use std::io;
+use std::io::{self, Read};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use axum::Json;
 use axum::extract::State;
@@ -71,6 +71,16 @@ struct Ring {
 }
 
 impl Ring {
+    /// Writes `line` to the log files, when persisted, and buffers it.
+    fn record(&mut self, line: LogLine) {
+        if let Some(writer) = &mut self.writer {
+            // Nowhere to report a failed write: logging it would come straight back here. The
+            // write is unbuffered so the lines before a crash are on disk.
+            let _ = writer.write(&line);
+        }
+        self.push(line);
+    }
+
     fn push(&mut self, line: LogLine) {
         if self.lines.len() == self.capacity {
             self.lines.pop_front();
@@ -98,49 +108,55 @@ impl LogBuffer {
     /// numbers continue after the persisted ones, so `since` pages forward across the restart;
     /// lines buffered before this call are renumbered after them and written too.
     pub fn persist(&self, dir: &Path, rotation: LogRotation) -> io::Result<()> {
-        let mut writer = LogWriter::open(dir, rotation)?;
-        let Ok(mut ring) = self.inner.lock() else {
-            return Err(io::Error::other("log buffer lock poisoned"));
-        };
+        let writer = LogWriter::open(dir, rotation)?;
+        let capacity = self.lock()?.capacity;
+        // Read before touching the ring, so a failed read leaves it as it was.
+        let (tail, mut last_seq) = log_files::read_tail(dir, capacity)?;
+        if writer.repaired {
+            // The partial line was the newest; its sequence number may have been seen.
+            last_seq += 1;
+        }
+        let mut ring = self.lock()?;
         let pending: Vec<LogLine> = ring.lines.drain(..).collect();
-        let mut last_seq = 0;
-        log_files::read_lines(dir, |line| {
-            last_seq = last_seq.max(line.seq);
+        for line in tail {
             ring.push(line);
-        })?;
+        }
         ring.next_seq = last_seq + 1;
+        ring.writer = Some(writer);
         for mut line in pending {
             line.seq = ring.next_seq;
             ring.next_seq += 1;
-            writer.write(&line)?;
-            ring.push(line);
+            ring.record(line);
         }
-        ring.writer = Some(writer);
         Ok(())
     }
 
     /// The persisted log files concatenated, oldest line first (JSON lines); the buffered lines
     /// in the same format when the log isn't persisted.
     pub fn export(&self) -> io::Result<Vec<u8>> {
-        let Ok(ring) = self.inner.lock() else {
-            return Err(io::Error::other("log buffer lock poisoned"));
-        };
         let mut out = Vec::new();
-        match &ring.writer {
-            // Read under the lock so no rotation renames a file halfway through.
-            Some(writer) => {
-                for path in log_files::files(writer.dir())? {
-                    out.extend(std::fs::read(path)?);
-                }
-            }
-            None => {
+        let files = {
+            let ring = self.lock()?;
+            let Some(writer) = &ring.writer else {
                 for line in &ring.lines {
                     serde_json::to_writer(&mut out, line).map_err(io::Error::other)?;
                     out.push(b'\n');
                 }
-            }
+                return Ok(out);
+            };
+            writer.snapshot()?
+        };
+        // Read outside the lock, up to each file's length at the snapshot, so logging goes on.
+        for (file, len) in files {
+            file.take(len).read_to_end(&mut out)?;
         }
         Ok(out)
+    }
+
+    fn lock(&self) -> io::Result<MutexGuard<'_, Ring>> {
+        self.inner
+            .lock()
+            .map_err(|_| io::Error::other("log buffer lock poisoned"))
     }
 
     /// The bus new lines are published on.
@@ -186,11 +202,7 @@ impl LogBuffer {
                 message,
             };
             ring.next_seq += 1;
-            if let Some(writer) = &mut ring.writer {
-                // Nowhere to report a failed write: logging it would come straight back here.
-                let _ = writer.write(&line);
-            }
-            ring.push(line.clone());
+            ring.record(line.clone());
             line
         };
         // Debug and trace lines stay in the buffer: streaming them could crowd task and inbox

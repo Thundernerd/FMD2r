@@ -228,14 +228,14 @@ export const SETTINGS_SECTIONS: Section[] = [
 				'logs.max_file_size_mb',
 				'Log file size (MiB)',
 				1,
-				U32_MAX,
+				1024,
 				'Takes effect after a restart.'
 			),
 			number(
 				'logs.max_files',
 				'Log files kept',
 				1,
-				U32_MAX,
+				100,
 				'The oldest is deleted past this. Takes effect after a restart.'
 			)
 		]

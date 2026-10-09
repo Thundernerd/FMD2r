@@ -536,11 +536,11 @@ impl Default for CoverSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(default)]
 pub struct LogSettings {
-    /// Size in MiB a log file grows to before the next one is started. Minimum 1.
-    #[schema(minimum = 1)]
+    /// Size in MiB a log file grows to before the next one is started. 1 to 1024.
+    #[schema(minimum = 1, maximum = 1024)]
     pub max_file_size_mb: u32,
-    /// Log files kept, the one being written included; the oldest is deleted past it. Minimum 1.
-    #[schema(minimum = 1)]
+    /// Log files kept, the one being written included; the oldest is deleted past it. 1 to 100.
+    #[schema(minimum = 1, maximum = 100)]
     pub max_files: u32,
 }
 

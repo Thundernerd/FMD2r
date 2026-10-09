@@ -30,9 +30,13 @@ struct Run {
 }
 
 fn start(logs_dir: &Path) -> Run {
+    start_with(logs_dir, 100, ROTATION)
+}
+
+fn start_with(logs_dir: &Path, capacity: usize, rotation: LogRotation) -> Run {
     let db_dir = tempfile::tempdir().unwrap();
-    let logs = LogBuffer::new(100, EventBus::new());
-    logs.persist(logs_dir, ROTATION).unwrap();
+    let logs = LogBuffer::new(capacity, EventBus::new());
+    logs.persist(logs_dir, rotation).unwrap();
     let db = AppDb::open(db_dir.path().join("app.db")).unwrap();
     let state = AppState::new(db).unwrap().with_logs(logs.clone());
     Run {
@@ -107,6 +111,55 @@ async fn since_pages_forward_across_a_restart() {
     assert_eq!(messages(&next), ["three", "four"]);
     let page = get_json(&after.state, "/api/logs?since=0&limit=3").await;
     assert_eq!(messages(&page), ["one", "two", "three"]);
+}
+
+#[tokio::test]
+async fn the_tail_after_a_restart_spans_rotated_files() {
+    let dir = tempfile::tempdir().unwrap();
+    // About two lines per file, so ten lines span several files.
+    let rotation = LogRotation {
+        max_file_bytes: 300,
+        max_files: 10,
+    };
+    let before = start_with(dir.path(), 100, rotation);
+    emit_logs(&before.logs, || {
+        for n in 1..=10 {
+            tracing::info!("line {n}");
+        }
+    });
+    drop(before);
+
+    let after = start_with(dir.path(), 5, rotation);
+    let lines = get_json(&after.state, "/api/logs").await;
+    assert_eq!(
+        messages(&lines),
+        ["line 6", "line 7", "line 8", "line 9", "line 10"]
+    );
+}
+
+#[tokio::test]
+async fn a_line_cut_off_by_a_crash_keeps_its_sequence_number_retired() {
+    let dir = tempfile::tempdir().unwrap();
+    let before = start(dir.path());
+    emit_logs(&before.logs, || {
+        tracing::info!("one");
+        tracing::info!("two");
+    });
+    drop(before);
+    // The process died while writing line 3, after a client could have seen it.
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(dir.path().join("fmd2r.log"))
+        .unwrap();
+    std::io::Write::write_all(&mut file, br#"{"seq":3,"time":"2026-10-"#).unwrap();
+    drop(file);
+
+    let after = start(dir.path());
+    emit_logs(&after.logs, || tracing::info!("three"));
+    let next = get_json(&after.state, "/api/logs?since=3").await;
+    assert_eq!(messages(&next), ["three"]);
+    let all = get_json(&after.state, "/api/logs").await;
+    assert_eq!(messages(&all), ["one", "two", "three"]);
 }
 
 #[tokio::test]
