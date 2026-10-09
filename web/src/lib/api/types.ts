@@ -1,4 +1,4 @@
-import type { components } from './schema';
+import type { components, paths } from './schema';
 
 type Schemas = components['schemas'];
 
@@ -54,3 +54,6 @@ export type FavoriteView = Schemas['FavoriteView'];
 export type FavoritePatch = Schemas['FavoritePatch'];
 export type FavoritesEvent = Schemas['FavoritesEvent'];
 export type FavoritesEventKind = Schemas['FavoritesEventKind'];
+export type ImportReport = Schemas['ImportReport'];
+export type SourceReport = Schemas['SourceReport'];
+export type ImportOptions = NonNullable<paths['/api/import']['post']['parameters']['query']>;

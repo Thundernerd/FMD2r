@@ -233,6 +233,12 @@ impl DownloadManager {
         self.blocking(move |inner| inner.stop(id)).await
     }
 
+    /// `CheckAndActiveTask` (baseunits/uDownloadsManager.pas:1784-1833): starts waiting tasks
+    /// while there are free slots, e.g. tasks queued straight into `app.db` by an import.
+    pub async fn activate_waiting(&self) -> Result<(), EngineError> {
+        self.blocking(Inner::check_and_active_task).await
+    }
+
     /// `StartAllTasks` (baseunits/uDownloadsManager.pas:1922-1941).
     pub async fn start_all(&self) -> Result<(), EngineError> {
         self.blocking(Inner::start_all).await

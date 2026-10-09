@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use fmd_import::{ImportOptions, ImportReport};
+use fmd_import::{ImportOptions, ImportReport, TimeZone};
 use fmd_store::{AppDb, KeyFileCipher};
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
@@ -234,8 +234,15 @@ impl App {
         self.dir.path().to_path_buf()
     }
 
+    /// Imports with FMD2's timestamps read as UTC.
     pub fn import(&self, fmd2: &Fmd2) -> ImportReport {
-        self.import_with(fmd2, &ImportOptions::default())
+        self.import_with(
+            fmd2,
+            &ImportOptions {
+                timezone: TimeZone::UTC,
+                ..ImportOptions::default()
+            },
+        )
     }
 
     pub fn import_with(&self, fmd2: &Fmd2, opts: &ImportOptions) -> ImportReport {

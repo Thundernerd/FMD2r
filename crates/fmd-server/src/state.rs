@@ -16,6 +16,7 @@ use crate::ApiError;
 use crate::auth::Auth;
 use crate::covers::{CoverConfig, CoverModules, Covers};
 use crate::events::{EventBus, ServerEvent};
+use crate::import::{ImportJob, ImportLimits};
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
 use crate::series::InfoCache;
@@ -46,6 +47,8 @@ pub struct AppState {
     pub(crate) list_jobs: Option<ListJobs>,
     pub(crate) favorites: Option<Arc<dyn FavoritesJobs>>,
     pub(crate) data_dir: Option<PathBuf>,
+    pub(crate) import_limits: ImportLimits,
+    pub(crate) import_job: ImportJob,
     pub(crate) started: Instant,
     pub(crate) clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
@@ -73,6 +76,8 @@ impl AppState {
             list_jobs: None,
             favorites: None,
             data_dir: None,
+            import_limits: ImportLimits::default(),
+            import_job: ImportJob::default(),
             started: Instant::now(),
             clock: Arc::new(SystemTime::now),
             shutdown: Arc::new(watch::channel(false).0),
@@ -206,6 +211,12 @@ impl AppState {
     /// Reports `dir` and the sizes of the databases in it in `GET /api/about`.
     pub fn with_data_dir(mut self, dir: impl AsRef<Path>) -> Self {
         self.data_dir = Some(dir.as_ref().to_owned());
+        self
+    }
+
+    /// Caps the size of `POST /api/import` uploads (instead of [`ImportLimits::default`]).
+    pub fn with_import_limits(mut self, limits: ImportLimits) -> Self {
+        self.import_limits = limits;
         self
     }
 

@@ -1,5 +1,6 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
 import { createMockFavorites } from './mock-favorites';
+import { mockImportReport } from './mock-import';
 import { createMockLists } from './mock-lists';
 import { Invalid, createMockSettings } from './mock-settings';
 import type { paths } from './schema';
@@ -543,6 +544,50 @@ export function createMockBackend({
 		}
 	};
 
+	/** The `import` job, listed once an import ran, as fmd-server registers it. */
+	const importJob: JobState = {
+		id: 'import',
+		title: 'Import from FMD2',
+		state: 'idle',
+		done: 0,
+		total: 5,
+		last_run: null,
+		next_run: null,
+		last_error: null
+	};
+	/**
+	 * `POST /api/import`: anything starting like a zip is the mock's FMD2 userdata; an import adds
+	 * its favorite, One Piece, to the library.
+	 */
+	const importUserdata = async (req: Request, query: URLSearchParams): Promise<Response> => {
+		if (importJob.state === 'running') {
+			return json({ status: 409, detail: 'job is already running' }, 409);
+		}
+		const zip = new Uint8Array(await req.arrayBuffer());
+		if (zip[0] !== 0x50 || zip[1] !== 0x4b) {
+			return json({ status: 400, detail: 'not a zip file: invalid Zip archive' }, 400);
+		}
+		const zone = query.get('timezone');
+		if (zone && !Intl.supportedValuesOf('timeZone').includes(zone)) {
+			return json({ status: 422, detail: `unknown time zone "${zone}"`, field: 'timezone' }, 422);
+		}
+		if (!jobs.includes(importJob)) jobs.push(importJob);
+		Object.assign(importJob, { state: 'running', done: 0, last_run: new Date().toISOString() });
+		broadcast('job.state', importJob);
+		for (let step = 1; step <= importJob.total; step++) {
+			await new Promise((resolve) => setTimeout(resolve, 150));
+			importJob.done = step;
+			broadcast('job.state', importJob);
+		}
+		const dryRun = query.get('dry_run') === 'true';
+		const onePiece = series('mangadex', '/title/op/one-piece');
+		const exists = favorites.has('mangadex', '/title/op/one-piece');
+		if (!dryRun && onePiece && !exists) favorites.add(onePiece, 'MangaDex');
+		importJob.state = 'done';
+		broadcast('job.state', importJob);
+		return json(mockImportReport(dryRun, query.getAll('map_path'), exists));
+	};
+
 	const fetch = async (req: Request): Promise<Response> => {
 		const { pathname, searchParams } = new URL(req.url);
 		const route = `${req.method} ${pathname}`;
@@ -663,6 +708,7 @@ export function createMockBackend({
 				? new Response(null, { status: 202 })
 				: json({ status: 409, detail: 'a favorites check is already running' }, 409);
 		}
+		if (route === 'POST /api/import') return importUserdata(req, searchParams);
 		if (route === 'GET /api/logs') return json(logs);
 		if (route === 'GET /api/jobs') return json(jobs);
 		if (route === 'GET /api/settings') return json(settings.getSettings());

@@ -8,6 +8,8 @@ import type {
 	FavoritePatch,
 	FavoriteView,
 	Health,
+	ImportOptions,
+	ImportReport,
 	InboxItem,
 	JobState,
 	ListFacets,
@@ -158,6 +160,13 @@ export interface Api {
 	deleteAccount(module: string): Promise<void>;
 	/** Logs in; resolves once the module's login is done. Rejects with 409 while one runs. */
 	loginAccount(module: string): Promise<AccountInfo>;
+	/**
+	 * Imports a zipped FMD2 `userdata` folder (with `dry_run`, only reports what it would import).
+	 * Resolves once done; progress follows as `job.state` events of the `import` job. Rejects with
+	 * an {@link ApiError} carrying the server's reason: 400 for a bad zip, 409 while an import
+	 * runs, 413 when the zip is too large, 422 for a bad path map or time zone.
+	 */
+	importFmd2(zip: Blob, options: ImportOptions): Promise<ImportReport>;
 }
 
 /** What a task's action buttons do (`POST /api/tasks/{id}/<action>`). */
@@ -448,6 +457,21 @@ export function createApi({
 				'loginAccount',
 				await client.POST('/api/accounts/{module}/login', { params: { path: { module } } })
 			);
+		},
+		async importFmd2(zip, options) {
+			const res = await client.POST('/api/import', {
+				params: { query: options },
+				// The body is the zip itself, sent as is.
+				body: zip as unknown as string,
+				bodySerializer: (body) => body,
+				headers: { 'content-type': 'application/zip' }
+			});
+			if (!res.response.ok || res.data === undefined) {
+				// Every error here is a `Problem`.
+				const problem = res.error as Partial<Problem> | undefined;
+				throw new ApiError(res.response.status, 'importFmd2', problem?.detail ?? null);
+			}
+			return res.data;
 		}
 	};
 }

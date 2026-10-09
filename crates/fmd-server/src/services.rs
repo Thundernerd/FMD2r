@@ -54,6 +54,12 @@ pub trait DownloadEngine: Send + Sync + 'static {
     /// Puts `ids` first in the queue, in that order.
     fn reorder(&self, ids: Vec<TaskId>) -> BoxFuture<'_, Result<(), EngineError>>;
 
+    /// Starts waiting tasks while there are free slots (`CheckAndActiveTask`,
+    /// baseunits/uDownloadsManager.pas:1784-1833), e.g. the ones an import queued.
+    fn activate_waiting(&self) -> BoxFuture<'_, Result<(), EngineError>> {
+        Box::pin(std::future::ready(Ok(())))
+    }
+
     /// The engine's events from now on; `None` when it has none.
     fn subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>> {
         None
@@ -100,6 +106,10 @@ impl DownloadEngine for DownloadManager {
 
     fn disable(&self, id: TaskId) -> BoxFuture<'_, Result<(), EngineError>> {
         Box::pin(DownloadManager::disable(self, id))
+    }
+
+    fn activate_waiting(&self) -> BoxFuture<'_, Result<(), EngineError>> {
+        Box::pin(DownloadManager::activate_waiting(self))
     }
 
     fn start_all(&self) -> BoxFuture<'_, Result<(), EngineError>> {
