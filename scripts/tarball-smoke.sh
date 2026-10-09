@@ -5,6 +5,7 @@
 #
 # Usage: scripts/tarball-smoke.sh TARBALL [LUA_DIR]   (default LUA_DIR: fixtures/lua)
 # FMD2R_RUNNER prefixes each fmd2r command, e.g. FMD2R_RUNNER='qemu-aarch64 -L /usr/aarch64-linux-gnu'.
+# With FMD2R_EXPECT_VERSION set (a leading `v` is dropped), `fmd2r --version` must print it.
 set -eu
 
 tarball=$1
@@ -31,7 +32,12 @@ lib=$(find "$dir" -name 'libfmdxpath*')
 
 echo "fmd2r --version"
 # shellcheck disable=SC2086 # the runner is a command line
-$runner "$root/fmd2r" --version || fail "fmd2r --version"
+reported=$($runner "$root/fmd2r" --version) || fail "fmd2r --version"
+echo "$reported"
+if [ -n "${FMD2R_EXPECT_VERSION:-}" ]; then
+  [ "$reported" = "fmd2r ${FMD2R_EXPECT_VERSION#v}" ] ||
+    fail "fmd2r --version printed '$reported', not version ${FMD2R_EXPECT_VERSION#v}"
+fi
 
 echo "fmd2r module init loads the bundled modules"
 # shellcheck disable=SC2086

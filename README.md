@@ -97,6 +97,10 @@ QEMU), pushes it to GHCR as `<version>`, `<major>.<minor>` and `latest` (pre-rel
 `fmd2r-<tag>-aarch64-linux-gnu.tar.gz` (the binary, built on Ubuntu 22.04 so it needs glibc 2.35
 or newer; each smoke-tested with `scripts/tarball-smoke.sh`) and their `SHA256SUMS`.
 
+The tag sets the version: before building, `scripts/set-version.sh` writes it into `Cargo.toml` and
+`Cargo.lock`, so `fmd2r --version` and `GET /api/about` report it without a version bump on main,
+and the smoke tests check that they do.
+
 ## CI
 
 The workflows in `.github/workflows` are set up for fast feedback on PRs: a new push to a PR

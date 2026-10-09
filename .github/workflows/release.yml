@@ -14,6 +14,8 @@ on:
   pull_request:
     paths:
       - .github/workflows/release.yml
+      - scripts/docker-smoke.sh
+      - scripts/set-version.sh
       - scripts/tarball-smoke.sh
   workflow_dispatch:
 
@@ -23,6 +25,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # The version every build reports, from the tag. Dry runs use a placeholder, so the stamping and
+  # its smoke checks run on them too.
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.0-dryrun' }}
 
 jobs:
   image:
@@ -32,6 +37,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      # Cargo.toml's version on main is not bumped per release: the tag sets it.
+      - name: Set the version from the tag
+        run: scripts/set-version.sh "$VERSION"
       - uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
@@ -62,7 +70,7 @@ jobs:
           cache-from: type=gha,scope=amd64
           cache-to: type=gha,mode=max,scope=amd64
       - name: Smoke test (amd64)
-        run: scripts/docker-smoke.sh fmd2r:smoke-amd64
+        run: FMD2R_EXPECT_VERSION="$VERSION" scripts/docker-smoke.sh fmd2r:smoke-amd64
       - name: Build (arm64)
         uses: docker/build-push-action@v6
         with:
@@ -74,7 +82,7 @@ jobs:
           cache-from: type=gha,scope=arm64
           cache-to: type=gha,mode=max,scope=arm64
       - name: Smoke test (arm64, under QEMU)
-        run: scripts/docker-smoke.sh fmd2r:smoke-arm64
+        run: FMD2R_EXPECT_VERSION="$VERSION" scripts/docker-smoke.sh fmd2r:smoke-arm64
       # Same inputs as the builds above, so every layer comes from the cache.
       - name: Push
         if: github.ref_type == 'tag'
@@ -107,6 +115,9 @@ jobs:
       AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
     steps:
       - uses: actions/checkout@v4
+      # Cargo.toml's version on main is not bumped per release: the tag sets it.
+      - name: Set the version from the tag
+        run: scripts/set-version.sh "$VERSION"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -134,7 +145,7 @@ jobs:
       - name: Smoke test
         env:
           FMD2R_RUNNER: ${{ matrix.cross && 'qemu-aarch64 -L /usr/aarch64-linux-gnu' || '' }}
-        run: scripts/tarball-smoke.sh dist/*.tar.gz
+        run: FMD2R_EXPECT_VERSION="$VERSION" scripts/tarball-smoke.sh dist/*.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: tarball-${{ matrix.arch }}
