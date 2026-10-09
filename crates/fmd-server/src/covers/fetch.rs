@@ -2,7 +2,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use fmd_http::HttpError;
+use fmd_http::{ConnectTo, HttpError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -126,6 +126,7 @@ pub(crate) fn fetch(
 /// (a module for a site on the LAN may fetch its covers there). Returns the checked address to
 /// connect to when the host is a name, so a DNS server that answers differently the second time
 /// (DNS rebinding) cannot send the request elsewhere, and the host is looked up once per request.
+/// The module's own host is neither checked nor pinned: it may resolve to anything anyway.
 ///
 /// With a proxy set on the module's session the proxy resolves and connects, so the guard then
 /// only checks where the proxy is asked to go, not where it ends up.
@@ -133,7 +134,7 @@ fn guard(
     resolver: &dyn CoverResolver,
     url: &Url,
     root: Option<&Url>,
-) -> Result<Option<SocketAddr>, FetchError> {
+) -> Result<Option<ConnectTo>, FetchError> {
     if !matches!(url.scheme(), "http" | "https") {
         return Err(FetchError::Forbidden(format!("not an http(s) URL: {url}")));
     }
@@ -154,10 +155,13 @@ fn guard(
             let addrs = resolver
                 .resolve(domain, port)
                 .map_err(|e| FetchError::Upstream(format!("cannot resolve {domain}: {e}")))?;
-            let Some(first) = addrs.first() else {
+            let Some(&addr) = addrs.first() else {
                 return Err(FetchError::Upstream(format!("{domain} has no address")));
             };
-            let pin = SocketAddr::new(first.ip(), port);
+            let pin = ConnectTo {
+                host: domain.to_owned(),
+                addr,
+            };
             (addrs.iter().map(SocketAddr::ip).collect(), Some(pin))
         }
     };

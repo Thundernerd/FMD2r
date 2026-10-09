@@ -143,13 +143,17 @@ struct Harness {
 }
 
 fn harness(cache: &Path, sites: &[(&str, &str)], config: impl FnOnce(&mut CoverConfig)) -> Harness {
+    harness_with(cache, modules(sites), config)
+}
+
+fn harness_with(cache: &Path, modules: Modules, config: impl FnOnce(&mut CoverConfig)) -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let db = AppDb::open(dir.path().join("app.db")).unwrap();
     let mut cfg = CoverConfig::new(cache);
     config(&mut cfg);
     Harness {
         _dir: dir,
-        state: AppState::new(db).unwrap().with_covers(cfg, modules(sites)),
+        state: AppState::new(db).unwrap().with_covers(cfg, modules),
     }
 }
 
@@ -435,7 +439,13 @@ impl RebindingDns {
         })
     }
 
-    fn lookup(&self, host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
+    fn lookups(&self) -> usize {
+        self.lookups.lock().unwrap().len()
+    }
+}
+
+impl CoverResolver for RebindingDns {
+    fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
         let mut lookups = self.lookups.lock().unwrap();
         let first = !lookups.iter().any(|h| h == host);
         lookups.push(host.to_owned());
@@ -446,24 +456,27 @@ impl RebindingDns {
         };
         Ok(vec![SocketAddr::new(ip, port)])
     }
-
-    fn lookups(&self) -> usize {
-        self.lookups.lock().unwrap().len()
-    }
 }
 
-impl CoverResolver for RebindingDns {
-    fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
-        self.lookup(host, port)
-    }
-}
-
-/// A network that records where each request connected: to the request's pinned address, or
-/// else wherever the DNS answers now. It serves `redirects` (path → location), then the cover.
+/// A network that records where each request connected: to the pinned address when the pin is
+/// for the request's host, or else wherever the DNS answers now. It serves `redirects` (path → location), then the cover.
 struct Network {
     dns: Arc<RebindingDns>,
     redirects: HashMap<String, String>,
     connected: Mutex<Vec<(String, SocketAddr)>>,
+}
+
+impl Network {
+    fn new(dns: Arc<RebindingDns>, redirects: &[(&str, &str)]) -> Arc<Self> {
+        Arc::new(Self {
+            dns,
+            redirects: redirects
+                .iter()
+                .map(|(path, location)| (path.to_string(), location.to_string()))
+                .collect(),
+            connected: Mutex::default(),
+        })
+    }
 }
 
 impl Transport for Network {
@@ -472,11 +485,14 @@ impl Transport for Network {
         request: WireRequest,
     ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
         let url = url::Url::parse(&request.url).unwrap();
-        let addr = match request.connect_to {
-            Some(addr) => addr,
+        let addr = match request
+            .connect_to
+            .filter(|pin| pin.applies_to(&request.url))
+        {
+            Some(pin) => pin.addr,
             None => self
                 .dns
-                .lookup(
+                .resolve(
                     url.host_str().unwrap(),
                     url.port_or_known_default().unwrap(),
                 )
@@ -504,32 +520,22 @@ impl Transport for Network {
     }
 }
 
-/// One module `site` on `http://site.test`, fetching over `network` and resolving with `dns`.
+/// One module `site` on `http://site.test`, fetching over `network` and resolving with its DNS.
 fn rebinding_harness(cache: &Path, network: Arc<Network>) -> Harness {
-    let dir = tempfile::tempdir().unwrap();
-    let db = AppDb::open(dir.path().join("app.db")).unwrap();
-    let mut cfg = CoverConfig::new(cache);
-    cfg.resolver = network.dns.clone();
+    let dns = network.dns.clone();
     let client = HttpClient::with_transport(network).unwrap();
     let http = client.module("site");
     let modules = Modules {
         client,
         modules: HashMap::from([("site".into(), ("http://site.test".into(), http))]),
     };
-    Harness {
-        _dir: dir,
-        state: AppState::new(db).unwrap().with_covers(cfg, modules),
-    }
+    harness_with(cache, modules, |c| c.resolver = dns)
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_rebinding_host_is_fetched_from_the_checked_address() {
     let dns = RebindingDns::new(&[("rebind.test", [93, 184, 216, 34])]);
-    let network = Arc::new(Network {
-        dns: dns.clone(),
-        redirects: HashMap::new(),
-        connected: Mutex::default(),
-    });
+    let network = Network::new(dns.clone(), &[]);
     let cache = tempfile::tempdir().unwrap();
     let h = rebinding_harness(cache.path(), network.clone());
 
@@ -557,15 +563,14 @@ async fn every_redirect_hop_is_fetched_from_its_checked_address() {
         ("cdn.test", [93, 184, 216, 35]),
         ("site.test", [203, 0, 113, 10]),
     ]);
-    let network = Arc::new(Network {
-        dns: dns.clone(),
-        redirects: HashMap::from([
-            ("/a.png".into(), "http://cdn.test/b.png".into()),
+    let network = Network::new(
+        dns.clone(),
+        &[
+            ("/a.png", "http://cdn.test/b.png"),
             // The module's own host is trusted, so it is resolved when connecting, unpinned.
-            ("/b.png".into(), "http://site.test/c.png".into()),
-        ]),
-        connected: Mutex::default(),
-    });
+            ("/b.png", "http://site.test/c.png"),
+        ],
+    );
     let cache = tempfile::tempdir().unwrap();
     let h = rebinding_harness(cache.path(), network.clone());
 
