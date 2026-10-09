@@ -1,12 +1,6 @@
-//! FMD2 userdata importer (`downloads.db`, `favorites.db`, `downloadedchapters.db`, `modules.json`,
-//! `settings.json`).
-//!
-//! [`import`] reads an FMD2 `userdata` directory (file names from baseunits/FMDOptions.pas:288-295)
-//! and writes its state into an FMD2r `app.db`. It is idempotent: rows already in the store are
-//! skipped and listed in the [`ImportReport`]. With [`ImportOptions::dry_run`] nothing is written
-//! and the report says what would be imported. Downloaded files are not copied.
-//!
-//! FMD2 stores dates as local time without a zone; they are read in [`ImportOptions::timezone`].
+//! FMD2 `userdata` importer into an FMD2r `app.db` (file names from
+//! baseunits/FMDOptions.pas:288-295). Idempotent: rows already in the store are skipped and
+//! reported. Downloaded files are not copied.
 
 mod downloaded_chapters;
 mod downloads;
@@ -45,11 +39,9 @@ pub struct ImportOptions {
     pub timezone: TimeZone,
 }
 
-/// Imports the FMD2 `userdata` directory at `userdata` into `db`. Account credentials are
-/// decrypted with FMD2's `DecryptString` and stored encrypted with `cipher`.
-///
-/// A missing source file is reported as not found; an unreadable one stops the import with an
-/// error (sources imported before it stay imported).
+/// Account credentials are decrypted with FMD2's `DecryptString` and stored encrypted with
+/// `cipher`. A missing source file is reported as not found; an unreadable one stops the import
+/// (sources imported before it stay imported).
 pub fn import(
     userdata: &Path,
     db: &AppDb,
@@ -67,8 +59,8 @@ pub struct ImportProgress {
     pub total: u64,
 }
 
-/// [`import`] into a running app: settings are applied through `settings`, the service the app
-/// reads them from, and `progress` hears after each source.
+/// [`import`] into a running app: settings go through the app's live `settings` service, and
+/// `progress` is called after each source.
 pub fn import_into(
     userdata: &Path,
     db: &AppDb,

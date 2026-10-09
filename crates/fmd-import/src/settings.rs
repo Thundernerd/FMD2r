@@ -3,7 +3,7 @@
 //! Format: a `TJSONIniFile` (baseunits/FMDOptions.pas:242): one object per section, one value per
 //! key. The keys, their meaning and FMD2's defaults are in `TMainForm.LoadOptions`
 //! (mangadownloader/forms/frmMain.pas:5803-5980); the language is read at :6896-6897. Each key is
-//! applied as its own settings update, so an invalid value skips only that key.
+//! its own settings update, so an invalid value skips only that key.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -372,7 +372,7 @@ pub(crate) fn import(
 
     let scratch;
     let service = if opts.dry_run {
-        // Validate against a throwaway copy of the current settings.
+        // Validate against a throwaway copy.
         scratch = SettingsService::load(AppDb::open(":memory:")?)?;
         scratch.update(serde_json::to_value(&*live.get()).map_err(SettingsError::from)?)?;
         &scratch

@@ -89,11 +89,9 @@ pub(crate) fn sql_bool(value: ValueRef<'_>) -> bool {
     }
 }
 
-/// Milliseconds since 1970-01-01 on FMD2's local clock (see [`wall_clock_to_utc`]) of a DATETIME column, or `None` when it is empty, unreadable or FMD2's zero
-/// date (`TDateTime` 0, 1899-12-30).
-///
-/// FMD2 writes `'YYYY-MM-DD hh:nn:ss.zzz'` (`PrepSQLValue`, baseunits/SQLiteData.pas:159-167);
-/// a number is read as a `TDateTime` (days since 1899-12-30).
+/// A DATETIME column as milliseconds since 1970-01-01 on FMD2's local clock, or `None` when empty,
+/// unreadable or FMD2's zero date (`TDateTime` 0). FMD2 writes `'YYYY-MM-DD hh:nn:ss.zzz'`
+/// (`PrepSQLValue`, baseunits/SQLiteData.pas:159-167); a number is read as a `TDateTime`.
 pub(crate) fn datetime(value: ValueRef<'_>) -> Option<i64> {
     match value {
         ValueRef::Text(t) => parse_iso_datetime(std::str::from_utf8(t).ok()?.trim()),
@@ -103,8 +101,7 @@ pub(crate) fn datetime(value: ValueRef<'_>) -> Option<i64> {
     }
 }
 
-/// Unix milliseconds of a wall-clock time read by [`datetime`] or [`parse_datetime_text`], in
-/// the zone FMD2 ran in.
+/// Converts a wall-clock time from [`datetime`] or [`parse_datetime_text`] to Unix milliseconds.
 pub(crate) fn wall_clock_to_utc(wall_clock: Option<i64>, opts: &ImportOptions) -> Option<i64> {
     opts.timezone.to_utc(wall_clock?)
 }
@@ -138,7 +135,7 @@ pub(crate) fn parse_iso_datetime(s: &str) -> Option<i64> {
     };
     let days = days_from_civil(y, mo, day)?;
     if days == -25_569 && ms == 0 {
-        // FMD2's zero date.
+        // FMD2's zero date, 1899-12-30.
         return None;
     }
     Some(days * 86_400_000 + ms)
@@ -186,10 +183,9 @@ pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> Option<i64> {
     Some(era * 146_097 + doe - 719_468)
 }
 
-/// Milliseconds since 1970-01-01 on FMD2's local clock of a `TDateTime` written as text by `DateTimeToStr`, whose date format
-/// follows the Windows locale FMD2 ran under: ISO `YYYY-MM-DD`, or `D-M-YYYY`/`D.M.YYYY` and
-/// `M/D/YYYY` (swapped when the first field cannot be the month), each optionally followed by a
-/// time. A plain number is a `TDateTime`.
+/// A `TDateTime` written by `DateTimeToStr`, as milliseconds on FMD2's local clock. The date
+/// format follows FMD2's Windows locale: ISO, `D-M-YYYY`/`D.M.YYYY` or `M/D/YYYY` (swapped when the
+/// first field cannot be the month), optionally followed by a time. A plain number is a `TDateTime`.
 pub(crate) fn parse_datetime_text(s: &str) -> Option<i64> {
     let s = s.trim();
     if let Some(ms) = parse_iso_datetime(s) {

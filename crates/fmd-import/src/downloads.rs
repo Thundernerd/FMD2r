@@ -24,7 +24,6 @@ use crate::fmd2::{
 use crate::paths::translate;
 use crate::report::{ImportReport, SkipReason};
 
-/// One `downloads` row, decoded.
 struct Download {
     enabled: bool,
     taskstatus: i64,
@@ -195,7 +194,6 @@ fn read(conn: &rusqlite::Connection) -> rusqlite::Result<Vec<Download>> {
     rows.collect()
 }
 
-/// The (module id, link) of every task in `downloads.db`.
 pub(crate) fn keys(path: &Path) -> Result<Vec<(String, String)>, ImportError> {
     let Some(conn) = open_db(path)? else {
         return Ok(Vec::new());
@@ -217,7 +215,7 @@ pub(crate) fn import(
     report.tasks.found = true;
     let downloads = read(&conn).map_err(|e| sqlite_error(path, e))?;
 
-    // A task is the same task when module, link and the time it was added match.
+    // Identity: module, link and date added.
     let mut existing: HashSet<(String, String, i64)> = db
         .tasks()
         .list()?

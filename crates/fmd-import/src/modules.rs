@@ -29,7 +29,6 @@ use crate::report::{ImportReport, SkipReason, Unmapped};
 
 const SOURCE: &str = "modules.json";
 
-/// The parsed `modules.json`, or `None` when there is none.
 pub(crate) fn read(path: &Path) -> Result<Option<Vec<Map<String, Value>>>, ImportError> {
     let entries: Option<Vec<Value>> = read_json(path)?;
     Ok(entries.map(|entries| {
@@ -48,8 +47,7 @@ pub(crate) fn module_ids(entries: &[Map<String, Value>]) -> impl Iterator<Item =
     entries.iter().map(|e| string(get(e, "ID")))
 }
 
-/// A property by name, also matched case-insensitively in case a hand-edited file changed the
-/// spelling.
+/// Falls back to a case-insensitive match, for hand-edited files.
 fn get<'a>(object: &'a Map<String, Value>, name: &str) -> Option<&'a Value> {
     object.get(name).or_else(|| {
         object
@@ -77,8 +75,8 @@ fn limit(value: Option<&Value>) -> u32 {
         .unwrap_or(0)
 }
 
-/// An enumerated property: `TJSONStreamer` writes its identifier, an integer stream its ordinal.
-/// Returns the ordinal within `names`.
+/// The ordinal of an enum property: `TJSONStreamer` writes its identifier, an integer stream its
+/// ordinal.
 fn enumerated(value: Option<&Value>, names: &[&str]) -> Option<usize> {
     match value {
         Some(Value::String(s)) => names.iter().position(|n| n.eq_ignore_ascii_case(s)),
@@ -259,9 +257,8 @@ pub(crate) fn import(
                     .collect()
             })
             .unwrap_or_default();
-        // FMD2 writes every installed module; those with no settings, option values or cookies
-        // need no row. Option values are always written, defaults included, so every module that
-        // declares options gets one.
+        // FMD2 writes every installed module; skip those with nothing set. Option values are
+        // always written (defaults included), so every module with options gets a row.
         if overrides != ModuleOverrides::default() || !cookies.is_empty() {
             if settings_repo.get(&module_id)?.is_some() {
                 report
@@ -316,9 +313,8 @@ pub(crate) fn import(
     Ok(folders)
 }
 
-/// Makes each website download folder in `folders` that no destination has yet a destination
-/// (T74), named after its last path component, numbered when that name is taken. A path that
-/// differs only by trailing separators is the same folder.
+/// Adds a destination for each folder not yet covered (T74), named after its last component and
+/// numbered when taken. Trailing separators are ignored when comparing.
 pub(crate) fn add_destinations(
     settings: &SettingsService,
     folders: &[String],
