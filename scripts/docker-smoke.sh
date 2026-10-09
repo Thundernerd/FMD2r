@@ -40,6 +40,14 @@ uid=$(docker exec "$name" id -u)
 echo "first start seeded /data/lua"
 docker exec "$name" sh -c 'ls /data/lua/modules/*.lua >/dev/null' || fail "/data/lua/modules is empty"
 
+echo "native XPath backend only: no libfmdxpath.so, and fmd2r doesn't link it"
+docker exec "$name" ldd /usr/local/bin/fmd2r >/dev/null || fail "ldd fmd2r"
+if docker exec "$name" ldd /usr/local/bin/fmd2r | grep -q libfmdxpath; then
+  fail "fmd2r links libfmdxpath.so"
+fi
+lib=$(docker exec "$name" find / -xdev -name 'libfmdxpath*' 2>/dev/null || true)
+[ -z "$lib" ] || fail "the image contains $lib"
+
 echo "tools for upstream scripts"
 docker exec "$name" magick -version >/dev/null || fail "magick -version"
 docker exec "$name" python3 --version || fail "python3 --version"
