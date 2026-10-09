@@ -109,7 +109,7 @@ web/           SvelteKit (Svelte 5, adapter-static SPA), API client generated fr
 
 **`app.db`** has these tables:
 - `tasks`, `task_chapters` (per-chapter status), `task_pages` (status + url). These replace FMD2's newline-joined columns.
-- `favorites`, `downloaded_chapters`, `module_settings` (options, HTTP overrides, limits, cookies), `accounts` (encrypted at rest).
+- `favorites`, `favorite_chapters` (the chapter links the site listed at the last check, for an exact new-chapter badge; T65), `downloaded_chapters`, `module_settings` (options, HTTP overrides, limits, cookies), `accounts` (encrypted at rest).
 - `settings` (key → JSON), `events` (inbox and history), `module_files` (synced Lua files: path, sha, last_modified).
 
 **`lists.db`** holds a single `masterlist(module_id, link, title, alttitles, authors, artists, genres, status, summary, numchapter, added_jdn)` table with FTS5. One table avoids FMD2's limit of 125 `ATTACH`ed site DBs. FMD2-DB prebuilt `<site>.7z` files are downloaded, extracted (`sevenz-rust`) and bulk-imported into it.

@@ -17,8 +17,8 @@ Out: how chapters get marked, and the "seen" wording (T62).
 - `fmd-core`: a check stores the site's link list, replacing the previous one.
 
 ## Acceptance criteria
-- [ ] The badge equals the number of chapters the site lists that are not marked.
-- [ ] fmt, clippy `-D warnings`, `cargo test --workspace` pass.
+- [x] The badge equals the number of chapters the site lists that are not marked.
+- [x] fmt, clippy `-D warnings`, `cargo test --workspace` pass.
 
 ## FMD2 references
 None (this goes beyond FMD2, which stores only the `currentchapter` count).

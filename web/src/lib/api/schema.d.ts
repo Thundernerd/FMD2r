@@ -1142,9 +1142,9 @@ export interface components {
 			module_id: string;
 			/**
 			 * Format: int32
-			 * @description Chapters on the site at the last check that are not downloaded: the chapter count less
-			 *     the downloaded ones, as only the count of the site's list is stored. Downloaded chapters
-			 *     the site no longer lists make it an undercount; a check finds the real ones by link.
+			 * @description Chapters on the site at the last check that are not downloaded, compared by link. A
+			 *     favorite not checked since its links were kept (or imported from FMD2) has only the
+			 *     count, so until its next check this is the chapter count less the downloaded ones.
 			 */
 			new_chapters: number;
 			save_to: string;

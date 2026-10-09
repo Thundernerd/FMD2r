@@ -16,7 +16,7 @@ use fmd_core::favorites::{CheckError, CheckMode, CheckScope};
 use fmd_core::info::{Chapter, InfoError, InfoOptions, MangaInfo};
 use fmd_core::modules::ModuleInfo;
 use fmd_server::{AppState, FavoritesJobs, ModuleCatalog, ModulesReport, build_router};
-use fmd_store::{AppDb, FavoriteId};
+use fmd_store::{AppDb, FavoriteId, ImportedFavorite, NewFavorite};
 use futures_util::future::BoxFuture;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -299,4 +299,88 @@ async fn filters_pick_favorites_by_state_and_title() {
     )
     .await;
     assert_eq!(ids(completed), Vec::<i64>::new());
+}
+
+impl Fixture {
+    /// Stores what a new-chapter check of favorite `id` would: the site's chapter count and
+    /// links (docs/tickets/T65-exact-new-chapter-badge.md).
+    fn checked(&self, id: i64, links: &[&str]) {
+        let mut favorite = self.db.favorites().get(FavoriteId(id)).unwrap().unwrap();
+        favorite.current_chapter = u32::try_from(links.len()).unwrap();
+        self.db.favorites().update(&favorite).unwrap();
+        self.db
+            .favorites()
+            .set_chapter_links(FavoriteId(id), links)
+            .unwrap();
+    }
+
+    async fn new_chapters(&self) -> Value {
+        let list = json_body(self.send("GET", "/api/favorites", None).await).await;
+        list[0]["new_chapters"].clone()
+    }
+}
+
+#[tokio::test]
+async fn the_badge_counts_the_sites_chapters_that_are_not_marked() {
+    let fx = Fixture::new();
+    let id = fx.add().await["id"].as_i64().unwrap();
+    let old: Vec<String> = (1..=50).map(|i| format!("/c{i}")).collect();
+    let old: Vec<&str> = old.iter().map(String::as_str).collect();
+    fx.db
+        .downloaded_chapters()
+        .mark("t", "/manga", &old)
+        .unwrap();
+
+    // The site drops 5 marked chapters and adds 3: 48 listed, 50 marked.
+    let mut site: Vec<&str> = old[5..].to_vec();
+    site.extend(["/n1", "/n2", "/n3"]);
+    fx.checked(id, &site);
+
+    assert_eq!(fx.new_chapters().await, 3);
+}
+
+#[tokio::test]
+async fn stale_marks_from_an_old_url_scheme_do_not_hide_new_chapters() {
+    let fx = Fixture::new();
+    let id = fx.add().await["id"].as_i64().unwrap();
+    fx.db
+        .downloaded_chapters()
+        .mark("t", "/manga", &["/old/1", "/old/2", "/old/3", "/old/4"])
+        .unwrap();
+
+    // `/c1` and `/c2` were marked when added (case-insensitively, as FMD2 merges the list).
+    fx.checked(id, &["/C1", "/c2", "/c3", "/c4", "/c5"]);
+
+    assert_eq!(fx.new_chapters().await, 3);
+}
+
+#[tokio::test]
+async fn a_favorite_not_checked_since_the_upgrade_keeps_the_count_difference() {
+    let fx = Fixture::new();
+    // Imported from FMD2, which stores only the chapter count.
+    fx.db
+        .favorites()
+        .import(&ImportedFavorite {
+            favorite: NewFavorite {
+                module_id: "t".into(),
+                link: "/manga".into(),
+                title: "Manga".into(),
+                save_to: "/data/Manga".into(),
+                cover_url: None,
+            },
+            status: "1".into(),
+            current_chapter: 5,
+            enabled: true,
+            date_added: 0,
+            date_last_checked: None,
+            date_last_updated: None,
+        })
+        .unwrap();
+    fx.db
+        .downloaded_chapters()
+        .mark("t", "/manga", &["/c1", "/c2"])
+        .unwrap();
+
+    // The site's 5 chapters less the 2 marked ones.
+    assert_eq!(fx.new_chapters().await, 3);
 }

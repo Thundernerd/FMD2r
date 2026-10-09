@@ -209,6 +209,67 @@ impl<'a> FavoriteRepo<'a> {
         reorder(&mut self.db.lock(), "favorites", ids.iter().map(|id| id.0))
     }
 
+    /// Replaces the chapter links the site listed at the favorite's last check, in the site's
+    /// order; nothing when there is no such favorite. FMD2 keeps only their count
+    /// (`currentchapter`, baseunits/FavoritesDB.pas:64).
+    pub fn set_chapter_links(&self, id: FavoriteId, links: &[&str]) -> Result<()> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM favorite_chapters WHERE favorite_id = ?1",
+            [id.0],
+        )?;
+        {
+            let mut stmt = tx.prepare_cached(
+                "INSERT INTO favorite_chapters (favorite_id, position, link)
+                 SELECT ?1, ?2, ?3 WHERE EXISTS (SELECT 1 FROM favorites WHERE id = ?1)",
+            )?;
+            for (position, link) in links.iter().enumerate() {
+                stmt.execute(params![id.0, position, link])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The chapter links stored by [`Self::set_chapter_links`], in the site's order; empty when
+    /// none are stored.
+    pub fn chapter_links(&self, id: FavoriteId) -> Result<Vec<String>> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT link FROM favorite_chapters WHERE favorite_id = ?1 ORDER BY position",
+        )?;
+        let rows = stmt.query_map([id.0], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// How many chapters the favorite has that are not in `downloaded_chapters`: the stored
+    /// chapter links with no mark, matched case-insensitively like that table's key. A favorite
+    /// with no stored links (not checked since they were kept, or imported from FMD2) has only
+    /// its chapter count, so it gets that count less its marks.
+    pub fn new_chapter_count(&self, favorite: &Favorite) -> Result<u32> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT COUNT(*), COUNT(*) FILTER (WHERE NOT EXISTS (
+                SELECT 1 FROM downloaded_chapters d
+                WHERE d.module_id = ?2 AND d.manga_link = ?3 AND d.chapter_link = c.link))
+             FROM favorite_chapters c WHERE c.favorite_id = ?1",
+        )?;
+        let (stored, unmarked): (u32, u32) = stmt.query_row(
+            params![favorite.id.0, favorite.module_id, favorite.link],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        if stored > 0 {
+            return Ok(unmarked);
+        }
+        let mut stmt = conn.prepare_cached(
+            "SELECT COUNT(*) FROM downloaded_chapters WHERE module_id = ?1 AND manga_link = ?2",
+        )?;
+        let marked: u32 =
+            stmt.query_row(params![favorite.module_id, favorite.link], |r| r.get(0))?;
+        Ok(favorite.current_chapter.saturating_sub(marked))
+    }
+
     pub fn delete(&self, id: FavoriteId) -> Result<()> {
         let conn = self.db.lock();
         conn.execute("DELETE FROM favorites WHERE id = ?1", [id.0])?;
