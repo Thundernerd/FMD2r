@@ -259,3 +259,71 @@ fn json_round_trips_match_duktape() {
         )
         .unwrap();
 }
+
+/// The `Duktape` built-in's codecs and the Encoding API, which websitebypass/cloudflare.lua:41-42
+/// builds the challenge's `btoa`/`atob` on.
+#[test]
+fn duktape_codecs_match_duktape() {
+    runtime()
+        .exec(
+            r#"
+            local cf = [[
+function btoa(s) {return Duktape.enc('base64', s);};
+function atob(s) {return new TextDecoder().decode(Duktape.dec('base64', s));};
+]]
+            same(cf .. 'btoa("hello")')
+            same(cf .. 'btoa("héllo 漫 😀")')
+            same(cf .. 'btoa("")')
+            same(cf .. 'atob("aGVsbG8=")')
+            same(cf .. 'atob(btoa("héllo 漫 😀"))')
+            same(cf .. 'atob("aGVsbG8")')
+            same(cf .. 'atob("aGVs bG8=")')
+            same(cf .. 'atob("//79")')
+            same(cf .. 'atob("!!")')
+            same(cf .. 'atob(btoa(String.fromCharCode(0xd800)))')
+
+            same('typeof Duktape')
+            same('Duktape.version')
+            same('Duktape.enc("hex", "hé")')
+            same('Duktape.enc("hex", 12.5)')
+            same('Duktape.enc("hex", null)')
+            same('Duktape.enc("hex", {})')
+            same('Duktape.enc("hex", new Uint8Array([1, 255]))')
+            same('Duktape.enc("base64", new Uint8Array([0, 1, 2, 3, 250]).buffer)')
+            same('Duktape.enc("base64", new Uint8Array([0, 1, 2, 3, 250]).subarray(1, 3))')
+            same('Duktape.enc("hex", new DataView(new Uint8Array([7, 8, 9]).buffer, 1))')
+            same('Duktape.enc("hex", new Uint16Array([0x0102]))')
+            same('Duktape.enc("nope", "x")')
+            same('var b = Duktape.dec("hex", "00ff41"); [typeof b, Object.prototype.toString.call(b), b.length, b[1], b instanceof Uint8Array].join()')
+            same('String(Duktape.dec("hex", "0"))')
+            same('String(Duktape.dec("hex", "zz"))')
+            same('Duktape.enc("hex", Duktape.dec("hex", "ABcd"))')
+            same('Duktape.enc("hex", Duktape.dec("base64", "AQID"))')
+            same('Duktape.enc("hex", Duktape.dec("base64", "AQ=="))')
+            same('Duktape.enc("hex", Duktape.dec("base64", "AQ"))')
+            same('Duktape.enc("hex", Duktape.dec("base64", "AQ=")) + "|"')
+            same('Duktape.enc("hex", Duktape.dec("base64", "A Q I D"))')
+            same('Duktape.enc("hex", Duktape.dec("base64", "AQ==AQ=="))')
+            same('Duktape.enc("hex", Duktape.dec("base64", "-_-_"))')
+            same('Duktape.enc("hex", Duktape.dec("base64", ""))')
+            same('Duktape.enc("hex", Duktape.dec("base64", new Uint8Array([65, 81, 61, 61])))')
+
+            same('var d = new TextDecoder(); [d.encoding, d.fatal, d.ignoreBOM].join()')
+            same('new TextDecoder().decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41]))')
+            same('new TextDecoder("utf-8", {ignoreBOM: true}).decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41])).length')
+            same('new TextDecoder().decode(new Uint8Array([0x41, 0xff, 0xc3, 0x42, 0xe6, 0xbc]))')
+            same('new TextDecoder().decode(new Uint8Array([0xf0, 0x9f, 0x98, 0x80])).length')
+            same('new TextDecoder().decode(new Uint8Array([0xed, 0xa0, 0xbd]))')
+            same('new TextDecoder().decode()')
+            same('new TextDecoder().decode(new Uint8Array([0x61, 0x62]).buffer)')
+            same('try { new TextDecoder("utf-8", {fatal: true}).decode(new Uint8Array([0xff])) } catch (e) { e.name }')
+            same('try { new TextDecoder("latin1") } catch (e) { e.name }')
+            same('new TextDecoder("UTF8").encoding')
+            same('var e = new TextEncoder(); e.encoding')
+            same('Duktape.enc("hex", new TextEncoder().encode("é😀\\ud800"))')
+            same('new TextEncoder().encode() instanceof Uint8Array')
+            same('new TextEncoder().encode().length')
+            "#,
+        )
+        .unwrap();
+}
