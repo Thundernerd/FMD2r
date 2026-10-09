@@ -12,6 +12,7 @@ mod inbox;
 mod jobs;
 mod lists;
 mod logs;
+mod lua_catalog;
 mod module_settings;
 mod module_updates;
 mod series;

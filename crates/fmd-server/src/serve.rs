@@ -10,6 +10,7 @@ use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, ListsDb};
 use thiserror::Error;
 use tokio::net::TcpListener;
 
+use crate::lua_catalog::LuaCatalog;
 use crate::module_updates::{self, LuaRuntime};
 use crate::{AppState, CoverConfig, Idle, LogBuffer, SystemTools, build_router};
 
@@ -87,8 +88,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let mut state = state
         .with_logs(config.logs)
         .with_data_dir(&data_dir)
-        .with_tools(SystemTools::new(bypass_config))
-        .with_covers(covers, Idle);
+        .with_tools(SystemTools::new(bypass_config));
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }
@@ -96,11 +96,18 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let db = state.db.clone();
     let key_file = data_dir.join(ACCOUNTS_KEY_FILE);
     let dir = lua_dir.clone();
-    let runtime = tokio::task::spawn_blocking(move || LuaRuntime::load(db, &dir, &key_file))
-        .await
-        .map_err(std::io::Error::other)?;
+    let xpath_backend = settings.xpath.backend;
+    let runtime =
+        tokio::task::spawn_blocking(move || LuaRuntime::load(db, &dir, &key_file, xpath_backend))
+            .await
+            .map_err(std::io::Error::other)?;
     match runtime {
         Ok(runtime) => {
+            module_updates::follow_xpath_backend(state.settings.clone(), &runtime);
+            let catalog = LuaCatalog::new(&runtime, state.db.clone());
+            state = state
+                .with_modules(catalog.clone())
+                .with_covers(covers, catalog);
             let live = runtime.modules.clone();
             let engine = DownloadManager::open(EngineConfig {
                 db: state.db.clone(),
@@ -118,7 +125,10 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                 module_updates::start(state.clone(), &runtime, lua_dir, flaresolverr_url);
             }
         }
-        Err(e) => tracing::error!(target: "fmd_server", "Lua modules: {e}"),
+        Err(e) => {
+            tracing::error!(target: "fmd_server", "Lua modules: {e}");
+            state = state.with_covers(covers, Idle);
+        }
     }
     let listener = TcpListener::bind(config.bind)
         .await

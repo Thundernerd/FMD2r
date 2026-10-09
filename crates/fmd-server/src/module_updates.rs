@@ -9,9 +9,12 @@ use fmd_core::module_updater::{
     LiveModules, ModuleUpdater, ModuleUpdaterJob, UpdaterConfig, has_no_modules,
 };
 use fmd_core::modules::StoreModuleSettings;
-use fmd_core::settings::{ModuleUpdaterSettings, write_websitebypass_config};
+use fmd_core::settings::{
+    ModuleUpdaterSettings, SettingsService, StoredModuleHttpSettings, XPathBackend,
+    write_websitebypass_config,
+};
 use fmd_http::HttpClient;
-use fmd_lua::{PoolConfig, WorkerPool};
+use fmd_lua::{Module, ModuleHttpSettings, PoolConfig, WorkerPool};
 use fmd_store::{AppDb, KeyFileCipher};
 use tokio::time::Instant;
 
@@ -42,10 +45,14 @@ pub(crate) struct LuaRuntime {
 impl LuaRuntime {
     /// Loads the modules in `lua_dir` with their settings (options, cookies, accounts) read
     /// through `db`, credentials and cookies decrypted by the key in `key_file`. Blocks.
+    ///
+    /// `CreateTXQuery` runs on `xpath_backend`, or on the runtime's default when this build
+    /// leaves that backend out.
     pub(crate) fn load(
         db: AppDb,
         lua_dir: &Path,
         key_file: &Path,
+        xpath_backend: XPathBackend,
     ) -> Result<LuaRuntime, LuaRuntimeError> {
         let cipher =
             KeyFileCipher::open_or_create(key_file).map_err(|source| LuaRuntimeError::KeyFile {
@@ -54,11 +61,18 @@ impl LuaRuntime {
             })?;
         let modules = Arc::new(LiveModules::load(
             lua_dir,
-            Arc::new(StoreModuleSettings::new(db, Arc::new(cipher))),
+            Arc::new(StoreModuleSettings::new(db.clone(), Arc::new(cipher))),
         ));
         let http = HttpClient::new()?;
         let mut config = PoolConfig::new(http.clone());
         config.lua_dir = lua_dir.to_owned();
+        config.xpath_backend = lua_xpath_backend(xpath_backend);
+        // The `HTTP` sessions callbacks get are prepared with the module's stored HTTP settings
+        // (`PrepareHTTP`, baseunits/WebsiteModules.pas:353-380).
+        config.http_settings = Some(Arc::new(move |module: &Module| {
+            Arc::new(StoredModuleHttpSettings::new(db.clone(), module.def().id))
+                as Arc<dyn ModuleHttpSettings>
+        }));
         let pool = Arc::new(WorkerPool::new(config)?);
         Ok(LuaRuntime {
             modules,
@@ -66,6 +80,40 @@ impl LuaRuntime {
             http,
         })
     }
+}
+
+/// The `fmd-lua` backend for the `xpath.backend` setting; `None`, logged, when this build leaves
+/// it out.
+fn lua_xpath_backend(setting: XPathBackend) -> Option<fmd_lua::XPathBackend> {
+    let backend = match setting {
+        XPathBackend::Fpc => fmd_lua::XPathBackend::Fpc,
+        XPathBackend::Native => fmd_lua::XPathBackend::Native,
+    };
+    if backend.engine().is_none() {
+        tracing::error!(target: "fmd_server", "xpath.backend {backend:?}: not in this build, keeping the current backend");
+        return None;
+    }
+    Some(backend)
+}
+
+/// Switches `runtime`'s workers to the `xpath.backend` setting whenever it changes.
+pub(crate) fn follow_xpath_backend(settings: Arc<SettingsService>, runtime: &LuaRuntime) {
+    let pool = runtime.pool.clone();
+    let mut changes = settings.subscribe();
+    let mut current = changes.borrow_and_update().xpath.backend;
+    tokio::spawn(async move {
+        while changes.changed().await.is_ok() {
+            let next = changes.borrow_and_update().xpath.backend;
+            if next == current {
+                continue;
+            }
+            current = next;
+            if let Some(backend) = lua_xpath_backend(next) {
+                tracing::info!(target: "fmd_server", "XPath backend: {backend:?}");
+                pool.set_xpath_backend(backend);
+            }
+        }
+    });
 }
 
 /// Registers the `modules` job over `runtime`'s modules, then runs it at startup and every

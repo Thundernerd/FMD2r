@@ -200,7 +200,7 @@ impl WorkerPool {
             lua_dir: config.lua_dir,
             http: config.http,
             http_settings: config.http_settings,
-            xpath_backend: config.xpath_backend,
+            xpath_backend: Mutex::new(config.xpath_backend),
             xpath_corpus: config.xpath_corpus,
             package: PackageCache::new(),
             stamps: AtomicU64::new(1),
@@ -248,6 +248,20 @@ impl WorkerPool {
             terminate: TerminateToken::new(),
             affinity: None,
         }
+    }
+
+    /// Switches `CreateTXQuery` to `backend` (the `xpath.backend` setting): every worker
+    /// rebuilds its state, as after [`invalidate(Invalidate::All)`](WorkerPool::invalidate),
+    /// before it runs its next job. Jobs already running finish on the old backend.
+    pub fn set_xpath_backend(&self, backend: XPathBackend) {
+        *lock(&self.shared.xpath_backend) = Some(backend);
+        self.invalidate(Invalidate::All);
+    }
+
+    /// The XPath backend of `CreateTXQuery` in the states built from now on; `None` for the
+    /// runtime's default.
+    pub fn xpath_backend(&self) -> Option<XPathBackend> {
+        *lock(&self.shared.xpath_backend)
     }
 
     /// Marks cached module bytecode and the states built from it stale: each worker rebuilds
@@ -509,7 +523,8 @@ struct Shared {
     lua_dir: PathBuf,
     http: HttpClient,
     http_settings: Option<Arc<HttpSettingsSource>>,
-    xpath_backend: Option<XPathBackend>,
+    /// Changed by [`WorkerPool::set_xpath_backend`].
+    xpath_backend: Mutex<Option<XPathBackend>>,
     xpath_corpus: Option<XPathCorpusWriter>,
     package: PackageCache,
     /// The source of stamps: states, bytecode and invalidations are ordered by them.
