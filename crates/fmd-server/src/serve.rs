@@ -8,6 +8,7 @@ use fmd_core::accounts::AccountService;
 use fmd_core::download::{DownloadManager, EngineConfig, ModuleLookup};
 use fmd_core::favorites::{CheckerConfig, FavoritesChecker, TaskQueue};
 use fmd_core::lists::{DbImporter, ListJobs, ListUpdater};
+use fmd_core::module_updater::RepoConfig;
 use fmd_core::settings::{SettingsService, write_websitebypass_config};
 use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, ListsDb};
 use thiserror::Error;
@@ -120,7 +121,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     match runtime {
         Ok(runtime) => {
             module_updates::follow_xpath_backend(state.settings.clone(), &runtime);
-            let catalog = LuaCatalog::new(&runtime, state.db.clone());
+            let upstream_ref = RepoConfig::from_settings(&settings.module_updater).git_ref;
+            let catalog = LuaCatalog::new(&runtime, state.db.clone(), &lua_dir, upstream_ref);
             // The accounts are the modules' `MODULE.Account`, stored encrypted under the key
             // file the runtime loaded them with.
             let live = runtime.modules.clone();

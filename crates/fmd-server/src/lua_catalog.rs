@@ -1,10 +1,11 @@
 //! The loaded Lua modules as the endpoints see them: the module list, series info run on the
 //! shared worker pool, and HTTP sessions for their covers.
 
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use fmd_core::info::{self, InfoError, InfoOptions, MangaInfo};
-use fmd_core::module_updater::LiveModules;
+use fmd_core::module_updater::{self, LiveModules};
 use fmd_core::modules::ModuleInfo;
 use fmd_core::settings::StoredModuleHttpSettings;
 use fmd_http::HttpClient;
@@ -14,7 +15,7 @@ use futures_util::future::BoxFuture;
 
 use crate::covers::{CoverModules, CoverSession};
 use crate::module_updates::LuaRuntime;
-use crate::services::{ModuleCatalog, ModulesReport};
+use crate::services::{LoadFailure, ModuleCatalog, ModulesReport};
 
 /// The modules of a [`LuaRuntime`], following its reloads.
 #[derive(Clone)]
@@ -22,8 +23,12 @@ pub(crate) struct LuaCatalog {
     modules: Arc<LiveModules>,
     pool: Arc<WorkerPool>,
     http: HttpClient,
-    /// Where the modules' HTTP settings are stored.
+    /// Where the modules' HTTP settings and the updater's state are stored.
     db: AppDb,
+    /// The Lua tree the modules load from.
+    lua_dir: PathBuf,
+    /// The upstream ref the Lua tree follows.
+    upstream_ref: String,
     /// The module list of the registry it was built from, rebuilt when a reload swaps it.
     infos: Arc<Mutex<Option<ModuleList>>>,
 }
@@ -35,13 +40,21 @@ struct ModuleList {
 }
 
 impl LuaCatalog {
-    /// The modules of `runtime`, their HTTP settings stored in `db`.
-    pub(crate) fn new(runtime: &LuaRuntime, db: AppDb) -> LuaCatalog {
+    /// The modules of `runtime`, loaded from `lua_dir` following `upstream_ref`, their HTTP
+    /// settings stored in `db`.
+    pub(crate) fn new(
+        runtime: &LuaRuntime,
+        db: AppDb,
+        lua_dir: &Path,
+        upstream_ref: String,
+    ) -> LuaCatalog {
         LuaCatalog {
             modules: runtime.modules.clone(),
             pool: runtime.pool.clone(),
             http: runtime.http.clone(),
             db,
+            lua_dir: lua_dir.to_owned(),
+            upstream_ref,
             infos: Arc::default(),
         }
     }
@@ -69,11 +82,51 @@ impl LuaCatalog {
         });
         infos
     }
+
+    /// The commit the module updater last synced the tree to, else the one the tree was seeded
+    /// from (the `UPSTREAM_REF` a snapshot carries).
+    fn upstream_sha(&self) -> Option<String> {
+        let synced = module_updater::synced_commit(&self.db).unwrap_or_else(|e| {
+            tracing::warn!(target: "fmd_server", "reading the synced commit: {e}");
+            String::new()
+        });
+        if !synced.is_empty() {
+            return Some(synced);
+        }
+        let seeded = std::fs::read_to_string(self.lua_dir.join(UPSTREAM_REF)).ok()?;
+        Some(seeded.trim().to_owned()).filter(|sha| !sha.is_empty())
+    }
+
+    /// The module files that failed to load into the registry in use now, named by their path
+    /// in the Lua dir (e.g. `modules/Foo.lua`).
+    fn load_failures(&self) -> Vec<LoadFailure> {
+        self.modules
+            .failures()
+            .iter()
+            .map(|f| {
+                let path = f.file.strip_prefix(&self.lua_dir).unwrap_or(&f.file);
+                LoadFailure {
+                    module: path
+                        .components()
+                        .map(|c| c.as_os_str().to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join("/"),
+                    error: f.error.clone(),
+                    inbox_id: None,
+                }
+            })
+            .collect()
+    }
 }
+
+/// The file in the Lua dir naming the upstream commit a snapshot of the tree was taken at.
+const UPSTREAM_REF: &str = "UPSTREAM_REF";
 
 impl ModuleCatalog for LuaCatalog {
     fn report(&self) -> ModulesReport {
         ModulesReport {
+            upstream_ref: Some(self.upstream_ref.clone()),
+            upstream_sha: self.upstream_sha(),
             module_count: self.infos().len() as u64,
             xpath_backend: Some(
                 match self.pool.xpath_backend().unwrap_or_default() {
@@ -82,7 +135,7 @@ impl ModuleCatalog for LuaCatalog {
                 }
                 .to_owned(),
             ),
-            ..ModulesReport::default()
+            load_failures: self.load_failures(),
         }
     }
 

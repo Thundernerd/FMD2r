@@ -10,7 +10,8 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use fmd_http::{HttpClient, HttpError, HttpSession, TerminateToken};
 use fmd_lua::{
-    Invalidate, MemorySettingsStore, Module, ModuleRegistry, ModuleSettingsStore, WorkerPool,
+    Invalidate, LoadFailure, MemorySettingsStore, Module, ModuleRegistry, ModuleSettingsStore,
+    WorkerPool,
 };
 use fmd_store::{AppDb, EventSeverity, ModuleFile, NewEvent, StoreError};
 use serde::{Deserialize, Serialize};
@@ -215,7 +216,13 @@ struct RepoState {
 /// earlier registry keep it until they let go.
 pub struct LiveModules {
     settings: Arc<dyn ModuleSettingsStore>,
-    current: RwLock<Arc<ModuleRegistry>>,
+    current: RwLock<Loaded>,
+}
+
+/// A registry and the module files that failed to load into it.
+struct Loaded {
+    registry: Arc<ModuleRegistry>,
+    failures: Arc<Vec<LoadFailure>>,
 }
 
 impl LiveModules {
@@ -228,7 +235,10 @@ impl LiveModules {
         }
         LiveModules {
             settings,
-            current: RwLock::new(Arc::new(report.registry)),
+            current: RwLock::new(Loaded {
+                registry: Arc::new(report.registry),
+                failures: Arc::new(report.failures),
+            }),
         }
     }
 
@@ -237,12 +247,33 @@ impl LiveModules {
         self.current
             .read()
             .unwrap_or_else(PoisonError::into_inner)
+            .registry
             .clone()
     }
 
-    fn swap(&self, registry: ModuleRegistry) {
-        *self.current.write().unwrap_or_else(PoisonError::into_inner) = Arc::new(registry);
+    /// The module files that failed to load into [`current`](LiveModules::current), sorted by
+    /// path: left out of it, or kept at their earlier version.
+    pub fn failures(&self) -> Arc<Vec<LoadFailure>> {
+        self.current
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .failures
+            .clone()
     }
+
+    fn swap(&self, registry: ModuleRegistry, failures: Vec<LoadFailure>) {
+        *self.current.write().unwrap_or_else(PoisonError::into_inner) = Loaded {
+            registry: Arc::new(registry),
+            failures: Arc::new(failures),
+        };
+    }
+}
+
+/// The upstream commit the Lua tree in `db`'s updater state was last fully synced to; empty
+/// before the first sync (`ModuleUpdater::synced_commit` without an updater).
+pub fn synced_commit(db: &AppDb) -> Result<String, UpdateError> {
+    let state: Option<RepoState> = db.settings().get(STATE_KEY)?;
+    Ok(state.map(|s| s.last_commit_sha).unwrap_or_default())
 }
 
 /// What [`ModuleUpdater::with_after_sync`] calls.
@@ -338,8 +369,7 @@ impl ModuleUpdater {
 
     /// The upstream commit the Lua tree was last fully synced to; empty before the first sync.
     pub fn synced_commit(&self) -> Result<String, UpdateError> {
-        let state: Option<RepoState> = self.db.settings().get(STATE_KEY)?;
-        Ok(state.map(|s| s.last_commit_sha).unwrap_or_default())
+        synced_commit(&self.db)
     }
 
     /// The followed ref, e.g. `master`.
@@ -576,7 +606,24 @@ impl ModuleUpdater {
             .filter(|def| reloaded(&def.file))
             .map(|def| def.id)
             .collect();
-        self.modules.swap(ModuleRegistry::from_modules(modules));
+        // The failures of files this reload left alone stand; the rest are this load's.
+        let mut live_failures: BTreeMap<PathBuf, String> = self
+            .modules
+            .failures()
+            .iter()
+            .filter(|f| !reloaded(&f.file))
+            .map(|f| (f.file.clone(), f.error.clone()))
+            .collect();
+        live_failures.extend(failed);
+        for (path, kept) in kept_out {
+            live_failures.insert(lua_dir.join(path), kept.error.clone());
+        }
+        let live_failures = live_failures
+            .into_iter()
+            .map(|(file, error)| LoadFailure { file, error })
+            .collect();
+        self.modules
+            .swap(ModuleRegistry::from_modules(modules), live_failures);
         if let Some(pool) = &self.pool {
             // A changed `require`d file also drops the pool's cache of them
             // (`LuaPackage.ClearCache`, baseunits/lua/LuaPackage.pas:141-144).
