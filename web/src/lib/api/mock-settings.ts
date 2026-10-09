@@ -1,11 +1,12 @@
 import { getPath, isObject } from '#lib/settings/draft.svelte.ts';
 import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 import type {
+	FieldProblem,
 	ModuleOptionSetting,
 	ModuleSettingsView,
 	ModuleSummary,
 	RenamePreview,
-	SaveToSettings,
+	RenamePreviewRequest,
 	Settings
 } from './types';
 
@@ -89,7 +90,12 @@ export const defaultSettings = (): Settings => ({
 	},
 	covers: { revalidate_after_hours: 168, cache_size_mb: 256 },
 	logs: { max_file_size_mb: 10, max_files: 5 },
-	server: { bind: '0.0.0.0:8080', auth_token: null },
+	server: {
+		bind: '0.0.0.0:8080',
+		auth_token: null,
+		session_idle_days: 7,
+		session_lifetime_days: 30
+	},
 	xpath: { backend: 'native' }
 });
 
@@ -203,44 +209,61 @@ const defaultOverrides = (): Overrides => ({
 
 type JsonObject = Record<string, unknown>;
 
-/** A 422 the way fmd-server reports it. */
+/** A 422 the way fmd-server reports it: every rejected value. */
 export class Invalid extends Error {
-	constructor(
-		readonly field: string,
-		readonly detail: string
-	) {
-		super(detail);
+	constructor(readonly fields: FieldProblem[]) {
+		super(fields.map((f) => `${f.field}: ${f.detail}`).join('; '));
 	}
 }
+
+/** Throws the collected problems, if any. */
+function check(problems: FieldProblem[]) {
+	if (problems.length) throw new Invalid(problems);
+}
+
+const prefixed = (problems: FieldProblem[], prefix: string) =>
+	problems.map((p) => ({ ...p, field: prefix + p.field }));
 
 /**
  * RFC 7396 merge of `patch` into `target`, rejecting unknown keys like the server does. `null`
  * resets a value to the one in `defaults`.
  */
-function mergePatch(target: JsonObject, patch: JsonObject, defaults: JsonObject, path = '') {
+function mergePatch(
+	target: JsonObject,
+	patch: JsonObject,
+	defaults: JsonObject,
+	problems: FieldProblem[],
+	path = ''
+) {
 	for (const [key, value] of Object.entries(patch)) {
 		const field = path ? `${path}.${key}` : key;
-		if (!(key in target)) throw new Invalid(field, `unknown setting ${field}`);
+		if (!(key in target)) {
+			problems.push({ field, detail: 'unknown setting' });
+			continue;
+		}
 		const current = target[key];
 		const fallback = defaults[key];
 		if (value === null) target[key] = structuredClone(fallback);
 		else if (isObject(current) && isObject(value) && isObject(fallback))
-			mergePatch(current, value, fallback, field);
+			mergePatch(current, value, fallback, problems, field);
 		else target[key] = value;
 	}
 }
 
 /** The server's range checks, as the settings page's own field definitions state them. */
-function validateSettings(settings: Settings) {
+function validateSettings(settings: Settings, problems: FieldProblem[]) {
 	for (const field of SETTINGS_SECTIONS.flatMap((s) => s.fields)) {
 		const value = getPath(settings, field.path);
 		const control = field.control;
 		if (control.kind === 'number') {
 			if (value === null && control.nullable) continue;
 			if (typeof value !== 'number' || !Number.isInteger(value))
-				throw new Invalid(field.path, 'expected an integer');
-			if (value < control.min || value > control.max)
-				throw new Invalid(field.path, `${value} is outside ${control.min}..=${control.max}`);
+				problems.push({ field: field.path, detail: 'expected an integer' });
+			else if (value < control.min || value > control.max)
+				problems.push({
+					field: field.path,
+					detail: `${value} is outside ${control.min}..=${control.max}`
+				});
 		}
 	}
 }
@@ -280,7 +303,12 @@ function load(): Stored {
 }
 
 /** Rough `CustomRename`: substitutes the tokens, no padding or symbol rules. */
-function previewRename(saveto: SaveToSettings): RenamePreview {
+function previewRename(draft: RenamePreviewRequest): RenamePreview {
+	const saveto = { ...defaultSettings().saveto, ...draft.saveto };
+	const images = { ...defaultSettings().images, ...draft.images };
+	const format = draft.output?.format ?? 'folder';
+	const listed = 'Sample Manga - Vol. 1 Ch. 5';
+	const chapterName = saveto.remove_manga_name_from_chapter ? 'Vol. 1 Ch. 5' : listed;
 	const fill = (template: string, chapter: string) =>
 		template
 			.replaceAll('%WEBSITE%', 'MangaDex')
@@ -290,11 +318,20 @@ function previewRename(saveto: SaveToSettings): RenamePreview {
 			.replaceAll('%CHAPTER%', chapter)
 			.replaceAll('%NUMBERING%', chapter ? '0005' : '')
 			.trim();
-	return {
-		manga: fill(saveto.manga_rename || '%MANGA%', ''),
-		chapter: fill(saveto.chapter_rename || '%CHAPTER%', 'Vol. 01 Ch. 005'),
-		filename: (saveto.filename_rename || '%FILENAME%').replaceAll('%FILENAME%', '001')
-	};
+	const manga = fill(saveto.manga_rename || '%MANGA%', '');
+	const chapter = fill(saveto.chapter_rename || '%CHAPTER%', chapterName);
+	const filename = fill(saveto.filename_rename || '%FILENAME%', chapter).replaceAll(
+		'%FILENAME%',
+		'001'
+	);
+	const ext = images.imagemagick.enabled ? images.imagemagick.save_as.toLowerCase() : 'jpg';
+	const page = `${filename}.${ext}`;
+	const dir = [saveto.default_dir || 'downloads', saveto.generate_manga_folder ? manga : null];
+	const path =
+		format === 'folder'
+			? [...dir, saveto.generate_chapter_folder ? chapter : null, page]
+			: [...dir, `${chapter}.${format}`];
+	return { manga, chapter, filename, page, path: path.filter(Boolean).join('/') };
 }
 
 /** The mock's settings state and operations. */
@@ -325,14 +362,54 @@ export function createMockSettings() {
 
 	const find = (id: string) => MODULES.find((m) => m.summary.id === id);
 
+	const nextSettings = (patch: JsonObject, problems: FieldProblem[]): Settings => {
+		const next = structuredClone(state.settings);
+		mergePatch(next, patch, defaultSettings(), problems);
+		validateSettings(next, problems);
+		return next;
+	};
+
+	const nextModule = (
+		module: MockModule,
+		patch: JsonObject,
+		problems: FieldProblem[]
+	): Overrides => {
+		const next = structuredClone(state.modules[module.summary.id] ?? defaultOverrides());
+		const { options, ...rest } = patch;
+		const { options: stored, ...current } = next;
+		mergePatch(current, rest, defaultOverrides(), problems);
+		if (options !== undefined && options !== null) {
+			if (!isObject(options)) {
+				problems.push({ field: 'options', detail: 'expected a JSON object' });
+			} else {
+				for (const [key, value] of Object.entries(options)) {
+					const field = `options.${key}`;
+					const option = module.options.find((o) => o.key === key);
+					if (!option) {
+						problems.push({ field, detail: 'unknown setting' });
+						continue;
+					}
+					if (value === null) {
+						delete stored[key];
+						continue;
+					}
+					const error = checkOption(option, value);
+					if (error) problems.push({ field, detail: error });
+					else stored[key] = value;
+				}
+			}
+		}
+		return { ...(current as Omit<Overrides, 'options'>), options: stored };
+	};
+
 	return {
 		getSettings: (): Settings => structuredClone(state.settings),
 
 		/** @throws Invalid */
 		patchSettings(patch: JsonObject): Settings {
-			const next = structuredClone(state.settings);
-			mergePatch(next, patch, defaultSettings());
-			validateSettings(next);
+			const problems: FieldProblem[] = [];
+			const next = nextSettings(patch, problems);
+			check(problems);
 			state.settings = next;
 			save();
 			return structuredClone(next);
@@ -352,28 +429,38 @@ export function createMockSettings() {
 		patchModule(id: string, patch: JsonObject): ModuleSettingsView | null {
 			const module = find(id);
 			if (!module) return null;
-			const next = structuredClone(state.modules[id] ?? defaultOverrides());
-			const { options, ...rest } = patch;
-			const { options: stored, ...current } = next;
-			mergePatch(current, rest, defaultOverrides());
-			if (options !== undefined && options !== null) {
-				if (!isObject(options)) throw new Invalid('options', 'expected a JSON object');
-				for (const [key, value] of Object.entries(options)) {
-					const field = `options.${key}`;
-					const option = module.options.find((o) => o.key === key);
-					if (!option) throw new Invalid(field, `unknown setting ${field}`);
-					if (value === null) {
-						delete stored[key];
-						continue;
-					}
-					const error = checkOption(option, value);
-					if (error) throw new Invalid(field, error);
-					stored[key] = value;
-				}
-			}
-			state.modules[id] = { ...(current as Omit<Overrides, 'options'>), options: stored };
+			const problems: FieldProblem[] = [];
+			const next = nextModule(module, patch, problems);
+			check(problems);
+			state.modules[id] = next;
 			save();
 			return view(module);
+		},
+
+		/** All or nothing; `null` when a module is unknown. @throws Invalid */
+		patchAll(
+			body: JsonObject
+		): { settings: Settings; modules: Record<string, ModuleSettingsView> } | null {
+			const problems: FieldProblem[] = [];
+			const settingsProblems: FieldProblem[] = [];
+			const settings = nextSettings(isObject(body.settings) ? body.settings : {}, settingsProblems);
+			problems.push(...prefixed(settingsProblems, 'settings.'));
+			const modules: [MockModule, Overrides][] = [];
+			for (const [id, patch] of Object.entries(isObject(body.modules) ? body.modules : {})) {
+				const module = find(id);
+				if (!module) return null;
+				const moduleProblems: FieldProblem[] = [];
+				modules.push([module, nextModule(module, isObject(patch) ? patch : {}, moduleProblems)]);
+				problems.push(...prefixed(moduleProblems, `modules.${id}.`));
+			}
+			check(problems);
+			state.settings = settings;
+			for (const [module, overrides] of modules) state.modules[module.summary.id] = overrides;
+			save();
+			return {
+				settings: structuredClone(settings),
+				modules: Object.fromEntries(modules.map(([m]) => [m.summary.id, view(m)]))
+			};
 		}
 	};
 }

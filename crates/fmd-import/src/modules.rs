@@ -21,6 +21,7 @@ use crate::ImportOptions;
 use crate::error::ImportError;
 use crate::fmd2::{
     json_bool, json_int, json_text, parse_datetime_text, read_json, tdatetime_to_ms,
+    wall_clock_to_utc,
 };
 use crate::report::{ImportReport, SkipReason, Unmapped};
 
@@ -171,12 +172,13 @@ fn overrides(
 
 /// A `THTTPCookie` (baseunits/httpcookiemanager.pas:15-37) as an `fmd-http` cookie. `Expires` is
 /// a `TDateTime` streamed as text (`jsoDateTimeAsString`, baseunits/WebsiteModules.pas:655).
-fn cookie(c: &Map<String, Value>) -> Cookie {
+fn cookie(c: &Map<String, Value>, opts: &ImportOptions) -> Cookie {
     let expires = match get(c, "Expires") {
         Some(Value::String(s)) => parse_datetime_text(s),
         Some(Value::Number(n)) => n.as_f64().and_then(tdatetime_to_ms),
         _ => None,
     };
+    let expires = wall_clock_to_utc(expires, opts);
     Cookie {
         name: string(get(c, "Name")),
         value: string(get(c, "Value")),
@@ -240,7 +242,12 @@ pub(crate) fn import(
         let overrides = overrides(&module_id, entry, report);
         let cookies: Vec<Cookie> = get(entry, "Cookies")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(Value::as_object).map(cookie).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_object)
+                    .map(|c| cookie(c, opts))
+                    .collect()
+            })
             .unwrap_or_default();
         // FMD2 writes every installed module; those with no settings, option values or cookies
         // need no row. Option values are always written, defaults included, so every module that

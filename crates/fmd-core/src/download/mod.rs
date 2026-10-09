@@ -26,7 +26,7 @@
 //! | Waiting | Stopped | `stop`, `stop_all` | `StopTask` (:1900-1920) |
 //! | running | Stopped | `stop`, `stop_all`: the thread is terminated | `TTaskThread.Destroy` (:485-528) |
 //! | any | Disabled / Stopped | `disable` / `enable` | `TTaskContainer.SetEnabled` (:1384-1397) |
-//! | Downloading, Preparing, Waiting at startup | running, or Waiting; Stopped when the module is gone | [`DownloadManager::open`] | `CheckAndActiveTaskAtStartup` (:1859-1893) |
+//! | Downloading, Preparing, Waiting (and Converting, Compressing: a killed process) at startup | running, or Waiting; Stopped when the module is gone | [`DownloadManager::open`] | `CheckAndActiveTaskAtStartup` (:1859-1893) |
 //!
 //! A task still running when the manager is dropped keeps its status, so the next
 //! [`DownloadManager::open`] resumes it (`StopAllDownloadTasksForExit`, :1957-1977, and
@@ -35,6 +35,7 @@
 mod files;
 mod manager;
 mod page;
+mod preview;
 mod task;
 
 use std::sync::Arc;
@@ -49,6 +50,7 @@ use manager::Inner;
 pub(crate) use manager::{rename_options, save_to};
 
 pub use fmd_store::{ChapterStatus, Task, TaskChapter, TaskId, TaskStatus};
+pub use preview::{PagePlacement, SampleChapter, first_page};
 
 /// Finds a loaded module by ID.
 pub type ModuleLookup = dyn Fn(&str) -> Option<Arc<Module>> + Send + Sync;
@@ -229,6 +231,12 @@ impl DownloadManager {
     /// requests and Lua waits makes prompt.
     pub async fn stop(&self, id: TaskId) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.stop(id)).await
+    }
+
+    /// `CheckAndActiveTask` (baseunits/uDownloadsManager.pas:1784-1833): starts waiting tasks
+    /// while there are free slots, e.g. tasks queued straight into `app.db` by an import.
+    pub async fn activate_waiting(&self) -> Result<(), EngineError> {
+        self.blocking(Inner::check_and_active_task).await
     }
 
     /// `StartAllTasks` (baseunits/uDownloadsManager.pas:1922-1941).

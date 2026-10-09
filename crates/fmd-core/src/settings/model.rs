@@ -476,6 +476,13 @@ pub struct ServerSettings {
     pub bind: String,
     /// Password/bearer token clients must present; `None` disables auth. Stored as plain JSON.
     pub auth_token: Option<String>,
+    /// Days a login session may go unused before it ends; every authorized request restarts
+    /// the count.
+    #[schema(minimum = 1, maximum = 365)]
+    pub session_idle_days: u32,
+    /// Days a login session lasts at most, however often it is used.
+    #[schema(minimum = 1, maximum = 3650)]
+    pub session_lifetime_days: u32,
 }
 
 impl Default for ServerSettings {
@@ -483,6 +490,8 @@ impl Default for ServerSettings {
         Self {
             bind: "0.0.0.0:8080".into(),
             auth_token: None,
+            session_idle_days: 7,
+            session_lifetime_days: 30,
         }
     }
 }

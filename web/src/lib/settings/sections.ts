@@ -248,7 +248,15 @@ export const SETTINGS_SECTIONS: Section[] = [
 			text('server.auth_token', 'Password', 'Leave empty to disable authentication.', {
 				secret: true,
 				nullable: true
-			})
+			}),
+			number(
+				'server.session_idle_days',
+				'Log out after (days unused)',
+				1,
+				365,
+				'Each visit restarts the count.'
+			),
+			number('server.session_lifetime_days', 'Log out after (days)', 1, 3650, 'However often used.')
 		]
 	},
 	{

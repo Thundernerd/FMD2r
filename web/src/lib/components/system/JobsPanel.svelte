@@ -32,6 +32,9 @@
 			.finally(() => (loading = false));
 	});
 
+	/** The FMD2 import, which only runs with an upload (`POST /api/import`). */
+	const UPLOAD_JOB = 'import';
+
 	const PHASE: Record<JobPhase, string> = {
 		idle: 'Idle',
 		running: 'Running',
@@ -111,20 +114,24 @@
 				</details>
 			{/if}
 
-			<div class="actions">
-				<button
-					class="btn sm primary"
-					type="button"
-					disabled={running || busy[job.id]}
-					onclick={() => control(job, 'run')}>Run</button
-				>
-				<button
-					class="btn sm"
-					type="button"
-					disabled={!running || busy[job.id]}
-					onclick={() => control(job, 'cancel')}>Cancel</button
-				>
-			</div>
+			{#if job.id === UPLOAD_JOB}
+				<a class="small" href="/">Import from the Library page</a>
+			{:else}
+				<div class="actions">
+					<button
+						class="btn sm primary"
+						type="button"
+						disabled={running || busy[job.id]}
+						onclick={() => control(job, 'run')}>Run</button
+					>
+					<button
+						class="btn sm"
+						type="button"
+						disabled={!running || busy[job.id]}
+						onclick={() => control(job, 'cancel')}>Cancel</button
+					>
+				</div>
+			{/if}
 			{#if failures[job.id]}
 				<p class="error small" role="alert">{failures[job.id]}</p>
 			{/if}

@@ -10,10 +10,12 @@ fmd-core = { path = "../fmd-core" }
 fmd-http = { path = "../fmd-http" }
 fmd-lua = { path = "../fmd-lua" }
 fmd-store = { path = "../fmd-store" }
+jiff = { version = "0.2.38", default-features = false, features = ["std", "tz-system", "tzdb-zoneinfo", "tzdb-bundle-always"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror.workspace = true
+utoipa = "5"
 
 [dev-dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }

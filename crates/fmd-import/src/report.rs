@@ -3,9 +3,10 @@
 use std::fmt;
 
 use serde::Serialize;
+use utoipa::ToSchema;
 
 /// The outcome of [`crate::import`], per source.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ToSchema)]
 pub struct ImportReport {
     /// Nothing was written; the counts say what would have been imported.
     pub dry_run: bool,
@@ -23,13 +24,13 @@ pub struct ImportReport {
     pub settings: SourceReport,
     /// FMD2 data FMD2r has no place for.
     pub unmapped: Vec<Unmapped>,
-    /// Things that were imported but may need attention, such as Windows paths no
-    /// [`crate::PathMap`] rewrote.
+    /// Things that were imported but may need attention, such as Windows paths no path map
+    /// rewrote.
     pub warnings: Vec<String>,
 }
 
 /// What one source contributed.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ToSchema)]
 pub struct SourceReport {
     /// The source file exists in the userdata directory.
     pub found: bool,
@@ -55,14 +56,14 @@ impl SourceReport {
 }
 
 /// An item that was not imported.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 pub struct Skipped {
     /// Identifies the item, e.g. `<module id> <link>` or a settings key.
     pub item: String,
     pub reason: SkipReason,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(tag = "kind", content = "detail", rename_all = "snake_case")]
 pub enum SkipReason {
     /// The store already holds it (from an earlier import or from FMD2r itself).
@@ -72,7 +73,7 @@ pub enum SkipReason {
 }
 
 /// FMD2 data with no FMD2r counterpart.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 pub struct Unmapped {
     /// The FMD2 file.
     pub source: String,

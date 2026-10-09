@@ -10,8 +10,7 @@ use fmd_lua::{ModuleHttpOverrides, ModuleHttpSettings, SettingsStoreError};
 use fmd_store::{AppDb, ModuleSettings, ModuleSettingsRepo};
 
 use super::model::ConnectionSettings;
-use super::service::{SettingsError, apply_merge_patch, check_known_keys, merge};
-use super::validate::invalid;
+use super::service::{FieldError, SettingsError, merge, merge_patch_reporting};
 use crate::modules::{OptionDef, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
 
 /// A user's overrides for one module. Everything except `options` only applies while `enabled`
@@ -54,6 +53,16 @@ impl ModuleOverrides {
         repo: &ModuleSettingsRepo<'_>,
         module_id: &str,
     ) -> Result<(), SettingsError> {
+        repo.upsert(&self.merged_over_stored(repo, module_id)?)?;
+        Ok(())
+    }
+
+    /// What [`Self::save`] stores: these overrides merged over the stored ones.
+    pub(super) fn merged_over_stored(
+        &self,
+        repo: &ModuleSettingsRepo<'_>,
+        module_id: &str,
+    ) -> Result<ModuleSettings, SettingsError> {
         let mut stored = repo
             .get(module_id)?
             .unwrap_or_else(|| ModuleSettings::new(module_id));
@@ -61,8 +70,7 @@ impl ModuleOverrides {
         merge(&mut stored.limits, serde_json::to_value(self.limits)?);
         merge(&mut stored.http, serde_json::to_value(&self.http)?);
         stored.options = Value::Object(self.options.clone());
-        repo.upsert(&stored)?;
-        Ok(())
+        Ok(stored)
     }
 }
 
@@ -74,47 +82,59 @@ impl ModuleOverrides {
     /// mangadownloader/forms/frmWebsiteOptionCustom.pas:187-191). `null` resets an option to
     /// its default.
     ///
-    /// On error `self` is unchanged; the error names the offending field as a dotted path.
+    /// On error `self` is unchanged; the error lists every offending field as a dotted path.
     pub fn apply_patch(
         &mut self,
         options: &[OptionDef],
         patch: Value,
     ) -> Result<(), SettingsError> {
+        *self = self.patched(options, patch)?;
+        Ok(())
+    }
+
+    /// These overrides with `patch` applied, as [`Self::apply_patch`] checks it.
+    pub fn patched(&self, options: &[OptionDef], patch: Value) -> Result<Self, SettingsError> {
         let Value::Object(mut patch) = patch else {
-            return Err(invalid("", "expected a JSON object"));
+            return Err(SettingsError::Invalid(vec![FieldError::new(
+                "",
+                "expected a JSON object",
+            )]));
         };
+        let mut errors = Vec::new();
         let option_patch = patch.remove("options");
-        let mut tree = serde_json::to_value(&*self)?;
-        if let Some(map) = tree.as_object_mut() {
+        let mut base = serde_json::to_value(self)?;
+        if let Some(map) = base.as_object_mut() {
             map.remove("options");
         }
-        let patch = Value::Object(patch);
-        check_known_keys(&tree, &patch, "")?;
-        apply_merge_patch(&mut tree, patch);
-        let mut next: ModuleOverrides = serde_path_to_error::deserialize(tree)
-            .map_err(|e| invalid(&e.path().to_string(), &e.inner().to_string()))?;
-        next.options = self.options.clone();
+        let next: Option<ModuleOverrides> =
+            merge_patch_reporting(base, Value::Object(patch), &mut errors);
+        let mut next_options = self.options.clone();
         match option_patch {
             None | Some(Value::Null) => {}
             Some(Value::Object(values)) => {
                 for (key, value) in values {
                     let field = format!("options.{key}");
-                    let def = options
-                        .iter()
-                        .find(|o| o.key == key)
-                        .ok_or(SettingsError::UnknownKey(field.clone()))?;
+                    let Some(def) = options.iter().find(|o| o.key == key) else {
+                        errors.push(FieldError::unknown(field));
+                        continue;
+                    };
                     if value.is_null() {
-                        next.options.remove(&key);
+                        next_options.remove(&key);
+                    } else if let Err(reason) = check_option(def, &value) {
+                        errors.push(FieldError::new(field, reason));
                     } else {
-                        check_option(def, &value).map_err(|reason| invalid(&field, &reason))?;
-                        next.options.insert(key, value);
+                        next_options.insert(key, value);
                     }
                 }
             }
-            Some(_) => return Err(invalid("options", "expected a JSON object")),
+            Some(_) => errors.push(FieldError::new("options", "expected a JSON object")),
         }
-        *self = next;
-        Ok(())
+        // `next` is only missing after an error was reported.
+        let Some(mut next) = next.filter(|_| errors.is_empty()) else {
+            return Err(SettingsError::Invalid(errors));
+        };
+        next.options = next_options;
+        Ok(next)
     }
 }
 

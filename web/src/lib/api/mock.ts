@@ -1,5 +1,6 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
 import { createMockFavorites } from './mock-favorites';
+import { mockImportReport } from './mock-import';
 import { createMockLists } from './mock-lists';
 import { Invalid, createMockSettings } from './mock-settings';
 import type { paths } from './schema';
@@ -14,7 +15,7 @@ import type {
 	LogLine,
 	ModuleSummary,
 	NewTask,
-	SaveToSettings,
+	RenamePreviewRequest,
 	SeriesInfo,
 	SeriesRef,
 	TaskDetail,
@@ -301,7 +302,45 @@ export interface MockBackend {
 	logsDownloadUrl: () => string;
 }
 
-export function createMockBackend(): MockBackend {
+export interface MockOptions {
+	/**
+	 * The password the mock requires, like `fmd2r serve --password`; `null` turns auth off.
+	 * Defaults to `sessionStorage['fmd2r.mock.password']`, so a test can turn auth on.
+	 */
+	password?: string | null;
+}
+
+const PASSWORD_KEY = 'fmd2r.mock.password';
+const SESSION_KEY = 'fmd2r.mock.session';
+
+/** A sessionStorage item, or `null` without storage (tests, private mode). */
+const stored = (key: string): string | null => {
+	try {
+		return globalThis.sessionStorage?.getItem(key) ?? null;
+	} catch {
+		return null;
+	}
+};
+
+/** Sets (or, with `null`, removes) a sessionStorage item; does nothing without storage. */
+const store = (key: string, value: string | null) => {
+	try {
+		if (value === null) globalThis.sessionStorage?.removeItem(key);
+		else globalThis.sessionStorage?.setItem(key, value);
+	} catch {
+		// Not persisted; the in-memory state still works.
+	}
+};
+
+export function createMockBackend({
+	password = stored(PASSWORD_KEY)
+}: MockOptions = {}): MockBackend {
+	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
+	let loggedIn = stored(SESSION_KEY) !== null;
+	const setLoggedIn = (value: boolean) => {
+		loggedIn = value;
+		store(SESSION_KEY, value ? '1' : null);
+	};
 	const inbox = seedInbox();
 	let tasks = seedTasks(Date.now());
 	/** Every open fake event stream, so API calls can announce what they changed. */
@@ -494,16 +533,82 @@ export function createMockBackend(): MockBackend {
 		} catch (e) {
 			if (!(e instanceof Invalid)) throw e;
 			return json(
-				{ status: 422, title: 'Unprocessable Entity', detail: e.detail, field: e.field },
+				{
+					status: 422,
+					title: 'Unprocessable Entity',
+					detail: e.message,
+					field: e.fields[0]?.field,
+					fields: e.fields
+				},
 				422
 			);
 		}
+	};
+
+	/** The `import` job, listed once an import ran, as fmd-server registers it. */
+	const importJob: JobState = {
+		id: 'import',
+		title: 'Import from FMD2',
+		state: 'idle',
+		done: 0,
+		total: 5,
+		last_run: null,
+		next_run: null,
+		last_error: null
+	};
+	/**
+	 * `POST /api/import`: anything starting like a zip is the mock's FMD2 userdata; an import adds
+	 * its favorite, One Piece, to the library.
+	 */
+	const importUserdata = async (req: Request, query: URLSearchParams): Promise<Response> => {
+		if (importJob.state === 'running') {
+			return json({ status: 409, detail: 'job is already running' }, 409);
+		}
+		const zip = new Uint8Array(await req.arrayBuffer());
+		if (zip[0] !== 0x50 || zip[1] !== 0x4b) {
+			return json({ status: 400, detail: 'not a zip file: invalid Zip archive' }, 400);
+		}
+		const zone = query.get('timezone');
+		if (zone && !Intl.supportedValuesOf('timeZone').includes(zone)) {
+			return json({ status: 422, detail: `unknown time zone "${zone}"`, field: 'timezone' }, 422);
+		}
+		if (!jobs.includes(importJob)) jobs.push(importJob);
+		Object.assign(importJob, { state: 'running', done: 0, last_run: new Date().toISOString() });
+		broadcast('job.state', importJob);
+		for (let step = 1; step <= importJob.total; step++) {
+			await new Promise((resolve) => setTimeout(resolve, 150));
+			importJob.done = step;
+			broadcast('job.state', importJob);
+		}
+		const dryRun = query.get('dry_run') === 'true';
+		const onePiece = series('mangadex', '/title/op/one-piece');
+		const exists = favorites.has('mangadex', '/title/op/one-piece');
+		if (!dryRun && onePiece && !exists) favorites.add(onePiece, 'MangaDex');
+		importJob.state = 'done';
+		broadcast('job.state', importJob);
+		return json(mockImportReport(dryRun, query.getAll('map_path'), exists));
 	};
 
 	const fetch = async (req: Request): Promise<Response> => {
 		const { pathname, searchParams } = new URL(req.url);
 		const route = `${req.method} ${pathname}`;
 
+		if (route === 'GET /api/health') return json({ status: 'ok', auth: password !== null });
+		if (route === 'POST /api/login') {
+			const body = (await req.json()) as { password?: unknown } | null;
+			if (password !== null && body?.password !== password) {
+				return json({ status: 401, title: 'Unauthorized' }, 401);
+			}
+			if (password !== null) setLoggedIn(true);
+			return new Response(null, { status: 204 });
+		}
+		if (route === 'POST /api/logout') {
+			setLoggedIn(false);
+			return new Response(null, { status: 204 });
+		}
+		if (password !== null && !loggedIn) {
+			return json({ status: 401, title: 'Unauthorized' }, 401);
+		}
 		if (route === 'GET /api/inbox') return json(inbox);
 		if (route === 'GET /api/tasks') {
 			const counts = { downloading: 0, waiting: 0, stopped: 0, finished: 0 };
@@ -604,12 +709,14 @@ export function createMockBackend(): MockBackend {
 				? new Response(null, { status: 202 })
 				: json({ status: 409, detail: 'a favorites check is already running' }, 409);
 		}
+		if (route === 'POST /api/import') return importUserdata(req, searchParams);
 		if (route === 'GET /api/logs') return json(logs);
 		if (route === 'GET /api/jobs') return json(jobs);
 		if (route === 'GET /api/settings') return json(settings.getSettings());
 		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
+		if (route === 'PATCH /api/settings/all') return update(req, settings.patchAll);
 		if (route === 'POST /api/preview-rename') {
-			return json(settings.previewRename((await req.json()) as SaveToSettings));
+			return json(settings.previewRename((await req.json()) as RenamePreviewRequest));
 		}
 		if (route === 'GET /api/modules') return json(modules());
 		if (route === 'GET /api/lists/search') return json(lists.search(searchParams));

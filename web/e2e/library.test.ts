@@ -60,3 +60,54 @@ test('a series in the library can be checked for missing chapters', async ({ pag
 	await page.getByRole('button', { name: 'Check missing chapters' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'missing chapters' })).toBeVisible();
 });
+
+/** A file that starts like a zip, as the mock backend checks. */
+const USERDATA_ZIP = {
+	name: 'userdata.zip',
+	mimeType: 'application/zip',
+	buffer: Buffer.from('PK\u0003\u0004 userdata')
+};
+
+test('an FMD2 userdata zip is checked with a dry run, then imported', async ({ page }) => {
+	await page.goto('/');
+	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
+	await expect(cards).toHaveCount(8);
+
+	await page.getByRole('button', { name: 'Import from FMD2' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Import from FMD2' });
+	await dialog.getByLabel('FMD2 userdata folder, zipped').setInputFiles(USERDATA_ZIP);
+	await expect(dialog.getByRole('button', { name: 'Import', exact: true })).toBeDisabled();
+	await dialog.getByRole('button', { name: 'Check' }).click();
+
+	const report = dialog.getByRole('table', { name: 'Import report' });
+	await expect(dialog.getByRole('status')).toContainText('nothing was written');
+	await expect(report.getByRole('row', { name: /favorites\.db/ })).toContainText('1');
+	await expect(dialog.getByText(/C:\\Manga\\Guts is a Windows path/)).toBeVisible();
+	await expect(dialog.getByText('connections.max_parallel_tasks: must be 1 to 8')).toBeVisible();
+	await expect(cards).toHaveCount(8);
+
+	// Mapping the Windows folder changes the options, so it needs another check.
+	await dialog.getByLabel('Path maps').fill('C:\\Manga=/data/manga');
+	await expect(dialog.getByRole('button', { name: 'Import', exact: true })).toBeDisabled();
+	await dialog.getByRole('button', { name: 'Check' }).click();
+	await expect(dialog.getByText(/is a Windows path/)).toHaveCount(0);
+
+	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
+	await expect(dialog.getByRole('status')).toContainText('Imported');
+	await expect(cards.filter({ hasText: 'One Piece' })).toHaveCount(1);
+	await dialog.getByRole('button', { name: 'Close' }).click();
+	await expect(dialog).toHaveCount(0);
+});
+
+test('an upload the server refuses shows why', async ({ page }) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Import from FMD2' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Import from FMD2' });
+	await dialog.getByLabel('FMD2 userdata folder, zipped').setInputFiles({
+		name: 'userdata.rar',
+		mimeType: 'application/octet-stream',
+		buffer: Buffer.from('Rar!')
+	});
+	await dialog.getByRole('button', { name: 'Check' }).click();
+	await expect(dialog.getByRole('alert')).toContainText('not a zip file');
+});
