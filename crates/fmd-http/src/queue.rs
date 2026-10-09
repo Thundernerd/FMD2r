@@ -34,7 +34,6 @@ impl ConnectionQueue {
         if let Ok(mut s) = self.state.lock() {
             s.max = max;
         }
-        // A raised limit may admit waiters.
         self.released.notify_waiters();
     }
 
@@ -59,8 +58,7 @@ impl ConnectionQueue {
     }
 
     fn try_take(&self) -> bool {
-        // A poisoned lock only means another thread panicked mid-update; the counters
-        // are still meaningful.
+        // The counters stay valid after a panic elsewhere, so ignore poisoning.
         let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if s.max == 0 || s.active < s.max {
             s.active += 1;

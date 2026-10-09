@@ -1,4 +1,4 @@
-// Helpers outside #[test] fns are not covered by clippy.toml's test exemption; unwrap is fine in tests/.
+// unwrap is fine in tests/, but clippy.toml's exemption misses helpers outside #[test] fns.
 #![allow(clippy::unwrap_used)]
 
 mod common;

@@ -223,9 +223,8 @@ impl HttpSession {
         if !self.send_with_retries(method, &saved).await {
             return false;
         }
-        // Follow 301/302/303/307 as GET, at most MaxRedirect times; past that the
-        // request fails. The first hop adds `Referer: <url before the redirect>` unless
-        // one is set (baseunits/httpsendthread.pas:631-678).
+        // Redirects are followed as GET up to MaxRedirect times, then fail; the first hop
+        // adds a Referer unless one is set (baseunits/httpsendthread.pas:631-678).
         let mut headers = saved.headers;
         let mut redirects = 0;
         while self.follow_redirection && matches!(self.result_code, 301 | 302 | 303 | 307) {
@@ -287,9 +286,8 @@ impl HttpSession {
     }
 
     /// Request state to re-send on a retry. FMD2 restores only the headers
-    /// (baseunits/httpsendthread.pas:627); by then Synapse has replaced `Document` with
-    /// the error response (baseunits/synapse/httpsend.pas:613), so a retried POST would
-    /// upload the error page. We re-send the original body and MIME type instead.
+    /// (baseunits/httpsendthread.pas:627), so a retried POST uploads the error page Synapse
+    /// left in `Document` (baseunits/synapse/httpsend.pas:613); we re-send the original body.
     fn request_snapshot(&self) -> RequestState {
         RequestState {
             headers: self.headers.clone(),
@@ -355,9 +353,9 @@ impl HttpSession {
         }
     }
 
-    /// Sets `OnAfterSetHTTPCookies` (baseunits/httpsendthread.pas:477-478): a hook run before
-    /// every exchange, after the module jar's cookies were added. FMD2 uses it to merge the
-    /// module's settings cookies (baseunits/WebsiteModules.pas:278-282, :360).
+    /// Sets `OnAfterSetHTTPCookies` (baseunits/httpsendthread.pas:477-478), run before every
+    /// exchange after the jar's cookies are added; FMD2 merges the module's settings cookies
+    /// with it (baseunits/WebsiteModules.pas:278-282, :360).
     pub fn set_on_after_set_cookies(&mut self, hook: Option<SessionHook>) {
         self.after_set_cookies = hook;
     }
@@ -396,14 +394,11 @@ impl HttpSession {
         }
     }
 
-    /// Synapse's `Clear` followed by reading the response: `Headers` becomes the
-    /// response's status line and headers, `MimeType` its Content-Type (default
-    /// `text/html`) and `Document` its body (baseunits/synapse/httpsend.pas:346-355,
-    /// 613-697).
+    /// Synapse's `Clear` then reading the response into `Headers`, `MimeType` (default
+    /// `text/html`) and `Document` (baseunits/synapse/httpsend.pas:346-355, 613-697).
     ///
-    /// Unlike Synapse's raw lines, header names arrive lowercased from hyper and the
-    /// status line and `ResultString` carry the canonical reason phrase rather than the
-    /// server's. `Values[...]` lookups are case-insensitive, so modules see no difference.
+    /// Unlike Synapse, header names arrive lowercased from hyper and the reason phrase is
+    /// the canonical one; `Values[...]` lookups are case-insensitive, so modules can't tell.
     fn take_response(&mut self, response: WireResponse) {
         self.headers.clear();
         self.mime_type = "text/html".into();
@@ -461,8 +456,7 @@ impl HttpSession {
         &self.last_url
     }
 
-    /// The token that terminates this session's requests; clone it to terminate from
-    /// another thread.
+    /// Clone of the token that terminates this session's requests.
     pub fn terminate_token(&self) -> TerminateToken {
         self.terminate.clone()
     }
@@ -632,10 +626,9 @@ impl HttpSession {
         self.proxy = self.stamp(proxy);
     }
 
-    /// Connects requests for the pinned host to its address instead of resolving the host (see
-    /// [`ConnectTo`]); `None` resolves again. A redirect to another host is not pinned. No FMD2
-    /// counterpart: it lets a caller connect to the address it checked (the cover proxy's SSRF
-    /// guard). With a proxy the proxy connects to the host, so the pin is unused.
+    /// Pins the host to an address (see [`ConnectTo`]) so a caller connects to the address
+    /// it checked (the cover proxy's SSRF guard). Redirects to other hosts and proxied
+    /// requests are not pinned. No FMD2 counterpart.
     pub fn set_connect_to(&mut self, pin: Option<ConnectTo>) {
         self.connect_to = pin;
     }

@@ -5,10 +5,8 @@ use std::sync::Arc;
 use crate::cookies::CookieJar;
 use crate::queue::ConnectionQueue;
 
-/// HTTP state shared by every session of one website module: its connection queue
-/// and cookie jar (`ConnectionsQueue` and `CookieManager`, baseunits/WebsiteModules.pas:113,
-/// 353-387).
-/// Cheap to clone; clones share the state.
+/// Connection queue and cookie jar shared by every session of one website module
+/// (`ConnectionsQueue`, `CookieManager`, baseunits/WebsiteModules.pas:113, 353-387).
 #[derive(Clone, Default)]
 pub struct ModuleHttp {
     pub(crate) queue: Arc<ConnectionQueue>,
@@ -16,7 +14,6 @@ pub struct ModuleHttp {
 }
 
 impl ModuleHttp {
-    /// The module's cookie jar.
     pub fn cookies(&self) -> &CookieJar {
         &self.cookies
     }
