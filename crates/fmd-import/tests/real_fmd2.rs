@@ -10,12 +10,14 @@ mod common;
 use std::path::Path;
 
 use common::App;
-use fmd_core::settings::{ProxyType, SettingsService};
+use fmd_core::settings::{ModuleOverrides, ProxyOverrideType, ProxyType, SettingsService};
 use fmd_import::{ImportOptions, SkipReason};
 use fmd_store::AccountStatus;
+use serde_json::json;
 
 /// Com-X, the fixture's module with an account (`m.AccountSupport`, fixtures/lua/modules/ComX.lua).
 const COMX: &str = "bdf2eb4381a7403ca93d144b9dbc0d0a";
+const MANGADEX: &str = "d07c9c2425764da8ba056505f57cf40c";
 
 /// Imports a copy of the fixture, so SQLite never touches the committed files.
 fn import_fixture(app: &App) -> fmd_import::ImportReport {
@@ -77,4 +79,28 @@ fn the_proxy_credentials_fmd2_encrypted_are_imported_in_plaintext() {
     assert_eq!(p.username, "proxy-user");
     assert_eq!(p.password, "pr0xy päss €");
     assert_eq!(s.connections.max_parallel_tasks, 3);
+}
+
+#[test]
+fn the_module_settings_fmd2_wrote_are_imported() {
+    let app = App::new();
+
+    import_fixture(&app);
+
+    let repo = app.db.module_settings();
+    let comx = ModuleOverrides::load(&repo, COMX).unwrap();
+    assert!(comx.enabled);
+    assert_eq!(comx.http.user_agent, "FMD2r-fixture/1.0");
+    assert_eq!(
+        (comx.limits.max_task_limit, comx.limits.max_connection_limit),
+        (2, 4)
+    );
+    let dex = ModuleOverrides::load(&repo, MANGADEX).unwrap();
+    assert_eq!(dex.http.proxy.kind, ProxyOverrideType::Http);
+    assert_eq!(dex.http.proxy.host, "module-proxy.test");
+    assert_eq!(dex.http.proxy.port, "3128");
+    assert_eq!(dex.http.proxy.username, "mod-user");
+    assert_eq!(dex.http.proxy.password, "mod-pass");
+    assert_eq!(dex.options["lualang"], json!(3));
+    assert_eq!(dex.options["luashowscangroup"], json!(true));
 }

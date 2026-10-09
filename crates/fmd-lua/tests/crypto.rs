@@ -387,7 +387,7 @@ fn encrypt_string_is_public_rust_api() {
 #[test]
 fn encrypt_string_matches_a_real_fmd2_binary() {
     // `plaintext hex <TAB> ciphertext` pairs FMD2 2.0.34.5's own EncryptString produced
-    // (baseunits/uBaseUnit.pas:1559-1587); fixtures/README.md says how they were made.
+    // (baseunits/uBaseUnit.pas:1559-1589); fixtures/README.md says how they were made.
     use fmd_lua::crypto::{decrypt_string, encrypt_string};
     let tsv = include_str!("../../../fixtures/fmd2/encrypt_string.tsv");
     let hex = |s: &str| -> Vec<u8> {
@@ -404,6 +404,7 @@ fn encrypt_string_matches_a_real_fmd2_binary() {
         assert_eq!(decrypt_string(cipher.as_bytes()), plain, "{line}");
         checked += 1;
     }
+    // Every line of the fixture, so an emptied or truncated file fails.
     assert_eq!(checked, 9);
 }
 

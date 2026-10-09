@@ -123,7 +123,7 @@ normalized form, for debugging a mismatch.
 
 ## `fmd2/`: files a real FMD2 binary wrote
 
-Ciphertext from FMD2 itself, so `EncryptString`/`DecryptString` (baseunits/uBaseUnit.pas:1556-1587)
+Ciphertext from FMD2 itself, so `EncryptString`/`DecryptString` (baseunits/uBaseUnit.pas:1556-1589)
 and the importer's account and proxy-password decryption are checked against FMD2, not against a
 reproduction of DCPcrypt's recipe (T43).
 
@@ -137,7 +137,9 @@ fmd2/
 
 `crates/fmd-lua/tests/crypto.rs` checks `encrypt_string`/`decrypt_string` against
 `encrypt_string.tsv`; `crates/fmd-import/tests/real_fmd2.rs` runs `fmd_import::import()` on
-`userdata/`. None of the credentials are real.
+`userdata/`. None of the credentials are real. There is no `accounts.db`: FMD2 keeps accounts in
+`modules.json`, and only names `ACCOUNTS_FILE` (baseunits/FMDOptions.pas:289) in its backup list
+(mangadownloader/forms/uBackupSettings.pas:69), so it never wrote one.
 
 ### How they were made
 
@@ -176,4 +178,4 @@ What the runs showed besides the vectors:
 - A `ProxyType` of `SOCKS5` came back as `""`; `HTTP`, the combo box's design-time text
   (frmMain.lfm:3566), survives. Setting `cbOptionProxyType.Text` (frmMain.pas:5875) on a
   `csDropDownList` combo box at that point doesn't select the item, under Wine at least, and
-  FMD2 then treats `""` as no proxy (baseunits/httpsendthread.pas:853-868).
+  FMD2 then treats `""` as no proxy (baseunits/httpsendthread.pas:853-873).

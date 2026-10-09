@@ -1,4 +1,4 @@
--- Throwaway: records FMD2's own EncryptString/DecryptString (baseunits/uBaseUnit.pas:1559-1587).
+-- Throwaway: records FMD2's own EncryptString/DecryptString (baseunits/uBaseUnit.pas:1559-1589).
 local function hex(s) return (s:gsub('.', function(c) return string.format('%02x', c:byte()) end)) end
 function Init()
 	local c = require 'fmd.crypto'
