@@ -70,8 +70,8 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/**
-		 * Log in with the module's `OnLogin`, then its `OnAccountState`; answers once the login is
-		 *     done, with the status the module set. `account.state` events announce the start and the end.
+		 * Log in with the module's `OnLogin`, then `OnAccountState`; answers once done. `account.state`
+		 *     events announce the start and the end.
 		 */
 		post: operations['loginAccount'];
 		delete?: never;
@@ -90,8 +90,8 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/**
-		 * Check whether folders exist and are writable by the server (T74), for the destinations'
-		 *     warnings. Relative paths resolve against the server's working directory, as downloads do.
+		 * Check whether folders exist and are writable by the server. Relative paths resolve against
+		 *     the server's working directory, as downloads do.
 		 */
 		post: operations['checkFolders'];
 		delete?: never;
@@ -751,10 +751,7 @@ export interface paths {
 		delete?: never;
 		options?: never;
 		head?: never;
-		/**
-		 * Update the settings and any modules' settings together, all or nothing. Nothing is stored
-		 *     unless every patch is valid, and everything is stored in one transaction.
-		 */
+		/** Update the settings and any modules' settings together in one transaction, all or nothing. */
 		patch: operations['patchAllSettings'];
 		trace?: never;
 	};
@@ -1014,8 +1011,8 @@ export interface components {
 			username: string;
 		};
 		/**
-		 * @description The fields to change; a missing field keeps its value. Not `Debug`, so the password cannot
-		 *     be logged.
+		 * @description The fields to change; a missing field keeps its value. Not `Debug`, so the password is never
+		 *     logged.
 		 */
 		AccountRequest: {
 			enabled?: boolean | null;
@@ -1041,10 +1038,7 @@ export interface components {
 			/** @description The series link relative to the module's `RootURL`. */
 			link: string;
 			module_id: string;
-			/**
-			 * @description The download directory; the default one when missing. The manga folder is added when
-			 *     generated.
-			 */
+			/** @description The download directory; the default one when missing. The generated manga folder is added. */
 			save_to?: string | null;
 		};
 		/** @description One chapter of a series. */
@@ -1150,8 +1144,7 @@ export interface components {
 		CoverSettings: {
 			/**
 			 * Format: int32
-			 * @description Size cap of the cover cache in MiB; least recently used covers are evicted past it.
-			 *     Minimum 1.
+			 * @description Cover cache size cap in MiB; least recently used covers are evicted past it.
 			 * @default 256
 			 */
 			cache_size_mb: number;
@@ -1245,9 +1238,8 @@ export interface components {
 			module_id: string;
 			/**
 			 * Format: int32
-			 * @description Chapters on the site at the last check that are not downloaded, compared by link. A
-			 *     favorite not checked since its links were kept (or imported from FMD2) has only the
-			 *     count, so until its next check this is the chapter count less the downloaded ones.
+			 * @description Chapters on the site at the last check that are not downloaded, compared by link. Until
+			 *     its first check with links kept (e.g. imported from FMD2), the count less the downloaded.
 			 */
 			new_chapters: number;
 			save_to: string;
@@ -1298,9 +1290,8 @@ export interface components {
 		FolderCheck: {
 			path: string;
 			/**
-			 * @description Why downloads can't be saved there now, or `None` when they can. A missing folder is
-			 *     created by the first download into it, so this is a warning, not an error: a disk may be
-			 *     unmounted for a while.
+			 * @description Why downloads can't be saved there now. A warning, not an error: the first download
+			 *     creates a missing folder, and a disk may be unmounted for a while.
 			 */
 			problem?: string | null;
 		};
@@ -1338,12 +1329,10 @@ export interface components {
 			 */
 			lua_dir: string;
 			/**
-			 * @description The websites Discover lists and searches, by module ID (`general/MangaListSelect`,
-			 *     comma-separated, mangadownloader/forms/frmMain.pas:5990-6004). IDs of modules that are
-			 *     not loaded are kept but ignored, so a module that comes back is still selected; FMD2
-			 *     drops them on load (mangadownloader/forms/frmMain.pas:6464-6470). Empty on a fresh
-			 *     install: FMD2 defaults to `config.json`'s `default_selected_websites`
-			 *     (baseunits/FMDOptions.pas:94, :250), which FMD2r does not ship.
+			 * @description Module IDs Discover lists and searches (`general/MangaListSelect`,
+			 *     mangadownloader/forms/frmMain.pas:5990-6004). IDs of unloaded modules are kept but
+			 *     ignored; FMD2 drops them (mangadownloader/forms/frmMain.pas:6464-6470). Empty by default:
+			 *     FMD2r does not ship `default_selected_websites` (baseunits/FMDOptions.pas:94, :250).
 			 * @default []
 			 */
 			selected_websites: string[];
@@ -1351,12 +1340,9 @@ export interface components {
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
 			auth: boolean;
-			/** @description Whether the server listens on a loopback address only, out of other machines' reach. */
+			/** @description Whether the server listens on a loopback address only. */
 			loopback: boolean;
-			/**
-			 * @description The settings the command line or environment overrides (`--bind`, `--password`, …), as
-			 *     dotted paths such as `server.bind`.
-			 */
+			/** @description Settings overridden by the command line or environment, as dotted paths (`server.bind`). */
 			overridden: string[];
 			/** @description Always `ok` while the server answers. */
 			status: string;
@@ -1469,10 +1455,7 @@ export interface components {
 		 * @enum {string}
 		 */
 		JobPhase: 'idle' | 'running' | 'done' | 'failed';
-		/**
-		 * @description A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites
-		 *     check, list update, module update, or any other registered job.
-		 */
+		/** @description A background job and its progress (`job.state`, and the items of `GET /api/jobs`). */
 		JobState: {
 			/** Format: int64 */
 			done: number;
@@ -1798,28 +1781,26 @@ export interface components {
 			/** @description The options the module declares with `AddOption*`, in declaration order. */
 			options: components['schemas']['ModuleOptionSetting'][];
 			/**
-			 * @description The folder the website's downloads go to when the user picks none; empty for the default
-			 *     destination (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50).
-			 *     Applies whether or not `enabled` is set.
+			 * @description The website's download folder when the user picks none; empty for the default
+			 *     (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Applies even
+			 *     when not `enabled`.
 			 */
 			save_to: string;
 		};
 		/**
 		 * @description A loaded module, for the module pickers.
 		 *
-		 *     IDs can repeat: FMD2's loader keeps every module a file's `Init` creates without checking
-		 *     IDs (baseunits/lua/LuaWebsiteModules.pas:523-589), and upstream `lua/modules/Manga1001.lua:18-19`
-		 *     registers two websites under one ID. `root_url` tells such entries apart; they share the
-		 *     ID's settings, which FMD2 keys by ID (baseunits/WebsiteModules.pas:545-700).
+		 *     IDs can repeat: FMD2's loader does not check them (baseunits/lua/LuaWebsiteModules.pas:523-589),
+		 *     and `lua/modules/Manga1001.lua:18-19` registers two websites under one ID. `root_url` tells
+		 *     them apart; they share the ID's settings (baseunits/WebsiteModules.pas:545-700).
 		 */
 		ModuleSummary: {
 			capabilities: components['schemas']['ModuleCapabilities'];
 			category: string;
 			/**
-			 * @description Whether its settings differ from the defaults: an option's value is not the one it
-			 *     declares, or its overrides are on (`Settings.Enabled`,
-			 *     baseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting, or it has
-			 *     its own download folder.
+			 * @description Whether its settings differ from the defaults: a changed option, enabled overrides
+			 *     (`Settings.Enabled`, baseunits/WebsiteModulesSettings.pas:80) that change a limit or HTTP
+			 *     setting, or its own download folder.
 			 */
 			customized: boolean;
 			id: string;
@@ -1918,9 +1899,8 @@ export interface components {
 		Problem: {
 			detail: string;
 			/**
-			 * @description The setting a validation error (422) is about, as a dotted path such as
-			 *     `connections.timeout_secs` or `options.server`.
-			 *     Kept for clients that read one field: the first of `fields`.
+			 * @description The first of `fields`, for clients that read one: a dotted path such as
+			 *     `connections.timeout_secs`.
 			 */
 			field?: string | null;
 			/** @description Every setting a validation error (422) is about, each with why it was rejected. */
@@ -1977,10 +1957,7 @@ export interface components {
 			manga: string;
 			/** @description The first page's file name with the extension it ends up with. */
 			page: string;
-			/**
-			 * @description Where the first page ends up: its file, or the chapter's archive when chapters are
-			 *     packed.
-			 */
+			/** @description The first page's file, or the chapter's archive when chapters are packed. */
 			path: string;
 		};
 		/** @description The settings a rename preview reads, possibly unsaved; a missing group takes its defaults. */
@@ -2075,18 +2052,16 @@ export interface components {
 			convert_digit_volume: boolean;
 			/**
 			 * @description The default destination's path (`saveto/SaveTo`, `DEFAULT_PATH`,
-			 *     baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for API
-			 *     clients that predate [`Self::destinations`]: it always mirrors the default's path, and
-			 *     a patch that changes it alone moves the default destination there. Empty resets it to
-			 *     the default.
+			 *     baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for
+			 *     clients predating [`Self::destinations`]. Patching it alone moves the default
+			 *     destination; empty resets it.
 			 * @default downloads
 			 */
 			default_dir: string;
 			/**
-			 * @description The named download folders a download can go to, one of them the default. No FMD2
-			 *     counterpart: FMD2 has one folder (`saveto/SaveTo`) plus a per-website override
-			 *     (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names are
-			 *     unique (ignoring case and surrounding spaces) and not empty; paths are not empty.
+			 * @description Named download folders, one of them the default. FMD2 has one folder plus a per-website
+			 *     override (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names
+			 *     are non-empty and unique (ignoring case and surrounding spaces); paths are non-empty.
 			 * @default [
 			 *       {
 			 *         "default": true,
@@ -2226,8 +2201,7 @@ export interface components {
 			has_auth_token: boolean;
 			/**
 			 * Format: int32
-			 * @description Days a login session may go unused before it ends; every authorized request restarts
-			 *     the count.
+			 * @description Days a login session may go unused; every authorized request restarts the count.
 			 */
 			session_idle_days: number;
 			/**
