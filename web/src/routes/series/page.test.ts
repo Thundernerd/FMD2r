@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
-import { ApiError } from '#lib/api/client.ts';
+import { ApiError, type Api } from '#lib/api/client.ts';
 import type { SeriesInfo } from '#lib/api/types.ts';
 
 // jsdom has no ResizeObserver; the chapter list's `bind:clientHeight` needs one.
@@ -16,14 +16,15 @@ const getSeries = vi.fn<(module: string, link: string) => Promise<SeriesInfo>>()
 vi.mock('$app/state', () => ({
 	page: { url: new URL('http://localhost/series?module=mangadex&link=%2Ftitle%2Ffrieren') }
 }));
-vi.mock('#lib/app.ts', () => ({
-	api: {
-		getSeries: (module: string, link: string) => getSeries(module, link),
+vi.mock('#lib/app.ts', () => {
+	// What the page calls before anyone presses a button.
+	const api: Pick<Api, 'getSeries' | 'listModules' | 'getSettings'> = {
+		getSeries: (module, link) => getSeries(module, link),
 		listModules: () => Promise.resolve([]),
 		getSettings: () => new Promise(() => {})
-	},
-	events: { queue: { upsert: () => {} } }
-}));
+	};
+	return { api, events: { queue: { upsert: () => {} } } };
+});
 
 const { default: SeriesPage } = await import('./+page.svelte');
 
@@ -50,6 +51,13 @@ function deferred<T>() {
 		reject = rej;
 	});
 	return { promise, resolve, reject };
+}
+
+/** Lets the page react to a settled `getSeries`. */
+async function settle() {
+	await tick();
+	await Promise.resolve();
+	flushSync();
 }
 
 describe('series page', () => {
@@ -81,9 +89,7 @@ describe('series page', () => {
 
 	it('replaces the skeleton with the series once it loads', async () => {
 		pending.resolve(frieren);
-		await tick();
-		await Promise.resolve();
-		flushSync();
+		await settle();
 
 		expect(skeleton()).toBeNull();
 		expect(document.querySelector('h1')?.textContent).toBe('Frieren');
@@ -92,9 +98,7 @@ describe('series page', () => {
 
 	it('replaces the skeleton with the error when the series is not found', async () => {
 		pending.reject(new ApiError(404, 'GET /api/series', 'series not found'));
-		await tick();
-		await Promise.resolve();
-		flushSync();
+		await settle();
 
 		expect(skeleton()).toBeNull();
 		expect(document.querySelector('[role="alert"]')?.textContent).toContain(

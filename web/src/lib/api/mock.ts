@@ -308,11 +308,15 @@ export interface MockOptions {
 	 * Defaults to `sessionStorage['fmd2r.mock.password']`, so a test can turn auth on.
 	 */
 	password?: string | null;
+	/**
+	 * How long, in ms, `GET /api/series` takes to answer, so a test can see the page while it loads.
+	 * Defaults to `sessionStorage['fmd2r.mock.series-delay-ms']`, or no delay.
+	 */
+	seriesDelayMs?: number;
 }
 
 const PASSWORD_KEY = 'fmd2r.mock.password';
 const SESSION_KEY = 'fmd2r.mock.session';
-/** How long, in ms, `GET /api/series` takes; a test sets it to see the page while it loads. */
 const SERIES_DELAY_KEY = 'fmd2r.mock.series-delay-ms';
 
 /** A sessionStorage item, or `null` without storage (tests, private mode). */
@@ -335,7 +339,8 @@ const store = (key: string, value: string | null) => {
 };
 
 export function createMockBackend({
-	password = stored(PASSWORD_KEY)
+	password = stored(PASSWORD_KEY),
+	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0)
 }: MockOptions = {}): MockBackend {
 	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
 	let loggedIn = stored(SESSION_KEY) !== null;
@@ -672,8 +677,7 @@ export function createMockBackend({
 			return json(createTask(body as NewTask), 201);
 		}
 		if (route === 'GET /api/series') {
-			const delay = Number(stored(SERIES_DELAY_KEY) ?? 0);
-			if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+			if (seriesDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, seriesDelayMs));
 			const info = series(searchParams.get('module') ?? '', searchParams.get('link') ?? '');
 			return info
 				? json(info)

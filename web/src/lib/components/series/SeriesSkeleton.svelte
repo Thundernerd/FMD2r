@@ -1,8 +1,8 @@
 <script lang="ts">
 	import SeriesLayout from './SeriesLayout.svelte';
 
-	/** Placeholder chapter rows; enough to fill the list's first screen. */
-	const ROWS = 8;
+	/** Placeholder chapter rows; enough to fill the list's 480px viewport (ChapterList's `.rows`). */
+	const ROWS = 14;
 </script>
 
 <!-- Laid out like SeriesHeader, ChapterList and DownloadBox, so the page doesn't jump when they arrive. -->
@@ -31,8 +31,9 @@
 					<span class="shape line w-full"></span>
 					<span class="shape line w-full"></span>
 					<span class="shape line w-full"></span>
-					<span class="shape line w-60pc"></span>
+					<span class="shape line w-three-fifths"></span>
 				</div>
+				<span class="shape show-more"></span>
 				<div class="actions">
 					<span class="shape button"></span>
 					<span class="shape button"></span>
@@ -51,21 +52,29 @@
 						<span class="shape button sm"></span>
 						<span class="shape button sm"></span>
 					</div>
-					{#each { length: ROWS }, i (i)}
-						<div class="row">
-							<span class="shape check"></span>
-							<span class="shape line w-120"></span>
-						</div>
-					{/each}
+					<div class="rows">
+						{#each { length: ROWS }, i (i)}
+							<div class="row">
+								<span class="shape check"></span>
+								<span class="shape line w-120"></span>
+							</div>
+						{/each}
+					</div>
 				</div>
 			{/snippet}
 			{#snippet side()}
 				<div class="card box">
 					<span class="shape line w-140"></span>
-					<span class="shape line w-60"></span>
-					<span class="shape field"></span>
-					<span class="shape line w-60"></span>
-					<span class="shape line w-120"></span>
+					<div class="fields">
+						<div class="field grow">
+							<span class="shape line w-60"></span>
+							<span class="shape input"></span>
+						</div>
+						<div class="field">
+							<span class="shape line w-60"></span>
+							<span class="shape line w-120 format"></span>
+						</div>
+					</div>
 					<span class="shape button"></span>
 				</div>
 			{/snippet}
@@ -169,8 +178,12 @@
 	.w-full {
 		width: 100%;
 	}
-	.w-60pc {
+	.w-three-fifths {
 		width: 60%;
+	}
+	.show-more {
+		width: 76px;
+		height: 22px;
 	}
 	.pill {
 		width: 64px;
@@ -213,10 +226,16 @@
 		padding: 10px 14px;
 		border-bottom: 1px solid var(--line);
 	}
+	/* As tall as ChapterList's `.rows` once it holds a series' worth of chapters. */
+	.rows {
+		height: 480px;
+		overflow: hidden;
+	}
 	.row {
 		height: 36px;
 		padding: 0 14px;
 		gap: 10px;
+		border-bottom: 1px solid var(--line);
 	}
 	.check {
 		width: 15px;
@@ -229,8 +248,25 @@
 		gap: 10px;
 		padding: 12px 14px;
 	}
+	.fields {
+		display: flex;
+		gap: var(--sp-3);
+		flex-wrap: wrap;
+	}
 	.field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-1);
+	}
+	.field.grow {
+		flex: 1 1 260px;
+		min-width: 0;
+	}
+	.input {
 		height: 30px;
+	}
+	.format {
+		margin: 9px 0;
 	}
 
 	@media (max-width: 860px) {
@@ -240,6 +276,12 @@
 		.cover {
 			width: 120px;
 			height: 170px;
+		}
+		.title {
+			height: 30px;
+		}
+		.rows {
+			height: 60vh;
 		}
 	}
 </style>
