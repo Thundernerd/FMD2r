@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use fmd_core::download::{DownloadManager, EngineConfig};
-use fmd_core::settings::write_websitebypass_config;
+use fmd_core::settings::{SettingsService, write_websitebypass_config};
 use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, ListsDb};
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -70,15 +70,15 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     })
     .await
     .map_err(std::io::Error::other)??;
-    // Read once: cover cache and FlareSolverr changes apply on the next start.
+    // Read once: cover cache changes apply on the next start.
     let settings = state.settings.get();
     // Absolute, so `GET /api/about` shows where the data really is.
     let data_dir = std::fs::canonicalize(&config.data_dir).unwrap_or(config.data_dir);
     let lua_dir = data_dir.join("lua");
     // The flag or environment variable wins for this run without replacing the stored setting.
-    let flaresolverr_url = config
-        .flaresolverr_url
-        .unwrap_or_else(|| settings.connections.flaresolverr_url.clone());
+    let flaresolverr_override = config.flaresolverr_url;
+    let flaresolverr_url =
+        module_updates::flaresolverr_url(flaresolverr_override.as_deref(), &settings);
     // Where upstream's cloudflare.lua looks for FlareSolverr (lua/websitebypass/cloudflare.lua:271-325).
     if let Err(e) = write_websitebypass_config(&lua_dir, &flaresolverr_url) {
         tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}");
@@ -122,13 +122,25 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                 Err(e) => tracing::error!(target: "fmd_server", "download engine: {e}"),
             }
             if config.module_updates {
-                module_updates::start(state.clone(), &runtime, lua_dir, flaresolverr_url);
+                module_updates::start(
+                    state.clone(),
+                    &runtime,
+                    lua_dir.clone(),
+                    flaresolverr_override.clone(),
+                );
             }
         }
         Err(e) => {
             tracing::error!(target: "fmd_server", "Lua modules: {e}");
             state = state.with_covers(covers, Idle);
         }
+    }
+    if flaresolverr_override.is_none() {
+        tokio::spawn(follow_flaresolverr_url(
+            state.settings.clone(),
+            lua_dir,
+            flaresolverr_url,
+        ));
     }
     let listener = TcpListener::bind(config.bind)
         .await
@@ -173,4 +185,38 @@ fn shutdown_signal() -> std::io::Result<impl Future<Output = ()>> {
             std::future::pending::<()>().await;
         }
     })
+}
+
+/// Rewrites `websitebypass_config.json` whenever the `connections.flaresolverr_url` setting
+/// differs from `current`, the URL last written. Upstream's `cloudflare.lua` reads the file at every bypass
+/// (lua/websitebypass/cloudflare.lua:271-325, :341), so the next one uses the new URL.
+async fn follow_flaresolverr_url(
+    settings: Arc<SettingsService>,
+    lua_dir: PathBuf,
+    mut current: String,
+) {
+    let mut changes = settings.subscribe();
+    while changes.changed().await.is_ok() {
+        let url = changes
+            .borrow_and_update()
+            .connections
+            .flaresolverr_url
+            .clone();
+        if url == current {
+            continue;
+        }
+        let dir = lua_dir.clone();
+        let next = url.clone();
+        let written = tokio::task::spawn_blocking(move || write_websitebypass_config(&dir, &next))
+            .await
+            .map_err(std::io::Error::other)
+            .and_then(|written| written);
+        match written {
+            Ok(()) => current = url,
+            // Tried again at the next settings change.
+            Err(e) => {
+                tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}")
+            }
+        }
+    }
 }

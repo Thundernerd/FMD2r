@@ -10,7 +10,7 @@ use fmd_core::module_updater::{
 };
 use fmd_core::modules::StoreModuleSettings;
 use fmd_core::settings::{
-    ModuleUpdaterSettings, SettingsService, StoredModuleHttpSettings, XPathBackend,
+    ModuleUpdaterSettings, Settings, SettingsService, StoredModuleHttpSettings, XPathBackend,
     write_websitebypass_config,
 };
 use fmd_http::HttpClient;
@@ -126,17 +126,19 @@ pub(crate) fn follow_xpath_backend(settings: Arc<SettingsService>, runtime: &Lua
 /// modules yet is synced at startup either way (the first-run bootstrap).
 ///
 /// The repository, token and keep-last-good settings are read once: changes apply on the next
-/// start. `flaresolverr_url` is written back into `websitebypass_config.json` whenever a sync
+/// start. The FlareSolverr URL (`flaresolverr_override`, else the `connections.flaresolverr_url`
+/// setting at that time) is written back into `websitebypass_config.json` whenever a sync
 /// replaces it with upstream's.
 pub(crate) fn start(
     state: AppState,
     runtime: &LuaRuntime,
     lua_dir: PathBuf,
-    flaresolverr_url: String,
+    flaresolverr_override: Option<String>,
 ) {
     let settings = state.settings.get().module_updater.clone();
     let config = UpdaterConfig::from_settings(&settings, &lua_dir);
     let dir = lua_dir.clone();
+    let settings_service = state.settings.clone();
     let updater = ModuleUpdater::new(
         config,
         state.db.clone(),
@@ -145,6 +147,8 @@ pub(crate) fn start(
     )
     .with_pool(runtime.pool.clone())
     .with_after_sync(move |report| {
+        let flaresolverr_url =
+            flaresolverr_url(flaresolverr_override.as_deref(), &settings_service.get());
         if report.downloaded.iter().any(|f| f == WEBSITEBYPASS_CONFIG)
             && let Err(e) = write_websitebypass_config(&dir, &flaresolverr_url)
         {
@@ -155,6 +159,14 @@ pub(crate) fn start(
     state.jobs.register(job.clone());
     state.jobs.changed(ModuleUpdaterJob::ID);
     tokio::spawn(schedule(job, state, lua_dir));
+}
+
+/// The FlareSolverr URL `websitebypass_config.json` points at: the flag or environment variable
+/// (`flaresolverr_override`) for this run, else the stored `connections.flaresolverr_url`.
+pub(crate) fn flaresolverr_url(flaresolverr_override: Option<&str>, settings: &Settings) -> String {
+    flaresolverr_override
+        .unwrap_or(&settings.connections.flaresolverr_url)
+        .to_owned()
 }
 
 /// The config file `write_websitebypass_config` writes, relative to the Lua dir.

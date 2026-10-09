@@ -16,7 +16,8 @@ const FLARESOLVERR_PORT: u16 = 8191;
 /// FlareSolverr) with its host and port (8191 when it names none); an empty one writes
 /// upstream's defaults: off, `localhost:8191` (lua/websitebypass/websitebypass_config.json). A
 /// URL that is not `http(s)://host[:port]` is an `InvalidInput` error and writes nothing.
-/// `debug`, `testing` and keys FMD2r does not know keep the values the file has.
+/// `debug`, `testing` and keys FMD2r does not know keep the values the file has. The file is
+/// replaced whole, so a reader never sees it half-written.
 pub fn write_websitebypass_config(lua_dir: &Path, flaresolverr_url: &str) -> std::io::Result<()> {
     let file = lua_dir.join("websitebypass/websitebypass_config.json");
     let mut config = std::fs::read(&file)
@@ -45,7 +46,13 @@ pub fn write_websitebypass_config(lua_dir: &Path, flaresolverr_url: &str) -> std
         std::fs::create_dir_all(dir)?;
     }
     let json = serde_json::to_vec_pretty(&Value::Object(config)).map_err(std::io::Error::other)?;
-    std::fs::write(file, json)
+    // Written whole and renamed into place: `cloudflare.lua` may read it at any time.
+    let temp = file.with_file_name(".websitebypass_config.json.fmd2r-write");
+    let written = std::fs::write(&temp, json).and_then(|()| std::fs::rename(&temp, &file));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    written
 }
 
 /// The host and port of an `http(s)://host[:port][/...]` URL; `None` when it is blank or names
