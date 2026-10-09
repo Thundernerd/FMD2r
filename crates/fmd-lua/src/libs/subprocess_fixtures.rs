@@ -5,11 +5,12 @@
 //! documented in `docs/fixtures.md`.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
 use super::subprocess::{Command, Output, Spawner};
+use crate::module::lock;
 
 /// The version of the format `subprocess.json` declares.
 pub const SUBPROCESS_FORMAT: u32 = 1;
@@ -89,10 +90,6 @@ impl Bytes {
             Bytes::Raw(bytes) => bytes.clone(),
         }
     }
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// `program args...`, for messages.

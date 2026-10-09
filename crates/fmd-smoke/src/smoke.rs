@@ -247,7 +247,7 @@ impl Smoke {
         let work = WorkDir::new().map_err(|e| format!("cannot create a working directory: {e}"))?;
         let mut command = Command::new(absolute(&self.fmd2r));
         command
-            .current_dir(&work.0)
+            .current_dir(&work.path)
             .arg("module")
             .arg(step.command())
             .arg(step.url(entry))
@@ -281,7 +281,9 @@ impl Smoke {
 }
 
 /// A fresh directory under the system's temporary directory, removed on drop.
-struct WorkDir(PathBuf);
+struct WorkDir {
+    path: PathBuf,
+}
 
 impl WorkDir {
     fn new() -> io::Result<WorkDir> {
@@ -292,14 +294,14 @@ impl WorkDir {
             fs::remove_dir_all(&dir)?;
         }
         fs::create_dir_all(&dir)?;
-        Ok(WorkDir(dir))
+        Ok(WorkDir { path: dir })
     }
 }
 
 impl Drop for WorkDir {
     fn drop(&mut self) {
         // Leaving a temporary directory behind is harmless.
-        let _ = fs::remove_dir_all(&self.0);
+        let _ = fs::remove_dir_all(&self.path);
     }
 }
 

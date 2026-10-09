@@ -80,7 +80,7 @@ pub struct RunArgs {
     #[command(flatten)]
     load: LoadArgs,
     #[command(flatten)]
-    http: HttpArgs,
+    http: IoArgs,
     /// Record every XPath evaluation into this differential corpus directory (see
     /// fixtures/xpath-corpus), adding to what is there.
     #[arg(long, value_name = "DIR")]
@@ -99,7 +99,7 @@ pub struct DownloadArgs {
 /// Where HTTP requests and `fmd.subprocess` processes go: the network and the system, the same
 /// with recording, or recorded fixtures.
 #[derive(Args)]
-pub struct HttpArgs {
+pub struct IoArgs {
     /// Write every HTTP exchange, and every process `fmd.subprocess` runs, into this fixture
     /// directory (see docs/fixtures.md).
     #[arg(long, value_name = "DIR", conflicts_with = "replay")]
@@ -116,15 +116,15 @@ pub struct HttpArgs {
 }
 
 /// The HTTP client and process spawner of a command, and the replays behind them, if any.
-struct CommandHttp {
+struct CommandIo {
     client: HttpClient,
     replay: Option<Arc<ReplayTransport>>,
     spawner: Option<Arc<dyn Spawner + Send + Sync>>,
     replay_spawner: Option<Arc<ReplaySpawner>>,
 }
 
-impl HttpArgs {
-    fn client(&self) -> anyhow::Result<CommandHttp> {
+impl IoArgs {
+    fn open(&self) -> anyhow::Result<CommandIo> {
         let mut replay = None;
         let mut spawner: Option<Arc<dyn Spawner + Send + Sync>> = None;
         let mut replay_spawner = None;
@@ -153,7 +153,7 @@ impl HttpArgs {
             (None, None) => Arc::new(ReqwestTransport::new()),
         };
         let client = HttpClient::with_transport(transport).context("starting the HTTP client")?;
-        Ok(CommandHttp {
+        Ok(CommandIo {
             client,
             replay,
             spawner,
@@ -162,7 +162,7 @@ impl HttpArgs {
     }
 }
 
-impl CommandHttp {
+impl CommandIo {
     /// Fails, naming each request and process, when a replay met requests it had no exchange
     /// for or processes it had no recorded call for.
     fn check_replay(&self) -> anyhow::Result<()> {
@@ -226,7 +226,7 @@ fn init(args: InitArgs) -> anyhow::Result<()> {
 /// One module run: the module and link a URL resolves to, and the worker running it.
 struct ModuleRun {
     target: Target,
-    http: CommandHttp,
+    http: CommandIo,
     pool: WorkerPool,
     xpath_corpus: Option<XPathCorpusWriter>,
 }
@@ -234,7 +234,7 @@ struct ModuleRun {
 impl ModuleRun {
     fn start(args: &RunArgs) -> anyhow::Result<ModuleRun> {
         let target = Target::resolve(&args.load, &args.url)?;
-        let http = args.http.client()?;
+        let http = args.http.open()?;
         let xpath_corpus = args
             .xpath_corpus
             .as_ref()
@@ -428,7 +428,7 @@ impl Target {
 /// XPath into `xpath_corpus`, if given.
 fn pool(
     load: &LoadArgs,
-    http: &CommandHttp,
+    http: &CommandIo,
     xpath_corpus: Option<XPathCorpusWriter>,
 ) -> anyhow::Result<WorkerPool> {
     let mut config = PoolConfig::new(http.client.clone());
