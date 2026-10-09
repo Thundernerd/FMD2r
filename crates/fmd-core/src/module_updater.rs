@@ -216,11 +216,11 @@ struct RepoState {
 /// earlier registry keep it until they let go.
 pub struct LiveModules {
     settings: Arc<dyn ModuleSettingsStore>,
-    current: RwLock<Loaded>,
+    current: RwLock<LoadedModules>,
 }
 
 /// A registry and the module files that failed to load into it.
-struct Loaded {
+struct LoadedModules {
     registry: Arc<ModuleRegistry>,
     failures: Arc<Vec<LoadFailure>>,
 }
@@ -235,7 +235,7 @@ impl LiveModules {
         }
         LiveModules {
             settings,
-            current: RwLock::new(Loaded {
+            current: RwLock::new(LoadedModules {
                 registry: Arc::new(report.registry),
                 failures: Arc::new(report.failures),
             }),
@@ -262,7 +262,7 @@ impl LiveModules {
     }
 
     fn swap(&self, registry: ModuleRegistry, failures: Vec<LoadFailure>) {
-        *self.current.write().unwrap_or_else(PoisonError::into_inner) = Loaded {
+        *self.current.write().unwrap_or_else(PoisonError::into_inner) = LoadedModules {
             registry: Arc::new(registry),
             failures: Arc::new(failures),
         };
@@ -606,12 +606,14 @@ impl ModuleUpdater {
             .filter(|def| reloaded(&def.file))
             .map(|def| def.id)
             .collect();
-        // The failures of files this reload left alone stand; the rest are this load's.
+        // The failures of files this reload left alone stand; the rest are this load's. The
+        // module directory was read, so its own failure is gone.
+        let modules_dir = lua_dir.join("modules");
         let mut live_failures: BTreeMap<PathBuf, String> = self
             .modules
             .failures()
             .iter()
-            .filter(|f| !reloaded(&f.file))
+            .filter(|f| !reloaded(&f.file) && f.file != modules_dir)
             .map(|f| (f.file.clone(), f.error.clone()))
             .collect();
         live_failures.extend(failed);
