@@ -1,0 +1,113 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://love4u.net/manga-6433/",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Fri, 09 Oct 2026 08:31:29 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "set-cookie",
+        "PHPSESSID=ioucq5uokpvu323hv86rimh2oc; path=/"
+      ],
+      [
+        "expires",
+        "Thu, 19 Nov 1981 08:52:00 GMT"
+      ],
+      [
+        "cache-control",
+        "no-store, no-cache, must-revalidate"
+      ],
+      [
+        "pragma",
+        "no-cache"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=OZumu9eYHLTwfxJm4GSVz34cGxOZxda2%2FRY%2B5Tb7EBIB89E9iImoktmDBNLtnNZ0XhGlhMQUumadhuwEGTn5mVOv6HcQ%2FSUpwznJZ7wb%2FeQIzBnC5rT%2BsUb%2Ft82Y\"}]}"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a47c077c4963c76c-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "zstd"
+  }
+}

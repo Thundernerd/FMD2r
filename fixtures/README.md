@@ -47,15 +47,20 @@ smoke/<name>/
   pages/  pages.json   the same for `module pages <chapter_url>`
 ```
 
+Every run starts in a fresh temporary working directory, removed afterwards: `utils.nodejs`
+installs puppeteer and writes its scripts under `lua/utils/npm` there, as FMD2 does under its
+own directory. Recording a node module needs `node` and `npm` on `PATH`.
+
 Image response bodies are dropped after recording (the exchange's `body` becomes `null`): `info`
 and `pages` don't need them.
 
 The `fmd-smoke` crate drives the list. Three places run it:
 
 - **CI**, offline: `cargo test -p fmd2r --test smoke` replays every entry (`--replay`) and fails
-  when an output differs from its snapshot. Replays run with an empty `PATH`, so a module that
-  runs a program through `fmd.subprocess` (node via `utils.nodejs`, python) can't reach the
-  network past the recording; such modules can't be on the list.
+  when an output differs from its snapshot. The processes a module runs through `fmd.subprocess`
+  (node via `utils.nodejs`, e.g. `comix`) are replayed from the recording too
+  (`subprocess.json`, see `docs/fixtures.md`), and replays run with an empty `PATH`, so nothing
+  reaches the network past the recording.
 - **Nightly**, live (`.github/workflows/smoke-nightly.yml`): runs every entry against the live
   site and on its recording, and uploads `smoke-report` with a Markdown report (also on the run's
   summary page). An entry whose replay fails is an *FMD2r regression*; one that fails only live

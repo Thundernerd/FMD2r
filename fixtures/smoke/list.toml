@@ -7,19 +7,44 @@
 #   MangaThemesia (thunderscans-barbarian, rizzcomics-absolute-dominion), WPComics (xoxocomics,
 #   manhuaplus-top), HeanCMS (omegascans), GroupLe (selfmanga), FoOlSlide (deathtollscans,
 #   seinagi-online), Liliana (manhuaplus-org), KeyoApp (genztoons-dragon-kunlun), Guya (guya-moe),
-#   LibGroup (mangalib).
+#   LibGroup (mangalib), FMReader (love4u).
 # - JSON APIs: mangadex, mangaplus, mangaball, olympus-scans, voratoon, guya-moe, mangalib, webtoons.
 # - Libraries: fmd.crypto (mangadex, mangaplus, webtoons, mangaball, philia-scans, voratoon,
 #   olympus-scans, e-hentai), fmd.duktape (fanfox), fmd.imagepuzzle (nexus-scanlation,
 #   philia-scans), pb (mangaplus).
 # - Cookies (webtoons, fanfox, e-hentai), account support (selfmanga, e-hentai; both run logged
 #   out), DynamicPageLink (e-hentai).
+# - Node (utils.nodejs: comix): the processes fmd.subprocess runs are recorded with the HTTP
+#   (subprocess.json, docs/fixtures.md) and replayed, so node itself never runs offline.
 #
-# Not covered, for want of a live site when the list was recorded (2026-10): MangaReaderOnline,
-# FMReader, MangaBox, Genkan and NineManga (sites dead, parked or behind Cloudflare challenges),
-# MadTheme (TooniTube's chapter API now redirects to another host), MangaHub (its API host is
-# down). Modules that run node (utils.nodejs, e.g. Comix) can't be replayed: node fetches pages
-# itself, past the recorded HTTP.
+# Templates not covered, checked again 2026-10-09 (T42); all upstream, none an FMD2r difference:
+# - MangaReaderOnline: the only live module, SubManhwa, overrides GetInfo with XPaths the
+#   redesigned site no longer matches (no title), so it fails the live check; the modules using
+#   the template's GetInfo (KomikGue, JapitComics, FallenAngelsScans) are parked or taken over,
+#   the rest dead or behind Cloudflare challenges (MangaZuki, MangAs, Manga18Us, KomikManga).
+# - MangaBox: MangaNato and MangaKakalot answer every HTML page with a Cloudflare challenge
+#   (403 "Just a moment..."); only their chapter API is reachable.
+# - Genkan: all nine hosts are dead, parked or redirect to unrelated sites.
+# - NineManga: the <lang>.ninemanga.com hosts don't resolve; www.ninemanga.com is a Cloudflare
+#   block page (manga pages 530, origin DNS error).
+# - MadTheme: TooniTube and BeeHentai redirect, whole site, to toontop.io, a different platform
+#   (no MadTheme markup or chapter API); MGJinx and KaliScan are dead. FMD2r follows the 301 to
+#   the new host as FMD2 does (baseunits/httpsendthread.pas:640-668): the module, not the
+#   redirect, is out of date.
+# - MangaHub: every mirror goes through api.mghcdn.com, which answers with a Cloudflare
+#   challenge. The template's GetPageNumber also needs a numeric fmd.env.Revision of at least
+#   6920 (templates/MangaHub.lua:122), which FMD2r leaves empty unless FMD2R_REVISION is set
+#   at build time.
+# - FMReader is covered for GetInfo only: every live module (Love4u, RawINU, MangaGun, WeLoMa)
+#   overrides GetPageNumber.
+#
+# Module issues seen while recording:
+# - MangaFire's GetPageNumber builds its API path from MODULE.Storage['listtype'], which only
+#   its GetInfo sets, so `module pages` on its own resolves no pages. FMD2 behaves the same:
+#   Storage is per module and in memory only (baseunits/lua/LuaWebsiteModules.pas:741), and a
+#   download task runs OnTaskStart, OnGetPageNumber and OnGetImageURL but never OnGetInfo
+#   (baseunits/uDownloadsManager.pas:1104-1330). Its downloads work only after the manga's info
+#   was loaded in the same session, and fail after a restart resumes the task: upstream.
 
 [[entry]]
 name = "mangadex"
@@ -195,3 +220,18 @@ module_id = "df365d3d22f141ad8b9224cc1413ca02"
 manga_url = "https://mangalib.me/ru/manga/269436--the-flash"
 chapter_url = "https://mangalib.me/manga/269436--the-flash/chapter?number=1&volume=1"
 notes = "LibGroup template; JSON API"
+
+[[entry]]
+name = "comix"
+module_id = "88a001d7619244ef98d13ecd869b8e64"
+manga_url = "https://comix.to/title/02l05-after-a-meal"
+chapter_url = "https://comix.to/title/02l05-after-a-meal/7033231-chapter-1"
+notes = "Runs node (utils.nodejs, puppeteer) through fmd.subprocess for the chapter list and pages; its subprocess calls are recorded with the HTTP"
+
+[[entry]]
+name = "love4u"
+module_id = "437660e89f824183901cf05c24e35eae"
+manga_url = "https://love4u.net/manga-6433/"
+chapter_url = "https://love4u.net/wlmr-moeko-to-hatake-to-otera-gohan-chapter-1"
+notes = "FMReader template (GetInfo; the module adds the chapter list and has its own GetPageNumber, as every live FMReader module does)"
+

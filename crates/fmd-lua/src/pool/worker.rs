@@ -153,6 +153,9 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
     let runtime = Runtime::new().map_err(|e| plain(format!("new Lua state: {e}")))?;
     runtime.set_lua_dir(&shared.lua_dir);
     runtime.set_package_cache(shared.package.clone());
+    if let Some(spawner) = &shared.spawner {
+        runtime.set_spawner(spawner.clone());
+    }
     runtime
         .install_globals(Globals {
             module: Some(def.id.clone()),

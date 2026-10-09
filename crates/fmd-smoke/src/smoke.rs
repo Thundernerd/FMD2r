@@ -4,6 +4,7 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use std::{fs, io, thread};
 
@@ -238,27 +239,32 @@ impl Smoke {
     }
 
     /// Runs `fmd2r module <step> <url> --module <id>` in `mode` and returns its stdout, or why
-    /// it failed.
+    /// it failed. It runs in a fresh working directory, removed afterwards: a module that runs
+    /// node (lua/utils/nodejs.lua) writes its scripts and npm packages under it, the way FMD2
+    /// writes them under its own directory.
     fn run(&self, entry: &Entry, step: Step, mode: Mode) -> Result<String, String> {
-        let mut command = Command::new(&self.fmd2r);
+        let absolute = |path: &Path| std::path::absolute(path).unwrap_or_else(|_| path.to_owned());
+        let work = WorkDir::new().map_err(|e| format!("cannot create a working directory: {e}"))?;
+        let mut command = Command::new(absolute(&self.fmd2r));
         command
+            .current_dir(&work.0)
             .arg("module")
             .arg(step.command())
             .arg(step.url(entry))
             .arg("--lua-dir")
-            .arg(&self.lua_dir)
+            .arg(absolute(&self.lua_dir))
             .arg("--module")
             .arg(&entry.module_id);
         if let Some(corpus) = &self.xpath_corpus {
-            command.arg("--xpath-corpus").arg(corpus);
+            command.arg("--xpath-corpus").arg(absolute(corpus));
         }
         match mode {
             Mode::Live => {}
             Mode::Record(dir) => {
-                command.arg("--record").arg(dir);
+                command.arg("--record").arg(absolute(&dir));
             }
             Mode::Replay(dir) => {
-                command.arg("--replay").arg(dir).env("PATH", "");
+                command.arg("--replay").arg(absolute(&dir)).env("PATH", "");
             }
         }
         let output = run_with_timeout(command, TIMEOUT)
@@ -271,6 +277,29 @@ impl Smoke {
             return Err(format!("exited with an error: {stderr}"));
         }
         Ok(output.stdout)
+    }
+}
+
+/// A fresh directory under the system's temporary directory, removed on drop.
+struct WorkDir(PathBuf);
+
+impl WorkDir {
+    fn new() -> io::Result<WorkDir> {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("fmd-smoke-{}-{n}", std::process::id()));
+        if dir.exists() {
+            fs::remove_dir_all(&dir)?;
+        }
+        fs::create_dir_all(&dir)?;
+        Ok(WorkDir(dir))
+    }
+}
+
+impl Drop for WorkDir {
+    fn drop(&mut self) {
+        // Leaving a temporary directory behind is harmless.
+        let _ = fs::remove_dir_all(&self.0);
     }
 }
 

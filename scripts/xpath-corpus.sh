@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 cargo build -q -p fmd2r -p fmd-smoke --features fmd2r/xpath-fpc
 # fmd2r links libfmdxpath.so from the build directory, without an rpath.
-LD_LIBRARY_PATH="$(dirname "$(ls -t target/debug/build/xpath-fpc-*/out/libfmdxpath.so | head -n1)")"
+LD_LIBRARY_PATH="$(realpath "$(dirname "$(ls -t target/debug/build/xpath-fpc-*/out/libfmdxpath.so | head -n1)")")"
 export LD_LIBRARY_PATH
 rm -rf fixtures/xpath-corpus
 results="$(mktemp)"
