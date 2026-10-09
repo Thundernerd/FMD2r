@@ -694,7 +694,8 @@ impl MatchRepo<'_> {
 
     /// Stores the matches of `module_id`'s titles, each with the fingerprint of the input it was
     /// decided on, in one transaction. A title whose match changed loses the cover link taken
-    /// from its old match.
+    /// from its old match, and one with an accepted match the link taken from its website, so
+    /// its cover comes from the match.
     pub fn store<'m, I>(&self, module_id: &str, matches: I) -> Result<()>
     where
         I: IntoIterator<Item = (&'m MatchInput, &'m StoredMatch)>,
@@ -709,8 +710,10 @@ impl MatchRepo<'_> {
             )?;
             let mut stale_cover = tx.prepare_cached(&format!(
                 "DELETE FROM cover_links WHERE module_id = ?1 AND link = ?2
-                 AND source = '{}' AND series_id IS NOT ?3",
-                CoverSource::MangaBaka.as_str()
+                 AND ((source = '{}' AND series_id IS NOT ?3)
+                      OR (source = '{}' AND ?3 IS NOT NULL))",
+                CoverSource::MangaBaka.as_str(),
+                CoverSource::Website.as_str()
             ))?;
             for (input, m) in matches {
                 stale_cover.execute(params![module_id, input.link, m.series_id])?;

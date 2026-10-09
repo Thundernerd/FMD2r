@@ -108,6 +108,8 @@ struct Site {
     /// How long one `GetInfo` takes.
     delay: Duration,
     calls: AtomicUsize,
+    /// Whether the website is down: `GetInfo` fails with a network problem.
+    down: std::sync::atomic::AtomicBool,
     in_flight: AtomicUsize,
     most_in_flight: AtomicUsize,
 }
@@ -156,6 +158,9 @@ impl ModuleCatalog for Shared {
                 return Err(InfoError::UnknownModule);
             }
             site.calls.fetch_add(1, Ordering::SeqCst);
+            if site.down.load(Ordering::SeqCst) {
+                return Err(InfoError::NetProblem);
+            }
             let now = site.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
             site.most_in_flight.fetch_max(now, Ordering::SeqCst);
             tokio::time::sleep(site.delay).await;
@@ -237,6 +242,7 @@ fn harness(covers: &[(&str, &str)], max_connection_limit: u32, delay: Duration) 
         max_connection_limit,
         delay,
         calls: AtomicUsize::new(0),
+        down: Default::default(),
         in_flight: AtomicUsize::new(0),
         most_in_flight: AtomicUsize::new(0),
     });
@@ -263,9 +269,14 @@ fn harness(covers: &[(&str, &str)], max_connection_limit: u32, delay: Duration) 
 impl Harness {
     /// A server over the harness's data, as after a restart: nothing is kept in memory.
     fn state(&self) -> AppState {
+        self.state_with(|_| {})
+    }
+
+    fn state_with(&self, config: impl FnOnce(&mut CoverConfig)) -> AppState {
         let db = AppDb::open(self.dir.path().join("app.db")).unwrap();
         let mut covers = CoverConfig::new(self.dir.path().join("covers"));
         covers.resolver = Arc::new(PublicDns);
+        config(&mut covers);
         AppState::new(db)
             .unwrap()
             .with_modules(Shared(self.site.clone()))
@@ -664,4 +675,67 @@ async fn discover_items_point_to_their_cover() {
     assert_eq!(cover, series_cover("/shadow", None));
 
     assert!(!image(&state, &format!("{cover}&w=150")).await.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_series_page_does_not_override_a_mangabaka_match() {
+    let h = harness(
+        &[("/shadow", "http://site.test/covers/shadow.png")],
+        0,
+        quick(),
+    );
+    let state = h.state_with_mangabaka();
+    let res = send(&state, "/api/series?module=site&link=%2Fshadow").await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    assert!(
+        !image(&state, &series_cover("/shadow", Some(150)))
+            .await
+            .is_empty()
+    );
+    assert_eq!(h.network.urls(), [SHADOW_X250]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_accepted_match_replaces_a_stored_website_link() {
+    let h = harness(
+        &[("/shadow", "http://site.test/covers/shadow.png")],
+        0,
+        quick(),
+    );
+    assert_eq!(
+        image(&h.state(), &series_cover("/shadow", None)).await,
+        png()
+    );
+    assert_eq!(h.site.calls(), 1);
+
+    // The database is downloaded and matches the title.
+    let state = h.state_with_mangabaka();
+    assert!(
+        !image(&state, &series_cover("/shadow", Some(150)))
+            .await
+            .is_empty()
+    );
+    assert_eq!(h.site.calls(), 1);
+    assert_eq!(
+        h.network.urls().last().map(String::as_str),
+        Some(SHADOW_X250)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stale_link_is_served_when_the_website_cannot_recheck_it() {
+    let h = harness(
+        &[("/shadow", "http://site.test/covers/shadow.png")],
+        0,
+        quick(),
+    );
+    // Every stored link is stale at once.
+    let state = h.state_with(|c| c.revalidate_after = Duration::ZERO);
+    assert_eq!(image(&state, &series_cover("/shadow", None)).await, png());
+
+    h.site.down.store(true, Ordering::SeqCst);
+    let state = h.state_with(|c| c.revalidate_after = Duration::ZERO);
+    assert_eq!(image(&state, &series_cover("/shadow", None)).await, png());
+    assert_eq!(h.site.calls(), 2);
 }

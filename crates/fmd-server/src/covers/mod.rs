@@ -290,6 +290,7 @@ impl From<FetchError> for ApiError {
             FetchError::UnknownModule(_) => ApiError::NotFound,
             FetchError::Forbidden(msg) => ApiError::BadRequest(msg),
             FetchError::Upstream(msg) => ApiError::BadGateway(msg),
+            FetchError::NoPlainSession => ApiError::Unavailable(err.to_string()),
             FetchError::Http(e) => ApiError::Internal(e.to_string()),
         }
     }

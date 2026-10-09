@@ -39,6 +39,9 @@ pub(crate) enum FetchError {
     Forbidden(String),
     #[error("upstream: {0}")]
     Upstream(String),
+    /// No session to fetch a cover outside a module with ([`CoverModules::plain_session`]).
+    #[error("no HTTP client for covers outside a module")]
+    NoPlainSession,
     #[error(transparent)]
     Http(#[from] HttpError),
 }
@@ -67,9 +70,7 @@ pub(crate) fn fetch(
             (session, Some(referer), Url::parse(&root_url).ok())
         }
         Origin::Plain => {
-            let session = modules.plain_session().ok_or_else(|| {
-                FetchError::Upstream("no HTTP client for covers outside a module".into())
-            })?;
+            let session = modules.plain_session().ok_or(FetchError::NoPlainSession)?;
             (session, None, None)
         }
     };

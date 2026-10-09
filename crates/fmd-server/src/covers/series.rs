@@ -151,10 +151,10 @@ async fn find(
         off_thread(move || lists.cover_links().get(&module, &link)).await??
     };
     let max_age = i64::try_from(covers.revalidate_after.as_secs()).unwrap_or(i64::MAX);
-    if let Some(stored) = stored
+    if let Some(stored) = &stored
         && now.saturating_sub(stored.checked_at) < max_age
     {
-        return Ok(Some(stored));
+        return Ok(Some(stored.clone()));
     }
     let found = match mangabaka(state, lists, module, link, now).await? {
         Some(found) => found,
@@ -163,7 +163,15 @@ async fn find(
                 .lookups
                 .turn(module, permits(state, &info.limits, module).await)
                 .await?;
-            website(state, &info.root_url, module, link, now).await?
+            match website(state, &info.root_url, module, link, now).await {
+                Ok(found) => found,
+                // A website that is down keeps the covers it gave: serve the stale link.
+                Err(ApiError::BadGateway(msg)) if stored.is_some() => {
+                    tracing::debug!(target: "fmd_server", "serving a stale cover link: {msg}");
+                    return Ok(stored);
+                }
+                Err(e) => return Err(e),
+            }
         }
     };
     let (lists, module, link, stored) = (
@@ -258,13 +266,28 @@ async fn website(
 
 /// Stores the cover `GetInfo` gave the series page for `module`'s title at `link`, saving a
 /// lookup later, unless the title's cover comes from MangaBaka. A failure only logs.
-pub(crate) async fn learned(state: &AppState, module: &str, link: &str, cover: &str) {
+pub(crate) async fn store_learned(state: &AppState, module: &str, link: &str, cover: &str) {
+    if let Err(e) = try_store_learned(state, module, link, cover).await {
+        tracing::warn!(target: "fmd_server", "storing a cover link: {e}");
+    }
+}
+
+async fn try_store_learned(
+    state: &AppState,
+    module: &str,
+    link: &str,
+    cover: &str,
+) -> Result<(), ApiError> {
     let (Some(lists), Some(info)) = (state.lists.clone(), state.modules.module(module)) else {
-        return;
+        return Ok(());
     };
-    let found = website_link(absolute(&info.root_url, cover), now_secs());
+    let now = now_secs();
+    if mangabaka(state, &lists, module, link, now).await?.is_some() {
+        return Ok(());
+    }
+    let found = website_link(absolute(&info.root_url, cover), now);
     let (module, link) = (module.to_owned(), link.to_owned());
-    let stored = off_thread(move || -> Result<(), fmd_store::StoreError> {
+    off_thread(move || -> Result<(), fmd_store::StoreError> {
         let covers = lists.cover_links();
         if covers
             .get(&module, &link)?
@@ -274,12 +297,8 @@ pub(crate) async fn learned(state: &AppState, module: &str, link: &str, cover: &
         }
         covers.put(&module, &link, &found)
     })
-    .await;
-    match stored {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => tracing::warn!(target: "fmd_server", "storing a cover link: {e}"),
-        Err(e) => tracing::warn!(target: "fmd_server", "storing a cover link: {e}"),
-    }
+    .await??;
+    Ok(())
 }
 
 /// A cover link from the website.
