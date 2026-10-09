@@ -51,17 +51,20 @@
 		return selected ? 'modules' : (TOC[0]?.id ?? '');
 	});
 	/** What a section holds that is out of view while another one shows: an error or an edit. */
-	function pending(id: string): 'Invalid settings' | 'Unsaved changes' | null {
-		const settings = SETTINGS_SECTIONS.find((s) => s.id === id);
-		const paths = settings?.fields.map((f) => f.path) ?? [];
-		const errors = settings
-			? paths.some((p) => draft?.errors[p])
-			: id === 'modules' && hasModuleErrors;
-		if (errors) return 'Invalid settings';
-		const edits = settings
-			? paths.some((p) => draft?.isDirty(p))
-			: id === 'modules' && !!moduleDraft?.dirty;
-		return edits ? 'Unsaved changes' : null;
+	type Pending = 'invalid' | 'dirty';
+	const PENDING_LABEL: Record<Pending, string> = {
+		invalid: 'Invalid settings',
+		dirty: 'Unsaved changes'
+	};
+	function pending(id: string): Pending | null {
+		const paths = SETTINGS_SECTIONS.find((s) => s.id === id)?.fields.map((f) => f.path);
+		if (paths) {
+			if (paths.some((p) => draft?.errors[p])) return 'invalid';
+			return paths.some((p) => draft?.isDirty(p)) ? 'dirty' : null;
+		}
+		if (id !== 'modules') return null;
+		if (hasModuleErrors) return 'invalid';
+		return moduleDraft?.dirty ? 'dirty' : null;
 	}
 
 	const section = $derived(SETTINGS_SECTIONS.find((s) => s.id === active));
@@ -176,8 +179,8 @@
 		const unplaced = showFieldErrors(e.fields, draft, module);
 		if (unplaced.length || !e.fields.length) saveError = unplaced.join('; ') || e.detail;
 		// A hidden section's fields are not in the page: show the first one with an error.
-		const invalid = TOC.find((entry) => pending(entry.id) === 'Invalid settings');
-		if (invalid) await show(invalid.id, { replace: true });
+		const invalid = TOC.find((entry) => pending(entry.id) === 'invalid');
+		if (invalid) await show(invalid.id);
 		await tick();
 		const first = document.querySelector<HTMLElement>('.field.invalid');
 		if (first) {
@@ -193,10 +196,10 @@
 	}
 
 	/** Shows section `id` alone; it keeps the unsaved edits of every section. */
-	async function show(id: string, { replace = false } = {}) {
+	async function show(id: string) {
 		if (id === active) return;
 		const { pathname, search } = page.url;
-		await goto(`${pathname}${search}#section-${id}`, { replace, reset: false });
+		await goto(`${pathname}${search}#section-${id}`, { reset: false });
 		// A long section may have been scrolled; the new one starts at its top.
 		if (window.scrollY > 0) window.scrollTo({ top: 0 });
 	}
@@ -234,8 +237,8 @@
 								href="#section-{entry.id}"
 								class:active={active === entry.id}
 								aria-current={active === entry.id ? 'location' : undefined}
-								class:invalid={mark === 'Invalid settings'}
-								title={mark}
+								class:invalid={mark === 'invalid'}
+								title={mark ? PENDING_LABEL[mark] : undefined}
 								onclick={(e) => onTocClick(e, entry.id)}
 								>{entry.title}{#if mark}<span class="mark" aria-hidden="true"></span>{/if}</a
 							>

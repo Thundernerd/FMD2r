@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 /** Switches to a settings section through the table of contents: a list, or a phone's dropdown. */
 async function openSection(page: Page, id: string, title: string) {
 	const nav = page.getByRole('navigation', { name: 'Settings sections' });
+	// It shows once the settings have loaded; only then is it known which of the two is visible.
+	await nav.waitFor();
 	const link = nav.getByRole('link', { name: title, exact: true });
 	if (await link.isVisible()) await link.click();
 	else await nav.getByRole('combobox', { name: 'Jump to section' }).selectOption(id);
@@ -24,7 +26,10 @@ test('a module option change is saved and still there after a reload', async ({ 
 	await bar.getByRole('button', { name: 'Save' }).click();
 	await expect(bar).toContainText('Saved');
 
-	await page.reload();
+	// A link to a module without a section opens the module settings.
+	const url = new URL(page.url());
+	url.hash = '';
+	await page.goto(url.href);
 	await expect(modules.getByRole('combobox', { name: 'Language' })).toHaveValue('2');
 	await expect(modules.getByRole('checkbox', { name: 'Data saver' })).toBeChecked();
 	await expect(modules.getByRole('checkbox', { name: 'Show chapter title' })).toBeChecked();
@@ -173,8 +178,8 @@ test('a rejected module change does not save the other settings either', async (
 	await bar.getByRole('button', { name: 'Save' }).click();
 	await expect(bar).toContainText('Fix the highlighted settings to save');
 
-	await page.goto('/settings#section-general');
 	await page.reload();
+	await openSection(page, 'general', 'General');
 	await expect(page.getByRole('checkbox', { name: 'Add new downloads stopped' })).not.toBeChecked();
 });
 
