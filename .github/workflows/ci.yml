@@ -71,7 +71,8 @@ jobs:
   # site, so nothing reaches the network.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The run takes a few minutes; this stops a hang well before the default 6 hours.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - run: rustup toolchain install

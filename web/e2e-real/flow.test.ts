@@ -53,18 +53,23 @@ test('add by URL, download two chapters through a restart, then check for new ch
 		.getByRole('region', { name: /^Finished \d+$/ })
 		.getByRole('listitem', { name: title });
 	await expect(finished).toContainText('2/2 chapters', { timeout: 60_000 });
+	// The progress survived the restart: chapter 1 was not downloaded again.
+	expect(await (await request.get(`${SITE}/fetches/${key}/1`)).text()).toBe('12');
 
 	const download = page.waitForEvent('download');
 	await finished.getByRole('link', { name: 'Get files' }).click();
 	// Two packed chapters come as one zip named after the series, holding a CBZ per chapter,
 	// named with FMD2's default 3-digit chapter numbers.
-	const files = await download;
-	expect(files.suggestedFilename()).toBe(`${title}.zip`);
-	const archives = unzip(await readFile(await files.path()));
+	const zip = await download;
+	expect(zip.suggestedFilename()).toBe(`${title}.zip`);
+	const archives = unzip(await readFile(await zip.path()));
 	expect(archives.map((a) => basename(a.name))).toEqual(['Ch. 001.cbz', 'Ch. 002.cbz']);
 	for (const archive of archives) {
 		const pages = unzip(archive.data);
-		// Every page, in natural order: 2 before 10.
+		// Every page, in natural order (2 before 10), both as stored and by name, which is how
+		// comic readers order them.
+		const names = pages.map((p) => p.name);
+		expect(names).toEqual(names.toSorted(new Intl.Collator('en', { numeric: true }).compare));
 		expect(pages.map((p) => pngWidth(p.data))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 	}
 

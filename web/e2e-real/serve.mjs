@@ -7,6 +7,7 @@
 //   `/c/<key>/1` to `/c/<key>/3`, each of PAGES pages; `POST /publish/<key>` adds a chapter;
 // - page `n` is a PNG `n` pixels wide, so a test can tell the pages apart;
 // - chapter 2's pages are held until `POST /release/<key>`, so a test can catch a task mid-download;
+// - `GET /fetches/<key>/<chapter>` counts the page requests for that chapter;
 // - `POST /restart` stops the server (SIGTERM) and starts it again on the same data dir, and
 //   answers once it is back.
 import { spawn, spawnSync } from 'node:child_process';
@@ -85,9 +86,14 @@ end
 `
 );
 
+/** Chapters a series lists until `/publish` adds one. */
+const CHAPTERS = 3;
+
 let ready = false;
-/** Chapters per series key, past the first 3. */
+/** Chapters per series key, once `/publish` changed them. */
 const published = new Map();
+/** Page requests per `<key>/<chapter>`. */
+const fetches = new Map();
 /** Series keys whose chapter 2 is no longer held. */
 const released = new Set();
 /** Answers for held chapter 2 pages, by series key. */
@@ -100,21 +106,31 @@ http
 		const release = url.match(/^\/release\/([^/]+)$/);
 		const series = url.match(/^\/manga\/([^/]+)$/);
 		const publish = url.match(/^\/publish\/([^/]+)$/);
+		const fetched = url.match(/^\/fetches\/([^/]+\/\d+)$/);
 		if (url === '/ready') {
 			res.writeHead(ready ? 200 : 503).end();
 		} else if (series) {
 			res
 				.writeHead(200, { 'content-type': 'text/plain' })
-				.end(String(published.get(series[1]) ?? 3));
+				.end(String(published.get(series[1]) ?? CHAPTERS));
 		} else if (req.method === 'POST' && publish) {
-			published.set(publish[1], (published.get(publish[1]) ?? 3) + 1);
+			published.set(publish[1], (published.get(publish[1]) ?? CHAPTERS) + 1);
 			res.writeHead(204).end();
+		} else if (fetched) {
+			res
+				.writeHead(200, { 'content-type': 'text/plain' })
+				.end(String(fetches.get(fetched[1]) ?? 0));
 		} else if (url === '/cover.png') {
 			res.writeHead(200, { 'content-type': 'image/png' }).end(png(4));
 		} else if (image) {
 			const [, key, chapter, page] = image;
-			const answer = () =>
-				res.writeHead(200, { 'content-type': 'image/png' }).end(png(Number(page)));
+			fetches.set(`${key}/${chapter}`, (fetches.get(`${key}/${chapter}`) ?? 0) + 1);
+			const answer = () => {
+				// A request from a server stopped since has nobody to answer.
+				if (!res.destroyed) {
+					res.writeHead(200, { 'content-type': 'image/png' }).end(png(Number(page)));
+				}
+			};
 			if (chapter === '2' && !released.has(key)) {
 				held.set(key, [...(held.get(key) ?? []), answer]);
 			} else {
@@ -146,8 +162,10 @@ const build = spawnSync('cargo', ['build', '--quiet', '-p', 'fmd2r'], {
 if (build.status !== 0) process.exit(1);
 const binary = join(resolve(root, process.env.CARGO_TARGET_DIR ?? 'target'), 'debug/fmd2r');
 
-/** The running server; its exit fails the run unless `stopServer` asked for it. */
-/** @type {import('node:child_process').ChildProcess} */
+/**
+ * The running server; its exit fails the run unless `stopServer` asked for it.
+ * @type {import('node:child_process').ChildProcess}
+ */
 let server;
 let stopping = false;
 
@@ -174,7 +192,9 @@ function startServer() {
 /** Stops the server as `docker stop` would: SIGTERM, then SIGKILL if it takes too long. */
 async function stopServer() {
 	stopping = true;
-	const exited = new Promise((done) => server.once('exit', done));
+	const exited = new Promise((done) =>
+		server.exitCode === null && server.signalCode === null ? server.once('exit', done) : done(null)
+	);
 	server.kill('SIGTERM');
 	const kill = setTimeout(() => server.kill('SIGKILL'), 15_000);
 	await exited;
@@ -183,13 +203,13 @@ async function stopServer() {
 }
 
 /**
- * Waits until `fetch` (retried every 500 ms while the server is not listening) succeeds.
- * @param {() => Promise<Response>} fetch
+ * Waits until `request` (retried every 500 ms while the server is not listening) succeeds.
+ * @param {() => Promise<Response>} request
  */
-async function untilUp(fetch) {
+async function untilUp(request) {
 	for (;;) {
 		try {
-			const res = await fetch();
+			const res = await request();
 			if (res.ok) return;
 		} catch {
 			// Not listening yet.
@@ -204,9 +224,8 @@ async function restart() {
 	await untilUp(() => fetch(`${app}/api/settings`));
 }
 
-const stop = () => {
-	stopping = true;
-	server.kill('SIGTERM');
+const stop = async () => {
+	await stopServer();
 	rmSync(dir, { recursive: true, force: true });
 	process.exit(0);
 };
