@@ -37,6 +37,8 @@ jobs:
   # runtime stage and smoke test run under QEMU.
   docker:
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +48,13 @@ jobs:
       - name: Validate compose.yaml
         if: matrix.arch == 'amd64'
         run: docker compose config -q && docker compose --env-file .env.example config -q
+      # Docker Hub's anonymous pull limit is shared per runner IP and often hit (429); skipped
+      # when the secrets aren't available, e.g. on fork PRs.
+      - uses: docker/login-action@v4
+        if: env.DOCKERHUB_TOKEN != ''
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/setup-qemu-action@v4
         if: matrix.arch == 'arm64'
         with:
