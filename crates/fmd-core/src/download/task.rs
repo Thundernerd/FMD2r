@@ -11,7 +11,7 @@ use fmd_lua::{Affinity, Caller, HttpModule, JobError, Module, ModuleDef, Reply, 
 use fmd_pack::{MAX_IMAGE_FILE_PATH, MagickOptions, PackOptions, RenameContext, custom_rename};
 use fmd_store::{ChapterStatus, NewPage, PageStatus, TaskId, TaskPage, TaskStatus};
 
-use super::files::find_image_file;
+use super::files::{find_image_file, remove_partial_images};
 use super::manager::{Inner, pack_format, rename_options};
 use super::{EngineError, EngineEvent, Progress};
 use crate::settings::{Settings, StoredModuleHttpSettings};
@@ -415,7 +415,7 @@ impl<'a> TaskRun<'a> {
                 self.save_pages()?;
             }
 
-            self.recover_packing();
+            self.recover_interrupted_writes();
             self.check_for_exists(dynamic_page_link);
 
             {
@@ -626,16 +626,17 @@ impl<'a> TaskRun<'a> {
         found
     }
 
+    /// Where the chapter is packed: `<save to>/<chapter name>`, which `fmd_pack::pack` adds
+    /// the format's extension to (baseunits/uDownloadsManager.pas:553-611).
+    fn pack_target(&self) -> PathBuf {
+        self.save_to.join(&self.chapter_names[self.chapter])
+    }
+
     /// The chapter's archive, when the output format packs chapters
     /// (baseunits/uDownloadsManager.pas:1027-1041).
     fn archive(&self) -> Option<PathBuf> {
         let format = pack_format(self.settings.output.format)?;
-        let base = if self.settings.saveto.generate_chapter_folder {
-            self.working_dir.clone()
-        } else {
-            self.working_dir.join(&self.chapter_names[self.chapter])
-        };
-        let mut path = base.into_os_string();
+        let mut path = self.pack_target().into_os_string();
         path.push(format.extension());
         Some(path.into())
     }
@@ -645,12 +646,21 @@ impl<'a> TaskRun<'a> {
         self.working_dir.join(&self.chapter_names[self.chapter])
     }
 
-    /// Puts back the pages a process killed while packing left in the staging folder, so
-    /// `CheckForExists` finds them (docs/tickets/T44-download-hard-crash-resume.md). An
-    /// archive on disk is whole, as `fmd_pack::pack` only renames it into place once written,
-    /// so then the pages are what was left of removing the packed ones: they go instead of
-    /// being packed again over the archive. FMD2 packs in place and has no staging folder.
-    fn recover_packing(&self) {
+    /// Recovers the chapter's pages from a process killed while saving or packing them
+    /// (docs/tickets/T44-download-hard-crash-resume.md), before `CheckForExists` looks for
+    /// them:
+    /// - half-saved pages are removed;
+    /// - pages left in the staging folder are put back. An archive on disk is whole, as
+    ///   `fmd_pack::pack` only renames it into place once written, so then the pages are what
+    ///   was left of removing the packed ones: they go instead of being packed again over the
+    ///   archive.
+    ///
+    /// FMD2 saves and packs in place and has no staging folder.
+    fn recover_interrupted_writes(&self) {
+        let pages = self.container().task.page_links.len();
+        for i in 0..pages {
+            remove_partial_images(&self.working_dir.join(self.file_name(i)));
+        }
         let Some(archive) = self.archive() else {
             return;
         };
@@ -659,16 +669,17 @@ impl<'a> TaskRun<'a> {
             return;
         }
         let packed = archive.is_file();
-        let pages = self.container().task.page_links.len();
         for i in 0..pages {
             let name = self.file_name(i);
             let Some(file) = find_image_file(&staging.join(&name), "") else {
                 continue;
             };
-            let result = match file.file_name() {
-                _ if packed => std::fs::remove_file(&file),
-                Some(file_name) => std::fs::rename(&file, self.working_dir.join(file_name)),
-                None => continue,
+            let result = if packed {
+                std::fs::remove_file(&file)
+            } else if let Some(file_name) = file.file_name() {
+                std::fs::rename(&file, self.working_dir.join(file_name))
+            } else {
+                continue;
             };
             if let Err(e) = result {
                 tracing::warn!(target: "fmd_core", "task {}: recovering {}: {e}", self.id.0, file.display());
@@ -743,7 +754,6 @@ impl<'a> TaskRun<'a> {
         let Some(format) = pack_format(self.settings.output.format) else {
             return true;
         };
-        let name = &self.chapter_names[self.chapter];
         let magick = &self.settings.images.imagemagick;
         let ext = if magick.enabled {
             magick.save_as.to_ascii_lowercase()
@@ -765,7 +775,7 @@ impl<'a> TaskRun<'a> {
         });
         let packed = packed
             .map_err(fmd_pack::PackError::from)
-            .and_then(|()| fmd_pack::pack(&staging, format, &self.save_to.join(name), &options));
+            .and_then(|()| fmd_pack::pack(&staging, format, &self.pack_target(), &options));
         // Nothing to pack leaves the folder behind (the archive was already there).
         let _ = std::fs::remove_dir(&staging);
         match packed {
