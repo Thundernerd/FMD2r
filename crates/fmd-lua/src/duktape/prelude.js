@@ -84,6 +84,23 @@
     return require;
   }
 
+  // Duktape's JSON.stringify writes lone surrogates as they are and escapes U+2028 and U+2029
+  // (DUK_USE_NONSTD_JSON_ESC_U2028_U2029 in Duktape 2.3's default config); QuickJS does the
+  // opposite (ES2019). An escaped backslash is matched first so `\\ud800` stays as it is.
+  var quickStringify = JSON.stringify;
+  JSON.stringify = function stringify(value, replacer, space) {
+    var json = quickStringify.apply(JSON, arguments);
+    if (typeof json !== 'string') {
+      return json;
+    }
+    return json.replace(/\\\\|\\u(d[89a-f][0-9a-f]{2})|[\u2028\u2029]/gi, function (m, surrogate) {
+      if (surrogate !== undefined) {
+        return String.fromCharCode(parseInt(surrogate, 16));
+      }
+      return m.length === 1 ? '\\u' + m.charCodeAt(0).toString(16) : m;
+    });
+  };
+
   globalThis.print = function () {
     log(Array.prototype.map.call(arguments, String).join(' '));
   };

@@ -1,0 +1,6 @@
+Duktape 2.3.0 (https://github.com/svaarala/duktape/releases/download/v2.3.0/duktape-2.3.0.tar.xz,
+sha256 ed6e2f3ab2061628a7aeee27ccff16538ba6a151480cccf2e846bd061e45afe8), the version FMD2 binds
+(DUK_VERSION = 20300, baseunits/Duktape.Api.pas:431).
+Files, copied unmodified: src-noline/duktape.c, src-noline/duktape.h, src-noline/duk_config.h
+(the default configuration), extras/module-duktape/duk_module_duktape.c and .h (the module
+loader FMD2's DLL exports as duk_module_duktape_init), LICENSE.txt.

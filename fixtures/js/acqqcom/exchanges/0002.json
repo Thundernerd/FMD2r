@@ -1,0 +1,117 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://gtimgcdn.ac.qq.com/media/js/ac.page.chapter.view_v2.7.0.js?v=202608131026",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "last-modified",
+        "Tue, 08 Apr 2025 07:51:08 GMT"
+      ],
+      [
+        "content-encoding",
+        "gzip"
+      ],
+      [
+        "etag",
+        "\"67f4d56c-424f2\""
+      ],
+      [
+        "date",
+        "Thu, 20 Aug 2026 19:50:45 GMT"
+      ],
+      [
+        "content-type",
+        "application/javascript; charset=utf-8"
+      ],
+      [
+        "x-powered-by",
+        "ACFramework/1.0"
+      ],
+      [
+        "expires",
+        "Sat, 19 Sep 2026 19:50:45 GMT"
+      ],
+      [
+        "server",
+        "TAPISIX/2.1.8"
+      ],
+      [
+        "cache-control",
+        "max-age=2592000"
+      ],
+      [
+        "age",
+        "1664821"
+      ],
+      [
+        "content-length",
+        "72951"
+      ],
+      [
+        "accept-ranges",
+        "bytes"
+      ],
+      [
+        "x-nws-log-uuid",
+        "2879705809304874506"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "x-cache-lookup",
+        "Cache Hit"
+      ],
+      [
+        "x-cdn-upstream-type",
+        "HTTPS"
+      ],
+      [
+        "access-control-allow-origin",
+        ""
+      ],
+      [
+        "vary",
+        "Origin"
+      ]
+    ],
+    "body": "bodies/0002.response",
+    "decoded_from": "gzip"
+  }
+}

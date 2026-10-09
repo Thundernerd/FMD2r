@@ -1,0 +1,16 @@
+[package]
+name = "fmd-duktape-ref"
+description = "Test-only reference: FMD2's ExecJS on the Duktape 2.3.0 it bundles, to compare fmd.duktape against"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+
+[build-dependencies]
+cc = "1"
+
+[lints]
+workspace = true

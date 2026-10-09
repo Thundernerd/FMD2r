@@ -197,9 +197,9 @@ fn terminating_the_worker_interrupts_a_script() {
 
 /// FMD2 hands Duktape the Lua string's bytes as UTF-8 and pushes the result's bytes back
 /// (baseunits/lua/LuaDuktape.pas:18, baseunits/Duktape.pas:92-94). JS strings are UTF-16 in
-/// between, so BMP text round-trips byte for byte. Non-BMP characters are where QuickJS may
-/// differ from Duktape's internal extended UTF-8 (docs/plan.md, "JavaScript"); the assertions
-/// on them pin QuickJS's behaviour: a surrogate pair, returned as 4-byte UTF-8.
+/// between, so BMP text round-trips byte for byte. A character outside the BMP is a surrogate
+/// pair, and comes back as CESU-8 (each surrogate as 3 bytes) as from Duktape 2.3
+/// (tests/duktape_reference.rs compares this with a Duktape build).
 #[test]
 fn passes_strings_through_as_utf8() {
     runtime()
@@ -209,7 +209,7 @@ fn passes_strings_through_as_utf8() {
             assert(js.ExecJS('"héllo wörld 漫画"') == 'héllo wörld 漫画')
             assert(js.ExecJS('"漫画".length') == '2')
             assert(js.ExecJS('"\\u00e9" === "é"') == 'true')
-            assert(js.ExecJS('"😀"') == '😀')
+            assert(js.ExecJS('"😀"') == '\xed\xa0\xbd\xed\xb8\x80')
             assert(js.ExecJS('"😀".length') == '2')
             assert(js.ExecJS('String.fromCharCode(0x41, 0xff)') == 'A\xc3\xbf')
             -- A lone surrogate comes back as its 3-byte (WTF-8) encoding.

@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://ac.qq.com/ComicView/index/id/531490/cid/1",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://gtimgcdn.ac.qq.com/media/js/ac.page.chapter.view_v2.7.0.js?v=202608131026",
+      "status": 200
+    }
+  ]
+}
