@@ -6,6 +6,8 @@ license.workspace = true
 publish = false
 
 [dependencies]
+# Hashes the server password (`server.auth_token`).
+argon2 = { version = "0.5", features = ["std"] }
 fmd-http = { path = "../fmd-http" }
 fmd-lua = { path = "../fmd-lua", default-features = false }
 fmd-pack = { path = "../fmd-pack" }

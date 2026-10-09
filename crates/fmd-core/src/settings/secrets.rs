@@ -6,6 +6,8 @@
 //!
 //! The threat model is the accounts' (see `crate::accounts`): copies of `app.db` without the
 //! key file reveal nothing, anyone holding the key file and the database reveals everything.
+//!
+//! The server password is not among them: it is stored hashed (see `password.rs`).
 
 use fmd_store::{Cipher, StoreError};
 use serde_json::{Map, Value};
@@ -14,7 +16,6 @@ use serde_json::{Map, Value};
 const SETTINGS_SECRETS: &[(&str, &[&str])] = &[
     ("connections", &["proxy", "password"]),
     ("module_updater", &["github_token"]),
-    ("server", &["auth_token"]),
 ];
 
 /// The secret in a module's HTTP overrides, as a path inside their JSON.

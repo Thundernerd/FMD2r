@@ -30,6 +30,7 @@ impl From<SettingsError> for ApiError {
             ),
             SettingsError::Store(e) => ApiError::Store(e),
             SettingsError::Json(e) => ApiError::Internal(e.to_string()),
+            SettingsError::Hash(e) => ApiError::Internal(e),
         }
     }
 }
@@ -59,8 +60,18 @@ pub(crate) async fn patch(
         return Err(ApiError::BadRequest("expected a JSON object".into()));
     }
     let settings = state.settings.clone();
+    let before = state.settings.get();
     let updated = crate::state::off_thread(move || settings.update(patch)).await??;
+    end_sessions_on_new_password(&state, &before, &updated);
     Ok(Json(updated.as_ref().into()))
+}
+
+/// Closes the open event streams when an update changed the password in force: the login
+/// sessions, bound to it, have ended (see `auth.rs`). The command line one leaves them be.
+fn end_sessions_on_new_password(state: &AppState, before: &Settings, after: &Settings) {
+    if !state.auth.is_fixed() && before.server.auth_token != after.server.auth_token {
+        state.end_sessions();
+    }
 }
 
 /// What [`patch_all`] saved.
@@ -114,8 +125,10 @@ pub(crate) async fn patch_all(
         infos.push(info);
     }
     let settings = state.settings.clone();
+    let before = state.settings.get();
     let (updated, overrides) =
         crate::state::off_thread(move || settings.update_with_modules(patch, modules)).await??;
+    end_sessions_on_new_password(&state, &before, &updated);
     Ok(Json(SavedSettings {
         settings: updated.as_ref().into(),
         modules: infos

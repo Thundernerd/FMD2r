@@ -6,19 +6,23 @@
 //! `POST /api/sessions/revoke-all`, and when the password changes. No FMD2 counterpart: FMD2 has
 //! no web server.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
 use std::time::{Duration, SystemTime};
 
 use axum::extract::{Request, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use fmd_core::settings::{Settings, verify_password};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
+use tokio::sync::Semaphore;
 use utoipa::ToSchema;
 
 use crate::error::ApiJson;
+use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
 const COOKIE: &str = "fmd2r_session";
@@ -26,27 +30,157 @@ const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 /// A session's last use is written at most this often, not on every request.
 const RENEW_EVERY: Duration = Duration::from_secs(60);
 
-/// The configured secret.
+/// Bearer tokens remembered as verified, at most.
+const VERIFIED_TOKENS: usize = 16;
+/// Password hashes checked at once, at most: each takes tens of milliseconds and ~19 MiB, and
+/// any client can ask for one.
+const CONCURRENT_HASHES: usize = 2;
+
+/// Where the password comes from: `--password` / `FMD2R_PASSWORD` when given, which wins, else
+/// the `server.auth_token` setting (a hash), read at every request so a change applies at once.
 pub(crate) struct Auth {
-    secret: String,
+    fixed: Option<String>,
+    verified: Mutex<Verified>,
+    hashing: Semaphore,
+}
+
+/// Bearer tokens verified against the setting's hash, so a request does not pay for hashing.
+#[derive(Default)]
+struct Verified {
+    /// The hash they were verified against; a new password forgets them.
+    hash: String,
+    /// SHA-256 digests of the tokens, newest last.
+    tokens: Vec<[u8; 32]>,
 }
 
 impl Auth {
-    pub(crate) fn new(secret: String) -> Arc<Self> {
-        Arc::new(Self { secret })
+    /// Auth from the setting only.
+    pub(crate) fn from_settings() -> Arc<Self> {
+        Arc::new(Self::new(None))
     }
 
-    fn is_secret(&self, candidate: &str) -> bool {
-        ct_eq(candidate, &self.secret)
+    /// Auth with `secret` from the command line or environment, ignoring the setting.
+    pub(crate) fn fixed(secret: String) -> Arc<Self> {
+        Arc::new(Self::new(Some(secret)))
+    }
+
+    fn new(fixed: Option<String>) -> Self {
+        Self {
+            fixed,
+            verified: Mutex::default(),
+            hashing: Semaphore::new(CONCURRENT_HASHES),
+        }
+    }
+
+    /// Whether the command line or environment sets the password.
+    pub(crate) fn is_fixed(&self) -> bool {
+        self.fixed.is_some()
+    }
+
+    /// The password requests need now, or `None` when the API is open.
+    pub(crate) fn current(&self, settings: &Settings) -> Option<Secret> {
+        match &self.fixed {
+            Some(secret) => Some(Secret::Plain(secret.clone())),
+            None => settings.server.auth_token.clone().map(Secret::Hash),
+        }
+    }
+
+    /// Whether `candidate` is the password. A hash is checked on the blocking pool, a few at a
+    /// time.
+    async fn matches(&self, secret: &Secret, candidate: &str) -> Result<bool, ApiError> {
+        match secret {
+            Secret::Plain(secret) => Ok(ct_eq(candidate, secret)),
+            Secret::Hash(hash) => {
+                let _permit = self
+                    .hashing
+                    .acquire()
+                    .await
+                    .map_err(|e| ApiError::Internal(e.to_string()))?;
+                let (hash, candidate) = (hash.clone(), candidate.to_owned());
+                off_thread(move || verify_password(&hash, &candidate)).await
+            }
+        }
+    }
+
+    /// Whether the request's bearer token is known to be `secret` without hashing: it is the
+    /// command line one, or one verified before.
+    fn bearer_known(&self, secret: &Secret, headers: &HeaderMap) -> bool {
+        let Some(token) = bearer_token(headers) else {
+            return false;
+        };
+        match secret {
+            Secret::Plain(secret) => ct_eq(token, secret),
+            Secret::Hash(hash) => {
+                let digest = token_digest(token);
+                self.verified(|v| v.hash == *hash && v.tokens.contains(&digest))
+            }
+        }
+    }
+
+    /// Whether the request's bearer token is the password `hash` was made from; remembers it
+    /// when it is.
+    async fn bearer_verifies(
+        &self,
+        secret: &Secret,
+        headers: &HeaderMap,
+    ) -> Result<bool, ApiError> {
+        let (Some(token), Secret::Hash(hash)) = (bearer_token(headers), secret) else {
+            return Ok(false);
+        };
+        if !self.matches(secret, token).await? {
+            return Ok(false);
+        }
+        let digest = token_digest(token);
+        self.verified(|v| {
+            if v.hash != *hash {
+                *v = Verified {
+                    hash: hash.clone(),
+                    tokens: Vec::new(),
+                };
+            }
+            if v.tokens.len() >= VERIFIED_TOKENS {
+                v.tokens.remove(0);
+            }
+            v.tokens.push(digest);
+        });
+        Ok(true)
+    }
+
+    fn verified<T>(&self, f: impl FnOnce(&mut Verified) -> T) -> T {
+        f(&mut self.verified.lock().unwrap_or_else(|e| e.into_inner()))
+    }
+}
+
+/// What [`Verified`] keeps of a bearer token.
+fn token_digest(token: &str) -> [u8; 32] {
+    Sha256::digest(token.as_bytes()).into()
+}
+
+/// The password a request is checked against.
+pub(crate) enum Secret {
+    /// From the command line or environment.
+    Plain(String),
+    /// The `server.auth_token` setting: a hash of the password.
+    Hash(String),
+}
+
+impl Secret {
+    /// What sessions are bound to: the password, or the stored hash (with its own salt, so
+    /// setting a password again also ends them).
+    fn binding(&self) -> &str {
+        match self {
+            Secret::Plain(s) | Secret::Hash(s) => s,
+        }
     }
 
     /// What `app.db` stores for the session cookie `token`: a hash bound to the secret, so a
     /// password change leaves every stored session unmatched.
     fn token_hash(&self, token: &str) -> Vec<u8> {
+        let binding = self.binding();
         let mut hash = Sha256::new();
         hash.update(b"fmd2r-session\0");
-        hash.update((self.secret.len() as u64).to_le_bytes());
-        hash.update(self.secret.as_bytes());
+        hash.update((binding.len() as u64).to_le_bytes());
+        hash.update(binding.as_bytes());
         hash.update(token.as_bytes());
         hash.finalize().to_vec()
     }
@@ -58,15 +192,16 @@ impl Auth {
             .map(|t| self.token_hash(t))
             .collect()
     }
+}
 
-    fn bearer_authorizes(&self, headers: &HeaderMap) -> bool {
-        headers
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.split_once(' '))
-            .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
-            .is_some_and(|(_, token)| self.is_secret(token.trim()))
-    }
+/// The token of an `Authorization: Bearer` header.
+fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split_once(' '))
+        .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+        .map(|(_, token)| token.trim())
 }
 
 /// Constant-time string comparison (the length itself is not hidden).
@@ -133,10 +268,10 @@ impl SessionCutoffs {
 /// Whether a session cookie in `headers` names a live session; renews the ones that do.
 async fn session_authorizes(
     state: &AppState,
-    auth: &Auth,
+    secret: &Secret,
     headers: &HeaderMap,
 ) -> Result<bool, ApiError> {
-    let hashes = auth.session_hashes(headers);
+    let hashes = secret.session_hashes(headers);
     if hashes.is_empty() {
         return Ok(false);
     }
@@ -156,13 +291,19 @@ async fn session_authorizes(
 
 /// Middleware for protected routes: a no-op unless auth is configured.
 pub(crate) async fn require(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    let Some(auth) = state.auth.clone() else {
+    let Some(secret) = state.secret() else {
         return next.run(req).await;
     };
-    if auth.bearer_authorizes(req.headers()) {
+    if state.auth.bearer_known(&secret, req.headers()) {
         return next.run(req).await;
     }
-    match session_authorizes(&state, &auth, req.headers()).await {
+    // A session before an unknown bearer token, which costs a hash.
+    let authorized = match session_authorizes(&state, &secret, req.headers()).await {
+        Ok(true) => Ok(true),
+        Ok(false) => state.auth.bearer_verifies(&secret, req.headers()).await,
+        Err(e) => Err(e),
+    };
+    match authorized {
         Ok(true) => next.run(req).await,
         Ok(false) => ApiError::Unauthorized.into_response(),
         Err(e) => e.into_response(),
@@ -224,14 +365,14 @@ pub(crate) async fn login(
     headers: HeaderMap,
     ApiJson(login): ApiJson<Login>,
 ) -> Result<Response, ApiError> {
-    let Some(auth) = state.auth.clone() else {
+    let Some(secret) = state.secret() else {
         return Ok(StatusCode::NO_CONTENT.into_response());
     };
-    if !auth.is_secret(&login.password) {
+    if !state.auth.matches(&secret, &login.password).await? {
         return Err(ApiError::Unauthorized);
     }
     let token = new_token()?;
-    let hash = auth.token_hash(&token);
+    let hash = secret.token_hash(&token);
     let c = SessionCutoffs::current(&state);
     state
         .blocking(move |db| {
@@ -253,8 +394,8 @@ pub(crate) async fn logout(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    if let Some(auth) = state.auth.clone() {
-        let hashes = auth.session_hashes(&headers);
+    if let Some(secret) = state.secret() {
+        let hashes = secret.session_hashes(&headers);
         state
             .blocking(move |db| {
                 let sessions = db.sessions();
@@ -277,7 +418,7 @@ pub(crate) async fn revoke_all(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    if state.auth.is_some() {
+    if state.secret().is_some() {
         state.blocking(|db| db.sessions().delete_all()).await?;
         state.end_sessions();
     }

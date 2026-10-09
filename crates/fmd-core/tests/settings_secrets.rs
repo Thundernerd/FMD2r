@@ -1,11 +1,14 @@
 //! Settings secrets at rest (docs/tickets/T63-settings-secrets.md): the proxy passwords, the
-//! GitHub token and the server password are stored encrypted in `app.db`, and plain values an
+//! GitHub token and the server password are not stored in plain text in `app.db` (the server
+//! password is hashed, docs/tickets/T64-password-and-bind-settings.md), and plain values an
 //! older build stored are encrypted on the next start.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
-use fmd_core::settings::{ModuleOverrides, ModulePatch, SettingsService, StoredModuleHttpSettings};
+use fmd_core::settings::{
+    ModuleOverrides, ModulePatch, SettingsService, StoredModuleHttpSettings, verify_password,
+};
 use fmd_http::{Proxy, ProxyKind};
 use fmd_lua::{ModuleHttpSettings, ProxyOverride};
 use fmd_store::{AppDb, ModuleSettings};
@@ -71,7 +74,8 @@ fn assert_secrets_readable(db: &AppDb) {
         s.module_updater.github_token.as_deref(),
         Some("token-secret")
     );
-    assert_eq!(s.server.auth_token.as_deref(), Some("server-secret"));
+    let hash = s.server.auth_token.as_deref().unwrap_or_default();
+    assert!(verify_password(hash, "server-secret"));
     let overrides = ModuleOverrides::load(&db.module_settings(), "site").unwrap();
     assert_eq!(overrides.http.proxy.password, "module-secret");
     assert_eq!(module_proxy(db), expected_module_proxy());

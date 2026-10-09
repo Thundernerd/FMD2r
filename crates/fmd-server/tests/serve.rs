@@ -173,7 +173,7 @@ impl Server {
         // made.
         let module_updates = settings["module_updater"]["auto_update"] == false;
         tokio::spawn(serve(ServeConfig {
-            bind,
+            bind: Some(bind),
             data_dir,
             auth: None,
             flaresolverr_url: None,

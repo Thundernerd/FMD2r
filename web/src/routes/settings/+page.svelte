@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api } from '#lib/app.ts';
+	import { api, session } from '#lib/app.ts';
 	import { ValidationError } from '#lib/api/client.ts';
 	import type {
 		ModuleSettingsView,
@@ -137,6 +137,8 @@
 		}
 		saved = true;
 		setTimeout(() => (saved = false), 2000);
+		// The password setting decides whether the server warns that it is open.
+		if (changes && 'server' in changes) session.checkHealth(api).catch(() => {});
 	}
 
 	/** Shows a rejected save: every invalid field inline, the first one scrolled to. */
@@ -235,7 +237,7 @@
 					<section id="section-{section.id}" class="card" aria-labelledby="heading-{section.id}">
 						<h2 id="heading-{section.id}">{section.title}</h2>
 						{#each section.fields as field (field.path)}
-							<SettingField {field} {draft} />
+							<SettingField {field} {draft} overridden={session.overridden(field.path)} />
 						{/each}
 						{#if section.id === 'saveto'}
 							<p class="preview small" aria-live="polite">

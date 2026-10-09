@@ -1,5 +1,6 @@
 //! Shared state handed to every handler.
 
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
@@ -13,7 +14,7 @@ use fmd_store::{AppDb, ListsDb, NewEvent};
 use tokio::sync::watch;
 
 use crate::ApiError;
-use crate::auth::Auth;
+use crate::auth::{Auth, Secret};
 use crate::covers::{CoverConfig, CoverModules, Covers};
 use crate::events::{EventBus, ServerEvent};
 use crate::import::{ImportJob, ImportLimits};
@@ -32,7 +33,11 @@ const DEFAULT_LOG_LINES: usize = 1000;
 pub struct AppState {
     pub(crate) db: AppDb,
     pub(crate) assets: Arc<dyn Assets>,
-    pub(crate) auth: Option<Arc<Auth>>,
+    pub(crate) auth: Arc<Auth>,
+    /// Where the server listens, for `GET /api/health`.
+    pub(crate) listen_addr: Option<SocketAddr>,
+    /// The settings the command line or environment overrides, as dotted paths.
+    pub(crate) overridden: Vec<&'static str>,
     pub(crate) events: EventBus,
     pub(crate) logs: LogBuffer,
     pub(crate) settings: Arc<SettingsService>,
@@ -84,7 +89,9 @@ impl AppState {
             sessions_ended: Arc::new(watch::channel(0).0),
             db,
             assets: Arc::new(EmbeddedAssets),
-            auth: None,
+            auth: Auth::from_settings(),
+            listen_addr: None,
+            overridden: Vec::new(),
             events,
         })
     }
@@ -96,10 +103,31 @@ impl AppState {
     }
 
     /// Requires `secret` (as a bearer token, or via a `POST /api/login` session) for every API
-    /// route except health, login and the OpenAPI document.
+    /// route except health, login and the OpenAPI document, instead of the `server.auth_token`
+    /// setting: the password given on the command line or in the environment.
     pub fn with_auth(mut self, secret: impl Into<String>) -> Self {
-        self.auth = Some(Auth::new(secret.into()));
+        self.auth = Auth::fixed(secret.into());
         self
+    }
+
+    /// Reports in `GET /api/health` whether `addr`, where the server listens, is a loopback
+    /// address. Without it the server counts as loopback-only.
+    pub fn with_listen_addr(mut self, addr: SocketAddr) -> Self {
+        self.listen_addr = Some(addr);
+        self
+    }
+
+    /// Reports in `GET /api/health` that the command line or environment overrides `settings`
+    /// (dotted paths such as `server.bind`). [`AppState::with_auth`] reports `server.auth_token`
+    /// itself.
+    pub fn with_overridden(mut self, settings: impl IntoIterator<Item = &'static str>) -> Self {
+        self.overridden.extend(settings);
+        self
+    }
+
+    /// The password requests need now, or `None` when the API is open.
+    pub(crate) fn secret(&self) -> Option<Secret> {
+        self.auth.current(&self.settings.get())
     }
 
     /// Reads the wall-clock time from `clock` instead of the system clock (login sessions

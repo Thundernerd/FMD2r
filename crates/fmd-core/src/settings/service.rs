@@ -10,6 +10,7 @@ use tokio::sync::watch;
 
 use super::model::Settings;
 use super::module_overrides::{ModuleOverrides, encrypt_plain_module_secrets};
+use super::password::{hash_patched, hash_stored};
 use super::secrets::{Found, seal_group, unseal_group};
 use super::validate::{normalize, validate};
 use crate::modules::OptionDef;
@@ -24,6 +25,9 @@ pub enum SettingsError {
     /// out of range, or names a setting that does not exist. Never empty.
     #[error("{}", display_fields(.0))]
     Invalid(Vec<FieldError>),
+    /// Hashing the server password failed (no randomness for the salt).
+    #[error("hashing the password: {0}")]
+    Hash(String),
 }
 
 /// One rejected value of an update.
@@ -92,7 +96,8 @@ impl SettingsService {
     /// The unreadable value stays in the table until that group is next updated.
     ///
     /// Secrets are stored encrypted (see `secrets.rs`); plain ones an older build stored, in
-    /// these groups or in a module's HTTP overrides, are encrypted here.
+    /// these groups or in a module's HTTP overrides, are encrypted here. The server password is
+    /// stored hashed (see `password.rs`); one an older build stored is hashed here.
     pub fn load(db: AppDb) -> Result<Self, SettingsError> {
         let mut tree = serde_json::to_value(Settings::default())?;
         let keys: Vec<String> = tree
@@ -102,6 +107,9 @@ impl SettingsService {
         let repo = db.settings();
         for key in keys {
             if let Some(mut stored) = repo.get::<Value>(&key)? {
+                if key == "server" && hash_stored(db.cipher(), &mut stored)? {
+                    repo.set(&key, &stored)?;
+                }
                 if unseal_group(db.cipher(), &key, &mut stored) == Found::Plain {
                     let mut sealed = stored.clone();
                     seal_group(db.cipher(), &key, &mut sealed)?;
@@ -152,7 +160,8 @@ impl SettingsService {
     }
 
     /// `current` with `patch` applied, normalised and validated.
-    fn patched(current: &Settings, patch: Value) -> Result<Settings, SettingsError> {
+    fn patched(current: &Settings, mut patch: Value) -> Result<Settings, SettingsError> {
+        hash_patched(&mut patch)?;
         let mut errors = Vec::new();
         let next = merge_patch_reporting(serde_json::to_value(current)?, patch, &mut errors);
         let Some(mut next) = next else {

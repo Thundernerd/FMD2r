@@ -368,7 +368,7 @@ export function createMockBackend({
 		if (logs.length > 2000) logs.shift();
 		return line;
 	};
-	log('INFO', 'fmd_server', null, 'listening on 0.0.0.0:8080');
+	log('INFO', 'fmd_server', null, 'listening on 127.0.0.1:8080');
 	for (let n = 1; n <= 40; n++) {
 		log('DEBUG', 'fmd_lua', 'MangaDex', `GET https://api.mangadex.org/at-home/server/${n}`);
 		if (n % 8 === 0) log('WARN', 'fmd.logger', 'MangaDex', 'rate limited, retrying in 2s');
@@ -593,7 +593,8 @@ export function createMockBackend({
 		const { pathname, searchParams } = new URL(req.url);
 		const route = `${req.method} ${pathname}`;
 
-		if (route === 'GET /api/health') return json({ status: 'ok', auth: password !== null });
+		if (route === 'GET /api/health')
+			return json({ status: 'ok', auth: password !== null, loopback: true, overridden: [] });
 		if (route === 'POST /api/login') {
 			const body = (await req.json()) as { password?: unknown } | null;
 			if (password !== null && body?.password !== password) {

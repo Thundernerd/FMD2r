@@ -1224,6 +1224,13 @@ export interface components {
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
 			auth: boolean;
+			/** @description Whether the server listens on a loopback address only, out of other machines' reach. */
+			loopback: boolean;
+			/**
+			 * @description The settings the command line or environment overrides (`--bind`, `--password`, …), as
+			 *     dotted paths such as `server.bind`.
+			 */
+			overridden: string[];
 			/** @description Always `ok` while the server answers. */
 			status: string;
 		};
@@ -2087,7 +2094,7 @@ export interface components {
 			saveto: components['schemas']['SaveToSettings'];
 			/**
 			 * @default {
-			 *       "bind": "0.0.0.0:8080",
+			 *       "bind": "127.0.0.1:8080",
 			 *       "has_auth_token": false,
 			 *       "session_idle_days": 7,
 			 *       "session_lifetime_days": 30
