@@ -8,9 +8,14 @@
 # native XPath backend only, so the image has no libfmdxpath.so (the fpc backend's x86-only
 # shim). The web UI and fmd2r build on the build platform; fmd2r cross-compiles for the target,
 # so only the runtime stage runs under emulation.
+#
+# BuildKit sets BUILDPLATFORM, BUILDARCH and TARGETARCH; the classic builder (`DOCKER_BUILDKIT=0`,
+# or a host without the buildx plugin) leaves them empty, so they fall back to amd64 where they are
+# used. The fallbacks are not ARG defaults: a default would override BuildKit's TARGETARCH.
+ARG BUILDPLATFORM
 
 # --- Web UI (SvelteKit, static) -------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:24-trixie-slim AS web
+FROM --platform=${BUILDPLATFORM:-linux/amd64} node:24-trixie-slim AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -19,11 +24,12 @@ COPY web/ ./
 RUN npm run build
 
 # --- fmd2r ---------------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM rust:1.97.1-slim-trixie AS rust
+FROM --platform=${BUILDPLATFORM:-linux/amd64} rust:1.97.1-slim-trixie AS rust
 ARG BUILDARCH
 ARG TARGETARCH
 # The C dependencies (Lua, SQLite, ring, zstd) need a C cross compiler when the target differs.
-RUN case "$TARGETARCH" in \
+RUN BUILDARCH=${BUILDARCH:-amd64} TARGETARCH=${TARGETARCH:-amd64} \
+ && case "$TARGETARCH" in \
       amd64) arch=x86_64 pkg=x86-64 ;; \
       arm64) arch=aarch64 pkg=aarch64 ;; \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \

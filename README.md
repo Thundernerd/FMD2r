@@ -31,6 +31,14 @@ docker compose up -d    # in a source checkout, `--build` builds the image local
 Then open <http://localhost:8080>. While the repository is private its GHCR package is too: run
 `docker login ghcr.io` first, or build locally with `--build`.
 
+A local build works with or without BuildKit (the classic builder builds a linux/amd64 image). The
+build context has no `.git`, so `FMD2R_GIT_REVISION` supplies the commit that `GET /api/about` and
+the System page report:
+
+```sh
+FMD2R_GIT_REVISION=$(git rev-parse --short=12 HEAD) docker compose up -d --build
+```
+
 - **Data:** everything lives in `/data` (the `fmd2r-data` volume): `app.db`, `lists.db`, `lua/`, the
   cover cache, and `downloads/`, the default save-to directory, which compose maps to `MANGA_DIR`.
   (`downloads` is relative to the working directory, `/data`, not to `FMD2R_DATA_DIR`.)
