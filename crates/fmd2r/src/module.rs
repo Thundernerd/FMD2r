@@ -42,7 +42,6 @@ pub struct LoadArgs {
 }
 
 impl LoadArgs {
-    /// Loads the modules: every file in `<lua-dir>/modules`, or just `--file`.
     fn load(&self) -> LoadReport {
         match &self.file {
             Some(file) => ModuleRegistry::load_file(&self.lua_dir, file),
@@ -50,7 +49,6 @@ impl LoadArgs {
         }
     }
 
-    /// The loaded modules `--module` selects: the one with that ID, or all of them.
     fn selected(&self, report: &LoadReport) -> anyhow::Result<Vec<Arc<Module>>> {
         let modules = report.registry.modules();
         match &self.module {
@@ -81,8 +79,8 @@ pub struct RunArgs {
     load: LoadArgs,
     #[command(flatten)]
     http: IoArgs,
-    /// Record every XPath evaluation into this differential corpus directory (see
-    /// fixtures/xpath-corpus), adding to what is there.
+    /// Append every XPath evaluation to this differential corpus directory (see
+    /// fixtures/xpath-corpus).
     #[arg(long, value_name = "DIR")]
     xpath_corpus: Option<PathBuf>,
 }
@@ -96,21 +94,19 @@ pub struct DownloadArgs {
     out: PathBuf,
 }
 
-/// Where HTTP requests and `fmd.subprocess` processes go: the network and the system, the same
-/// with recording, or recorded fixtures.
+/// Where HTTP and `fmd.subprocess` go: live, recorded, or replayed from fixtures.
 #[derive(Args)]
 pub struct IoArgs {
     /// Write every HTTP exchange, and every process `fmd.subprocess` runs, into this fixture
     /// directory (see docs/fixtures.md).
     #[arg(long, value_name = "DIR", conflicts_with = "replay")]
     record: Option<PathBuf>,
-    /// Serve HTTP and `fmd.subprocess` processes from the fixtures recorded in this directory
-    /// instead of the network and the system; a request or process with no recording fails the
-    /// command.
+    /// Serve HTTP and `fmd.subprocess` from the fixtures in this directory; an unrecorded
+    /// request or process fails the command.
     #[arg(long, value_name = "DIR")]
     replay: Option<PathBuf>,
-    /// With --replay, a request header whose value must match the recorded one too (method, URL
-    /// and body always do). Repeatable.
+    /// With --replay, also match this request header (method, URL and body always match).
+    /// Repeatable.
     #[arg(long, value_name = "NAME", requires = "replay")]
     match_header: Vec<String>,
 }
@@ -163,8 +159,7 @@ impl IoArgs {
 }
 
 impl CommandIo {
-    /// Fails, naming each request and process, when a replay met requests it had no exchange
-    /// for or processes it had no recorded call for.
+    /// Fails, naming each one, when a replay met unrecorded requests or processes.
     fn check_replay(&self) -> anyhow::Result<()> {
         let requests = self.replay.as_ref().map(|r| r.misses()).unwrap_or_default();
         let processes = self
@@ -252,8 +247,7 @@ impl ModuleRun {
         })
     }
 
-    /// The callbacks' `result`, after failing on any request a replay had no exchange for, which
-    /// is what usually made a callback fail.
+    /// Checks replay misses before `result`, since a miss usually is why a callback failed.
     fn finish<T>(&self, result: Result<T, JobError>) -> anyhow::Result<T> {
         if let Some(corpus) = &self.xpath_corpus {
             corpus.finish().context("recording the XPath corpus")?;
@@ -306,13 +300,11 @@ const INFORMATION_NOT_FOUND: u8 = 2;
 /// What an unresolved page link holds (baseunits/uDownloadsManager.pas:845-849, :1208-1211).
 const UNRESOLVED_PAGE: &str = "W";
 
-/// Prepares one chapter as FMD2's task thread does before downloading (`TTaskThread.Execute`,
-/// baseunits/uDownloadsManager.pas:975-1250, the part at :1167-1246): `OnTaskStart`; then, when
-/// it left no page links, `DoGetPageNumber` (:829-881); then, unless the module sets
-/// `DynamicPageLink`, `OnGetImageURL` for every page still unresolved (`DoPageLink`, :421-433,
-/// with `GetLinkPageFromURL`, :327-333). All run on one worker, in order, each with a fresh
-/// `HTTP` session. Prints each callback's result too, and fails after printing when no page link
-/// resolved, which FMD2's task thread does not check.
+/// Prepares one chapter like `TTaskThread.Execute` (baseunits/uDownloadsManager.pas:1167-1246):
+/// `OnTaskStart`; `DoGetPageNumber` (:829-881) when no page links; then, unless
+/// `DynamicPageLink`, `OnGetImageURL` per unresolved page (`DoPageLink`, :421-433, with
+/// `GetLinkPageFromURL`, :327-333). All on one worker, each with a fresh `HTTP` session. Fails
+/// after printing when no page link resolved, which FMD2 does not check.
 fn pages(args: RunArgs) -> anyhow::Result<()> {
     let run = ModuleRun::start(&args)?;
     let result = prepare_chapter(&run);
@@ -329,9 +321,9 @@ fn pages(args: RunArgs) -> anyhow::Result<()> {
     });
     println!("{}", serde_json::to_string_pretty(&out)?);
     if !prepared.resolved {
-        // Not on `GetPageNumber`'s result alone: modules return false on chapters that work
-        // (MangaDex returns `no_error`, unset in `DoGetPageNumber` and so read as false,
-        // baseunits/lua/LuaWebsiteModules.pas:285-304), and FMD2 ignores it.
+        // Not on `GetPageNumber`'s result alone: modules return false on working chapters
+        // (e.g. MangaDex's `no_error`, read as false, baseunits/lua/LuaWebsiteModules.pas:285-304),
+        // and FMD2 ignores it.
         if prepared.get_page_number == Some(false) {
             bail!("no page link resolved; GetPageNumber returned false");
         }
@@ -472,8 +464,6 @@ impl Target {
     }
 }
 
-/// A one-thread worker pool over `load`'s `lua/` dir, sending HTTP through `http` and recording
-/// XPath into `xpath_corpus`, if given.
 fn pool(
     load: &LoadArgs,
     http: &CommandIo,
@@ -487,7 +477,6 @@ fn pool(
     WorkerPool::new(config).context("starting the Lua worker")
 }
 
-/// Lists every module file that failed to load on stderr.
 fn print_failures(report: &LoadReport) {
     for failure in &report.failures {
         eprintln!("{}: {}", failure.file.display(), failure.error);
@@ -549,7 +538,6 @@ fn option_json(option: &ModuleOption) -> Value {
     })
 }
 
-/// The modules as a text table, one row per module.
 fn table(defs: &[ModuleDef]) -> String {
     let mut rows = vec![[
         "ID".to_owned(),

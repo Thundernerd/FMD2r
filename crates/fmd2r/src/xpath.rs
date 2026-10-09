@@ -10,11 +10,9 @@ use fmd_xpath::{Backend, Normalized, XPathEngine, diff};
 
 #[derive(Subcommand)]
 pub enum XpathCommand {
-    /// Evaluate an expression against an HTML document and print the result as the differential
-    /// runner compares it.
+    /// Evaluate an expression on an HTML document, printed as the differential runner compares it.
     Eval(EvalArgs),
-    /// Evaluate every entry of the differential corpus on both backends and report where they
-    /// differ. Exits with an error on any mismatch.
+    /// Compare both backends on every differential corpus entry; fails on any mismatch.
     Diff(DiffArgs),
 }
 
