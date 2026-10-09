@@ -15,7 +15,7 @@ import type {
 	LogLine,
 	ModuleSummary,
 	NewTask,
-	SaveToSettings,
+	RenamePreviewRequest,
 	SeriesInfo,
 	SeriesRef,
 	TaskDetail,
@@ -301,7 +301,45 @@ export interface MockBackend {
 	taskFilesUrl: (id: number) => string;
 }
 
-export function createMockBackend(): MockBackend {
+export interface MockOptions {
+	/**
+	 * The password the mock requires, like `fmd2r serve --password`; `null` turns auth off.
+	 * Defaults to `sessionStorage['fmd2r.mock.password']`, so a test can turn auth on.
+	 */
+	password?: string | null;
+}
+
+const PASSWORD_KEY = 'fmd2r.mock.password';
+const SESSION_KEY = 'fmd2r.mock.session';
+
+/** A sessionStorage item, or `null` without storage (tests, private mode). */
+const stored = (key: string): string | null => {
+	try {
+		return globalThis.sessionStorage?.getItem(key) ?? null;
+	} catch {
+		return null;
+	}
+};
+
+/** Sets (or, with `null`, removes) a sessionStorage item; does nothing without storage. */
+const store = (key: string, value: string | null) => {
+	try {
+		if (value === null) globalThis.sessionStorage?.removeItem(key);
+		else globalThis.sessionStorage?.setItem(key, value);
+	} catch {
+		// Not persisted; the in-memory state still works.
+	}
+};
+
+export function createMockBackend({
+	password = stored(PASSWORD_KEY)
+}: MockOptions = {}): MockBackend {
+	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
+	let loggedIn = stored(SESSION_KEY) !== null;
+	const setLoggedIn = (value: boolean) => {
+		loggedIn = value;
+		store(SESSION_KEY, value ? '1' : null);
+	};
 	const inbox = seedInbox();
 	let tasks = seedTasks(Date.now());
 	/** Every open fake event stream, so API calls can announce what they changed. */
@@ -494,7 +532,13 @@ export function createMockBackend(): MockBackend {
 		} catch (e) {
 			if (!(e instanceof Invalid)) throw e;
 			return json(
-				{ status: 422, title: 'Unprocessable Entity', detail: e.detail, field: e.field },
+				{
+					status: 422,
+					title: 'Unprocessable Entity',
+					detail: e.message,
+					field: e.fields[0]?.field,
+					fields: e.fields
+				},
 				422
 			);
 		}
@@ -548,6 +592,22 @@ export function createMockBackend(): MockBackend {
 		const { pathname, searchParams } = new URL(req.url);
 		const route = `${req.method} ${pathname}`;
 
+		if (route === 'GET /api/health') return json({ status: 'ok', auth: password !== null });
+		if (route === 'POST /api/login') {
+			const body = (await req.json()) as { password?: unknown } | null;
+			if (password !== null && body?.password !== password) {
+				return json({ status: 401, title: 'Unauthorized' }, 401);
+			}
+			if (password !== null) setLoggedIn(true);
+			return new Response(null, { status: 204 });
+		}
+		if (route === 'POST /api/logout') {
+			setLoggedIn(false);
+			return new Response(null, { status: 204 });
+		}
+		if (password !== null && !loggedIn) {
+			return json({ status: 401, title: 'Unauthorized' }, 401);
+		}
 		if (route === 'GET /api/inbox') return json(inbox);
 		if (route === 'GET /api/tasks') {
 			const counts = { downloading: 0, waiting: 0, stopped: 0, finished: 0 };
@@ -653,8 +713,9 @@ export function createMockBackend(): MockBackend {
 		if (route === 'GET /api/jobs') return json(jobs);
 		if (route === 'GET /api/settings') return json(settings.getSettings());
 		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
+		if (route === 'PATCH /api/settings/all') return update(req, settings.patchAll);
 		if (route === 'POST /api/preview-rename') {
-			return json(settings.previewRename((await req.json()) as SaveToSettings));
+			return json(settings.previewRename((await req.json()) as RenamePreviewRequest));
 		}
 		if (route === 'GET /api/modules') return json(modules());
 		if (route === 'GET /api/lists/search') return json(lists.search(searchParams));

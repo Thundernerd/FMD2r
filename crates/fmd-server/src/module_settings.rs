@@ -94,7 +94,7 @@ impl ModuleSettingsView {
     /// Option values resolve like `MODULE.GetOption`: the stored value when it has the option's
     /// type, else the default (`fmd_lua::Module::option_value`,
     /// baseunits/lua/LuaWebsiteModules.pas:921-949).
-    fn new(module: ModuleInfo, overrides: ModuleOverrides) -> Self {
+    pub(crate) fn new(module: ModuleInfo, overrides: ModuleOverrides) -> Self {
         let int = |key: &str| overrides.options.get(key).and_then(as_i32);
         let options = module
             .options

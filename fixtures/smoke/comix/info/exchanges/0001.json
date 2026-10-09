@@ -1,0 +1,101 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://comix.to/title/02l05-after-a-meal",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Fri, 09 Oct 2026 08:29:22 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=utf-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "x-request-id",
+        "24c7c18def55478dac363cb746bac715"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=c5eEVOTTaWkuUr%2F9EE%2BRuiweEC0wi4Iu%2FAY2YU21Y0bW8JDTvZV%2FyffB299qpUzQ0dkoz0AC4F912tYFSateZwQ%2F5oif2AE1ExYeP6Qv2bT3WbzCSSCECu8RLg%3D%3D\"}]}"
+      ],
+      [
+        "cache-control",
+        "no-store, no-cache, must-revalidate"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "vary",
+        "accept-encoding"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a47c04647f99db35-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": "zstd"
+  }
+}

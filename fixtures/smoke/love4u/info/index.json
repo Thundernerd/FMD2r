@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://love4u.net/manga-6433/",
+      "status": 200
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://love4u.net/app/manga/controllers/cont.Listchapter.php?mid=6433",
+      "status": 200
+    }
+  ]
+}

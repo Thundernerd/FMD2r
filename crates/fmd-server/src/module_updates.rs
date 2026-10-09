@@ -9,9 +9,12 @@ use fmd_core::module_updater::{
     LiveModules, ModuleUpdater, ModuleUpdaterJob, UpdaterConfig, has_no_modules,
 };
 use fmd_core::modules::StoreModuleSettings;
-use fmd_core::settings::{ModuleUpdaterSettings, write_websitebypass_config};
+use fmd_core::settings::{
+    ModuleUpdaterSettings, Settings, SettingsService, StoredModuleHttpSettings, XPathBackend,
+    write_websitebypass_config,
+};
 use fmd_http::HttpClient;
-use fmd_lua::{PoolConfig, WorkerPool};
+use fmd_lua::{Module, ModuleHttpSettings, PoolConfig, WorkerPool};
 use fmd_store::{AppDb, KeyFileCipher};
 use tokio::time::Instant;
 
@@ -37,15 +40,21 @@ pub(crate) struct LuaRuntime {
     pub(crate) modules: Arc<LiveModules>,
     pub(crate) pool: Arc<WorkerPool>,
     pub(crate) http: HttpClient,
+    /// The `xpath.backend` setting the workers were started with.
+    xpath_backend: XPathBackend,
 }
 
 impl LuaRuntime {
     /// Loads the modules in `lua_dir` with their settings (options, cookies, accounts) read
     /// through `db`, credentials and cookies decrypted by the key in `key_file`. Blocks.
+    ///
+    /// `CreateTXQuery` runs on `xpath_backend`, or on the runtime's default when this build
+    /// leaves that backend out.
     pub(crate) fn load(
         db: AppDb,
         lua_dir: &Path,
         key_file: &Path,
+        xpath_backend: XPathBackend,
     ) -> Result<LuaRuntime, LuaRuntimeError> {
         let cipher =
             KeyFileCipher::open_or_create(key_file).map_err(|source| LuaRuntimeError::KeyFile {
@@ -54,18 +63,62 @@ impl LuaRuntime {
             })?;
         let modules = Arc::new(LiveModules::load(
             lua_dir,
-            Arc::new(StoreModuleSettings::new(db, Arc::new(cipher))),
+            Arc::new(StoreModuleSettings::new(db.clone(), Arc::new(cipher))),
         ));
         let http = HttpClient::new()?;
         let mut config = PoolConfig::new(http.clone());
         config.lua_dir = lua_dir.to_owned();
+        config.xpath_backend = lua_xpath_backend(xpath_backend);
+        // The `HTTP` sessions callbacks get are prepared with the module's stored HTTP settings
+        // (`PrepareHTTP`, baseunits/WebsiteModules.pas:353-380).
+        config.http_settings = Some(Arc::new(move |module: &Module| {
+            Arc::new(StoredModuleHttpSettings::new(db.clone(), module.def().id))
+                as Arc<dyn ModuleHttpSettings>
+        }));
         let pool = Arc::new(WorkerPool::new(config)?);
         Ok(LuaRuntime {
             modules,
             pool,
             http,
+            xpath_backend,
         })
     }
+}
+
+/// The `fmd-lua` backend for the `xpath.backend` setting; `None`, logged, when this build leaves
+/// it out.
+fn lua_xpath_backend(setting: XPathBackend) -> Option<fmd_lua::XPathBackend> {
+    let backend = match setting {
+        XPathBackend::Fpc => fmd_lua::XPathBackend::Fpc,
+        XPathBackend::Native => fmd_lua::XPathBackend::Native,
+    };
+    if backend.engine().is_none() {
+        tracing::error!(target: "fmd_server", "xpath.backend {backend:?} is not in this build; ignoring it");
+        return None;
+    }
+    Some(backend)
+}
+
+/// Switches `runtime`'s workers to the `xpath.backend` setting whenever it changes, starting with
+/// a change made while the runtime loaded.
+pub(crate) fn follow_xpath_backend(settings: Arc<SettingsService>, runtime: &LuaRuntime) {
+    let pool = runtime.pool.clone();
+    let mut changes = settings.subscribe();
+    changes.mark_changed();
+    let mut current = runtime.xpath_backend;
+    tokio::spawn(async move {
+        while changes.changed().await.is_ok() {
+            let next = changes.borrow_and_update().xpath.backend;
+            if next == current {
+                continue;
+            }
+            current = next;
+            if let Some(backend) = lua_xpath_backend(next) {
+                tracing::info!(target: "fmd_server", "XPath backend: {backend:?}");
+                pool.set_xpath_backend(backend);
+            }
+        }
+    });
 }
 
 /// Registers the `modules` job over `runtime`'s modules, then runs it at startup and every
@@ -73,17 +126,19 @@ impl LuaRuntime {
 /// modules yet is synced at startup either way (the first-run bootstrap).
 ///
 /// The repository, token and keep-last-good settings are read once: changes apply on the next
-/// start. `flaresolverr_url` is written back into `websitebypass_config.json` whenever a sync
+/// start. The FlareSolverr URL (`flaresolverr_override`, else the `connections.flaresolverr_url`
+/// setting at that time) is written back into `websitebypass_config.json` whenever a sync
 /// replaces it with upstream's.
 pub(crate) fn start(
     state: AppState,
     runtime: &LuaRuntime,
     lua_dir: PathBuf,
-    flaresolverr_url: String,
+    flaresolverr_override: Option<String>,
 ) {
     let settings = state.settings.get().module_updater.clone();
     let config = UpdaterConfig::from_settings(&settings, &lua_dir);
     let dir = lua_dir.clone();
+    let settings_service = state.settings.clone();
     let updater = ModuleUpdater::new(
         config,
         state.db.clone(),
@@ -92,6 +147,8 @@ pub(crate) fn start(
     )
     .with_pool(runtime.pool.clone())
     .with_after_sync(move |report| {
+        let flaresolverr_url =
+            flaresolverr_url(flaresolverr_override.as_deref(), &settings_service.get());
         if report.downloaded.iter().any(|f| f == WEBSITEBYPASS_CONFIG)
             && let Err(e) = write_websitebypass_config(&dir, &flaresolverr_url)
         {
@@ -102,6 +159,14 @@ pub(crate) fn start(
     state.jobs.register(job.clone());
     state.jobs.changed(ModuleUpdaterJob::ID);
     tokio::spawn(schedule(job, state, lua_dir));
+}
+
+/// The FlareSolverr URL `websitebypass_config.json` points at: the flag or environment variable
+/// (`flaresolverr_override`) for this run, else the stored `connections.flaresolverr_url`.
+pub(crate) fn flaresolverr_url(flaresolverr_override: Option<&str>, settings: &Settings) -> String {
+    flaresolverr_override
+        .unwrap_or(&settings.connections.flaresolverr_url)
+        .to_owned()
 }
 
 /// The config file `write_websitebypass_config` writes, relative to the Lua dir.

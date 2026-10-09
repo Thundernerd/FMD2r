@@ -31,6 +31,9 @@ pub enum ApiError {
         field: Option<String>,
         detail: String,
     },
+    /// Several values of a well-formed request fail validation; never empty.
+    #[error("{}", display_fields(.0))]
+    Fields(Vec<FieldProblem>),
     /// The resource is in a state that does not allow the request (e.g. a job already running).
     #[error("{0}")]
     Conflict(String),
@@ -64,8 +67,20 @@ pub struct Problem {
     pub detail: String,
     /// The setting a validation error (422) is about, as a dotted path such as
     /// `connections.timeout_secs` or `options.server`.
+    /// Kept for clients that read one field: the first of `fields`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
+    /// Every setting a validation error (422) is about, each with why it was rejected.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<FieldProblem>,
+}
+
+/// One rejected value of a 422.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct FieldProblem {
+    /// The setting as a dotted path, like [`Problem::field`].
+    pub field: String,
+    pub detail: String,
 }
 
 impl ApiError {
@@ -75,7 +90,7 @@ impl ApiError {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
-            Self::Invalid { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::Invalid { .. } | Self::Fields(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Rejected(status, _) => *status,
@@ -101,15 +116,24 @@ impl IntoResponse for ApiError {
         } else {
             self.to_string()
         };
+        let fields = match &self {
+            Self::Invalid {
+                field: Some(field),
+                detail,
+            } => vec![FieldProblem {
+                field: field.clone(),
+                detail: detail.clone(),
+            }],
+            Self::Fields(fields) => fields.clone(),
+            _ => Vec::new(),
+        };
         let problem = Problem {
             kind: "about:blank".into(),
             title: status.canonical_reason().unwrap_or("Error").into(),
             status: status.as_u16(),
             detail,
-            field: match &self {
-                Self::Invalid { field, .. } => field.clone(),
-                _ => None,
-            },
+            field: fields.first().map(|f| f.field.clone()),
+            fields,
         };
         let mut res = (
             status,
@@ -179,3 +203,11 @@ pub(crate) struct ApiJson<T>(pub T);
 #[derive(FromRequestParts)]
 #[from_request(via(axum::extract::Query), rejection(ApiError))]
 pub(crate) struct ApiQuery<T>(pub T);
+
+fn display_fields(fields: &[FieldProblem]) -> String {
+    fields
+        .iter()
+        .map(|f| format!("{}: {}", f.field, f.detail))
+        .collect::<Vec<_>>()
+        .join("; ")
+}

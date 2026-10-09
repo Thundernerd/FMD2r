@@ -482,6 +482,47 @@ async fn an_invalid_setting_is_a_422_naming_the_field_and_changes_nothing() {
 }
 
 #[tokio::test]
+async fn every_invalid_setting_of_a_patch_is_reported_in_one_422() {
+    let h = harness();
+    // Out of range (timeout 1..=300, mangadownloader/forms/frmMain.lfm:3387-3388), the wrong
+    // type, and unknown: all three come back, in patch order, and nothing is stored.
+    let patch = serde_json::json!({
+        "connections": { "timeout_secs": 0, "max_parallel_tasks": "four", "nope": 1 },
+        "general": { "language": "nl" },
+    });
+    let res = send(&h.state, patch_json("/api/settings", patch)).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let problem = body_json(res).await;
+    let mut fields: Vec<&str> = problem["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["field"].as_str().unwrap())
+        .collect();
+    fields.sort_unstable();
+    assert_eq!(
+        fields,
+        [
+            "connections.max_parallel_tasks",
+            "connections.nope",
+            "connections.timeout_secs"
+        ]
+    );
+    assert!(
+        problem["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| !f["detail"].as_str().unwrap().is_empty())
+    );
+    // `field` stays for clients that read one.
+    assert!(fields.contains(&problem["field"].as_str().unwrap()));
+
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(body["general"]["language"], "en");
+}
+
+#[tokio::test]
 async fn patching_settings_with_a_non_object_is_a_400_problem() {
     let h = harness();
     let res = send(
@@ -557,30 +598,85 @@ async fn debug_lines_are_buffered_but_not_streamed() {
     assert!(!seen.contains("chatty"), "{seen}");
 }
 
+fn preview(body: serde_json::Value) -> Request<Body> {
+    Request::post("/api/preview-rename")
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
 #[tokio::test]
 async fn rename_templates_are_previewed_on_sample_values() {
     let h = harness();
-    let draft = serde_json::json!({
+    let draft = serde_json::json!({ "saveto": {
         "manga_rename": "%WEBSITE% - %MANGA%",
         "chapter_rename": "%NUMBERING% %CHAPTER%",
         "filename_rename": "page %FILENAME%",
+        "remove_manga_name_from_chapter": true,
         "convert_digit_volume": true,
         "digit_volume_length": 2,
         "convert_digit_chapter": true,
         "digit_chapter_length": 3,
-    });
-    let req = Request::post("/api/preview-rename")
-        .header("content-type", "application/json")
-        .body(Body::from(draft.to_string()))
-        .unwrap();
-    let res = send(&h.state, req).await;
+    }});
+    let res = send(&h.state, preview(draft)).await;
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(res).await;
     // CustomRename (baseunits/uBaseUnit.pas:1798-1859) with VolumeChapterPadZero
-    // (baseunits/uMisc.pas:119-259) on the sample "Vol. 1 Ch. 5", numbering "0005"; a page's
-    // file name is the template with `%FILENAME%` as the 1-based page number padded to 3
-    // (baseunits/uDownloadsManager.pas:530-552).
+    // (baseunits/uMisc.pas:119-259) on the sample chapter "Sample Manga - Vol. 1 Ch. 5" stripped
+    // of the title (baseunits/uData.pas:186-200), numbering "0005"; a page's file name is the
+    // template with `%FILENAME%` as the 1-based page number padded to 3
+    // (baseunits/uDownloadsManager.pas:530-552), and the sample page is a JPEG.
     assert_eq!(body["manga"], "MangaDex - Sample Manga");
     assert_eq!(body["chapter"], "0005 Vol. 01 Ch. 005");
     assert_eq!(body["filename"], "page 001");
+    assert_eq!(body["page"], "page 001.jpg");
+    assert_eq!(
+        body["path"],
+        "downloads/MangaDex - Sample Manga/0005 Vol. 01 Ch. 005/page 001.jpg"
+    );
+}
+
+#[tokio::test]
+async fn the_preview_keeps_the_title_in_chapter_names_unless_told_to_remove_it() {
+    let h = harness();
+    let saveto = |remove: bool| {
+        serde_json::json!({ "saveto": {
+            "chapter_rename": "%CHAPTER%",
+            "remove_manga_name_from_chapter": remove,
+            "convert_digit_volume": false,
+            "convert_digit_chapter": false,
+        }})
+    };
+    // `OptionRemoveMangaNameFromChapter` (baseunits/uData.pas:186-200).
+    let body = body_json(send(&h.state, preview(saveto(false))).await).await;
+    assert_eq!(body["chapter"], "Sample Manga - Vol. 1 Ch. 5");
+    let body = body_json(send(&h.state, preview(saveto(true))).await).await;
+    assert_eq!(body["chapter"], "Vol. 1 Ch. 5");
+}
+
+#[tokio::test]
+async fn the_preview_path_is_where_the_engine_writes_the_first_page() {
+    let h = harness();
+    // No chapter folder: the pages go straight into the manga folder
+    // (baseunits/uDownloadsManager.pas:1143-1152); ImageMagick saves them as its format
+    // (baseunits/uDownloadsManager.pas:613-711).
+    let draft = serde_json::json!({
+        "saveto": { "generate_chapter_folder": false, "convert_digit_volume": false,
+            "convert_digit_chapter": false },
+        "images": { "imagemagick": { "enabled": true, "save_as": "PNG" } },
+    });
+    let body = body_json(send(&h.state, preview(draft)).await).await;
+    assert_eq!(body["page"], "001.png");
+    assert_eq!(body["path"], "downloads/Sample Manga/001.png");
+
+    // Packed: the chapter becomes `<save to>/<chapter name>.cbz` holding the pages
+    // (baseunits/uDownloadsManager.pas:553-611).
+    let draft = serde_json::json!({
+        "saveto": { "generate_manga_folder": false, "convert_digit_volume": false,
+            "convert_digit_chapter": false, "default_dir": "/data" },
+        "output": { "format": "cbz" },
+    });
+    let body = body_json(send(&h.state, preview(draft)).await).await;
+    assert_eq!(body["page"], "001.jpg");
+    assert_eq!(body["path"], "/data/Sample Manga - Vol. 1 Ch. 5.cbz");
 }

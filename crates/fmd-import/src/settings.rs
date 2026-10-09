@@ -394,7 +394,7 @@ pub(crate) fn import(
                     report.settings.skip(item, SkipReason::AlreadyExists);
                 }
                 Ok(_) => report.settings.imported += 1,
-                Err(e @ (SettingsError::Invalid { .. } | SettingsError::UnknownKey(_))) => {
+                Err(e @ SettingsError::Invalid(_)) => {
                     report
                         .settings
                         .skip(item, SkipReason::Invalid(e.to_string()));

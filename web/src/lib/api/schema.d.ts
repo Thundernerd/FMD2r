@@ -438,6 +438,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/logout': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** End the session whose cookie comes with the request, and clear the cookie. */
+		post: operations['logout'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/logs': {
 		parameters: {
 			query?: never;
@@ -524,8 +541,8 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/**
-		 * Preview the rename templates of a (possibly unsaved) `saveto` group on a sample series, the
-		 *     way downloads will name their folders and files.
+		 * Preview the naming settings of a (possibly unsaved) draft on a sample chapter: the names
+		 *     and path the download engine gives it.
 		 */
 		post: operations['previewRename'];
 		delete?: never;
@@ -567,6 +584,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/sessions/revoke-all': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** End every session, this one included. Bearer tokens keep working. */
+		post: operations['revokeAllSessions'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/settings': {
 		parameters: {
 			query?: never;
@@ -586,6 +620,26 @@ export interface paths {
 		 *     to its default. Nothing is stored unless the whole result is valid.
 		 */
 		patch: operations['patchSettings'];
+		trace?: never;
+	};
+	'/api/settings/all': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		/**
+		 * Update the settings and any modules' settings together, all or nothing. Nothing is stored
+		 *     unless every patch is valid, and everything is stored in one transaction.
+		 */
+		patch: operations['patchAllSettings'];
 		trace?: never;
 	};
 	'/api/tasks': {
@@ -1125,6 +1179,12 @@ export interface components {
 		 * @enum {string}
 		 */
 		FavoritesEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
+		/** @description One rejected value of a 422. */
+		FieldProblem: {
+			detail: string;
+			/** @description The setting as a dotted path, like [`Problem::field`]. */
+			field: string;
+		};
 		GeneralSettings: {
 			/**
 			 * @description Add new tasks stopped instead of waiting (`general/AddAsStopped`,
@@ -1156,6 +1216,8 @@ export interface components {
 			lua_dir: string;
 		};
 		Health: {
+			/** @description Whether the API requires the password (as a bearer token or a login session). */
+			auth: boolean;
 			/** @description Always `ok` while the server answers. */
 			status: string;
 		};
@@ -1621,8 +1683,11 @@ export interface components {
 			/**
 			 * @description The setting a validation error (422) is about, as a dotted path such as
 			 *     `connections.timeout_secs` or `options.server`.
+			 *     Kept for clients that read one field: the first of `fields`.
 			 */
 			field?: string | null;
+			/** @description Every setting a validation error (422) is about, each with why it was rejected. */
+			fields?: components['schemas']['FieldProblem'][];
 			/** Format: int32 */
 			status: number;
 			/** @description The status code's reason phrase. */
@@ -1677,14 +1742,65 @@ export interface components {
 		 * @enum {string}
 		 */
 		ProxyType: 'http' | 'socks4' | 'socks5';
-		/** @description The names the rename templates of a draft produce for a sample series. */
+		/** @description The names a download of a sample chapter gets with a draft's settings. */
 		RenamePreview: {
 			/** @description The chapter folder or archive name (`chapter_rename`). */
 			chapter: string;
 			/** @description The first page's file name, without extension (`filename_rename`). */
 			filename: string;
-			/** @description The manga folder name (`manga_rename`). */
+			/** @description The manga folder name (`manga_rename`), whether or not the folder is generated. */
 			manga: string;
+			/** @description The first page's file name with the extension it ends up with. */
+			page: string;
+			/**
+			 * @description Where the first page ends up: its file, or the chapter's archive when chapters are
+			 *     packed.
+			 */
+			path: string;
+		};
+		/** @description The settings a rename preview reads, possibly unsaved; a missing group takes its defaults. */
+		RenamePreviewRequest: {
+			/**
+			 * @default {
+			 *       "imagemagick": {
+			 *         "compression": "None",
+			 *         "enabled": false,
+			 *         "quality": 75,
+			 *         "save_as": "JPEG"
+			 *       },
+			 *       "jpeg_quality": 80,
+			 *       "png_compression": "fastest",
+			 *       "png_to_jpeg": false,
+			 *       "webp_save_as": "png"
+			 *     }
+			 */
+			images: components['schemas']['ImageSettings'];
+			/**
+			 * @default {
+			 *       "format": "folder",
+			 *       "pdf_quality": 100
+			 *     }
+			 */
+			output: components['schemas']['OutputSettings'];
+			/**
+			 * @default {
+			 *       "chapter_rename": "%CHAPTER%",
+			 *       "convert_digit_chapter": true,
+			 *       "convert_digit_volume": true,
+			 *       "default_dir": "downloads",
+			 *       "digit_chapter_length": 3,
+			 *       "digit_volume_length": 2,
+			 *       "filename_rename": "%FILENAME%",
+			 *       "generate_chapter_folder": true,
+			 *       "generate_manga_folder": true,
+			 *       "illegal_chars": "posix",
+			 *       "manga_rename": "%MANGA%",
+			 *       "remove_manga_name_from_chapter": false,
+			 *       "replace_unicode": false,
+			 *       "replace_unicode_with": "_"
+			 *     }
+			 */
+			saveto: components['schemas']['SaveToSettings'];
 		};
 		/** @description A manga URL to resolve. */
 		ResolveRequest: {
@@ -1773,6 +1889,14 @@ export interface components {
 			 */
 			replace_unicode_with: string;
 		};
+		/** @description What [`patch_all`] saved. */
+		SavedSettings: {
+			/** @description The settings of each patched module, by module ID. */
+			modules: {
+				[key: string]: components['schemas']['ModuleSettingsView'];
+			};
+			settings: components['schemas']['Settings'];
+		};
 		/** @description One page of search results. */
 		SearchPage: {
 			items: components['schemas']['ListItem'][];
@@ -1831,6 +1955,19 @@ export interface components {
 			 * @default 0.0.0.0:8080
 			 */
 			bind: string;
+			/**
+			 * Format: int32
+			 * @description Days a login session may go unused before it ends; every authorized request restarts
+			 *     the count.
+			 * @default 7
+			 */
+			session_idle_days: number;
+			/**
+			 * Format: int32
+			 * @description Days a login session lasts at most, however often it is used.
+			 * @default 30
+			 */
+			session_lifetime_days: number;
 		};
 		/** @description Every application setting. Stored one group per key in `app.db`'s `settings` table. */
 		Settings: {
@@ -1941,7 +2078,9 @@ export interface components {
 			/**
 			 * @default {
 			 *       "auth_token": null,
-			 *       "bind": "0.0.0.0:8080"
+			 *       "bind": "0.0.0.0:8080",
+			 *       "session_idle_days": 7,
+			 *       "session_lifetime_days": 30
 			 *     }
 			 */
 			server: components['schemas']['ServerSettings'];
@@ -1962,6 +2101,19 @@ export interface components {
 			 *     }
 			 */
 			xpath: components['schemas']['XPathSettings'];
+		};
+		/** @description The body of [`patch_all`]; either part may be left out. */
+		SettingsSave: {
+			/** @description A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID. */
+			modules?: {
+				[key: string]: {
+					[key: string]: unknown;
+				};
+			} | null;
+			/** @description A merge patch as for `PATCH /api/settings`. */
+			settings?: {
+				[key: string]: unknown;
+			} | null;
 		};
 		SkipReason:
 			| {
@@ -3257,6 +3409,24 @@ export interface operations {
 			};
 		};
 	};
+	logout: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Logged out; the session cookie is cleared (also without a live session) */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+		};
+	};
 	listLogs: {
 		parameters: {
 			query?: {
@@ -3443,7 +3613,7 @@ export interface operations {
 		};
 		requestBody: {
 			content: {
-				'application/json': components['schemas']['SaveToSettings'];
+				'application/json': components['schemas']['RenamePreviewRequest'];
 			};
 		};
 		responses: {
@@ -3543,6 +3713,33 @@ export interface operations {
 			};
 		};
 	};
+	revokeAllSessions: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Every session ended; this client's cookie is cleared */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Not authorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
 	getSettings: {
 		parameters: {
 			query?: never;
@@ -3597,6 +3794,57 @@ export interface operations {
 				};
 			};
 			/** @description A value is invalid or a setting unknown; `field` names it */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	patchAllSettings: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['SettingsSave'];
+			};
+		};
+		responses: {
+			/** @description The updated settings */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SavedSettings'];
+				};
+			};
+			/** @description Malformed body */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description No module with a given ID is loaded */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Values are invalid or settings unknown; `fields` names each, prefixed `settings.` or `modules.<id>.` */
 			422: {
 				headers: {
 					[name: string]: unknown;

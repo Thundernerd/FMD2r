@@ -123,3 +123,40 @@ fn startup_points_the_cloudflare_bypass_at_flaresolverr() {
     assert_eq!(config["flaresolverr_port"], 8191);
     signal_and_wait(server, "TERM");
 }
+
+#[test]
+fn a_flaresolverr_url_setting_change_rewrites_the_bypass_config_without_a_restart() {
+    let server = start();
+    let config = server
+        ._dir
+        .path()
+        .join("data/lua/websitebypass/websitebypass_config.json");
+    let body = r#"{"connections":{"flaresolverr_url":"http://solver:8191"}}"#;
+    let mut stream = TcpStream::connect(&server.addr).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        stream,
+        "PATCH /api/settings HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n\
+         Content-Length: {}\r\n\r\n{body}",
+        server.addr,
+        body.len()
+    )
+    .unwrap();
+    assert!(read_head(&mut stream).starts_with("HTTP/1.1 200"));
+
+    // The keys lua/websitebypass/cloudflare.lua:309-322 reads, at its next bypass.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let written: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
+        if written["flaresolverr_ip"] == "solver" {
+            assert_eq!(written["use_webdriver"], true);
+            break;
+        }
+        assert!(Instant::now() < deadline, "{written}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    signal_and_wait(server, "TERM");
+}

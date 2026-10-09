@@ -11,6 +11,7 @@ use crate::PackError;
 use crate::epub::write_epub;
 use crate::natural_sort::natural_cmp;
 use crate::pdf::write_pdf;
+use crate::whole::write_whole;
 
 /// Output formats (`TPackerFormat`, baseunits/uPacker.pas:18, and `Compress`,
 /// baseunits/uDownloadsManager.pas:566-571).
@@ -57,7 +58,8 @@ impl Default for PackOptions {
 }
 
 /// Packs the images in `dir` into `out_path` plus the format's extension, and returns the
-/// written path (`TPacker.Execute`, baseunits/uPacker.pas:255-330).
+/// written path (`TPacker.Execute`, baseunits/uPacker.pas:255-330). The archive appears under
+/// that path only once it is whole ([`write_whole`]).
 ///
 /// Images are the files in `dir` (not subfolders) with an image extension, in natural order.
 /// `Folder` moves `dir` to `out_path` unless they are the same.
@@ -92,12 +94,12 @@ pub fn pack(
     }
 
     // The book title is the folder's name (`GetLastDir(Path)`, baseunits/uPacker.pas:186, :225).
-    match format {
-        PackFormat::Zip | PackFormat::Cbz => write_zip(&files, &saved)?,
-        PackFormat::Epub => write_epub(&files, &file_name(dir), &saved)?,
-        PackFormat::Pdf => write_pdf(&files, &file_name(dir), opts.pdf_quality, &saved)?,
-        PackFormat::Folder => {}
-    }
+    write_whole(&saved, |part| match format {
+        PackFormat::Zip | PackFormat::Cbz => write_zip(&files, part),
+        PackFormat::Epub => write_epub(&files, &file_name(dir), part),
+        PackFormat::Pdf => write_pdf(&files, &file_name(dir), opts.pdf_quality, part),
+        PackFormat::Folder => Err(PackError::Io(io::Error::other("a folder is not written"))),
+    })?;
 
     if opts.remove_sources {
         for file in &files {

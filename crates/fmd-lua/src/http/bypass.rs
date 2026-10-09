@@ -13,7 +13,7 @@ use mlua::{AnyUserData, Function, LightUserData, Lua, Table, Value};
 
 use super::{HttpObject, LuaHttp, ModuleHttpSettings};
 use crate::class::borrow;
-use crate::{LuaDir, Module, app_data_or_default};
+use crate::{LuaDir, Module, PackageCache, app_data_or_default};
 
 /// The module side of the hook: whose bypass guard, `Storage` and settings it uses.
 ///
@@ -46,21 +46,38 @@ struct Scripts {
     websitebypass: PathBuf,
 }
 
-thread_local! {
-    /// The scripts of every `websitebypass/` folder used on this thread, or `None` for a folder
-    /// without them. FMD2 keeps one check state per process behind a lock (:41-43, :95);
-    /// `HTTP` objects are bound to their thread here, so each thread keeps its own.
-    static SCRIPTS: RefCell<HashMap<PathBuf, Option<Rc<Scripts>>>> = RefCell::default();
+/// The scripts of one folder as loaded at one generation of the package cache.
+struct Loaded {
+    generation: u64,
+    scripts: Option<Rc<Scripts>>,
 }
 
-/// The scripts in `dir`, loaded on first use.
-fn scripts(dir: &Path) -> Option<Rc<Scripts>> {
-    SCRIPTS.with(|cache| {
-        cache
-            .borrow_mut()
-            .entry(dir.to_path_buf())
-            .or_insert_with(|| load_scripts(dir).map(Rc::new))
-            .clone()
+thread_local! {
+    /// The scripts of every `websitebypass/` folder used on this thread, or `None` for a folder
+    /// without them. FMD2 keeps one check state per process behind a lock (:41-43, :95) and
+    /// loads it once (:45-75); `HTTP` objects are bound to their thread here, so each thread
+    /// keeps its own, and loads it again once the package cache was cleared, so an updated
+    /// script applies without a restart.
+    static SCRIPTS: RefCell<HashMap<PathBuf, Loaded>> = RefCell::default();
+}
+
+/// The scripts in `dir`, loaded on first use and again after `cache` was cleared.
+fn scripts(dir: &Path, cache: &PackageCache) -> Option<Rc<Scripts>> {
+    let generation = cache.generation();
+    SCRIPTS.with(|loaded| {
+        let mut loaded = loaded.borrow_mut();
+        match loaded.get(dir) {
+            Some(l) if l.generation == generation => l.scripts.clone(),
+            _ => {
+                let scripts = load_scripts(dir).map(Rc::new);
+                let entry = Loaded {
+                    generation,
+                    scripts: scripts.clone(),
+                };
+                loaded.insert(dir.to_path_buf(), entry);
+                scripts
+            }
+        }
     })
 }
 
@@ -173,7 +190,8 @@ pub(super) fn request(
     let bypass = borrow(http)?.bypass.clone();
     let scripts = bypass.as_ref().and_then(|_| {
         let LuaDir(lua_dir) = app_data_or_default(lua);
-        scripts(&lua_dir.join("websitebypass"))
+        let cache: PackageCache = app_data_or_default(lua);
+        scripts(&lua_dir.join("websitebypass"), &cache)
     });
     let (Some(bypass), Some(scripts)) = (bypass, scripts) else {
         return borrow(http)?.request(send);

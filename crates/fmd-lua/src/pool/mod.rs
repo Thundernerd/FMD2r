@@ -16,6 +16,7 @@ use std::thread::JoinHandle;
 use fmd_http::{HttpClient, HttpSession, TerminateToken};
 
 use crate::module::lock;
+use crate::subprocess::Spawner;
 use crate::{Module, ModuleHttpSettings, PackageCache, XPathBackend, XPathCorpusWriter};
 
 pub use callbacks::{
@@ -42,6 +43,9 @@ pub struct PoolConfig {
     pub xpath_backend: Option<XPathBackend>,
     /// Records every XPath evaluation into the differential corpus when set (T35).
     pub xpath_corpus: Option<XPathCorpusWriter>,
+    /// What starts `fmd.subprocess`'s processes, e.g. a recording or replaying one; the system's
+    /// when `None`.
+    pub spawner: Option<Arc<dyn Spawner + Send + Sync>>,
 }
 
 impl PoolConfig {
@@ -55,6 +59,7 @@ impl PoolConfig {
             http_settings: None,
             xpath_backend: None,
             xpath_corpus: None,
+            spawner: None,
         }
     }
 }
@@ -200,8 +205,9 @@ impl WorkerPool {
             lua_dir: config.lua_dir,
             http: config.http,
             http_settings: config.http_settings,
-            xpath_backend: config.xpath_backend,
+            xpath_backend: Mutex::new(config.xpath_backend),
             xpath_corpus: config.xpath_corpus,
+            spawner: config.spawner,
             package: PackageCache::new(),
             stamps: AtomicU64::new(1),
             stale: Mutex::default(),
@@ -248,6 +254,20 @@ impl WorkerPool {
             terminate: TerminateToken::new(),
             affinity: None,
         }
+    }
+
+    /// Switches `CreateTXQuery` to `backend` (the `xpath.backend` setting): every worker
+    /// rebuilds its state, as after [`invalidate(Invalidate::All)`](WorkerPool::invalidate),
+    /// before it runs its next job. Jobs already running finish on the old backend.
+    pub fn set_xpath_backend(&self, backend: XPathBackend) {
+        *lock(&self.shared.xpath_backend) = Some(backend);
+        self.invalidate(Invalidate::All);
+    }
+
+    /// The XPath backend of `CreateTXQuery` in the states built from now on; `None` for the
+    /// runtime's default.
+    pub fn xpath_backend(&self) -> Option<XPathBackend> {
+        *lock(&self.shared.xpath_backend)
     }
 
     /// Marks cached module bytecode and the states built from it stale: each worker rebuilds
@@ -509,8 +529,10 @@ struct Shared {
     lua_dir: PathBuf,
     http: HttpClient,
     http_settings: Option<Arc<HttpSettingsSource>>,
-    xpath_backend: Option<XPathBackend>,
+    /// Changed by [`WorkerPool::set_xpath_backend`].
+    xpath_backend: Mutex<Option<XPathBackend>>,
     xpath_corpus: Option<XPathCorpusWriter>,
+    spawner: Option<Arc<dyn Spawner + Send + Sync>>,
     package: PackageCache,
     /// The source of stamps: states, bytecode and invalidations are ordered by them.
     stamps: AtomicU64,

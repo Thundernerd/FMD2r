@@ -7,7 +7,7 @@ use crate::client::{HttpClient, Setting};
 use crate::module::ModuleHttp;
 use crate::strings::NameValueList;
 use crate::terminate::TerminateToken;
-use crate::transport::{Proxy, ProxyKind, WireRequest, WireResponse};
+use crate::transport::{ConnectTo, Proxy, ProxyKind, WireRequest, WireResponse};
 use crate::{HttpError, decode, url};
 
 /// Headers, document and MIME type of a request, restored before each re-send.
@@ -44,6 +44,7 @@ pub struct HttpSession {
     retry_count: Setting<i32>,
     timeout_ms: Setting<u32>,
     proxy: Setting<Option<Proxy>>,
+    connect_to: Option<ConnectTo>,
     compress: bool,
     follow_redirection: bool,
     max_redirect: u32,
@@ -78,6 +79,7 @@ impl HttpSession {
             retry_count: defaults.retry_count,
             timeout_ms: defaults.timeout_ms,
             proxy: defaults.proxy,
+            connect_to: None,
             compress: true,
             follow_redirection: true,
             max_redirect: 5,
@@ -390,6 +392,7 @@ impl HttpSession {
             body: self.document.clone(),
             timeout: Duration::from_millis(u64::from(self.timeout())),
             proxy: self.proxy(),
+            connect_to: self.connect_to.clone(),
         }
     }
 
@@ -627,6 +630,14 @@ impl HttpSession {
     /// (baseunits/httpsendthread.pas:909-912).
     pub fn set_proxy_server(&mut self, proxy: Option<Proxy>) {
         self.proxy = self.stamp(proxy);
+    }
+
+    /// Connects requests for the pinned host to its address instead of resolving the host (see
+    /// [`ConnectTo`]); `None` resolves again. A redirect to another host is not pinned. No FMD2
+    /// counterpart: it lets a caller connect to the address it checked (the cover proxy's SSRF
+    /// guard). With a proxy the proxy connects to the host, so the pin is unused.
+    pub fn set_connect_to(&mut self, pin: Option<ConnectTo>) {
+        self.connect_to = pin;
     }
 
     /// `GetProxy` (baseunits/httpsendthread.pas:876-907); `None` without a proxy host.
