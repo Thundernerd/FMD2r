@@ -31,3 +31,11 @@ export const HACHIRAW: ModuleSummary[] = [
 	summary(HACHIRAW_ID, 'HachiRaw', 'https://hachiraw.win'),
 	summary('other', 'Other', 'https://other.example')
 ];
+
+/** A website with a long name, as upstream lua/modules/DetectiveConanAr.lua:7-10 registers it. */
+export const DETECTIVE_CONAN = summary(
+	'784d8c809fa042109663230a2afdd88a',
+	'شبكة كونان العربية (detectiveconanar)',
+	'https://manga.detectiveconanar.com',
+	'Arabic'
+);

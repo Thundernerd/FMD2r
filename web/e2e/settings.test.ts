@@ -227,7 +227,9 @@ test('the website selection shows its search and lines its websites up in column
 	await expect(websites.getByRole('button', { name: 'Select all' })).toBeVisible();
 	await expect(websites.getByRole('button', { name: 'Select none' })).toBeVisible();
 
-	// A long name takes no more room than the others, so the websites line up in columns.
+	// A long name takes no more room than the others, so the websites line up in columns. The
+	// width leaves room for two columns, so the three websites take two rows.
+	await page.setViewportSize({ width: 640, height: 740 });
 	const arabic = websites.getByRole('group', { name: 'Arabic' }).getByRole('checkbox');
 	await expect(arabic).toHaveCount(3);
 	const items = await arabic.evaluateAll((boxes) =>
@@ -238,5 +240,6 @@ test('the website selection shows its search and lines its websites up in column
 	);
 	expect(new Set(items.map((item) => item.width)).size).toBe(1);
 	const columns = items.filter((item) => item.top === items[0]?.top).length;
+	expect(columns).toBeLessThan(items.length);
 	items.forEach((item, i) => expect(item.left).toBe(items[i % columns]?.left));
 });

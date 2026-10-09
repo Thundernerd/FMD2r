@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 import { Draft } from '#lib/settings/draft.svelte.ts';
-import { HACHIRAW, HACHIRAW_ID, summary } from '../modules.fixture.ts';
+import { DETECTIVE_CONAN, HACHIRAW, HACHIRAW_ID, summary } from '../modules.fixture.ts';
 import WebsiteSelection from './WebsiteSelection.svelte';
 
 const MODULES = [
@@ -54,20 +54,8 @@ describe('WebsiteSelection', () => {
 	});
 
 	it('shows the full name of a website in its tooltip', () => {
-		// lua/modules/DetectiveConanAr.lua:8-10.
-		const name = 'شبكة كونان العربية (detectiveconanar)';
-		renderSelection(
-			[],
-			[
-				...MODULES,
-				summary(
-					'784d8c809fa042109663230a2afdd88a',
-					name,
-					'https://manga.detectiveconanar.com',
-					'Arabic'
-				)
-			]
-		);
+		const { name } = DETECTIVE_CONAN;
+		renderSelection([], [...MODULES, DETECTIVE_CONAN]);
 		expect(box(name).closest('label')?.title).toBe(name);
 		// A repeated name carries its host, as the label does.
 		expect(box('HachiRaw (hachiraw.win)').closest('label')?.title).toBe('HachiRaw (hachiraw.win)');
