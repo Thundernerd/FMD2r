@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::panic)]
 
 use std::net::{SocketAddr, TcpListener};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -147,11 +148,11 @@ impl Server {
 
     /// [`Server::start`] with `settings` (a merge patch) stored in `app.db` beforehand.
     async fn start_with(settings: Value) -> Server {
-        Server::start_seeded(Site::default(), settings, |_| {}).await
+        Server::start_seeded(Site::default(), settings, |_, _| {}).await
     }
 
-    /// [`Server::start_with`] on `site`, with `seed` run on `app.db` beforehand.
-    async fn start_seeded(site: Site, settings: Value, seed: impl FnOnce(&AppDb)) -> Server {
+    /// [`Server::start_with`] on `site`, with `seed` run on `app.db` and the Lua dir beforehand.
+    async fn start_seeded(site: Site, settings: Value, seed: impl FnOnce(&AppDb, &Path)) -> Server {
         let root = start_site(site.clone()).await;
         let dir = tempfile::tempdir().unwrap();
         let data_dir = dir.path().join("data");
@@ -162,7 +163,7 @@ impl Server {
         )
         .unwrap();
         let db = AppDb::open(data_dir.join("app.db")).unwrap();
-        seed(&db);
+        seed(&db, &data_dir.join("lua"));
         SettingsService::load(db)
             .unwrap()
             .update(settings.clone())
@@ -532,7 +533,7 @@ async fn the_favorites_are_checked_at_startup() {
     let site = Site::default();
     site.chapter_3.store(true, Ordering::SeqCst);
     // The library holds `/saga` with its first two chapters downloaded.
-    let seed = |db: &AppDb| {
+    let seed = |db: &AppDb, _: &Path| {
         db.favorites()
             .create(&NewFavorite {
                 module_id: "stub".into(),
@@ -554,6 +555,76 @@ async fn the_favorites_are_checked_at_startup() {
         .wait_for("/api/inbox", |inbox| !inbox.as_array().unwrap().is_empty())
         .await;
     assert_eq!(inbox[0]["title"], "Found new chapter(s)", "{inbox}");
+}
+
+/// The commit the fixture Lua tree was snapshotted at.
+const SNAPSHOT_SHA: &str = "0123456789abcdef0123456789abcdef01234567";
+
+#[tokio::test(flavor = "multi_thread")]
+async fn about_shows_the_followed_ref_and_the_snapshot_sha_before_any_sync() {
+    let seed = |_: &AppDb, lua: &Path| {
+        std::fs::write(lua.join("UPSTREAM_REF"), format!("{SNAPSHOT_SHA}\n")).unwrap();
+    };
+    let server = Server::start_seeded(
+        Site::default(),
+        json!({ "module_updater": { "auto_update": false, "repo_ref": "stable" } }),
+        seed,
+    )
+    .await;
+
+    let about = server.get_json("/api/about").await;
+
+    assert_eq!(about["upstream_ref"], "stable", "{about}");
+    assert_eq!(about["upstream_sha"], SNAPSHOT_SHA, "{about}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn about_shows_the_synced_commit_once_the_tree_was_synced() {
+    let synced = "89abcdef0123456789abcdef0123456789abcdef";
+    // A previous run's updater synced the seeded tree to `synced`.
+    let seed = |db: &AppDb, lua: &Path| {
+        std::fs::write(lua.join("UPSTREAM_REF"), SNAPSHOT_SHA).unwrap();
+        db.settings()
+            .set("module_updater.repo", &json!({ "last_commit_sha": synced }))
+            .unwrap();
+    };
+    let server = Server::start_seeded(
+        Site::default(),
+        json!({ "module_updater": { "auto_update": false } }),
+        seed,
+    )
+    .await;
+
+    let about = server.get_json("/api/about").await;
+
+    assert_eq!(about["upstream_ref"], "master", "{about}");
+    assert_eq!(about["upstream_sha"], synced, "{about}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn about_lists_the_module_that_failed_to_load() {
+    let seed = |_: &AppDb, lua: &Path| {
+        std::fs::write(
+            lua.join("modules/Broken.lua"),
+            "function Init() error('no site today') end",
+        )
+        .unwrap();
+    };
+    let server = Server::start_seeded(
+        Site::default(),
+        json!({ "module_updater": { "auto_update": false } }),
+        seed,
+    )
+    .await;
+
+    let about = server.get_json("/api/about").await;
+
+    assert_eq!(about["module_count"], 1, "{about}");
+    let failures = about["load_failures"].as_array().unwrap();
+    assert_eq!(failures.len(), 1, "{about}");
+    assert_eq!(failures[0]["module"], "modules/Broken.lua");
+    let error = failures[0]["error"].as_str().unwrap();
+    assert!(error.contains("no site today"), "{error}");
 }
 
 /// A forward HTTP proxy on a local socket: records the absolute URI of each request it gets and
