@@ -278,7 +278,16 @@ impl SettingsService {
                 continue;
             }
             let mut stored = repo.get::<Value>(&key)?.unwrap_or(Value::Null);
+            let unselected = key == "general" && stored.get("selected_websites").is_none();
             merge(&mut stored, group);
+            // An empty selection nobody chose stays unstored, so the upgrade still selects the
+            // listed websites ([`Self::select_listed_websites`]).
+            if unselected
+                && stored.get("selected_websites") == Some(&Value::Array(Vec::new()))
+                && let Value::Object(fields) = &mut stored
+            {
+                fields.remove("selected_websites");
+            }
             seal_group(self.db.cipher(), &key, &mut stored)?;
             changed.push((key, stored));
         }

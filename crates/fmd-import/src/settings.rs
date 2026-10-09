@@ -36,7 +36,7 @@ enum Conv {
     /// A port typed into a text field; empty means none.
     Port,
     /// Items joined by commas, as `MangaListSelect` (mangadownloader/forms/frmMain.pas:5990-6004,
-    /// split at :6466); empty items are dropped.
+    /// split at :6465); empty items are dropped.
     List,
     /// Stored with `EncryptString` (read with `DecryptString`, mangadownloader/forms/frmMain.pas:5878-5879).
     Encrypted,

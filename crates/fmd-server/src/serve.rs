@@ -83,7 +83,9 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let state = tokio::task::spawn_blocking(move || -> Result<AppState, ServeError> {
         let lists = ListsDb::open(lists_path)?;
         let state = AppState::new(AppDb::open(db_path)?)?;
-        state.settings.select_listed_websites(&lists)?;
+        if let Err(e) = state.settings.select_listed_websites(&lists) {
+            tracing::warn!(target: "fmd_server", "selecting the websites with a list: {e}");
+        }
         Ok(state.with_lists(lists))
     })
     .await

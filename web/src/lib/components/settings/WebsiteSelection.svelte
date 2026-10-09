@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ModuleSummary } from '#lib/api/types.ts';
 	import type { Draft } from '#lib/settings/draft.svelte.ts';
-	import { moduleHost, moduleKey, repeatedNames } from '#lib/modules.ts';
+	import { groupModules, moduleKey, moduleLabel, repeatedNames } from '#lib/modules.ts';
 
 	let {
 		modules,
@@ -26,25 +26,10 @@
 	const count = $derived([...loaded].filter((id) => selected.has(id)).length);
 
 	const repeated = $derived(repeatedNames(modules));
-	/** How a module is listed: by name, with its host when another module has that name too. */
-	const label = (m: ModuleSummary) =>
-		repeated.has(m.name) ? `${m.name} (${moduleHost(m)})` : m.name;
+	const label = (m: ModuleSummary) => moduleLabel(m, repeated);
 
-	/** The modules matching the search, grouped by category, groups and modules by label. */
-	const groups = $derived.by(() => {
-		const words = search.toLowerCase().split(/\s+/).filter(Boolean);
-		const shown = modules.filter((m) => {
-			const text = `${m.name} ${m.category}`.toLowerCase();
-			return words.every((w) => text.includes(w));
-		});
-		const byCategory = Object.groupBy(shown, (m) => m.category || 'Other');
-		return Object.entries(byCategory)
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([category, list = []]) => ({
-				category,
-				modules: list.toSorted((a, b) => label(a).localeCompare(label(b)))
-			}));
-	});
+	/** The modules matching the search, grouped by category. */
+	const groups = $derived(groupModules(modules, search));
 
 	/** Selects or deselects `ids`, keeping the order of the rest. */
 	function toggle(ids: string[], on: boolean) {

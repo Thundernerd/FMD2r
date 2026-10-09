@@ -11,8 +11,8 @@ const MODULES = [
 	summary('webtoons', 'Webtoons', 'https://www.webtoons.com', 'English')
 ];
 
-/** FMD2's website selection: a checkbox per module, grouped by category (`tsWebsiteSelection`,
- * mangadownloader/forms/frmMain.pas:3315-3317). */
+/** FMD2's website selection: a checkbox per module, grouped by category, with a search
+ * (`tsWebsiteSelection`, mangadownloader/forms/frmMain.pas:234, search at :3315-3317). */
 function renderSelection(selected: string[]) {
 	const draft = new Draft<object>({ general: { selected_websites: selected } });
 	render(WebsiteSelection, { modules: MODULES, draft });

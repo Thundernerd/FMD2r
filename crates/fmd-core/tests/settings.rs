@@ -303,3 +303,23 @@ fn upgrading_selects_the_websites_that_have_a_list_once() {
     reloaded.select_listed_websites(&lists).unwrap();
     assert_eq!(reloaded.get().general.selected_websites, ["a"]);
 }
+
+#[test]
+fn another_general_change_before_the_first_start_does_not_skip_the_upgrade() {
+    let (dir, db) = open_db();
+    db.settings()
+        .set("general", &json!({ "language": "nl" }))
+        .unwrap();
+    let lists = lists_with(dir.path(), &["a"]);
+    // e.g. `fmd2r import` of a settings.json without `MangaListSelect`, before `serve` runs.
+    SettingsService::load(db.clone())
+        .unwrap()
+        .update(json!({ "general": { "add_as_stopped": true } }))
+        .unwrap();
+
+    let service = SettingsService::load(db).unwrap();
+    service.select_listed_websites(&lists).unwrap();
+
+    assert_eq!(service.get().general.selected_websites, ["a"]);
+    assert!(service.get().general.add_as_stopped);
+}
