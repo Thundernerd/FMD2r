@@ -90,11 +90,13 @@ fn public_api() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::health))
         .routes(routes!(auth::login))
+        .routes(routes!(auth::logout))
 }
 
 /// Routes behind the auth layer (when auth is configured).
 fn protected_api() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .routes(routes!(auth::revoke_all))
         .routes(routes!(events::stream))
         .routes(routes!(inbox::list))
         .routes(routes!(inbox::mark_read))

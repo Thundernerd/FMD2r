@@ -96,6 +96,16 @@ pub(super) fn validate(s: &Settings) -> Result<(), SettingsError> {
         s.module_updater.interval_minutes,
         1..=u32::MAX,
     )?;
+    check(
+        "server.session_idle_days",
+        s.server.session_idle_days,
+        1..=365,
+    )?;
+    check(
+        "server.session_lifetime_days",
+        s.server.session_lifetime_days,
+        1..=3650,
+    )?;
     check("covers.cache_size_mb", s.covers.cache_size_mb, 1..=u32::MAX)?;
     if !c.flaresolverr_url.trim().is_empty()
         && super::websitebypass::flaresolverr_address(&c.flaresolverr_url).is_none()

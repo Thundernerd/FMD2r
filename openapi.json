@@ -1232,6 +1232,20 @@
         }
       }
     },
+    "/api/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "End the session whose cookie comes with the request, and clear the cookie.",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Logged out; the session cookie is cleared (also without a live session)"
+          }
+        }
+      }
+    },
     "/api/logs": {
       "get": {
         "tags": [
@@ -1610,6 +1624,30 @@
           },
           "502": {
             "description": "The website could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/revoke-all": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "End every session, this one included. Bearer tokens keep working.",
+        "operationId": "revokeAllSessions",
+        "responses": {
+          "204": {
+            "description": "Every session ended; this client's cookie is cleared"
+          },
+          "401": {
+            "description": "Not authorized",
             "content": {
               "application/json": {
                 "schema": {
@@ -2915,9 +2953,14 @@
       "Health": {
         "type": "object",
         "required": [
-          "status"
+          "status",
+          "auth"
         ],
         "properties": {
+          "auth": {
+            "type": "boolean",
+            "description": "Whether the API requires the password (as a bearer token or a login session)."
+          },
           "status": {
             "type": "string",
             "description": "Always `ok` while the server answers."
@@ -4265,6 +4308,22 @@
             "type": "string",
             "description": "Socket address to listen on.",
             "default": "0.0.0.0:8080"
+          },
+          "session_idle_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days a login session may go unused before it ends; every authorized request restarts\nthe count.",
+            "default": 7,
+            "maximum": 365,
+            "minimum": 1
+          },
+          "session_lifetime_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days a login session lasts at most, however often it is used.",
+            "default": 30,
+            "maximum": 3650,
+            "minimum": 1
           }
         }
       },
@@ -4416,7 +4475,9 @@
             ],
             "default": {
               "auth_token": null,
-              "bind": "0.0.0.0:8080"
+              "bind": "0.0.0.0:8080",
+              "session_idle_days": 7,
+              "session_lifetime_days": 30
             }
           },
           "update_lists": {

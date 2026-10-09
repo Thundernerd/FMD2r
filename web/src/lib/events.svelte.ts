@@ -28,6 +28,11 @@ export interface EventStoreOptions {
 	maxLogLines?: number;
 	/** Where `task.*` frames go; a queue that never refetches when omitted. */
 	queue?: QueueStore;
+	/**
+	 * Called when the stream fails. An `EventSource` hides the status, so this is where a caller
+	 * can find out whether the session ended.
+	 */
+	onDisconnect?: () => void;
 }
 
 /** The `job.lists.<kind>` events the server sends. */
@@ -68,7 +73,8 @@ export class EventStore {
 	logs: LogFeed;
 	connected = $state(false);
 
-	#opts: Required<Omit<EventStoreOptions, 'queue'>>;
+	#opts: Required<Omit<EventStoreOptions, 'queue' | 'onDisconnect'>> &
+		Pick<EventStoreOptions, 'onDisconnect'>;
 	#source: EventSourceLike | null = null;
 	#retry: ReturnType<typeof setTimeout> | null = null;
 	#backoff = INITIAL_BACKOFF_MS;
@@ -138,6 +144,7 @@ export class EventStore {
 			es.close();
 			this.#source = null;
 			this.connected = false;
+			this.#opts.onDisconnect?.();
 			const delay = this.#backoff;
 			this.#backoff = Math.min(this.#backoff * 2, MAX_BACKOFF_MS);
 			this.#retry = setTimeout(() => {
