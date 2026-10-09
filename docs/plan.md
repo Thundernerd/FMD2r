@@ -203,6 +203,27 @@ Each ticket has a spec in `docs/tickets/T<nn>-<slug>.md`; T00 (this documentatio
 | T34 | Native Rust XPath backend: xee, html5ever, and Xidel extensions (`json()`, dot-path into JSON, `?*`, `jn:*`, `css()`) | T08 |
 | T35 | XPath differential corpus from smoke runs; switch the default backend at full parity | T16, T34 |
 
+### Follow-ups (review of merged PRs, 2026-10-09)
+Found by reading every merged PR's notes after T35. Wiring first: T37 → T38 → T39 is what makes the composed server usable; the rest are independent.
+
+| # | Ticket | Deps |
+|---|---|---|
+| T37 | Wire the module catalog, covers and XPath backend into `serve` | — |
+| T38 | Wire accounts, list jobs and the favorites checker into `serve` | T37 |
+| T39 | Real-server end-to-end run in CI | T38 |
+| T40 | Cover proxy: pin the checked address (DNS rebinding) | — |
+| T41 | Session expiry and logout | — |
+| T42 | Smoke list coverage gaps and module issues seen while recording | — |
+| T43 | Test vectors from a real FMD2 install | — |
+| T44 | Download engine: resume after a hard crash | — |
+| T45 | Settings page follow-ups | — |
+| T46 | Hot reload for the anti-bot scripts, and the updater's broken-module window | — |
+| T47 | Import from the web UI, and FMD2's local timestamps | — |
+| T48 | Persist logs | — |
+| T49 | arm64 images now that the native XPath backend is the default | — |
+| T50 | Verify the JS engine against Duktape on the untested cases | — |
+| T51 | Sign off decisions flagged in the merged PRs (owner: maintainer) | — |
+
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:
   - Lua binding core: T03
