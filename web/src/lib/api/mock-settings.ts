@@ -1,6 +1,7 @@
 import { getPath, isObject } from '#lib/settings/draft.svelte.ts';
 import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 import type {
+	FieldProblem,
 	ModuleOptionSetting,
 	ModuleSettingsView,
 	ModuleSummary,
@@ -201,12 +202,6 @@ const defaultOverrides = (): Overrides => ({
 });
 
 type JsonObject = Record<string, unknown>;
-
-/** One rejected value, the way fmd-server names it. */
-interface FieldProblem {
-	field: string;
-	detail: string;
-}
 
 /** A 422 the way fmd-server reports it: every rejected value. */
 export class Invalid extends Error {

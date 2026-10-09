@@ -585,9 +585,7 @@ export interface paths {
 		options?: never;
 		head?: never;
 		/**
-		 * Update the settings and any modules' settings together, all or nothing. The body is
-		 *     `{"settings": <merge patch as for PATCH /api/settings>, "modules": {"<id>": <merge patch as
-		 *     for PATCH /api/modules/{id}/settings>}}`; either part may be left out. Nothing is stored
+		 * Update the settings and any modules' settings together, all or nothing. Nothing is stored
 		 *     unless every patch is valid, and everything is stored in one transaction.
 		 */
 		patch: operations['patchAllSettings'];
@@ -2011,6 +2009,19 @@ export interface components {
 			 *     }
 			 */
 			xpath: components['schemas']['XPathSettings'];
+		};
+		/** @description The body of [`patch_all`]; either part may be left out. */
+		SettingsSave: {
+			/** @description A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID. */
+			modules?: {
+				[key: string]: {
+					[key: string]: unknown;
+				};
+			} | null;
+			/** @description A merge patch as for `PATCH /api/settings`. */
+			settings?: {
+				[key: string]: unknown;
+			} | null;
 		};
 		/**
 		 * @description How characters that are illegal in file names are handled (mirrors `fmd_pack::SymbolMode`).
@@ -3547,9 +3558,7 @@ export interface operations {
 		};
 		requestBody: {
 			content: {
-				'application/json': {
-					[key: string]: unknown;
-				};
+				'application/json': components['schemas']['SettingsSave'];
 			};
 		};
 		responses: {
@@ -3562,7 +3571,7 @@ export interface operations {
 					'application/json': components['schemas']['SavedSettings'];
 				};
 			};
-			/** @description The body or a patch is not a JSON object */
+			/** @description Malformed body */
 			400: {
 				headers: {
 					[name: string]: unknown;

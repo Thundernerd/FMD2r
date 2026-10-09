@@ -16,6 +16,7 @@ export type SaveToSettings = Schemas['SaveToSettings'];
 export type RenamePreview = Schemas['RenamePreview'];
 export type RenamePreviewRequest = Schemas['RenamePreviewRequest'];
 export type SavedSettings = Schemas['SavedSettings'];
+export type SettingsSave = Schemas['SettingsSave'];
 export type FieldProblem = Schemas['FieldProblem'];
 export type ModuleSummary = Schemas['ModuleSummary'];
 export type ModuleSettingsView = Schemas['ModuleSettingsView'];

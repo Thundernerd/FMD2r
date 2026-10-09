@@ -53,7 +53,7 @@ pub use serve::{ServeConfig, ServeError, serve};
 pub use services::{
     DownloadEngine, FavoritesJobs, Idle, LoadFailure, ModuleCatalog, ModulesReport,
 };
-pub use settings::{RenamePreview, SavedSettings};
+pub use settings::{RenamePreview, SavedSettings, SettingsSave};
 pub use spa::{Assets, EmbeddedAssets};
 pub use state::AppState;
 pub use tasks::{

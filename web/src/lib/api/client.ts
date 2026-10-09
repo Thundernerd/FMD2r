@@ -20,6 +20,7 @@ import type {
 	RenamePreview,
 	RenamePreviewRequest,
 	SavedSettings,
+	SettingsSave,
 	SearchPage,
 	SeriesInfo,
 	SeriesRef,
@@ -59,12 +60,6 @@ export class ValidationError extends ApiError {
 /** A JSON merge patch (RFC 7396): changed values, `null` to reset one to its default. */
 export type MergePatch =
 	paths['/api/settings']['patch']['requestBody']['content']['application/json'];
-
-/** The body of {@link Api.patchAllSettings}: either part may be left out. */
-export interface SettingsSave {
-	settings?: MergePatch;
-	modules?: Record<string, MergePatch>;
-}
 
 /** Everything the UI asks of fmd-server. Pages talk to this, never to `fetch` directly. */
 export interface Api {
@@ -312,7 +307,7 @@ export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}
 		async patchAllSettings(patch) {
 			return validated(
 				'patchAllSettings',
-				await client.PATCH('/api/settings/all', { body: { ...patch } })
+				await client.PATCH('/api/settings/all', { body: patch })
 			);
 		},
 		async previewRename(draft) {

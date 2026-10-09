@@ -1700,17 +1700,13 @@
         "tags": [
           "settings"
         ],
-        "summary": "Update the settings and any modules' settings together, all or nothing. The body is\n`{\"settings\": <merge patch as for PATCH /api/settings>, \"modules\": {\"<id>\": <merge patch as\nfor PATCH /api/modules/{id}/settings>}}`; either part may be left out. Nothing is stored\nunless every patch is valid, and everything is stored in one transaction.",
+        "summary": "Update the settings and any modules' settings together, all or nothing. Nothing is stored\nunless every patch is valid, and everything is stored in one transaction.",
         "operationId": "patchAllSettings",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": {},
-                "propertyNames": {
-                  "type": "string"
-                }
+                "$ref": "#/components/schemas/SettingsSave"
               }
             }
           },
@@ -1728,7 +1724,7 @@
             }
           },
           "400": {
-            "description": "The body or a patch is not a JSON object",
+            "description": "Malformed body",
             "content": {
               "application/json": {
                 "schema": {
@@ -4626,6 +4622,41 @@
             }
           }
         }
+      },
+      "SettingsSave": {
+        "type": "object",
+        "description": "The body of [`patch_all`]; either part may be left out.",
+        "properties": {
+          "modules": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "A merge patch as for `PATCH /api/settings`.",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "SymbolMode": {
         "type": "string",

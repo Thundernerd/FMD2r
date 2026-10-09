@@ -70,56 +70,40 @@ pub struct SavedSettings {
     pub modules: HashMap<String, ModuleSettingsView>,
 }
 
-/// Update the settings and any modules' settings together, all or nothing. The body is
-/// `{"settings": <merge patch as for PATCH /api/settings>, "modules": {"<id>": <merge patch as
-/// for PATCH /api/modules/{id}/settings>}}`; either part may be left out. Nothing is stored
+/// The body of [`patch_all`]; either part may be left out.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SettingsSave {
+    /// A merge patch as for `PATCH /api/settings`.
+    #[schema(value_type = Option<HashMap<String, Value>>)]
+    pub settings: Option<Map<String, Value>>,
+    /// A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID.
+    #[schema(value_type = Option<HashMap<String, HashMap<String, Value>>>)]
+    pub modules: Option<HashMap<String, Map<String, Value>>>,
+}
+
+/// Update the settings and any modules' settings together, all or nothing. Nothing is stored
 /// unless every patch is valid, and everything is stored in one transaction.
 #[utoipa::path(patch, path = "/api/settings/all", tag = "settings",
     operation_id = "patchAllSettings",
-    request_body(content = HashMap<String, Value>, content_type = "application/json"),
+    request_body(content = SettingsSave, content_type = "application/json"),
     responses(
         (status = 200, body = SavedSettings, description = "The updated settings"),
-        (status = 400, description = "The body or a patch is not a JSON object", body = Problem),
+        (status = 400, description = "Malformed body", body = Problem),
+        (status = 422, description = "The body does not have the expected shape", body = Problem),
         (status = 404, description = "No module with a given ID is loaded", body = Problem),
         (status = 422, description = "Values are invalid or settings unknown; `fields` names \
             each, prefixed `settings.` or `modules.<id>.`", body = Problem),
     ))]
 pub(crate) async fn patch_all(
     State(state): State<AppState>,
-    ApiJson(body): ApiJson<Value>,
+    ApiJson(body): ApiJson<SettingsSave>,
 ) -> Result<Json<SavedSettings>, ApiError> {
-    let Value::Object(mut body) = body else {
-        return Err(ApiError::BadRequest("expected a JSON object".into()));
-    };
-    let patch = match body.remove("settings") {
-        None | Some(Value::Null) => Value::Object(Map::new()),
-        Some(patch @ Value::Object(_)) => patch,
-        Some(_) => {
-            return Err(ApiError::BadRequest(
-                "`settings` is not a JSON object".into(),
-            ));
-        }
-    };
-    let module_patches = match body.remove("modules") {
-        None | Some(Value::Null) => Map::new(),
-        Some(Value::Object(patches)) => patches,
-        Some(_) => {
-            return Err(ApiError::BadRequest(
-                "`modules` is not a JSON object".into(),
-            ));
-        }
-    };
-    if let Some(key) = body.keys().next() {
-        return Err(ApiError::BadRequest(format!("unknown part {key}")));
-    }
+    let patch = Value::Object(body.settings.unwrap_or_default());
     let mut modules = Vec::new();
     let mut infos = Vec::new();
-    for (id, patch) in module_patches {
-        if !patch.is_object() {
-            return Err(ApiError::BadRequest(format!(
-                "the patch of module {id} is not a JSON object"
-            )));
-        }
+    for (id, patch) in body.modules.unwrap_or_default() {
+        let patch = Value::Object(patch);
         let info = state.modules.module(&id).ok_or(ApiError::NotFound)?;
         modules.push(ModulePatch {
             module_id: id,

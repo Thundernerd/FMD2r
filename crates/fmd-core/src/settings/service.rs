@@ -142,13 +142,9 @@ impl SettingsService {
     }
 
     /// `current` with `patch` applied, normalised and validated.
-    fn patched(current: &Settings, mut patch: Value) -> Result<Settings, SettingsError> {
+    fn patched(current: &Settings, patch: Value) -> Result<Settings, SettingsError> {
         let mut errors = Vec::new();
-        let base = serde_json::to_value(current)?;
-        check_known_keys(&base, &mut patch, "", &mut errors);
-        let mut tree = base.clone();
-        apply_merge_patch(&mut tree, patch);
-        let next = deserialize_reporting(tree, &base, &mut errors);
+        let next = merge_patch_reporting(serde_json::to_value(current)?, patch, &mut errors);
         let Some(mut next) = next else {
             return Err(SettingsError::Invalid(errors));
         };
@@ -181,8 +177,10 @@ impl SettingsService {
                 overrides.push(next);
             }
         }
-        SettingsError::check(errors)?;
-        let next = next.unwrap_or_else(|| current.as_ref().clone());
+        // Without errors every part parsed.
+        let Some(next) = next.filter(|_| errors.is_empty()) else {
+            return Err(SettingsError::Invalid(errors));
+        };
         let groups = self.changed_groups(&current, &next)?;
         let stored = modules
             .iter()
@@ -311,12 +309,7 @@ fn merge_maps(dst: &mut Map<String, Value>, src: Map<String, Value>) {
 
 /// Reports patch keys that are not settings, so a typo is an error rather than a silent no-op,
 /// and drops them from `patch` so the rest of it can still be checked.
-pub(super) fn check_known_keys(
-    tree: &Value,
-    patch: &mut Value,
-    path: &str,
-    errors: &mut Vec<FieldError>,
-) {
+fn check_known_keys(tree: &Value, patch: &mut Value, path: &str, errors: &mut Vec<FieldError>) {
     let (Value::Object(tree), Value::Object(patch)) = (tree, patch) else {
         return;
     };
@@ -343,10 +336,23 @@ fn join_path(path: &str, key: &str) -> String {
     }
 }
 
+/// `base` with the merge patch `patch` applied and deserialised, reporting every unknown key and
+/// every value that does not parse; `None` when the result cannot be made to parse.
+pub(super) fn merge_patch_reporting<T: serde::de::DeserializeOwned>(
+    base: Value,
+    mut patch: Value,
+    errors: &mut Vec<FieldError>,
+) -> Option<T> {
+    check_known_keys(&base, &mut patch, "", errors);
+    let mut tree = base.clone();
+    apply_merge_patch(&mut tree, patch);
+    deserialize_reporting(tree, &base, errors)
+}
+
 /// Deserialises `tree`, reporting every value that does not parse rather than only the first:
 /// each one is reported and put back to its value in `base` (which parses), then the rest is
 /// tried again. `None` when a value cannot be put back.
-pub(super) fn deserialize_reporting<T: serde::de::DeserializeOwned>(
+fn deserialize_reporting<T: serde::de::DeserializeOwned>(
     mut tree: Value,
     base: &Value,
     errors: &mut Vec<FieldError>,

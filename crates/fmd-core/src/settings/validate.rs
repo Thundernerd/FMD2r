@@ -34,9 +34,7 @@ pub(crate) fn normalize(s: &mut Settings) {
 pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
     let mut errors = Vec::new();
     let mut check = |field: &str, error: Option<String>| {
-        if let Some(reason) = error {
-            errors.push(FieldError::new(field, reason));
-        }
+        errors.extend(error.map(|reason| FieldError::new(field, reason)));
     };
     let c = &s.connections;
     check(
@@ -61,9 +59,10 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         out_of(c.max_update_list_threads, 1..=32),
     );
     check("connections.timeout_secs", out_of(c.timeout_secs, 1..=300));
-    if c.proxy.port == Some(0) {
-        check("connections.proxy.port", Some("must be 1..=65535".into()));
-    }
+    check(
+        "connections.proxy.port",
+        (c.proxy.port == Some(0)).then(|| "must be 1..=65535".into()),
+    );
     check(
         "saveto.digit_volume_length",
         out_of(s.saveto.digit_volume_length, 1..=10),
@@ -101,20 +100,21 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         "covers.cache_size_mb",
         out_of(s.covers.cache_size_mb, 1..=u32::MAX),
     );
-    if !c.flaresolverr_url.trim().is_empty()
-        && super::websitebypass::flaresolverr_address(&c.flaresolverr_url).is_none()
-    {
-        check(
-            "connections.flaresolverr_url",
-            Some("must be empty or an http(s) URL such as http://flaresolverr:8191".into()),
-        );
-    }
-    if s.server.bind.parse::<SocketAddr>().is_err() {
-        check(
-            "server.bind",
-            Some("must be a socket address such as 0.0.0.0:8080".into()),
-        );
-    }
+    let bad_flaresolverr = !c.flaresolverr_url.trim().is_empty()
+        && super::websitebypass::flaresolverr_address(&c.flaresolverr_url).is_none();
+    check(
+        "connections.flaresolverr_url",
+        bad_flaresolverr
+            .then(|| "must be empty or an http(s) URL such as http://flaresolverr:8191".into()),
+    );
+    check(
+        "server.bind",
+        s.server
+            .bind
+            .parse::<SocketAddr>()
+            .is_err()
+            .then(|| "must be a socket address such as 0.0.0.0:8080".into()),
+    );
     errors
 }
 

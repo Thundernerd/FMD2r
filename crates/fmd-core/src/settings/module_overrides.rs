@@ -10,9 +10,7 @@ use fmd_lua::{ModuleHttpOverrides, ModuleHttpSettings, SettingsStoreError};
 use fmd_store::{AppDb, ModuleSettings, ModuleSettingsRepo};
 
 use super::model::ConnectionSettings;
-use super::service::{
-    FieldError, SettingsError, apply_merge_patch, check_known_keys, deserialize_reporting, merge,
-};
+use super::service::{FieldError, SettingsError, merge, merge_patch_reporting};
 use crate::modules::{OptionDef, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
 
 /// A user's overrides for one module. Everything except `options` only applies while `enabled`
@@ -108,11 +106,8 @@ impl ModuleOverrides {
         if let Some(map) = base.as_object_mut() {
             map.remove("options");
         }
-        let mut patch = Value::Object(patch);
-        check_known_keys(&base, &mut patch, "", &mut errors);
-        let mut tree = base.clone();
-        apply_merge_patch(&mut tree, patch);
-        let next: Option<ModuleOverrides> = deserialize_reporting(tree, &base, &mut errors);
+        let next: Option<ModuleOverrides> =
+            merge_patch_reporting(base, Value::Object(patch), &mut errors);
         let mut next_options = self.options.clone();
         match option_patch {
             None | Some(Value::Null) => {}
