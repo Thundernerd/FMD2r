@@ -27,6 +27,10 @@ struct Paths {
     /// The smoke list's directory (`list.toml` and the recorded entries).
     #[arg(long, global = true, default_value = "fixtures/smoke")]
     dir: PathBuf,
+    /// Record every XPath evaluation of the runs into this differential corpus directory
+    /// (fixtures/xpath-corpus), adding to what is there.
+    #[arg(long, global = true, value_name = "DIR")]
+    xpath_corpus: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -67,6 +71,7 @@ fn main() -> ExitCode {
         fmd2r: cli.paths.fmd2r,
         lua_dir: cli.paths.lua_dir,
         dir: cli.paths.dir,
+        xpath_corpus: cli.paths.xpath_corpus,
     };
     match run(&smoke, cli.command) {
         Ok(code) => code,

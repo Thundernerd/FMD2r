@@ -499,10 +499,11 @@ pub struct XPathSettings {
 #[serde(rename_all = "lowercase")]
 pub enum XPathBackend {
     /// FMD2's own engine (internettools) over FFI, so module XPath behaves exactly as in FMD2.
-    /// The default until the native backend reaches parity (T35).
-    #[default]
+    /// Needs a build with the `fpc` backend.
     Fpc,
-    /// The pure-Rust engine.
+    /// The pure-Rust engine; the default since the differential corpus showed parity with
+    /// `fpc` (T35, fixtures/xpath-corpus).
+    #[default]
     Native,
 }
 

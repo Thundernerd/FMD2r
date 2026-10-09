@@ -63,8 +63,8 @@ fn fresh_db_returns_fmd2_defaults() {
     assert_eq!(s.module_updater.repo_ref, "master");
     assert_eq!(s.module_updater.repo_path, "lua");
 
-    // FMD2's own XPath engine until the native one reaches parity (T35).
-    assert_eq!(s.xpath.backend, XPathBackend::Fpc);
+    // The native XPath engine, at parity with FMD2's on the differential corpus (T35).
+    assert_eq!(s.xpath.backend, XPathBackend::Native);
 
     // Covers are revalidated weekly and capped at 256 MiB.
     assert_eq!(s.covers.revalidate_after_hours, 168);

@@ -16,7 +16,7 @@ use std::thread::JoinHandle;
 use fmd_http::{HttpClient, HttpSession, TerminateToken};
 
 use crate::module::lock;
-use crate::{Module, ModuleHttpSettings, PackageCache, XPathBackend};
+use crate::{Module, ModuleHttpSettings, PackageCache, XPathBackend, XPathCorpusWriter};
 
 pub use callbacks::{
     Answer, Call, Callback, InfoReply, ListReply, MangaInfo, NamesAndLinks, PageCount, Task,
@@ -40,6 +40,8 @@ pub struct PoolConfig {
     pub http_settings: Option<Arc<HttpSettingsSource>>,
     /// The XPath backend of `CreateTXQuery`; the runtime's default when `None`.
     pub xpath_backend: Option<XPathBackend>,
+    /// Records every XPath evaluation into the differential corpus when set (T35).
+    pub xpath_corpus: Option<XPathCorpusWriter>,
 }
 
 impl PoolConfig {
@@ -52,6 +54,7 @@ impl PoolConfig {
             http,
             http_settings: None,
             xpath_backend: None,
+            xpath_corpus: None,
         }
     }
 }
@@ -198,6 +201,7 @@ impl WorkerPool {
             http: config.http,
             http_settings: config.http_settings,
             xpath_backend: config.xpath_backend,
+            xpath_corpus: config.xpath_corpus,
             package: PackageCache::new(),
             stamps: AtomicU64::new(1),
             stale: Mutex::default(),
@@ -506,6 +510,7 @@ struct Shared {
     http: HttpClient,
     http_settings: Option<Arc<HttpSettingsSource>>,
     xpath_backend: Option<XPathBackend>,
+    xpath_corpus: Option<XPathCorpusWriter>,
     package: PackageCache,
     /// The source of stamps: states, bytecode and invalidations are ordered by them.
     stamps: AtomicU64,

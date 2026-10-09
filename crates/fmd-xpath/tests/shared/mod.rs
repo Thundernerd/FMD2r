@@ -233,6 +233,90 @@ macro_rules! suite {
         }
 
         #[test]
+        fn xmlns_attributes_put_elements_in_a_namespace() {
+            // `xmlns` and `xmlns:p` declare namespaces as internettools' HTML parser reads them
+            // (data/simplehtmltreeparser.pas:2451-2470); they aren't attributes.
+            let html = r#"<html lang="en" xmlns="X"><body><div><a>t</a></div></body></html>"#;
+            assert_eq!(string(html, "namespace-uri(//a)"), "X");
+            assert_eq!(string("<p>x</p>", "namespace-uri(//p)"), "");
+            assert_eq!(items(html, "//a"), ["t"]);
+            assert_eq!(string(html, "count(/html/@*)"), "1");
+            // An undeclared prefix is dropped from the name (data/simplehtmltreeparser.pas:
+            // 2466-2477), a declared one kept.
+            let vue = r#"<body><a v-bind:title="t">x</a><fb:like>y</fb:like></body>"#;
+            assert_eq!(string(vue, "//a/@title"), "t");
+            assert_eq!(string(vue, "name(//like)"), "like");
+            let fb = r#"<html xmlns:fb="F"><body><fb:like>y</fb:like></body></html>"#;
+            assert_eq!(string(fb, "name(//*:like)"), "fb:like");
+            assert_eq!(string(fb, "namespace-uri(//*:like)"), "F");
+        }
+
+        #[test]
+        fn namespaced_nodes_serialize_with_their_declarations() {
+            // `serializeNodes` (internettools data/xquery__serialization_nodes.pas:386-700): a
+            // serialized node declares the namespaces in scope, and elements outside the HTML
+            // namespaces (none, empty, XHTML) are written as XML.
+            let outer = |html: &str, expr: &str| {
+                let doc = engine().parse(html.as_bytes()).unwrap();
+                doc.eval(expr, None, false).outer_html()
+            };
+            let html = r#"<html lang="en" xmlns="X"><body><br><p title='a"b'>x"y</p><p></p></body></html>"#;
+            assert_eq!(
+                outer(html, "/html"),
+                r#"<html xmlns="X" lang="en"><head/><body><br/><p title="a&quot;b">x&quot;y</p><p/></body></html>"#
+            );
+            // An element with its parent's namespace is HTML again.
+            assert_eq!(
+                outer(html, "//body"),
+                r#"<body xmlns="X"><br><p title="a&quot;b">x"y</p><p></p></body>"#
+            );
+            let xhtml = r#"<html xmlns="http://www.w3.org/1999/xhtml"><body><br><p></p></body></html>"#;
+            assert_eq!(
+                outer(xhtml, "/html"),
+                r#"<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><br><p></p></body></html>"#
+            );
+            // The element's own namespace first, then its ancestors' declarations.
+            let prefixed =
+                r#"<html xmlns:b="B" xmlns:a="A" xmlns="X"><body><div>t</div></body></html>"#;
+            assert_eq!(
+                outer(prefixed, "//div"),
+                r#"<div xmlns="X" xmlns:b="B" xmlns:a="A">t</div>"#
+            );
+            let nested = r#"<html xmlns="X"><body><div xmlns="X">1</div><div xmlns="Y"><a>t</a></div></body></html>"#;
+            assert_eq!(
+                outer(nested, "//body"),
+                r#"<body xmlns="X"><div>1</div><div xmlns="Y"><a>t</a></div></body>"#
+            );
+            let svg = r#"<body><svg xmlns="http://www.w3.org/2000/svg"><path d="M0"/><text>a"b</text></svg></body>"#;
+            assert_eq!(
+                outer(svg, "//body"),
+                r#"<body><svg xmlns="http://www.w3.org/2000/svg"><path d="M0"/><text>a&quot;b</text></svg></body>"#
+            );
+            assert_eq!(
+                outer(r#"<html xmlns:fb="F"><body><fb:like a=1>y</fb:like></body></html>"#, "//body"),
+                r#"<body xmlns:fb="F"><fb:like a="1">y</fb:like></body>"#
+            );
+            // Only the first child of an inner serialization gets the ancestors' declarations.
+            let doc = engine()
+                .parse(br#"<html xmlns:og="O"><body><div>1</div><div>2</div></body></html>"#)
+                .unwrap();
+            assert_eq!(
+                doc.eval("//body", None, false).inner_html(),
+                r#"<div xmlns:og="O">1</div><div>2</div>"#
+            );
+        }
+
+        #[test]
+        fn string_literals_normalise_line_endings() {
+            // CR LF and a lone CR become LF (internettools data/xquery__parse.pas:2653-2656,
+            // the default `xqlenXML1` of data/xquery.pas:8384), as in modules that join with
+            // a Lua "\r\n" (GenzToons).
+            let html = "<p>a</p><p>b</p>";
+            assert_eq!(string(html, "string-join(//p, \"\r\n\")"), "a\nb");
+            assert_eq!(string("", "'x\ry' || \"\r\r\n\""), "x\ny\n\n");
+        }
+
+        #[test]
         fn strings_join_and_compare_like_internettools() {
             let html = "<ul><li> One </li><li>two</li></ul>";
             assert_eq!(string(html, "string-join(//li, ', ')"), "One, two");

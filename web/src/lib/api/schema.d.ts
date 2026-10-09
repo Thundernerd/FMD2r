@@ -1917,7 +1917,7 @@ export interface components {
 			update_lists: components['schemas']['UpdateListSettings'];
 			/**
 			 * @default {
-			 *       "backend": "fpc"
+			 *       "backend": "native"
 			 *     }
 			 */
 			xpath: components['schemas']['XPathSettings'];
@@ -2168,7 +2168,7 @@ export interface components {
 		XPathBackend: 'fpc' | 'native';
 		/** @description Module XPath evaluation. No FMD2 counterpart: FMD2 always uses its own engine. */
 		XPathSettings: {
-			/** @default fpc */
+			/** @default native */
 			backend: components['schemas']['XPathBackend'];
 		};
 	};

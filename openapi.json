@@ -4441,7 +4441,7 @@
               }
             ],
             "default": {
-              "backend": "fpc"
+              "backend": "native"
             }
           }
         }
@@ -4930,7 +4930,7 @@
                 "description": "Which `fmd-xpath` backend evaluates module XPath (`fmd_lua::Runtime::set_xpath_backend`)."
               }
             ],
-            "default": "fpc"
+            "default": "native"
           }
         }
       }

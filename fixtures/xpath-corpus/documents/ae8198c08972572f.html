@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>frantic :: Capítulo 1 :: Seinagi Online</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<link href="https://online.seinagi.org.es/content/themes/default/style.css?v=0.8.19" rel="stylesheet" type="text/css" />        
+		<link rel="sitemap" type="application/xml" title="Sitemap" href="https://online.seinagi.org.es/sitemap.xml" />
+		<link rel="alternate" type="application/rss+xml" title="RSS" href="https://online.seinagi.org.es/rss.xml" />
+		<link rel="alternate" type="application/atom+xml" title="Atom" href="https://online.seinagi.org.es/atom.xml" />
+		<link rel='index' title='Seinagi Online' href='https://online.seinagi.org.es/' />
+        <link rel='stylesheet' id='colorcss'  href='https://online.seinagi.org.es/content/themes/default/style-1.css' type='text/css' media='all' />
+		<meta name="generator" content="FoOlSlide 0.8.19" />
+		<script src="https://online.seinagi.org.es/assets/js/jquery.js?v=0.8.19"></script>
+		<script src="https://online.seinagi.org.es/assets/js/jquery.plugins.js?v=0.8.19"></script>
+				        <style type="text/css">
+					.bloque_banner {
+				position:absolute;
+				z-index:100;
+			}
+			.bloque_adsbanner{
+				position:fixed;
+				top:50%;
+				left:50%;
+				margin-left: -364px;	
+				margin-bottom: -45px;
+				width:728px;
+				height:90px;
+				background:#000000;
+				border:1px solid #2f2f2f;
+			}
+			.exit_bloque_adsbanner,	.exit_bloque_adsbanner2{
+				position:absolute;
+				width:24px;
+				height:24px;
+				background:url(//static.seinagi.org.es/image/close.png) no-repeat;
+				cursor:pointer;
+				border-radius:4px;
+			}
+			.exit_bloque_adsbanner{
+				top:15px;
+				left:15px;
+			}
+			.exit_bloque_adsbanner2{
+				top:15px;
+				left:15px;
+			}
+			.bloque_adsbanner_no{
+			}
+        </style>
+        
+	<script language="javascript">
+		clickHandler = function(event){			
+			var date = new Date();						
+			date.setTime(date.getTime() + (24*60*60*1000));						
+			var expires = "expires="+date.toGMTString();				
+			document.cookie="popupglobal1008=1791489719; domain=.seinagi.org.es; path=/; "+expires;
+			document.cookie="popup11008=1791489959; domain=.seinagi.org.es; path=/; "+expires;
+			document.cookie="popup1n1008=1; domain=.seinagi.org.es; path=/; "+expires;
+			self.removeEventListener('click',clickHandler);
+		}
+		self.addEventListener('click',clickHandler);	
+	</script>        <script language="javascript">
+			function _color(csscolor){			
+				document.getElementById("colorcss").href="https://online.seinagi.org.es/content/themes/default/style-"+csscolor+".css";
+				if(csscolor==1 || csscolor==3) {
+					document.body.style["background"]="#000";
+		
+				}
+				if(csscolor==2 || csscolor==4) {
+					document.body.style["background-image"]="url(//static.seinagi.org.es/img/fondo/fondo4.jpg)";
+					document.body.style["background-attachment"]="fixed";
+					document.body.style["background-position"]="top center";
+					document.body.style["background-repeat"]="no-repeat";
+				}
+				var date = new Date();	
+				date.setTime(date.getTime() + (74649600000));	
+				var expires = "expires="+date.toGMTString();	
+				document.cookie="color="+csscolor+"; domain=.seinagi.org.es; path=/; "+expires;
+			}
+			
+			// mostrar / ocultar publcidad
+			function _switch_ads(exeption)	{
+				// obtener elementos
+				var top = document.getElementById("ads_top_minbanner");
+				var bottom = document.getElementById("ads_bottom_banner");			
+
+				// calcular estado
+				var status;
+				if(exeption != null){
+					status = (exeption) ? 'block' : 'none';
+				} else {
+					status = (bottom.style.display == 'none') ? 'block' : 'none';
+				}			
+
+				// incluir estilos
+				top.style.display = status;
+				bottom.style.display = status;
+			}	
+
+			function _ads_autoHide(seconds)	{
+				var timeOutPeriod = seconds * 1000;
+				setTimeout(function(){
+					// ocultar publicidad
+					_switch_ads(false);
+				}, timeOutPeriod);
+			}	
+		</script>
+        <script language="javascript">
+			$(function(){
+				$(".exit_bloque_adsbanner").mouseover(
+					function(){
+						$(".exit_bloque_adsbanner").css("display","none");
+						$(".exit_bloque_adsbanner2").css("display","");
+					}
+				);
+				$(".exit_bloque_adsbanner2").click(
+					function(){			
+						$(".exit_bloque_adsbanner2").remove();
+						document.getElementById("ads_top_banner").className="ads1 iframe banner";
+						document.getElementById("quitarcss").className="bloque_adsbanner_no";
+					}
+				);
+			});
+			!function(a){function d(){a(b).each(function(){e(a(this)).removeClass("open")})}function e(b){var c=b.attr("data-target"),d;return c||(c=b.attr("href"),c=c&&/#/.test(c)&&c.replace(/.*(?=#[^\s]*$)/,"")),d=a(c),d.length||(d=b.parent()),d}var b="[data-toggle=dropdown]",c=function(b){var c=a(b).on("click.dropdown.data-api",this.toggle);a("html").on("click.dropdown.data-api",function(){c.parent().removeClass("open")})};c.prototype={constructor:c,toggle:function(b){var c=a(this),f,g;if(c.is(".disabled, :disabled"))return;return f=e(c),g=f.hasClass("open"),d(),g||f.toggleClass("open"),c.focus(),!1},keydown:function(b){var c,d,f,g,h,i;if(!/(38|40|27)/.test(b.keyCode))return;c=a(this),b.preventDefault(),b.stopPropagation();if(c.is(".disabled, :disabled"))return;g=e(c),h=g.hasClass("open");if(!h||h&&b.keyCode==27)return c.click();d=a("[role=menu] li:not(.divider):visible a",g);if(!d.length)return;i=d.index(d.filter(":focus")),b.keyCode==38&&i>0&&i--,b.keyCode==40&&i<d.length-1&&i++,~i||(i=0),d.eq(i).focus()}};var f=a.fn.dropdown;a.fn.dropdown=function(b){return this.each(function(){var d=a(this),e=d.data("dropdown");e||d.data("dropdown",e=new c(this)),typeof b=="string"&&e[b].call(d)})},a.fn.dropdown.Constructor=c,a.fn.dropdown.noConflict=function(){return a.fn.dropdown=f,this},a(document).on("click.dropdown.data-api touchstart.dropdown.data-api",d).on("click.dropdown touchstart.dropdown.data-api",".dropdown form",function(a){a.stopPropagation()}).on("touchstart.dropdown.data-api",".dropdown-menu",function(a){a.stopPropagation()}).on("click.dropdown.data-api touchstart.dropdown.data-api",b,c.prototype.toggle).on("keydown.dropdown.data-api touchstart.dropdown.data-api",b+", [role=menu]",c.prototype.keydown)}(window.jQuery)// JavaScript Document
+		</script>
+	</head>
+	<body id="fondo" class="">
+		<div id="wrapper">
+						<div id="header">
+				                <div class="clearer">   
+                    <a alt="frantic :: Capítulo 1 :: Seinagi Online" title="frantic :: Capítulo 1 :: Seinagi Online" href="https://online.seinagi.org.es/"><div class="top" style="background-image:url(//static.seinagi.org.es/img/logos/logo1.jpg); width:1140px; height:193px;"></div></a>
+                    <div class="flag">
+                        <div class="template">
+                            <span>Color Theme</span><br />
+                            <a href="#" onClick="_color(1);"><div class="color color1"></div></a>
+                            <a href="#" onClick="_color(2);"><div class="color color2"></div></a>
+                            <a href="#" onClick="_color(3);"><div class="color color3"></div></a>
+                            <a href="#" onClick="_color(4);"><div class="color color4"></div></a>
+                            <div style="clear:both;"></div>
+                        </div>
+                    </div>
+                    <div class="urlsocial">    
+                        <a title="Hazte Fan!" href="https://www.facebook.com/SeinagiScanlations" target="_blank">                
+                            <img src="https://online.seinagi.org.es/content/themes/default/images/facebook.png" /> Facebook                    
+                        </a>            
+                    </div>
+                </div>
+				<div role="navigation" id="navig">
+					<ul>
+						<li>
+							<a href="https://online.seinagi.org.es/">Últimas publicaciones</a>
+						</li>
+						<li>
+							<a href="https://online.seinagi.org.es/directory/">Lista de series</a>
+						</li>
+                        <li>
+							<a href="https://online.seinagi.org.es/account/auth/login/">Cuentas</a>
+						</li>
+						<li style="">
+							<form action="https://online.seinagi.org.es/search/" method="post" accept-charset="utf-8"><input type="text" name="search" value="" placeholder="Para buscar series, escribe y pulsa enter" id="searchbox" class="fright"  /></form>						</li>
+						<li>
+							<a style="padding:0;" href="https://online.seinagi.org.es/feeds/rss/"><img height="28" width="28" style="position:relative; top:1px;" src="https://online.seinagi.org.es/content/themes/default/images/feed-icon-28x28.png" /></a>
+						</li>
+					</ul>
+				</div>
+
+				<a href="https://online.seinagi.org.es/"><div id="title">Seinagi Online</div></a>
+				<div class="home_url"><a href="https://seinagi.org.es">Volver al sitio &crarr;</a></div>				<div class="clearer"></div>
+			</div>
+
+			<article id="content">
+
+				
+<div class="panel">
+	<div class="topbar">
+		<div>
+			<div class="topbar_left">
+				<h1 class="tbtitle dnone"><a href="https://online.seinagi.org.es/series/frantic/" title="frantic">frantic</a> :: <a href="https://online.seinagi.org.es/read/frantic/es/0/1/" title="Capítulo 1">Capítulo 1</a></h1>
+				<div class="tbtitle dropdown_parent"><div class="text"><a href="https://online.seinagi.org.es/series/frantic/" title="frantic">frantic</a> ⤵</div>
+					<ul class="dropdown"><li><a href="https://online.seinagi.org.es/series/a_certain_idol_accelerato/" title=" A Certain Idol Accelerato"> A Certain Idol Accelerato</a></li><li><a href="https://online.seinagi.org.es/series/666_satan/" title="666 Satan">666 Satan</a></li><li><a href="https://online.seinagi.org.es/series/acony/" title="Acony">Acony</a></li><li><a href="https://online.seinagi.org.es/series/all_around_typemoon/" title="All Around Type-Moon">All Around Type-Moon</a></li><li><a href="https://online.seinagi.org.es/series/amagami_dreamy_forever/" title="Amagami Dreamy Forever">Amagami Dreamy Forever</a></li><li><a href="https://online.seinagi.org.es/series/amagami_love_goes_on/" title="Amagami Love Goes On!">Amagami Love Goes On!</a></li><li><a href="https://online.seinagi.org.es/series/amagami_precious_diary__extras/" title="Amagami Precious Diary - Extras">Amagami Precious Diary - Extras</a></li><li><a href="https://online.seinagi.org.es/series/amagami_precious_diary__kaoru/" title="Amagami Precious Diary - Kaoru">Amagami Precious Diary - Kaoru</a></li><li><a href="https://online.seinagi.org.es/series/amagami_precious_diary__tsubasa/" title="Amagami Precious Diary - Tsubasa">Amagami Precious Diary - Tsubasa</a></li><li><a href="https://online.seinagi.org.es/series/amagami_sincerely_yours/" title="Amagami Sincerely Yours">Amagami Sincerely Yours</a></li><li><a href="https://online.seinagi.org.es/series/amairo_islenauts/" title="Amairo IsleNauts">Amairo IsleNauts</a></li><li><a href="https://online.seinagi.org.es/series/amatsuki/" title="Amatsuki">Amatsuki</a></li><li><a href="https://online.seinagi.org.es/series/ane_doki/" title="Ane Doki">Ane Doki</a></li><li><a href="https://online.seinagi.org.es/series/angel_beats/" title="Angel Beats!">Angel Beats!</a></li><li><a href="https://online.seinagi.org.es/series/ano_natsu_de_matteru/" title="Ano Natsu de Matteru">Ano Natsu de Matteru</a></li><li><a href="https://online.seinagi.org.es/series/ares/" title="Ares">Ares</a></li><li><a href="https://online.seinagi.org.es/series/assassins_pride/" title="Assassin's Pride">Assassin's Pride</a></li><li><a href="https://online.seinagi.org.es/series/asu_no_yoichi/" title="Asu no Yoichi!">Asu no Yoichi!</a></li><li><a href="https://online.seinagi.org.es/series/ayu_mayu/" title="Ayu Mayu">Ayu Mayu</a></li><li><a href="https://online.seinagi.org.es/series/baki_dou/" title="Baki Dou">Baki Dou</a></li><li><a href="https://online.seinagi.org.es/series/big_order/" title="Big Order">Big Order</a></li><li><a href="https://online.seinagi.org.es/series/black_yome_ni_yoroshiku/" title="Black Yome ni Yoroshiku!">Black Yome ni Yoroshiku!</a></li><li><a href="https://online.seinagi.org.es/series/blassreitergenetic/" title="Blassreiter-Genetic">Blassreiter-Genetic</a></li><li><a href="https://online.seinagi.org.es/series/bloodline_in_the_dark/" title="Bloodline in the Dark">Bloodline in the Dark</a></li><li><a href="https://online.seinagi.org.es/series/boku_ha_tomodachi_ga_sukunai/" title="Boku Ha Tomodachi ga Sukunai">Boku Ha Tomodachi ga Sukunai</a></li><li><a href="https://online.seinagi.org.es/series/boku_no_koto_suki_ni_natt/" title="Boku no Koto Suki ni Natt">Boku no Koto Suki ni Natt</a></li><li><a href="https://online.seinagi.org.es/series/boku_to_boku/" title="Boku to Boku">Boku to Boku</a></li><li><a href="https://online.seinagi.org.es/series/boku_wa_tomodachi_ga_sukunai__koushiki_anthology_comic/" title="Boku wa Tomodachi ga Sukunai - Koushiki Anthology Comic">Boku wa Tomodachi ga Sukunai - Koushiki Anthology Comic</a></li><li><a href="https://online.seinagi.org.es/series/boku_wa_tomodachi_ga_sukunai_biyori/" title="Boku wa Tomodachi ga Sukunai Biyori">Boku wa Tomodachi ga Sukunai Biyori</a></li><li><a href="https://online.seinagi.org.es/series/boku_wa_tomodachi_ga_sukunai_plus/" title="Boku wa Tomodachi ga Sukunai Plus">Boku wa Tomodachi ga Sukunai Plus</a></li><li><a href="https://online.seinagi.org.es/series/boku_wa_tomodachi_ga_sukunai_shobon/" title="Boku wa Tomodachi ga Sukunai Shobon!">Boku wa Tomodachi ga Sukunai Shobon!</a></li><li><a href="https://online.seinagi.org.es/series/break_blade/" title="Break Blade">Break Blade</a></li><li><a href="https://online.seinagi.org.es/series/celestial_clothes/" title="Celestial Clothes">Celestial Clothes</a></li><li><a href="https://online.seinagi.org.es/series/chokotto_sister/" title="Chokotto Sister">Chokotto Sister</a></li><li><a href="https://online.seinagi.org.es/series/comic_studio/" title="Comic Studio">Comic Studio</a></li><li><a href="https://online.seinagi.org.es/series/coschu/" title="Cos-Chu">Cos-Chu</a></li><li><a href="https://online.seinagi.org.es/series/countrouble/" title="Countrouble">Countrouble</a></li><li><a href="https://online.seinagi.org.es/series/cradle_of_monsters/" title="Cradle of Monsters">Cradle of Monsters</a></li><li><a href="https://online.seinagi.org.es/series/crash/" title="Crash!">Crash!</a></li><li><a href="https://online.seinagi.org.es/series/dfrag/" title="D-Frag">D-Frag</a></li><li><a href="https://online.seinagi.org.es/series/dgrayman/" title="D.Gray-man ">D.Gray-man </a></li><li><a href="https://online.seinagi.org.es/series/dha/" title="DHA">DHA</a></li><li><a href="https://online.seinagi.org.es/series/domina_no_do/" title="Domina no Do">Domina no Do</a></li><li><a href="https://online.seinagi.org.es/series/doujinyahari_ore_no_seishun_love_come_wa_machigatteiru/" title="Doujin-Yahari ore no seishun love come wa machigatteiru">Doujin-Yahari ore no seishun love come wa machigatteiru</a></li><li><a href="https://online.seinagi.org.es/series/doujinshikantai_collection/" title="Doujinshi-Kantai Collection">Doujinshi-Kantai Collection</a></li><li><a href="https://online.seinagi.org.es/series/doujinshis__azumanga_daioh/" title="Doujinshis - Azumanga Daioh">Doujinshis - Azumanga Daioh</a></li><li><a href="https://online.seinagi.org.es/series/doujinshis__disgaea_2/" title="Doujinshis - Disgaea 2">Doujinshis - Disgaea 2</a></li><li><a href="https://online.seinagi.org.es/series/doujinshis__fate_stay_night/" title="Doujinshis - Fate stay night">Doujinshis - Fate stay night</a></li><li><a href="https://online.seinagi.org.es/series/doujinshis__higurashi_no_naku_koro_ni/" title="Doujinshis - Higurashi no Naku Koro ni">Doujinshis - Higurashi no Naku Koro ni</a></li><li><a href="https://online.seinagi.org.es/series/doujinshis__inu_usa_neko/" title="Doujinshis - Inu Usa Neko">Doujinshis - Inu Usa Neko</a></li><li><a href="https://online.seinagi.org.es/series/doujinshis__suzumiya_haruhi_no_yuuutsu/" title="Doujinshis - Suzumiya Haruhi no Yuuutsu">Doujinshis - Suzumiya Haruhi no Yuuutsu</a></li><li><a href="https://online.seinagi.org.es/series/doujinshis__sword_art_online/" title="Doujinshis - Sword Art Online">Doujinshis - Sword Art Online</a></li><li><a href="https://online.seinagi.org.es/series/doujinshis__to_aru_railgun_y_index/" title="Doujinshis - To Aru RailGun y Index">Doujinshis - To Aru RailGun y Index</a></li><li><a href="https://online.seinagi.org.es/series/drifters/" title="Drifters">Drifters</a></li><li><a href="https://online.seinagi.org.es/series/fairy_tail/" title="Fairy Tail">Fairy Tail</a></li><li><a href="https://online.seinagi.org.es/series/flame_of_recca/" title="Flame of Recca">Flame of Recca</a></li><li><a href="https://online.seinagi.org.es/series/franken_fran/" title="Franken Fran">Franken Fran</a></li><li><a href="https://online.seinagi.org.es/series/frantic/" title="frantic">frantic</a></li><li><a href="https://online.seinagi.org.es/series/garei/" title="Ga-Rei">Ga-Rei</a></li><li><a href="https://online.seinagi.org.es/series/gift/" title="GIFT">GIFT</a></li><li><a href="https://online.seinagi.org.es/series/gore__varios/" title="Gore - VARIOS">Gore - VARIOS</a></li><li><a href="https://online.seinagi.org.es/series/greed_packet_unlimited/" title="Greed Packet Unlimited">Greed Packet Unlimited</a></li><li><a href="https://online.seinagi.org.es/series/gupan/" title="Gu-Pan!">Gu-Pan!</a></li><li><a href="https://online.seinagi.org.es/series/gyonwoo__jiknyu/" title="Gyon-Woo & Jik-Nyu">Gyon-Woo & Jik-Nyu</a></li><li><a href="https://online.seinagi.org.es/series/haganai_x_seitokai_crossover/" title="Haganai x Seitokai Crossover">Haganai x Seitokai Crossover</a></li><li><a href="https://online.seinagi.org.es/series/hajimete_datteba/" title="Hajimete Datteba!">Hajimete Datteba!</a></li><li><a href="https://online.seinagi.org.es/series/hana_to_harinezumi/" title="Hana to Harinezumi">Hana to Harinezumi</a></li><li><a href="https://online.seinagi.org.es/series/hanasaku_iroha/" title="Hanasaku Iroha">Hanasaku Iroha</a></li><li><a href="https://online.seinagi.org.es/series/hanbun_no_tsuki_ga_noboru_sora/" title="Hanbun no Tsuki ga Noboru Sora">Hanbun no Tsuki ga Noboru Sora</a></li><li><a href="https://online.seinagi.org.es/series/hataraku_maousama/" title="Hataraku Maou-sama">Hataraku Maou-sama</a></li><li><a href="https://online.seinagi.org.es/series/hell_blade/" title="Hell Blade">Hell Blade</a></li><li><a href="https://online.seinagi.org.es/series/higanbana_no_saku_yoru_ni/" title="Higanbana no Saku Yoru ni">Higanbana no Saku Yoru ni</a></li><li><a href="https://online.seinagi.org.es/series/highschool_of_the_dead/" title="Highschool of the Dead">Highschool of the Dead</a></li><li><a href="https://online.seinagi.org.es/series/hikaru_no_go/" title="Hikaru No Go">Hikaru No Go</a></li><li><a href="https://online.seinagi.org.es/series/himichu_no_ayakosama/" title="Himichu no Ayako-sama">Himichu no Ayako-sama</a></li><li><a href="https://online.seinagi.org.es/series/ichinensei_ni_nacchattara/" title="Ichinensei Ni Nacchattara">Ichinensei Ni Nacchattara</a></li><li><a href="https://online.seinagi.org.es/series/ikkitousen/" title="Ikkitousen">Ikkitousen</a></li><li><a href="https://online.seinagi.org.es/series/ikoku_meiro_no_croisee/" title="Ikoku Meiro no Croisee">Ikoku Meiro no Croisee</a></li><li><a href="https://online.seinagi.org.es/series/kagami_no_kuni_no_harisugawa/" title="Kagami no Kuni no Harisugawa">Kagami no Kuni no Harisugawa</a></li><li><a href="https://online.seinagi.org.es/series/kaitai_shinsho_0/" title="Kaitai Shinsho 0">Kaitai Shinsho 0</a></li><li><a href="https://online.seinagi.org.es/series/kami_nomi_zo_shiru_sekai/" title="Kami nomi zo Shiru Sekai">Kami nomi zo Shiru Sekai</a></li><li><a href="https://online.seinagi.org.es/series/kanokon/" title="Kanokon">Kanokon</a></li><li><a href="https://online.seinagi.org.es/series/kateky_hitman_reborn/" title="Katekyō Hitman Reborn!">Katekyō Hitman Reborn!</a></li><li><a href="https://online.seinagi.org.es/series/kiss_x_sis/" title="Kiss x Sis">Kiss x Sis</a></li><li><a href="https://online.seinagi.org.es/series/koe_de_oshigoto/" title="Koe de Oshigoto!">Koe de Oshigoto!</a></li><li><a href="https://online.seinagi.org.es/series/koibana_onsen/" title="Koibana Onsen">Koibana Onsen</a></li><li><a href="https://online.seinagi.org.es/series/koko_ga_uwasa_no_el_palacio/" title="Koko ga Uwasa no El Palacio">Koko ga Uwasa no El Palacio</a></li><li><a href="https://online.seinagi.org.es/series/kurosagi/" title="Kurosagi">Kurosagi</a></li><li><a href="https://online.seinagi.org.es/series/love__collage/" title="Love & Collage">Love & Collage</a></li><li><a href="https://online.seinagi.org.es/series/loveplus_manaka_days/" title="LovePlus Manaka Days">LovePlus Manaka Days</a></li><li><a href="https://online.seinagi.org.es/series/loveplus_nene_days/" title="Loveplus Nene Days">Loveplus Nene Days</a></li><li><a href="https://online.seinagi.org.es/series/loveplus_rinko_days/" title="LovePlus Rinko Days">LovePlus Rinko Days</a></li><li><a href="https://online.seinagi.org.es/series/mahou_shoujo_of_the_end/" title="Mahou Shoujo of the End">Mahou Shoujo of the End</a></li><li><a href="https://online.seinagi.org.es/series/mahouka_koukou_no_rettousei___/" title="Mahouka Koukou no Rettousei   ">Mahouka Koukou no Rettousei   </a></li><li><a href="https://online.seinagi.org.es/series/mahouka_koukou_no_rettousei__kyuukousen_hen/" title="Mahouka Koukou no Rettousei - Kyuukousen Hen">Mahouka Koukou no Rettousei - Kyuukousen Hen</a></li><li><a href="https://online.seinagi.org.es/series/mai_no_heya/" title="Mai no Heya">Mai no Heya</a></li><li><a href="https://online.seinagi.org.es/series/mirai_nikki/" title="Mirai Nikki">Mirai Nikki</a></li><li><a href="https://online.seinagi.org.es/series/mirai_nikki_redial_/" title="Mirai Nikki Redial ">Mirai Nikki Redial </a></li><li><a href="https://online.seinagi.org.es/series/mitsudomoe/" title="Mitsudomoe">Mitsudomoe</a></li><li><a href="https://online.seinagi.org.es/series/mm/" title="MM!">MM!</a></li></ul>				</div>
+				<div class="tbtitle dropdown_parent"><div class="text"><a href="https://online.seinagi.org.es/read/frantic/es/0/1/">Capítulo 1</a> ⤵</div>
+					<ul class="dropdown"><li><a href="https://online.seinagi.org.es/read/frantic/es/0/3/" title="Capítulo 3">Capítulo 3</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/2/" title="Capítulo 2">Capítulo 2</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/" title="Capítulo 1">Capítulo 1</a></li></ul>				</div>
+				<div class="tbtitle icon_wrapper dnone" ><img class="icon off" src="https://online.seinagi.org.es/assets/glyphish/off/181.png" /><img class="icon on" src="https://online.seinagi.org.es/assets/glyphish/on/181.png" /></div>
+				<div class="icon_wrapper fleft"><a href="//revive.miocio.org/short/?t=1&s=https://online.seinagi.org.es/download/frantic/es/0/1/"><img class="icon off" src="https://online.seinagi.org.es/assets/glyphish/off/50.png" /><img class="icon on" src="https://online.seinagi.org.es/assets/glyphish/on/50.png" /></a></div>			</div>
+			<div class="topbar_right">
+				<div class="tbtitle dropdown_parent dropdown_right"><div class="text">25 ⤵</div>
+					<ul class="dropdown" style="width:90px;"><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/1" onClick="changePage(0); return false;">Página 1</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/2" onClick="changePage(1); return false;">Página 2</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/3" onClick="changePage(2); return false;">Página 3</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/4" onClick="changePage(3); return false;">Página 4</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/5" onClick="changePage(4); return false;">Página 5</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/6" onClick="changePage(5); return false;">Página 6</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/7" onClick="changePage(6); return false;">Página 7</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/8" onClick="changePage(7); return false;">Página 8</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/9" onClick="changePage(8); return false;">Página 9</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/10" onClick="changePage(9); return false;">Página 10</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/11" onClick="changePage(10); return false;">Página 11</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/12" onClick="changePage(11); return false;">Página 12</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/13" onClick="changePage(12); return false;">Página 13</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/14" onClick="changePage(13); return false;">Página 14</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/15" onClick="changePage(14); return false;">Página 15</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/16" onClick="changePage(15); return false;">Página 16</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/17" onClick="changePage(16); return false;">Página 17</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/18" onClick="changePage(17); return false;">Página 18</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/19" onClick="changePage(18); return false;">Página 19</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/20" onClick="changePage(19); return false;">Página 20</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/21" onClick="changePage(20); return false;">Página 21</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/22" onClick="changePage(21); return false;">Página 22</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/23" onClick="changePage(22); return false;">Página 23</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/24" onClick="changePage(23); return false;">Página 24</a></li><li><a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/25" onClick="changePage(24); return false;">Página 25</a></li></ul>				</div>
+
+				<div class="divider"></div>
+				<span class="numbers">
+					<div class="number number_3 "><a href="page/3">03</a></div><div class="number number_2 "><a href="page/2">02</a></div><div class="number number_1 current_page"><a href="page/1">01</a></div>				</span>
+			</div>
+		</div>
+		<div class="clearer"></div>
+	</div>
+</div>
+
+
+<div id="page">
+
+	<div class="inner">
+		<a href="https://online.seinagi.org.es/read/frantic/es/0/1/page/2" onClick="return nextPage();" >
+			<img class="open" src="https://online.seinagi.org.es/content/comics/frantic_5dd1b34f254a2/01_0__5dd1b3d0e7135/000.jpg" />
+		</a>
+	</div>
+</div>
+
+<div class="clearer"></div>
+
+<div id="bottombar">
+    <div class="pagenumber">
+		Página 1    </div>
+    <div class="socialbuttons">
+        <div class="tweet">
+            <a href="http://twitter.com/share" class="twitter-share-button" data-url="https://online.seinagi.org.es/read/frantic/es/0/1/" data-count="horizontal" data-via="SeinagiFansub" data-related="SeinagiFansub">Tweet</a><script type="text/javascript" src="https://platform.twitter.com/widgets.js"></script>
+        </div>
+		<div class="facebook">
+			<iframe src="https://www.facebook.com/plugins/like.php?href=https%3A%2F%2Fonline.seinagi.org.es%2Fread%2Ffrantic%2Fes%2F0%2F1%2F&amp;layout=button_count&amp;show_faces=false&amp;width=90&amp;action=like&amp;font=arial&amp;colorscheme=light&amp;height=21" scrolling="no" frameborder="0" style="border:none; overflow:hidden; width:95px; height:21px;" allowTransparency="true"></iframe>
+		</div>
+		<div class="googleplus">
+			<g:plusone size="medium" href="https://online.seinagi.org.es/read/frantic/es/0/1/"></g:plusone>
+		</div>
+    </div>
+</div>
+
+<script type="text/javascript">
+	var title = document.title;
+	var pages = [{"id":130490,"chapter_id":"4888","filename":"000.jpg","hidden":"0","created":"2019-11-17 20:57:48","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"806","width":"700","mime":"image\/jpeg","size":"134405","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/000.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/000.jpg"},{"id":130491,"chapter_id":"4888","filename":"x01.jpg","hidden":"0","created":"2019-11-17 20:57:49","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"296856","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x01.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x01.jpg"},{"id":130492,"chapter_id":"4888","filename":"x02.jpg","hidden":"0","created":"2019-11-17 20:57:52","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"257951","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x02.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x02.jpg"},{"id":130493,"chapter_id":"4888","filename":"x03.jpg","hidden":"0","created":"2019-11-17 20:57:54","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"258771","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x03.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x03.jpg"},{"id":130494,"chapter_id":"4888","filename":"x04.jpg","hidden":"0","created":"2019-11-17 20:57:55","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"259355","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x04.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x04.jpg"},{"id":130496,"chapter_id":"4888","filename":"x05.jpg","hidden":"0","created":"2019-11-17 20:57:57","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"308725","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x05.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x05.jpg"},{"id":130495,"chapter_id":"4888","filename":"x06.jpg","hidden":"0","created":"2019-11-17 20:57:56","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"254051","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x06.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x06.jpg"},{"id":130497,"chapter_id":"4888","filename":"x07.jpg","hidden":"0","created":"2019-11-17 20:57:58","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"249481","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x07.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x07.jpg"},{"id":130498,"chapter_id":"4888","filename":"x08.jpg","hidden":"0","created":"2019-11-17 20:58:00","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"287099","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x08.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x08.jpg"},{"id":130499,"chapter_id":"4888","filename":"x09.jpg","hidden":"0","created":"2019-11-17 20:58:01","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"281878","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x09.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x09.jpg"},{"id":130500,"chapter_id":"4888","filename":"x10.jpg","hidden":"0","created":"2019-11-17 20:58:02","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"264765","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x10.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x10.jpg"},{"id":130501,"chapter_id":"4888","filename":"x11.jpg","hidden":"0","created":"2019-11-17 20:58:04","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"293115","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x11.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x11.jpg"},{"id":130502,"chapter_id":"4888","filename":"x12.jpg","hidden":"0","created":"2019-11-17 20:58:05","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"228392","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x12.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x12.jpg"},{"id":130503,"chapter_id":"4888","filename":"x13.jpg","hidden":"0","created":"2019-11-17 20:58:06","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"336308","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x13.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x13.jpg"},{"id":130504,"chapter_id":"4888","filename":"x14.jpg","hidden":"0","created":"2019-11-17 20:58:07","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"262477","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x14.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x14.jpg"},{"id":130505,"chapter_id":"4888","filename":"x15.jpg","hidden":"0","created":"2019-11-17 20:58:08","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"283479","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x15.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x15.jpg"},{"id":130506,"chapter_id":"4888","filename":"x16.jpg","hidden":"0","created":"2019-11-17 20:58:10","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"294031","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x16.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x16.jpg"},{"id":130507,"chapter_id":"4888","filename":"x17.jpg","hidden":"0","created":"2019-11-17 20:58:11","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"301554","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x17.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x17.jpg"},{"id":130508,"chapter_id":"4888","filename":"x18.jpg","hidden":"0","created":"2019-11-17 20:58:12","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"294619","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x18.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x18.jpg"},{"id":130509,"chapter_id":"4888","filename":"x19.jpg","hidden":"0","created":"2019-11-17 20:58:13","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"306296","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x19.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x19.jpg"},{"id":130510,"chapter_id":"4888","filename":"x20.jpg","hidden":"0","created":"2019-11-17 20:58:15","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"370728","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x20.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x20.jpg"},{"id":130511,"chapter_id":"4888","filename":"x21.jpg","hidden":"0","created":"2019-11-17 20:58:16","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"305720","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x21.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x21.jpg"},{"id":130512,"chapter_id":"4888","filename":"x22.jpg","hidden":"0","created":"2019-11-17 20:58:17","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"288365","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x22.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x22.jpg"},{"id":130513,"chapter_id":"4888","filename":"x23.jpg","hidden":"0","created":"2019-11-17 20:58:19","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"315016","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x23.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x23.jpg"},{"id":130514,"chapter_id":"4888","filename":"x24.jpg","hidden":"0","created":"2019-11-17 20:58:20","lastseen":"0000-00-00 00:00:00","updated":"0000-00-00 00:00:00","creator":"2","editor":"2","height":"1400","width":"969","mime":"image\/jpeg","size":"315228","url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x24.jpg","thumb_url":"https:\/\/online.seinagi.org.es\/content\/comics\/frantic_5dd1b34f254a2\/01_0__5dd1b3d0e7135\/x24.jpg"}];
+
+	var next_chapter = "https://online.seinagi.org.es/read/frantic/es/0/2/";
+	var preload_next = 5;
+	var preload_back = 2;
+	var current_page = 0;
+
+	var initialized = false;
+
+	var base_url = 'https://online.seinagi.org.es/read/frantic/es/0/1/';
+	var site_url = 'https://online.seinagi.org.es/';
+
+	var gt_page = 'Página';
+	var gt_key_suggestion = 'Puedes usar W-A-S-D o las teclas de dirección para navegar';
+	var gt_key_tap = 'Pulsa dos veces para cambiar de página';
+
+	function changePage(id, noscroll, nohash)
+	{
+		id = parseInt(id);
+		if (initialized && id == current_page)
+			return false;
+
+		if(!initialized) {
+			create_message('key_suggestion', 4000, gt_key_suggestion);
+		}
+
+		initialized = true;
+		if(id > pages.length-1)
+		{
+			location.href = next_chapter;
+			return false;
+		}
+		if(id < 0){
+			current_page = 0;
+			id = 0;
+		}
+
+		preload(id);
+		current_page = id;
+		next = parseInt(id+1);
+		jQuery("html, body").stop(true,true);
+		if(!noscroll) jQuery.scrollTo('.panel', 430, {'offset':{'top':-6}});
+
+		if(pages[id].loaded !== true) {
+			jQuery('#page .inner img.open').css({'opacity':'0'});
+			jQuery('#page .inner img.open').attr('src', pages[id].url);
+		}
+		else {
+			jQuery('#page .inner img.open').css({'opacity':'1'});
+			jQuery('#page .inner img.open').attr('src', pages[id].url);
+		}
+
+		resizePage(id);
+
+		if(!nohash) History.pushState(null, null, base_url+'page/' + (current_page + 1));
+		document.title = gt_page+' ' + (current_page+1) + ' :: ' + title;
+		update_numberPanel();
+		jQuery('#pagelist .current').removeClass('current');
+		
+		var referent = base_url+'page/'  + (current_page + 1);
+
+		jQuery("#ads_top_banner.iframe iframe").attr("src", site_url + "content/ads/ads_top.php?ref=" + referent);
+		jQuery("#ads_bottom_banner.iframe iframe").attr("src", site_url + "content/ads/ads_bottom.php?ref=" + referent);
+
+		return false;
+	}
+
+
+	function resizePage(id) {
+		var doc_width = jQuery(document).width();
+		var page_width = parseInt(pages[id].width);
+		var page_height = parseInt(pages[id].height);
+		var nice_width = 980;
+		var perfect_width = 980;
+
+		if(doc_width > 1200) {
+			nice_width = 1120;
+			perfect_width = 1000;
+		}
+		if(doc_width > 1600) {
+			nice_width = 1400;
+			perfect_width = 1300;
+		}
+		if(doc_width > 1800) {
+			nice_width = 1600;
+			perfect_width = 1500;
+		}
+
+		if (page_width > nice_width && (page_width/page_height) > 1.2) {
+			if(page_height < 1610) {
+				width = page_width;
+				height = page_height;
+			}
+			else {
+				height = 1600;
+				width = page_width;
+				width = (height*width)/(page_height);
+			}
+			jQuery("#page").css({'max-width': 'none', 'overflow':'auto'});
+			jQuery("#page").animate({scrollLeft:9000},400);
+			jQuery("#page .inner img.open").css({'max-width':'99999px'});
+			jQuery('#page .inner img.open').attr({width:width, height:height});
+			if(jQuery("#page").width() < jQuery("#page .inner img.open").width()) {
+				isSpread = true;
+				create_message('is_spread', 3000, 'Tap the arrows twice to change page');
+			}
+			else {
+				jQuery("#page").css({'max-width': width+10, 'overflow':'hidden'});
+				isSpread = false;
+				delete_message('is_spread');
+			}
+		}
+		else{
+			if(page_width < nice_width && doc_width > page_width + 10) {
+				width = page_width;
+				height = page_height;
+			}
+			else {
+				width = (doc_width > perfect_width) ? perfect_width : doc_width - 10;
+				height = page_height;
+				height = (height*width)/page_width;
+			}
+			jQuery('#page .inner img.open').attr({width:width, height:height});
+			jQuery("#page").css({'max-width':(width + 10) + 'px','overflow':'hidden'});
+			jQuery("#page .inner img.open").css({'max-width':'100%'});
+			isSpread = false;
+			delete_message('is_spread');
+		}
+	}
+
+	function nextPage()
+	{
+		changePage(current_page+1);
+		return false;
+	}
+
+	function prevPage()
+	{
+		changePage(current_page-1);
+		return false;
+	}
+
+	function preload(id)
+	{
+		var array = [];
+		var arraydata = [];
+		for(i = -preload_back; i < preload_next; i++)
+		{
+			if(id+i >= 0 && id+i < pages.length)
+			{
+				array.push(pages[(id+i)].url);
+				arraydata.push(id+i);
+			}
+		}
+
+		jQuery.preload(array, {
+			threshold: 40,
+			enforceCache: true,
+			onComplete:function(data)
+			{
+				var idx = data.index;
+				if(data.index == page)
+					return false;
+				var page = arraydata[idx];
+				pages[page].loaded = true;
+				jQuery('.numbers .number_'+ (page+1)).addClass('loaded');
+				if(current_page == page)
+				{
+					jQuery('#page .inner img.open').animate({'opacity':'1.0'}, 800);
+					jQuery('#page .inner img.open').attr('src', pages[current_page].url);
+				}
+			}
+
+		});
+	}
+
+	function create_numberPanel()
+	{
+		result = "";
+		for (j = pages.length+1; j > 0; j--) {
+			nextnumber = ((j/1000 < 1 && pages.length >= 1000)?'0':'') + ((j/100 < 1 && pages.length >= 100)?'0':'') + ((j/10 < 1 && pages.length >= 10)?'0':'') + j;
+			result += "<div class='number number_"+ j +" dnone'><a href='" + base_url + "page/" + j + "' onClick='changePage("+(j-1)+"); return false;'>"+nextnumber+"</a></div>";
+		}
+		jQuery(".topbar_right .numbers").html(result);
+	}
+
+	function update_numberPanel()
+	{
+		jQuery('.topbar_right .number.current_page').removeClass('current_page');
+		jQuery('.topbar_right .number_'+(current_page+1)).addClass('current_page');
+		jQuery('.topbar_right .number').addClass('dnone');
+		for (i = ((val = current_page - 1) <= 0)?(1):val; i <= pages.length && i < current_page + 4; i++) {
+			jQuery('.number_'+i).removeClass('dnone');
+		}
+
+		jQuery('.pagenumber').html(gt_page + ' ' + (current_page+1));
+	}
+
+	function chapters_dropdown()
+	{
+		location.href = jQuery('#chapters_dropdown').val();
+	}
+
+	function togglePagelist()
+	{
+		jQuery('#pagelist').slideToggle();
+		jQuery.scrollTo('#pagelist', 300);
+	}
+
+
+	var isSpread = false;
+	var button_down = false;
+	var button_down_code;
+
+	jQuery(document).ready(function() {
+		jQuery(document).keydown(function(e){
+
+			if(!button_down && !jQuery("input").is(":focus"))
+			{
+				button_down = true;
+				code = e.keyCode || e.which;
+
+				if(e.keyCode==37 || e.keyCode==65)
+				{
+					if(!isSpread) prevPage();
+					else if(e.timeStamp - timeStamp37 < 400 && e.timeStamp - timeStamp37 > 150) prevPage();
+					timeStamp37 = e.timeStamp;
+
+					button_down = true;
+					e.preventDefault();
+					button_down_code = setInterval(function() {
+						if (button_down) {
+							jQuery('#page').scrollTo("-=13",{axis:"x"});
+						}
+					}, 20);
+				}
+				if(e.keyCode==39 || e.keyCode==68)
+				{
+					if(!isSpread) nextPage();
+					else if(e.timeStamp - timeStamp39 < 400 && e.timeStamp - timeStamp39 > 150) nextPage();
+					timeStamp39 = e.timeStamp;
+
+					button_down = true;
+					e.preventDefault();
+					button_down_code = setInterval(function() {
+						if (button_down) {
+							jQuery('#page').scrollTo("+=13",{axis:"x"});
+						}
+					}, 20);
+				}
+
+
+				if(code == 40 || code == 83)
+				{
+					e.preventDefault();
+					button_down_code = setInterval(function() {
+						if (button_down) {
+							jQuery.scrollTo("+=13");
+						}
+					}, 20);
+				}
+
+				if(code == 38 || code == 87)
+				{
+					e.preventDefault();
+					button_down_code = setInterval(function() {
+						if (button_down) {
+							jQuery.scrollTo("-=13");
+						}
+					}, 20);
+
+				}
+			}
+
+		});
+
+		jQuery(document).keyup(function(e){
+			button_down_code = window.clearInterval(button_down_code);
+			button_down = false;
+		});
+
+		timeStamp37 = 0;
+		timeStamp39 = 0;
+
+		jQuery(window).bind('statechange',function(){
+			var State = History.getState();
+			url = parseInt(State.url.substr(State.url.lastIndexOf('/')+1));
+			changePage(url-1, false, true);
+			document.title = gt_page+' ' + (current_page+1) + ' :: ' + title;
+		});
+
+
+
+		State = History.getState();
+		url = State.url.substr(State.url.lastIndexOf('/')+1);
+		if(url < 1)
+			url = 1;
+		current_page = url-1;
+		History.pushState(null, null, base_url+'page/' + (current_page+1));
+		changePage(current_page, false, true);
+		create_numberPanel();
+		update_numberPanel();
+		document.title = gt_page+' ' + (current_page+1) + ' :: ' + title;
+
+		jQuery(window).resize(function() {
+			resizePage(current_page);
+		});
+	});
+</script>
+			</article>
+
+		</div>
+		<div id="footer">			
+			<!-- Add a placeholder for the Twitch embed -->
+			<div id="twitch-embed"></div>
+			<div class="text">
+				<div>
+					Todos los manga que aparece en esta Web son propiedad de sus editores.<br/> 
+Las traducciones son por Fans y pretende ser una vista previa del material para los países de habla hispana.<br/>
+No trate de sacar provecho de este material.<br/> Si te ha gustado alguno de los manga que obtuvo aquí, considerar la compra de las versiones en japonés, o la traducción local, donde esté disponible. Gracias por su apoyo.				</div>
+				<div class="cp_link">
+					<a href="http://www.foolz.us/info/foolslide/" target="_blank"><img src="https://online.seinagi.org.es/content/themes/default/images/logo_footer.png" /></a>
+				</div>
+			</div>
+		</div>
+
+		<div id="messages">
+		</div>
+		<!-- Load the Twitch embed script -->
+		<script src="https://player.twitch.tv/js/embed/v1.js"></script>
+
+		<!-- Create a Twitch.Player object. This will render within the placeholder div -->
+		<script type="text/javascript">
+		  new Twitch.Player("twitch-embed", {
+			  width: "100%",
+			  height: 500,
+			  channel: "djscusa"
+		  });
+		</script>
+        <!--<iframe frameborder="0" height="0" width="0" allowtransparency="true" scrolling="no" marginheight="0" marginwidth="0" src="//seinagi.org.es/blog/geo.php?http=http://online.seinagi.org.es/read/frantic/es/0/1/&referer="></iframe>-->
+	</body>
+	</html>

@@ -131,6 +131,9 @@ pub struct Smoke {
     pub lua_dir: PathBuf,
     /// `fixtures/smoke`: `list.toml` and one directory per entry.
     pub dir: PathBuf,
+    /// The XPath differential corpus every run records its XPath evaluations into, if any
+    /// (`fmd2r module --xpath-corpus`).
+    pub xpath_corpus: Option<PathBuf>,
 }
 
 impl Smoke {
@@ -246,6 +249,9 @@ impl Smoke {
             .arg(&self.lua_dir)
             .arg("--module")
             .arg(&entry.module_id);
+        if let Some(corpus) = &self.xpath_corpus {
+            command.arg("--xpath-corpus").arg(corpus);
+        }
         match mode {
             Mode::Live => {}
             Mode::Record(dir) => {

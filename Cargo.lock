@@ -973,6 +973,9 @@ dependencies = [
  "indexmap",
  "regex",
  "rust_decimal",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror",
  "xpath-fpc",
 ]
@@ -992,6 +995,7 @@ dependencies = [
  "fmd-server",
  "fmd-smoke",
  "fmd-store",
+ "fmd-xpath",
  "predicates",
  "serde_json",
  "tempfile",

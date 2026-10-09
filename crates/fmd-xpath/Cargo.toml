@@ -11,14 +11,22 @@ default = ["native"]
 fpc = ["dep:xpath-fpc"]
 # The pure-Rust backend: html5ever and an internettools-compatible XPath evaluator (README.md).
 native = ["dep:html5ever", "dep:indexmap", "dep:regex", "dep:rust_decimal"]
+# Both backends, for the differential corpus test (tests/corpus.rs): `cargo test -p fmd-xpath
+# --features diff`.
+diff = ["fpc", "native"]
 
 [dependencies]
 html5ever = { version = "0.40", optional = true }
 indexmap = { version = "2", optional = true }
 regex = { version = "1", optional = true }
 rust_decimal = { version = "1", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 thiserror.workspace = true
 xpath-fpc = { path = "../xpath-fpc", optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

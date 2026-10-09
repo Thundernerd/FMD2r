@@ -3,9 +3,11 @@
 //! baseunits/lua/LuaHandler.pas:42-151).
 
 use std::panic::AssertUnwindSafe;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use fmd_http::{HttpSession, TerminateToken};
+use fmd_xpath::LoggingEngine;
 use mlua::chunk::ChunkMode;
 use mlua::{Function, Lua, MultiValue, Value};
 
@@ -160,6 +162,16 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
     if let Some(backend) = shared.xpath_backend {
         runtime
             .set_xpath_backend(backend)
+            .map_err(|e| plain(format!("new Lua state: {e}")))?;
+    }
+    if let Some(corpus) = &shared.xpath_corpus {
+        let engine = match shared.xpath_backend {
+            Some(backend) => backend.engine(),
+            None => crate::default_xpath_engine(),
+        }
+        .ok_or_else(|| plain("new Lua state: no XPath backend to log".to_owned()))?;
+        runtime
+            .set_xpath_engine(Rc::new(LoggingEngine::new(engine, corpus.hook())))
             .map_err(|e| plain(format!("new Lua state: {e}")))?;
     }
     let lua = runtime.lua();

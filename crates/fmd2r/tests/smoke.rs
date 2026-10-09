@@ -16,6 +16,7 @@ fn smoke() -> Smoke {
         fmd2r: assert_cmd::cargo::cargo_bin("fmd2r"),
         lua_dir: fixtures().join("lua"),
         dir: fixtures().join("smoke"),
+        xpath_corpus: None,
     }
 }
 

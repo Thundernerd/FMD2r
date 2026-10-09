@@ -1,11 +1,12 @@
 //! `fmd2r`: the FMD2r server binary plus developer CLI subcommands.
 
 mod module;
+mod xpath;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use anyhow::{Context, bail};
+use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
 use fmd_import::{ImportOptions, PathMap};
 use fmd_server::{EventBus, LogBuffer, ServeConfig};
@@ -14,6 +15,7 @@ use module::ModuleCommand;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use xpath::XpathCommand;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -38,7 +40,7 @@ enum Command {
     /// Exercise website modules from the command line.
     #[command(subcommand)]
     Module(ModuleCommand),
-    /// Evaluate XPath expressions with the FMD2 XPath engine.
+    /// Evaluate XPath expressions, and compare the XPath backends on the differential corpus.
     #[command(subcommand)]
     Xpath(XpathCommand),
 }
@@ -84,24 +86,17 @@ struct ImportArgs {
     resume: bool,
 }
 
-#[derive(Subcommand)]
-enum XpathCommand {
-    /// Evaluate an expression against an HTML document.
-    Eval,
-}
-
 /// Log lines kept for `GET /api/logs`.
 const LOG_LINES: usize = 2000;
 
 fn main() -> anyhow::Result<()> {
-    let ticket = match Cli::parse().command {
-        Command::Serve(args) => return serve(args),
-        Command::Openapi { out } => return openapi(out),
-        Command::Import(args) => return import(args),
-        Command::Module(command) => return module::run(command),
-        Command::Xpath(XpathCommand::Eval) => "T35",
-    };
-    bail!("not implemented yet ({ticket})")
+    match Cli::parse().command {
+        Command::Serve(args) => serve(args),
+        Command::Openapi { out } => openapi(out),
+        Command::Import(args) => import(args),
+        Command::Module(command) => module::run(command),
+        Command::Xpath(command) => xpath::run(command),
+    }
 }
 
 fn serve(args: ServeArgs) -> anyhow::Result<()> {

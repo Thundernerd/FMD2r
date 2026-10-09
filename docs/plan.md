@@ -14,6 +14,7 @@ objects, callbacks and their quirks that modules see must be reproduced faithful
 
 Decisions taken:
 - XPath: wrap FMD2's own engine (internettools) as a C-ABI shared library first; replace it with a Rust engine later, gated by differential tests.
+  - T35 switched the default `xpath.backend` to `native`: on the differential corpus recorded from the smoke list's replay (`fixtures/xpath-corpus`, 1,116 expression/document pairs over 59 documents) it gives the `fpc` backend's results everywhere (item counts and kinds, string values, serialized nodes). The corpus run fixed two differences: CR LF in string literals, and namespaces from `xmlns` attributes (an element outside the HTML namespaces serializes as XML, and a serialized node re-declares the namespaces in scope). `fpc` stays selectable (`--features xpath-fpc`, `Runtime::set_xpath_backend`, `fmd2r xpath eval --backend fpc`); CI's `xpath-fpc` job runs both backends on the shared suites and the corpus as the parity guard, and the nightly smoke run diffs a corpus of the day's live pages. Removing the shim is a later decision.
 - Deployment: one binary that serves the API and the embedded SPA, plus a Docker image. Optional password/token auth. No user accounts.
 - Lua: `mlua` with vendored Lua 5.4. C modules are allowed, because `pb` is needed.
 - JavaScript (`fmd.duktape.ExecJS`): `rquickjs`, a C engine with a Rust API and an ES5 superset. Duktape via `cc` is the fallback if QuickJS behaves differently.
@@ -33,7 +34,7 @@ crates/
   fmd-pack     output: folder / zip / cbz (zip crate), pdf (lopdf or printpdf), epub (custom on zip); image conversion via `image` (+ libwebp-sys if needed)
   fmd-import   FMD2 userdata importer (downloads.db, favorites.db, downloadedchapters.db, modules.json, settings.json)
   fmd-server   axum: REST (OpenAPI via utoipa) + SSE event stream + cover proxy/cache + embedded SPA (rust-embed)
-  fmd2r        binary: `serve`, plus dev CLI subcommands (`module init|info|pages|download`, `xpath eval`)
+  fmd2r        binary: `serve`, plus dev CLI subcommands (`module init|info|pages|download`, `xpath eval|diff`)
 web/           SvelteKit (Svelte 5, adapter-static SPA), API client generated from OpenAPI
 ```
 
@@ -229,5 +230,5 @@ Each ticket has a spec in `docs/tickets/T<nn>-<slug>.md`; T00 (this documentatio
 - **Host API unit tests:** Rust tests that run small Lua snippets against mocked HTTP. They cover each quirk above: dot and colon calls, ignored unknown properties, 0-based TStrings, `GET` returning true on a 404 with a body, Headers swapping, and redirects.
 - **Module corpus test (CI):** load every module in `lua/modules` and assert that `Init` succeeds. Statically scan the modules for Host API names that are not implemented.
 - **Record/replay smoke tests:** a `--record` mode saves HTTP exchanges for the smoke list. CI replays them offline and checks that `OnGetInfo` and `OnGetPageNumber` give stable outputs. A nightly live run reports module breakage separately from regressions in FMD2r itself.
-- **XPath differential tests:** the FPC backend logs (expression, document hash) pairs during smoke runs, building a corpus. The native backend must produce identical results on all of them before it becomes the default.
+- **XPath differential tests:** smoke runs log (expression, context, document hash) entries and the documents into a corpus (`fixtures/xpath-corpus`). The native backend produced identical results on all of them before it became the default (T35), and CI keeps checking it.
 - **End to end:** run `fmd2r serve` (or `docker compose up` with FlareSolverr), add a MangaDex URL from a phone browser, add it to the library, download 2 chapters as CBZ, then check the file contents, the queue SSE updates, and that progress survives a restart.

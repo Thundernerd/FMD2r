@@ -90,6 +90,17 @@ fn lex(src: &str) -> XResult<Vec<Tok>> {
                             break;
                         }
                     }
+                    // CR LF and a lone CR become LF (`normalizeLineEnding` with the default
+                    // `xqlenXML1`, internettools data/xquery__parse.pas:1205-1212, :2653-2656,
+                    // data/xquery.pas:8384).
+                    Some('\r') => {
+                        s.push('\n');
+                        i += if chars.get(i + 1) == Some(&'\n') {
+                            2
+                        } else {
+                            1
+                        };
+                    }
                     Some(&other) => {
                         s.push(other);
                         i += 1;
@@ -253,6 +264,8 @@ impl Axis {
 pub(crate) enum NodeTest {
     /// A name (ASCII case-insensitive, like internettools on HTML); `*` matches any.
     Name(String),
+    /// `*:name`: the local part of a name, whatever its prefix.
+    LocalName(String),
     AnyName,
     /// `node()`.
     Node,
@@ -266,6 +279,17 @@ pub(crate) enum NodeTest {
     Document,
     /// `comment()` and `processing-instruction()`: the tree has neither.
     Nothing,
+}
+
+/// The node test a name makes: `*:local`, `prefix:*` or a name.
+fn name_test(name: String) -> NodeTest {
+    if let Some(local) = name.strip_prefix("*:") {
+        NodeTest::LocalName(local.to_owned())
+    } else if name.ends_with(":*") {
+        NodeTest::AnyName
+    } else {
+        NodeTest::Name(name)
+    }
 }
 
 /// The key of a `?` lookup.
@@ -880,7 +904,7 @@ impl Parser {
             }
             if !is_call && !is_constructor && !is_literal {
                 self.pos += 1;
-                return self.predicates(Axis::Child, NodeTest::Name(name));
+                return self.predicates(Axis::Child, name_test(name));
             }
         }
         self.postfix()
@@ -891,13 +915,7 @@ impl Parser {
             Tok::Sym("*") => Ok(NodeTest::AnyName),
             Tok::Name(name) => {
                 if !self.is_sym("(") || !KIND_TESTS.contains(&name.as_str()) {
-                    if let Some(local) = name.strip_prefix("*:") {
-                        return Ok(NodeTest::Name(local.to_owned()));
-                    }
-                    if name.ends_with(":*") {
-                        return Ok(NodeTest::AnyName);
-                    }
-                    return Ok(NodeTest::Name(name));
+                    return Ok(name_test(name));
                 }
                 self.pos += 1;
                 let argument = match self.peek().clone() {

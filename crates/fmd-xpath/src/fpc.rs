@@ -5,7 +5,7 @@ use std::any::Any;
 use std::ffi::{c_char, c_int};
 use std::ptr::{self, NonNull};
 
-use crate::{Document, Error, Result, XPathEngine, XPathValue};
+use crate::{Document, Error, Kind, Result, XPathEngine, XPathValue};
 
 mod ffi {
     use std::ffi::{c_char, c_int};
@@ -141,6 +141,11 @@ impl XPathValue for FpcValue {
         unsafe { ffi::fx_value_kind(self.raw()) == FX_KIND_UNDEFINED }
     }
 
+    fn kind(&self) -> Kind {
+        // SAFETY: the handle is live.
+        kind(unsafe { ffi::fx_value_kind(self.raw()) })
+    }
+
     fn string(&self) -> String {
         // SAFETY: the handle is live.
         take(unsafe { ffi::fx_value_to_string(self.raw()) })
@@ -209,6 +214,9 @@ impl XPathValue for EmptyValue {
     fn is_undefined(&self) -> bool {
         true
     }
+    fn kind(&self) -> Kind {
+        Kind::Undefined
+    }
     fn string(&self) -> String {
         String::new()
     }
@@ -229,6 +237,27 @@ impl XPathValue for EmptyValue {
     }
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+/// The [`Kind`] of an `fx_kind` (crates/xpath-fpc/fmdxpath.h); the library returns no other.
+fn kind(kind: c_int) -> Kind {
+    match kind {
+        1 => Kind::Boolean,
+        2 => Kind::Int64,
+        3 => Kind::Null,
+        4 => Kind::Node,
+        5 => Kind::Sequence,
+        6 => Kind::Array,
+        7 => Kind::Double,
+        8 => Kind::String,
+        9 => Kind::Decimal,
+        10 => Kind::Binary,
+        11 => Kind::QName,
+        12 => Kind::DateTime,
+        13 => Kind::Object,
+        14 => Kind::Function,
+        _ => Kind::Undefined,
     }
 }
 

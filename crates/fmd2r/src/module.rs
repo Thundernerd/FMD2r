@@ -10,7 +10,7 @@ use fmd_http::{
 };
 use fmd_lua::{
     Callback, InfoReply, JobError, LoadReport, MangaInfo, Module, ModuleDef, ModuleOption,
-    ModuleRegistry, OptionKind, PoolConfig, Task, WorkerPool,
+    ModuleRegistry, OptionKind, PoolConfig, Task, WorkerPool, XPathCorpusWriter,
 };
 use serde_json::{Value, json};
 
@@ -80,6 +80,10 @@ pub struct RunArgs {
     load: LoadArgs,
     #[command(flatten)]
     http: HttpArgs,
+    /// Record every XPath evaluation into this differential corpus directory (see
+    /// fixtures/xpath-corpus), adding to what is there.
+    #[arg(long, value_name = "DIR")]
+    xpath_corpus: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -193,19 +197,36 @@ struct ModuleRun {
     target: Target,
     http: CommandHttp,
     pool: WorkerPool,
+    xpath_corpus: Option<XPathCorpusWriter>,
 }
 
 impl ModuleRun {
     fn start(args: &RunArgs) -> anyhow::Result<ModuleRun> {
         let target = Target::resolve(&args.load, &args.url)?;
         let http = args.http.client()?;
-        let pool = pool(&args.load, &http)?;
-        Ok(ModuleRun { target, http, pool })
+        let xpath_corpus = args
+            .xpath_corpus
+            .as_ref()
+            .map(|dir| {
+                XPathCorpusWriter::open(dir)
+                    .with_context(|| format!("opening the XPath corpus in {}", dir.display()))
+            })
+            .transpose()?;
+        let pool = pool(&args.load, &http, xpath_corpus.clone())?;
+        Ok(ModuleRun {
+            target,
+            http,
+            pool,
+            xpath_corpus,
+        })
     }
 
     /// The callbacks' `result`, after failing on any request a replay had no exchange for, which
     /// is what usually made a callback fail.
     fn finish<T>(&self, result: Result<T, JobError>) -> anyhow::Result<T> {
+        if let Some(corpus) = &self.xpath_corpus {
+            corpus.finish().context("recording the XPath corpus")?;
+        }
         self.http.check_replay()?;
         Ok(result?)
     }
@@ -372,11 +393,17 @@ impl Target {
     }
 }
 
-/// A one-thread worker pool over `load`'s `lua/` dir, sending HTTP through `http`.
-fn pool(load: &LoadArgs, http: &CommandHttp) -> anyhow::Result<WorkerPool> {
+/// A one-thread worker pool over `load`'s `lua/` dir, sending HTTP through `http` and recording
+/// XPath into `xpath_corpus`, if given.
+fn pool(
+    load: &LoadArgs,
+    http: &CommandHttp,
+    xpath_corpus: Option<XPathCorpusWriter>,
+) -> anyhow::Result<WorkerPool> {
     let mut config = PoolConfig::new(http.client.clone());
     config.threads = 1;
     config.lua_dir = load.lua_dir.clone();
+    config.xpath_corpus = xpath_corpus;
     WorkerPool::new(config).context("starting the Lua worker")
 }
 
