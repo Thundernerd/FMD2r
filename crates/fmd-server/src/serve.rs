@@ -56,8 +56,11 @@ pub enum ServeError {
     Store(#[from] fmd_store::StoreError),
     #[error("settings: {0}")]
     Settings(#[from] fmd_core::settings::SettingsError),
-    #[error("the server.bind setting {0:?} is not a socket address")]
-    BindSetting(String),
+    #[error("the server.bind setting {value:?}: {source}")]
+    BindSetting {
+        value: String,
+        source: std::net::AddrParseError,
+    },
     #[error("bind {addr}: {source}")]
     Bind {
         addr: SocketAddr,
@@ -68,8 +71,7 @@ pub enum ServeError {
 }
 
 /// Opens the store in `config.data_dir`, then serves the app on `config.bind` (or the
-/// `server.bind` setting) until SIGINT or
-/// SIGTERM, letting in-flight requests finish and closing event streams.
+/// `server.bind` setting) until SIGINT or SIGTERM, letting in-flight requests finish and closing event streams.
 pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     std::fs::create_dir_all(&config.data_dir).map_err(|source| ServeError::DataDir {
         path: config.data_dir.clone(),
@@ -116,7 +118,10 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
             .server
             .bind
             .parse()
-            .map_err(|_| ServeError::BindSetting(settings.server.bind.clone()))?,
+            .map_err(|source| ServeError::BindSetting {
+                value: settings.server.bind.clone(),
+                source,
+            })?,
     };
     let overridden = [
         config.bind.map(|_| "server.bind"),

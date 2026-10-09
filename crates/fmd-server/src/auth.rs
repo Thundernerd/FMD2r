@@ -7,6 +7,7 @@
 //! no web server.
 
 use std::sync::{Arc, Mutex};
+
 use std::time::{Duration, SystemTime};
 
 use axum::extract::{Request, State};
@@ -17,6 +18,7 @@ use fmd_core::settings::{Settings, verify_password};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
+use tokio::sync::Semaphore;
 use utoipa::ToSchema;
 
 use crate::error::ApiJson;
@@ -30,12 +32,16 @@ const RENEW_EVERY: Duration = Duration::from_secs(60);
 
 /// Bearer tokens remembered as verified, at most.
 const VERIFIED_TOKENS: usize = 16;
+/// Password hashes checked at once, at most: each takes tens of milliseconds and ~19 MiB, and
+/// any client can ask for one.
+const CONCURRENT_HASHES: usize = 2;
 
 /// Where the password comes from: `--password` / `FMD2R_PASSWORD` when given, which wins, else
 /// the `server.auth_token` setting (a hash), read at every request so a change applies at once.
 pub(crate) struct Auth {
     fixed: Option<String>,
     verified: Mutex<Verified>,
+    hashing: Semaphore,
 }
 
 /// Bearer tokens verified against the setting's hash, so a request does not pay for hashing.
@@ -50,18 +56,20 @@ struct Verified {
 impl Auth {
     /// Auth from the setting only.
     pub(crate) fn from_settings() -> Arc<Self> {
-        Arc::new(Self {
-            fixed: None,
-            verified: Mutex::default(),
-        })
+        Arc::new(Self::new(None))
     }
 
     /// Auth with `secret` from the command line or environment, ignoring the setting.
     pub(crate) fn fixed(secret: String) -> Arc<Self> {
-        Arc::new(Self {
-            fixed: Some(secret),
+        Arc::new(Self::new(Some(secret)))
+    }
+
+    fn new(fixed: Option<String>) -> Self {
+        Self {
+            fixed,
             verified: Mutex::default(),
-        })
+            hashing: Semaphore::new(CONCURRENT_HASHES),
+        }
     }
 
     /// Whether the command line or environment sets the password.
@@ -77,25 +85,52 @@ impl Auth {
         }
     }
 
-    /// Whether the request's bearer token is `secret`.
-    async fn bearer_authorizes(
+    /// Whether `candidate` is the password. A hash is checked on the blocking pool, a few at a
+    /// time.
+    async fn matches(&self, secret: &Secret, candidate: &str) -> Result<bool, ApiError> {
+        match secret {
+            Secret::Plain(secret) => Ok(ct_eq(candidate, secret)),
+            Secret::Hash(hash) => {
+                let _permit = self
+                    .hashing
+                    .acquire()
+                    .await
+                    .map_err(|e| ApiError::Internal(e.to_string()))?;
+                let (hash, candidate) = (hash.clone(), candidate.to_owned());
+                off_thread(move || verify_password(&hash, &candidate)).await
+            }
+        }
+    }
+
+    /// Whether the request's bearer token is known to be `secret` without hashing: it is the
+    /// command line one, or one verified before.
+    fn bearer_known(&self, secret: &Secret, headers: &HeaderMap) -> bool {
+        let Some(token) = bearer_token(headers) else {
+            return false;
+        };
+        match secret {
+            Secret::Plain(secret) => ct_eq(token, secret),
+            Secret::Hash(hash) => {
+                let digest = token_digest(token);
+                self.verified(|v| v.hash == *hash && v.tokens.contains(&digest))
+            }
+        }
+    }
+
+    /// Whether the request's bearer token is the password `hash` was made from; remembers it
+    /// when it is.
+    async fn bearer_verifies(
         &self,
         secret: &Secret,
         headers: &HeaderMap,
     ) -> Result<bool, ApiError> {
-        let Some(token) = bearer_token(headers) else {
+        let (Some(token), Secret::Hash(hash)) = (bearer_token(headers), secret) else {
             return Ok(false);
         };
-        let Secret::Hash(hash) = secret else {
-            return secret.matches(token).await;
-        };
-        let digest: [u8; 32] = Sha256::digest(token.as_bytes()).into();
-        if self.verified(|v| v.hash == *hash && v.tokens.contains(&digest)) {
-            return Ok(true);
-        }
-        if !secret.matches(token).await? {
+        if !self.matches(secret, token).await? {
             return Ok(false);
         }
+        let digest = token_digest(token);
         self.verified(|v| {
             if v.hash != *hash {
                 *v = Verified {
@@ -116,6 +151,11 @@ impl Auth {
     }
 }
 
+/// What [`Verified`] keeps of a bearer token.
+fn token_digest(token: &str) -> [u8; 32] {
+    Sha256::digest(token.as_bytes()).into()
+}
+
 /// The password a request is checked against.
 pub(crate) enum Secret {
     /// From the command line or environment.
@@ -130,17 +170,6 @@ impl Secret {
     fn binding(&self) -> &str {
         match self {
             Secret::Plain(s) | Secret::Hash(s) => s,
-        }
-    }
-
-    /// Whether `candidate` is the password. A hash is checked on the blocking pool.
-    async fn matches(&self, candidate: &str) -> Result<bool, ApiError> {
-        match self {
-            Secret::Plain(secret) => Ok(ct_eq(candidate, secret)),
-            Secret::Hash(hash) => {
-                let (hash, candidate) = (hash.clone(), candidate.to_owned());
-                off_thread(move || verify_password(&hash, &candidate)).await
-            }
         }
     }
 
@@ -265,12 +294,16 @@ pub(crate) async fn require(State(state): State<AppState>, req: Request, next: N
     let Some(secret) = state.secret() else {
         return next.run(req).await;
     };
-    match state.auth.bearer_authorizes(&secret, req.headers()).await {
-        Ok(true) => return next.run(req).await,
-        Ok(false) => {}
-        Err(e) => return e.into_response(),
+    if state.auth.bearer_known(&secret, req.headers()) {
+        return next.run(req).await;
     }
-    match session_authorizes(&state, &secret, req.headers()).await {
+    // A session before an unknown bearer token, which costs a hash.
+    let authorized = match session_authorizes(&state, &secret, req.headers()).await {
+        Ok(true) => Ok(true),
+        Ok(false) => state.auth.bearer_verifies(&secret, req.headers()).await,
+        Err(e) => Err(e),
+    };
+    match authorized {
         Ok(true) => next.run(req).await,
         Ok(false) => ApiError::Unauthorized.into_response(),
         Err(e) => e.into_response(),
@@ -335,7 +368,7 @@ pub(crate) async fn login(
     let Some(secret) = state.secret() else {
         return Ok(StatusCode::NO_CONTENT.into_response());
     };
-    if !secret.matches(&login.password).await? {
+    if !state.auth.matches(&secret, &login.password).await? {
         return Err(ApiError::Unauthorized);
     }
     let token = new_token()?;

@@ -66,10 +66,10 @@ pub(crate) async fn patch(
     Ok(Json(updated.as_ref().into()))
 }
 
-/// Closes the open event streams when an update changed the password: the login sessions,
-/// bound to it, have ended (see `auth.rs`).
+/// Closes the open event streams when an update changed the password in force: the login
+/// sessions, bound to it, have ended (see `auth.rs`). The command line one leaves them be.
 fn end_sessions_on_new_password(state: &AppState, before: &Settings, after: &Settings) {
-    if before.server.auth_token != after.server.auth_token {
+    if !state.auth.is_fixed() && before.server.auth_token != after.server.auth_token {
         state.end_sessions();
     }
 }

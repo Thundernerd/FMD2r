@@ -12,8 +12,8 @@ use serde_json::Value;
 use super::secrets::unseal;
 use super::service::SettingsError;
 
-/// The path of the password inside the `server` group.
-const PASSWORD: &[&str] = &["auth_token"];
+/// The key of the password inside the `server` group.
+const PASSWORD_KEY: &str = "auth_token";
 
 /// A salted hash of `password`.
 fn hash(password: &str) -> Result<String, SettingsError> {
@@ -44,9 +44,18 @@ fn is_hash(value: &str) -> bool {
 pub(super) fn hash_patched(patch: &mut Value) -> Result<(), SettingsError> {
     let slot = patch
         .get_mut("server")
-        .and_then(|server| server.get_mut(PASSWORD[0]));
+        .and_then(|server| server.get_mut(PASSWORD_KEY));
+    hash_in_place(slot, |_| true)
+}
+
+/// Replaces the non-empty password in `slot` with its hash when `needs_hash` says so.
+fn hash_in_place(
+    slot: Option<&mut Value>,
+    needs_hash: impl FnOnce(&str) -> bool,
+) -> Result<(), SettingsError> {
     if let Some(Value::String(password)) = slot
         && !password.is_empty()
+        && needs_hash(password)
     {
         *password = hash(password)?;
     }
@@ -55,14 +64,24 @@ pub(super) fn hash_patched(patch: &mut Value) -> Result<(), SettingsError> {
 
 /// Hashes the password in the stored `server` group when an older build stored it plain or
 /// encrypted; whether `group` changed.
+///
+/// An encrypted one that cannot be decrypted (a lost or replaced key file) is replaced by the
+/// hash of a random password nobody knows, so the API stays locked instead of turning open;
+/// `--password` / `FMD2R_PASSWORD` gets in to set a new one.
 pub(super) fn hash_stored(cipher: &dyn Cipher, group: &mut Value) -> Result<bool, SettingsError> {
     let before = group.clone();
-    unseal(cipher, group, PASSWORD);
-    if let Some(Value::String(password)) = group.get_mut(PASSWORD[0])
-        && !password.is_empty()
-        && !is_hash(password)
+    let encrypted = group.get(PASSWORD_KEY).is_some_and(Value::is_object);
+    unseal(cipher, group, &[PASSWORD_KEY]);
+    if encrypted
+        && group.get(PASSWORD_KEY).is_none()
+        && let Value::Object(map) = group
     {
-        *password = hash(password)?;
+        tracing::error!(target: "fmd_core",
+            "the server password cannot be decrypted; the API stays locked until a new one is \
+             set (log in with --password / FMD2R_PASSWORD to set it)");
+        let unknown = SaltString::generate(&mut OsRng);
+        map.insert(PASSWORD_KEY.into(), hash(unknown.as_str())?.into());
     }
+    hash_in_place(group.get_mut(PASSWORD_KEY), |p| !is_hash(p))?;
     Ok(*group != before)
 }

@@ -268,3 +268,20 @@ async fn health_names_the_settings_the_command_line_overrides() {
     overridden.sort_unstable();
     assert_eq!(overridden, ["server.auth_token", "server.bind"]);
 }
+
+#[tokio::test]
+async fn a_stored_password_that_cannot_be_decrypted_keeps_the_server_locked() {
+    let h = harness();
+    // Encrypted by an older build (T63) under a key file that is gone.
+    h.db.settings()
+        .set("server", &json!({ "auth_token": { "encrypted": "00ff" } }))
+        .unwrap();
+
+    let state = AppState::new(h.db.clone()).unwrap();
+
+    assert_eq!(health(&state).await["auth"], true);
+    assert_eq!(inbox(&state, None).await, StatusCode::UNAUTHORIZED);
+    // The command line password still gets in, to set a new one.
+    let state = state.with_auth("from-env");
+    assert_eq!(inbox_with_bearer(&state, "from-env").await, StatusCode::OK);
+}
