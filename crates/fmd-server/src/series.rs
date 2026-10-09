@@ -86,7 +86,8 @@ pub struct ChapterInfo {
     pub name: String,
     /// Relative to the module's `RootURL`.
     pub link: String,
-    /// Whether the chapter was downloaded before.
+    /// Whether the chapter was downloaded before, or marked when the series was added to the
+    /// library (mangadownloader/forms/frmMain.pas:2797-2846). The UI calls it "seen".
     pub downloaded: bool,
 }
 

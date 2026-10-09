@@ -4,7 +4,7 @@ import type { ImportReport, SourceReport } from '#lib/api/types.ts';
 export const SOURCES: { key: SourceKey; label: string }[] = [
 	{ key: 'tasks', label: 'downloads.db → tasks' },
 	{ key: 'favorites', label: 'favorites.db → favorites' },
-	{ key: 'downloaded_chapters', label: 'downloadedchapters.db → downloaded chapters' },
+	{ key: 'downloaded_chapters', label: 'downloadedchapters.db → seen chapters' },
 	{ key: 'module_settings', label: 'modules.json → module settings' },
 	{ key: 'accounts', label: 'modules.json → accounts' },
 	{ key: 'settings', label: 'settings.json → settings' }

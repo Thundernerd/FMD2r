@@ -27,7 +27,7 @@ test('selection shortcuts pick new chapters or a typed range', async ({ page }) 
 	const box = page.getByRole('region', { name: 'Download', exact: true });
 	const chapters = page.getByRole('region', { name: 'Chapters' });
 
-	// The mock has chapters 1–138 downloaded.
+	// The mock has chapters 1–138 seen.
 	await chapters.getByRole('button', { name: 'New' }).click();
 	await expect(box).toContainText('4 chapters selected');
 

@@ -953,7 +953,10 @@ export interface components {
 		};
 		/** @description One chapter of a series. */
 		ChapterInfo: {
-			/** @description Whether the chapter was downloaded before. */
+			/**
+			 * @description Whether the chapter was downloaded before, or marked when the series was added to the
+			 *     library (mangadownloader/forms/frmMain.pas:2797-2846). The UI calls it "seen".
+			 */
 			downloaded: boolean;
 			/** @description Relative to the module's `RootURL`. */
 			link: string;

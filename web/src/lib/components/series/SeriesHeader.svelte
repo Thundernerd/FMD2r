@@ -63,7 +63,7 @@
 	let expanded = $state(false);
 	// Short summaries show in full; longer ones start clamped.
 	const long = $derived(series.summary.length > 280 || series.summary.split('\n').length > 4);
-	const downloaded = $derived(series.chapters.filter((c) => c.downloaded).length);
+	const seen = $derived(series.chapters.filter((c) => c.downloaded).length);
 </script>
 
 <header class="hero">
@@ -96,7 +96,7 @@
 			{/if}
 			<div>
 				<dt class="label">Chapters</dt>
-				<dd class="num">{series.chapters.length} · {downloaded} downloaded</dd>
+				<dd class="num">{series.chapters.length} · {seen} seen</dd>
 			</div>
 		</dl>
 		{#if series.genres.length}
