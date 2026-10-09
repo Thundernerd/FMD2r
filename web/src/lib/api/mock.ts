@@ -14,7 +14,7 @@ import type {
 	LogLine,
 	ModuleSummary,
 	NewTask,
-	SaveToSettings,
+	RenamePreviewRequest,
 	SeriesInfo,
 	SeriesRef,
 	TaskDetail,
@@ -493,7 +493,13 @@ export function createMockBackend(): MockBackend {
 		} catch (e) {
 			if (!(e instanceof Invalid)) throw e;
 			return json(
-				{ status: 422, title: 'Unprocessable Entity', detail: e.detail, field: e.field },
+				{
+					status: 422,
+					title: 'Unprocessable Entity',
+					detail: e.message,
+					field: e.fields[0]?.field,
+					fields: e.fields
+				},
 				422
 			);
 		}
@@ -607,8 +613,9 @@ export function createMockBackend(): MockBackend {
 		if (route === 'GET /api/jobs') return json(jobs);
 		if (route === 'GET /api/settings') return json(settings.getSettings());
 		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
+		if (route === 'PATCH /api/settings/all') return update(req, settings.patchAll);
 		if (route === 'POST /api/preview-rename') {
-			return json(settings.previewRename((await req.json()) as SaveToSettings));
+			return json(settings.previewRename((await req.json()) as RenamePreviewRequest));
 		}
 		if (route === 'GET /api/modules') return json(modules());
 		if (route === 'GET /api/lists/search') return json(lists.search(searchParams));

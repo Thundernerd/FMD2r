@@ -8,13 +8,14 @@
 		ModuleSettingsView,
 		ModuleSummary,
 		RenamePreview,
-		SaveToSettings,
+		RenamePreviewRequest,
 		Settings
 	} from '#lib/api/types.ts';
 	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
+	import { showFieldErrors } from '#lib/settings/save.ts';
 	import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 
 	const TOC = [
@@ -90,77 +91,68 @@
 		goto(url, { replace: true, reset: false });
 	}
 
-	// Preview the rename templates as they are typed, debounced.
+	// Preview the naming settings as they are typed, debounced.
 	$effect(() => {
 		if (!draft) return;
-		const saveto = $state.snapshot(draft.value.saveto) as SaveToSettings;
+		const { saveto, images, output } = $state.snapshot(draft.value) as Settings;
+		const request: RenamePreviewRequest = { saveto, images, output };
 		const timer = setTimeout(() => {
 			api
-				.previewRename(saveto)
+				.previewRename(request)
 				.then((p) => (preview = p))
 				.catch(() => (preview = null));
 		}, 250);
 		return () => clearTimeout(timer);
 	});
 
+	/** Where a download's first page ends up, inside its archive when chapters are packed. */
 	const previewPath = $derived.by(() => {
-		if (!draft || !preview) return '';
-		const s = draft.value.saveto;
-		return [
-			s.default_dir || 'downloads',
-			s.generate_manga_folder ? preview.manga : null,
-			s.generate_chapter_folder ? preview.chapter : null,
-			`${preview.filename}.jpg`
-		]
-			.filter(Boolean)
-			.join('/');
+		if (!preview) return '';
+		return preview.path.endsWith(preview.page) ? preview.path : `${preview.path} › ${preview.page}`;
 	});
 
-	/** Records a rejected save on `target`; `false` when the error names no field. */
-	function reject(e: unknown, target: Draft<object>): boolean {
-		if (e instanceof ValidationError && e.field) {
-			target.errors[e.field] = e.detail;
-			return true;
-		}
-		saveError = e instanceof ValidationError ? e.detail : 'Could not save the settings.';
-		return false;
-	}
-
+	/** Saves the settings and the open module's settings together: both or neither. */
 	async function save() {
+		const changes = draft?.changes();
+		const moduleChanges = moduleView ? moduleDraft?.changes() : null;
+		const moduleId = moduleView?.id;
 		saving = true;
 		saveError = null;
-		let invalid = false;
-		const changes = draft?.changes();
-		if (draft && changes) {
-			try {
-				draft.commit(await api.patchSettings(changes));
-			} catch (e) {
-				invalid = reject(e, draft) || invalid;
-			}
-		}
-		const moduleChanges = moduleDraft?.changes();
-		if (moduleDraft && moduleView && moduleChanges) {
-			try {
-				const view = await api.patchModuleSettings(moduleView.id, moduleChanges);
+		try {
+			const result = await api.patchAllSettings({
+				...(changes ? { settings: changes } : {}),
+				...(moduleId && moduleChanges ? { modules: { [moduleId]: moduleChanges } } : {})
+			});
+			draft?.commit(result.settings);
+			const view = moduleId ? result.modules[moduleId] : undefined;
+			if (view && moduleDraft) {
 				moduleView = view;
 				moduleDraft.commit(editable(view));
-			} catch (e) {
-				invalid = reject(e, moduleDraft) || invalid;
 			}
+		} catch (e) {
+			await reject(e, moduleId);
+			return;
+		} finally {
+			saving = false;
 		}
-		saving = false;
-		if (invalid) {
-			await tick();
-			const first = document.querySelector<HTMLElement>('.field.invalid');
-			if (first) {
-				first.scrollIntoView({ block: 'center' });
-				first.querySelector<HTMLElement>('input, select')?.focus({ preventScroll: true });
-			} else {
-				saveError = 'A setting is invalid.';
-			}
-		} else if (!saveError) {
-			saved = true;
-			setTimeout(() => (saved = false), 2000);
+		saved = true;
+		setTimeout(() => (saved = false), 2000);
+	}
+
+	/** Shows a rejected save: every invalid field inline, the first one scrolled to. */
+	async function reject(e: unknown, moduleId: string | undefined) {
+		if (!(e instanceof ValidationError)) {
+			saveError = 'Could not save the settings.';
+			return;
+		}
+		const module = moduleId && moduleDraft ? { id: moduleId, draft: moduleDraft } : null;
+		const unplaced = showFieldErrors(e.fields, draft, module);
+		if (unplaced.length || !e.fields.length) saveError = unplaced.join('; ') || e.detail;
+		await tick();
+		const first = document.querySelector<HTMLElement>('.field.invalid');
+		if (first) {
+			first.scrollIntoView({ block: 'center' });
+			first.querySelector<HTMLElement>('input, select')?.focus({ preventScroll: true });
 		}
 	}
 
