@@ -152,6 +152,16 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
     let def = module.def();
     let runtime = Runtime::new().map_err(|e| plain(format!("new Lua state: {e}")))?;
     runtime.set_lua_dir(&shared.lua_dir);
+    // FMD2 runs in the parent of `lua/`, which upstream's relative paths assume, e.g.
+    // `lua\websitebypass\websitebypass_config.json` (lua/websitebypass/cloudflare.lua:272).
+    // A bare `lua` has an empty parent: the current directory, the default.
+    if let Some(dir) = shared
+        .lua_dir
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+    {
+        runtime.set_working_dir(dir);
+    }
     runtime.set_package_cache(shared.package.clone());
     runtime
         .install_globals(Globals {
@@ -295,24 +305,25 @@ impl Ctx<'_> {
 
     /// Sets the global `HTTP` (`L.LoadObject('HTTP', ...)`) over the job's session, or a new
     /// one for the module (`CreateHTTP` and `PrepareHTTP`, baseunits/WebsiteModules.pas:382-387, :353-380), tied to the
-    /// job's termination.
+    /// job's termination. Its requests run the module's anti-bot hook
+    /// (`WebsiteBypassHTTPRequest`, baseunits/WebsiteModules.pas:272-276).
     pub(super) fn set_http(&mut self) -> mlua::Result<()> {
+        let settings: Arc<dyn ModuleHttpSettings> = match &self.shared.http_settings {
+            Some(source) => source(self.module),
+            None => Arc::new(NoOverrides),
+        };
         let mut session = match self.http.take() {
             Some(session) => session,
             None => {
-                let settings: Arc<dyn ModuleHttpSettings> = match &self.shared.http_settings {
-                    Some(source) => source(self.module),
-                    None => Arc::new(NoOverrides),
-                };
                 let module = HttpModule {
                     http: self.module.http().clone(),
-                    settings,
+                    settings: settings.clone(),
                 };
                 create_http(&self.shared.http, Some(&module))
             }
         };
         session.set_terminate_token(self.terminate.clone());
-        let http = LuaHttp::new(session);
+        let http = LuaHttp::with_website_bypass(session, self.module.clone(), settings);
         self.lua().globals().set("HTTP", http.build(self.lua())?)?;
         self.lua_http = Some(http);
         Ok(())

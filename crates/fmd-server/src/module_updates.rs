@@ -73,17 +73,19 @@ impl LuaRuntime {
 /// modules yet is synced at startup either way (the first-run bootstrap).
 ///
 /// The repository, token and keep-last-good settings are read once: changes apply on the next
-/// start. `flaresolverr_url` is written back into `websitebypass_config.json` whenever a sync
+/// start. The FlareSolverr URL (`flaresolverr_override`, else the `connections.flaresolverr_url`
+/// setting at that time) is written back into `websitebypass_config.json` whenever a sync
 /// replaces it with upstream's.
 pub(crate) fn start(
     state: AppState,
     runtime: &LuaRuntime,
     lua_dir: PathBuf,
-    flaresolverr_url: String,
+    flaresolverr_override: Option<String>,
 ) {
     let settings = state.settings.get().module_updater.clone();
     let config = UpdaterConfig::from_settings(&settings, &lua_dir);
     let dir = lua_dir.clone();
+    let service = state.settings.clone();
     let updater = ModuleUpdater::new(
         config,
         state.db.clone(),
@@ -92,6 +94,9 @@ pub(crate) fn start(
     )
     .with_pool(runtime.pool.clone())
     .with_after_sync(move |report| {
+        let flaresolverr_url = flaresolverr_override
+            .clone()
+            .unwrap_or_else(|| service.get().connections.flaresolverr_url.clone());
         if report.downloaded.iter().any(|f| f == WEBSITEBYPASS_CONFIG)
             && let Err(e) = write_websitebypass_config(&dir, &flaresolverr_url)
         {
