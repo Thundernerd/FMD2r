@@ -17,5 +17,7 @@ export const api = createApi({
 export const events = new EventStore({
 	url: '/api/events',
 	connect: mock ? mock.eventSource : (url) => new EventSource(url),
-	queue: new QueueStore({ refresh: () => api.listTasks() })
+	queue: new QueueStore({ refresh: () => api.listTasks() }),
+	// Any protected call reports a 401 through `onUnauthorized`.
+	onDisconnect: () => void api.listInbox().catch(() => {})
 });

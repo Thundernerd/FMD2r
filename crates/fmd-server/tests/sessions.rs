@@ -258,3 +258,34 @@ async fn health_says_whether_a_password_is_required() {
     let open = AppState::new(AppDb::open(h.dir.path().join("open.db")).unwrap()).unwrap();
     assert_eq!(body(send(&open, get()).await).await["auth"], false);
 }
+
+/// Whether the response body ends (rather than staying open) within a second.
+async fn body_ends(res: Response) -> bool {
+    let mut body = res.into_body();
+    let drained = async {
+        while let Some(frame) = http_body_util::BodyExt::frame(&mut body).await {
+            frame.unwrap();
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(1), drained)
+        .await
+        .is_ok()
+}
+
+#[tokio::test]
+async fn ending_sessions_closes_the_open_event_streams() {
+    for end in ["/api/logout", "/api/sessions/revoke-all"] {
+        let h = harness();
+        let cookie = login(&h.state).await;
+        let events = Request::get("/api/events")
+            .header("cookie", &cookie)
+            .body(Body::empty())
+            .unwrap();
+        let stream = send(&h.state, events).await;
+        assert_eq!(stream.status(), StatusCode::OK);
+
+        let res = send(&h.state, post_with(end, &cookie)).await;
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        assert!(body_ends(stream).await, "{end} left the stream open");
+    }
+}

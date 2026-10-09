@@ -1,6 +1,6 @@
 //! Web UI login sessions (T41). No FMD2 counterpart: FMD2 has no web server.
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
 use crate::db::Db;
 use crate::error::Result;
@@ -26,22 +26,36 @@ impl<'a> SessionRepo<'a> {
         Ok(())
     }
 
-    /// Marks the session seen at `now` if it exists, was last seen at or after `seen_since` and
-    /// was created at or after `created_since`; returns whether it did.
+    /// Whether the session exists, was last seen at or after `seen_since` and was created at or
+    /// after `created_since`. A live session last seen before `renew_before` is marked seen at
+    /// `now`; the others are left alone, so frequent requests don't each cost a write.
     pub fn renew(
         &self,
         token_hash: &[u8],
         now: i64,
+        renew_before: i64,
         seen_since: i64,
         created_since: i64,
     ) -> Result<bool> {
         let conn = self.db.lock();
-        let renewed = conn.execute(
-            "UPDATE sessions SET last_seen = max(last_seen, ?2)
-             WHERE token_hash = ?1 AND last_seen >= ?3 AND created_at >= ?4",
-            params![token_hash, now, seen_since, created_since],
-        )?;
-        Ok(renewed == 1)
+        let last_seen: Option<i64> = conn
+            .query_row(
+                "SELECT last_seen FROM sessions
+                 WHERE token_hash = ?1 AND last_seen >= ?2 AND created_at >= ?3",
+                params![token_hash, seen_since, created_since],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(last_seen) = last_seen else {
+            return Ok(false);
+        };
+        if last_seen < renew_before {
+            conn.execute(
+                "UPDATE sessions SET last_seen = ?2 WHERE token_hash = ?1",
+                params![token_hash, now],
+            )?;
+        }
+        Ok(true)
     }
 
     /// Ends one session; ending an unknown one is not an error.

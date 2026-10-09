@@ -62,8 +62,6 @@ export interface Api {
 	login(password: string): Promise<boolean>;
 	/** Ends this browser's session and clears its cookie. */
 	logout(): Promise<void>;
-	/** Ends every session, this one included. */
-	revokeAllSessions(): Promise<void>;
 	listInbox(): Promise<InboxItem[]>;
 	markRead(id: string): Promise<void>;
 	/** The whole download queue, in queue order. */
@@ -211,10 +209,6 @@ export function createApi({
 		async logout() {
 			const { response } = await client.POST('/api/logout');
 			if (!response.ok) throw new ApiError(response.status, 'logout');
-		},
-		async revokeAllSessions() {
-			const { response } = await client.POST('/api/sessions/revoke-all');
-			if (!response.ok) throw new ApiError(response.status, 'revokeAllSessions');
 		},
 		async listInbox() {
 			return unwrap('listInbox', await client.GET('/api/inbox'));

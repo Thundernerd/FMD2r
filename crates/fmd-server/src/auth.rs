@@ -22,7 +22,9 @@ use crate::error::ApiJson;
 use crate::{ApiError, AppState, Problem};
 
 const COOKIE: &str = "fmd2r_session";
-const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+/// A session's last use is written at most this often, not on every request.
+const RENEW_EVERY: Duration = Duration::from_secs(60);
 
 /// The configured secret.
 pub(crate) struct Auth {
@@ -47,6 +49,14 @@ impl Auth {
         hash.update(self.secret.as_bytes());
         hash.update(token.as_bytes());
         hash.finalize().to_vec()
+    }
+
+    /// The stored hashes of the session cookies sent with a request.
+    fn session_hashes(&self, headers: &HeaderMap) -> Vec<Vec<u8>> {
+        session_cookies(headers)
+            .iter()
+            .map(|t| self.token_hash(t))
+            .collect()
     }
 
     fn bearer_authorizes(&self, headers: &HeaderMap) -> bool {
@@ -76,32 +86,47 @@ fn session_cookies(headers: &HeaderMap) -> Vec<String> {
         .collect()
 }
 
+/// A fresh random session token (256 bits, hex).
+fn new_token() -> Result<String, ApiError> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
 /// Unix milliseconds of `at`, saturating.
 fn unix_ms(at: SystemTime) -> i64 {
     at.duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
-/// The session timing at the current time: now, and the oldest last use and creation a live
-/// session may have.
-struct Window {
+/// The session limits as of now (Unix ms): the oldest last use and creation a live session may
+/// have, and how long a new session lasts at most.
+struct SessionCutoffs {
     now: i64,
     seen_since: i64,
     created_since: i64,
     lifetime: Duration,
 }
 
-impl Window {
+impl SessionCutoffs {
     fn current(state: &AppState) -> Self {
         let now = unix_ms(state.now());
         let server = &state.settings.get().server;
-        let days = |d: u32| i64::from(d).saturating_mul(DAY_MS);
+        let ms = |d: Duration| i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
+        let idle = DAY.saturating_mul(server.session_idle_days);
+        let lifetime = DAY.saturating_mul(server.session_lifetime_days);
         Self {
             now,
-            seen_since: now.saturating_sub(days(server.session_idle_days)),
-            created_since: now.saturating_sub(days(server.session_lifetime_days)),
-            lifetime: Duration::from_secs(u64::from(server.session_lifetime_days) * 86_400),
+            seen_since: now.saturating_sub(ms(idle)),
+            created_since: now.saturating_sub(ms(lifetime)),
+            lifetime,
         }
+    }
+
+    /// Last uses older than this are rewritten on the next request.
+    fn renew_before(&self) -> i64 {
+        self.now
+            .saturating_sub(i64::try_from(RENEW_EVERY.as_millis()).unwrap_or(i64::MAX))
     }
 }
 
@@ -111,20 +136,18 @@ async fn session_authorizes(
     auth: &Auth,
     headers: &HeaderMap,
 ) -> Result<bool, ApiError> {
-    let hashes: Vec<Vec<u8>> = session_cookies(headers)
-        .iter()
-        .map(|t| auth.token_hash(t))
-        .collect();
+    let hashes = auth.session_hashes(headers);
     if hashes.is_empty() {
         return Ok(false);
     }
-    let w = Window::current(state);
+    let c = SessionCutoffs::current(state);
     state
         .blocking(move |db| {
             let sessions = db.sessions();
             let mut live = false;
             for hash in &hashes {
-                live |= sessions.renew(hash, w.now, w.seen_since, w.created_since)?;
+                live |=
+                    sessions.renew(hash, c.now, c.renew_before(), c.seen_since, c.created_since)?;
             }
             Ok::<_, fmd_store::StoreError>(live)
         })
@@ -207,19 +230,17 @@ pub(crate) async fn login(
     if !auth.is_secret(&login.password) {
         return Err(ApiError::Unauthorized);
     }
-    let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).map_err(|e| ApiError::Internal(e.to_string()))?;
-    let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let token = new_token()?;
     let hash = auth.token_hash(&token);
-    let w = Window::current(&state);
+    let c = SessionCutoffs::current(&state);
     state
         .blocking(move |db| {
             let sessions = db.sessions();
-            sessions.delete_expired(w.seen_since, w.created_since)?;
-            sessions.create(&hash, w.now)
+            sessions.delete_expired(c.seen_since, c.created_since)?;
+            sessions.create(&hash, c.now)
         })
         .await?;
-    let cookie = session_cookie(&token, w.lifetime, over_https(&headers))?;
+    let cookie = session_cookie(&token, c.lifetime, over_https(&headers))?;
     Ok((StatusCode::NO_CONTENT, [(header::SET_COOKIE, cookie)]).into_response())
 }
 
@@ -233,16 +254,14 @@ pub(crate) async fn logout(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     if let Some(auth) = state.auth.clone() {
-        let hashes: Vec<Vec<u8>> = session_cookies(&headers)
-            .iter()
-            .map(|t| auth.token_hash(t))
-            .collect();
+        let hashes = auth.session_hashes(&headers);
         state
             .blocking(move |db| {
                 let sessions = db.sessions();
                 hashes.iter().try_for_each(|hash| sessions.delete(hash))
             })
             .await?;
+        state.end_sessions();
     }
     clearing_cookie(StatusCode::NO_CONTENT, &headers)
 }
@@ -260,6 +279,7 @@ pub(crate) async fn revoke_all(
 ) -> Result<Response, ApiError> {
     if state.auth.is_some() {
         state.blocking(|db| db.sessions().delete_all()).await?;
+        state.end_sessions();
     }
     clearing_cookie(StatusCode::NO_CONTENT, &headers)
 }

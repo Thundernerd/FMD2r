@@ -8,9 +8,18 @@ export class SessionStore {
 	/** The last API call was refused for want of a session: show the login screen. */
 	locked = $state(false);
 
-	/** An API call answered 401. */
+	/** What `GET /api/health` said about auth. */
+	serverRequiresAuth(required: boolean) {
+		this.required = required;
+	}
+
+	/** An API call answered 401, or this browser logged out. */
 	unauthorized() {
 		this.required = true;
 		this.locked = true;
+	}
+
+	loggedIn() {
+		this.locked = false;
 	}
 }

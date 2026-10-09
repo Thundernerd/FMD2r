@@ -14,7 +14,7 @@
 	$effect(() => {
 		api
 			.health()
-			.then((health) => (session.required = health.auth))
+			.then((health) => session.serverRequiresAuth(health.auth))
 			.catch(() => {});
 	});
 
@@ -43,12 +43,12 @@
 
 	async function logout() {
 		await api.logout().catch(() => {});
-		session.locked = true;
+		session.unauthorized();
 	}
 </script>
 
 {#if session.locked}
-	<LoginScreen {api} onlogin={() => (session.locked = false)} />
+	<LoginScreen {api} onlogin={() => session.loggedIn()} />
 {:else}
 	<div class="app" class:with-dock={showDock}>
 		<TopNav>

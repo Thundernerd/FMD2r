@@ -49,6 +49,9 @@ pub struct AppState {
     pub(crate) started: Instant,
     pub(crate) clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
+    /// Bumped whenever login sessions are ended, so open event streams close and reconnect
+    /// through the auth check.
+    pub(crate) sessions_ended: Arc<watch::Sender<u64>>,
 }
 
 impl AppState {
@@ -73,6 +76,7 @@ impl AppState {
             started: Instant::now(),
             clock: Arc::new(SystemTime::now),
             shutdown: Arc::new(watch::channel(false).0),
+            sessions_ended: Arc::new(watch::channel(0).0),
             db,
             assets: Arc::new(EmbeddedAssets),
             auth: None,
@@ -221,6 +225,25 @@ impl AppState {
         async move {
             // An error means the sender is gone, which also means shutdown.
             let _ = rx.wait_for(|down| *down).await;
+        }
+    }
+
+    /// Closes every open event stream because login sessions ended; clients reconnect, and
+    /// those whose session is gone get a 401.
+    pub(crate) fn end_sessions(&self) {
+        self.sessions_ended.send_modify(|n| *n = n.wrapping_add(1));
+    }
+
+    /// Resolves once the server shuts down or [`AppState::end_sessions`] is called.
+    pub(crate) fn stream_ended(&self) -> impl Future<Output = ()> + Send + use<> {
+        let shutdown = self.shutting_down();
+        let mut ended = self.sessions_ended.subscribe();
+        async move {
+            let ended = async move {
+                // An error means the sender is gone, which also ends the stream.
+                let _ = ended.changed().await;
+            };
+            futures_util::future::select(Box::pin(shutdown), Box::pin(ended)).await;
         }
     }
 

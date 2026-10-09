@@ -557,10 +557,6 @@ export function createMockBackend({
 		if (password !== null && !loggedIn) {
 			return json({ status: 401, title: 'Unauthorized' }, 401);
 		}
-		if (route === 'POST /api/sessions/revoke-all') {
-			setLoggedIn(false);
-			return new Response(null, { status: 204 });
-		}
 		if (route === 'GET /api/inbox') return json(inbox);
 		if (route === 'GET /api/tasks') {
 			const counts = { downloading: 0, waiting: 0, stopped: 0, finished: 0 };
