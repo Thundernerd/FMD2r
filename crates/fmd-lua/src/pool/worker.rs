@@ -161,8 +161,9 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
         .map_err(|e| plain(format!("new Lua state: {e}")))?;
     // The XPath backend of `CreateTXQuery`: the configured one, else the runtime's default;
     // wrapped to record into the differential corpus when one is set.
-    if shared.xpath_backend.is_some() || shared.xpath_corpus.is_some() {
-        let engine = match shared.xpath_backend {
+    let xpath_backend = *lock(&shared.xpath_backend);
+    if xpath_backend.is_some() || shared.xpath_corpus.is_some() {
+        let engine = match xpath_backend {
             Some(backend) => backend
                 .engine()
                 .ok_or(crate::Error::MissingXPathBackend(backend)),

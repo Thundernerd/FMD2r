@@ -24,6 +24,11 @@ on:
       - crates/fmd-lua/tests/xquery_fpc.rs
       - crates/fmd-lua/tests/xquery_native.rs
       - crates/fmd-lua/tests/without_xpath.rs
+      # The server's backend switch (module_updates.rs) and its test.
+      - crates/fmd-server/Cargo.toml
+      - crates/fmd-server/src/module_updates.rs
+      - crates/fmd-server/src/serve.rs
+      - crates/fmd-server/tests/serve.rs
       - crates/fmd2r/Cargo.toml
       - crates/fmd2r/src/xpath.rs
       - crates/fmd2r/tests/xpath.rs
@@ -74,7 +79,7 @@ jobs:
       # The root workspace's crates with the fpc XPath backend on (the check job builds them without it).
       - name: Clippy (fpc backend)
         working-directory: .
-        run: cargo clippy -p fmd-xpath -p fmd-lua -p fmd2r --all-targets --features fmd-xpath/diff,fmd-lua/xpath-fpc,fmd2r/xpath-fpc -- -D warnings
+        run: cargo clippy -p fmd-xpath -p fmd-lua -p fmd-server -p fmd2r --all-targets --features fmd-xpath/diff,fmd-lua/xpath-fpc,fmd-server/xpath-fpc,fmd2r/xpath-fpc -- -D warnings
       # `fmd-xpath/diff` runs the differential corpus on both backends (tests/corpus.rs).
       - name: Test (fpc backend)
         working-directory: .
@@ -82,6 +87,10 @@ jobs:
       - name: Test fmd2r xpath (fpc backend)
         working-directory: .
         run: cargo test -p fmd2r --features xpath-fpc --test xpath
+      # `xpath.backend` applied by `serve`, at startup and on change.
+      - name: Test fmd-server serve (fpc backend)
+        working-directory: .
+        run: cargo test -p fmd-server --features xpath-fpc --test serve
       - name: Build libfmdxpath.so
         run: ./build.sh build
       - uses: actions/upload-artifact@v4
