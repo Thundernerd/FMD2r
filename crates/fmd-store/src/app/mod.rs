@@ -1,4 +1,5 @@
-//! `app.db`: application state (tasks, favorites, settings, accounts, events, module files).
+//! `app.db`: application state (tasks, favorites, settings, accounts, events, module files,
+//! login sessions).
 
 pub(crate) mod accounts;
 pub(crate) mod downloaded_chapters;
@@ -6,6 +7,7 @@ pub(crate) mod events;
 pub(crate) mod favorites;
 pub(crate) mod module_files;
 pub(crate) mod module_settings;
+pub(crate) mod sessions;
 pub(crate) mod settings;
 pub(crate) mod tasks;
 
@@ -20,10 +22,14 @@ use events::EventRepo;
 use favorites::FavoriteRepo;
 use module_files::ModuleFileRepo;
 use module_settings::ModuleSettingsRepo;
+use sessions::SessionRepo;
 use settings::SettingsRepo;
 use tasks::TaskRepo;
 
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/app_v1.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/app_v1.sql"),
+    include_str!("../migrations/app_v2.sql"),
+];
 
 /// Handle to `app.db`. Clone it to share between threads.
 #[derive(Clone)]
@@ -72,6 +78,11 @@ impl AppDb {
     /// Application settings (key → JSON).
     pub fn settings(&self) -> SettingsRepo<'_> {
         SettingsRepo::new(&self.db)
+    }
+
+    /// Web UI login sessions.
+    pub fn sessions(&self) -> SessionRepo<'_> {
+        SessionRepo::new(&self.db)
     }
 
     /// Lua files synced from upstream.

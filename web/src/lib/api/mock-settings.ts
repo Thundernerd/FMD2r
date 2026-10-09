@@ -88,7 +88,12 @@ export const defaultSettings = (): Settings => ({
 		keep_last_good: true
 	},
 	covers: { revalidate_after_hours: 168, cache_size_mb: 256 },
-	server: { bind: '0.0.0.0:8080', auth_token: null },
+	server: {
+		bind: '0.0.0.0:8080',
+		auth_token: null,
+		session_idle_days: 7,
+		session_lifetime_days: 30
+	},
 	xpath: { backend: 'native' }
 });
 

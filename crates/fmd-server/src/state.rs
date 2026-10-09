@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use fmd_core::accounts::AccountService;
 use fmd_core::favorites::CheckerEvent;
@@ -47,6 +47,7 @@ pub struct AppState {
     pub(crate) favorites: Option<Arc<dyn FavoritesJobs>>,
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) started: Instant,
+    pub(crate) clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
 }
 
@@ -70,6 +71,7 @@ impl AppState {
             favorites: None,
             data_dir: None,
             started: Instant::now(),
+            clock: Arc::new(SystemTime::now),
             shutdown: Arc::new(watch::channel(false).0),
             db,
             assets: Arc::new(EmbeddedAssets),
@@ -89,6 +91,18 @@ impl AppState {
     pub fn with_auth(mut self, secret: impl Into<String>) -> Self {
         self.auth = Some(Auth::new(secret.into()));
         self
+    }
+
+    /// Reads the wall-clock time from `clock` instead of the system clock (login sessions
+    /// expire by it).
+    pub fn with_clock(mut self, clock: impl Fn() -> SystemTime + Send + Sync + 'static) -> Self {
+        self.clock = Arc::new(clock);
+        self
+    }
+
+    /// The current wall-clock time.
+    pub(crate) fn now(&self) -> SystemTime {
+        (self.clock)()
     }
 
     /// Serves `GET /api/logs` from `logs` (the buffer installed as a `tracing` layer) and streams
