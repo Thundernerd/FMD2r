@@ -9,7 +9,10 @@ use fmd_core::download::{DownloadManager, EngineConfig, ModuleLookup};
 use fmd_core::favorites::{CheckerConfig, FavoritesChecker, TaskQueue};
 use fmd_core::lists::{DbImporter, ListJobs, ListUpdater};
 use fmd_core::module_updater::RepoConfig;
-use fmd_core::settings::{SettingsService, write_websitebypass_config};
+use fmd_core::settings::{
+    ConnectionSettings, ProxyType, SettingsService, write_websitebypass_config,
+};
+use fmd_http::{HttpClient, Proxy, ProxyKind};
 use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, ListsDb};
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -120,6 +123,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
             .map_err(std::io::Error::other)?;
     match runtime {
         Ok(runtime) => {
+            // Before the download engine resumes anything.
+            follow_connections(state.settings.clone(), runtime.http.clone());
             module_updates::follow_xpath_backend(state.settings.clone(), &runtime);
             let upstream_ref = RepoConfig::from_settings(&settings.module_updater).git_ref;
             let catalog = LuaCatalog::new(&runtime, state.db.clone(), &lua_dir, upstream_ref);
@@ -303,4 +308,52 @@ async fn follow_flaresolverr_url(
             }
         }
     }
+}
+
+/// Applies the `connections` settings to `http` now, then again whenever they change.
+fn follow_connections(settings: Arc<SettingsService>, http: HttpClient) {
+    let mut changes = settings.subscribe();
+    let mut current = changes.borrow_and_update().connections.clone();
+    apply_connections(&http, &current);
+    tokio::spawn(async move {
+        while changes.changed().await.is_ok() {
+            let next = changes.borrow_and_update().connections.clone();
+            if next != current {
+                apply_connections(&http, &next);
+                current = next;
+            }
+        }
+    });
+}
+
+/// Applies the `connections` settings to `http`, as `ApplyOptions` does at startup and on every
+/// save (mangadownloader/forms/frmMain.pas:6264-6295): the retry count, timeout and proxy for new
+/// and existing sessions (`Set…AndApply`, baseunits/httpsendthread.pas:332-392), the user agent
+/// for sessions created from now on (`DefaultUserAgent`).
+fn apply_connections(http: &HttpClient, connections: &ConnectionSettings) {
+    http.set_default_user_agent(connections.user_agent.clone());
+    http.set_default_retry_count(connections.retry_count);
+    http.set_default_timeout(connections.timeout_secs.saturating_mul(1000));
+    http.set_default_proxy(global_proxy(connections));
+}
+
+/// The global proxy; `None` when it is off (`SetDefaultProxyAndApply('', …)`,
+/// mangadownloader/forms/frmMain.pas:6295).
+fn global_proxy(connections: &ConnectionSettings) -> Option<Proxy> {
+    let proxy = &connections.proxy;
+    if !proxy.enabled {
+        return None;
+    }
+    let kind = match proxy.kind {
+        ProxyType::Http => ProxyKind::Http,
+        ProxyType::Socks4 => ProxyKind::Socks4,
+        ProxyType::Socks5 => ProxyKind::Socks5,
+    };
+    Some(Proxy {
+        kind,
+        host: proxy.host.clone(),
+        port: proxy.port.map(|p| p.to_string()).unwrap_or_default(),
+        user: proxy.username.clone(),
+        pass: proxy.password.clone(),
+    })
 }

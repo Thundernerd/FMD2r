@@ -19,10 +19,17 @@ use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
 /// A loaded module, for the module pickers.
+///
+/// IDs can repeat: FMD2's loader keeps every module a file's `Init` creates without checking
+/// IDs (baseunits/lua/LuaWebsiteModules.pas:523-589), and upstream `lua/modules/Manga1001.lua:18-19`
+/// registers two websites under one ID. `root_url` tells such entries apart; they share the
+/// ID's settings, which FMD2 keys by ID (baseunits/WebsiteModules.pas:545-700).
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ModuleSummary {
     pub id: String,
     pub name: String,
+    /// The website's root URL, lowercased as the loader leaves it.
+    pub root_url: String,
     pub category: String,
     /// How many options the module declares.
     pub option_count: usize,
@@ -146,7 +153,7 @@ impl ModuleSettingsView {
     }
 }
 
-/// Every loaded module, sorted by ID.
+/// Every loaded module, sorted by ID; modules sharing an ID are all listed.
 #[utoipa::path(get, path = "/api/modules", tag = "modules", operation_id = "listModules",
     responses((status = 200, body = Vec<ModuleSummary>, description = "The loaded modules")))]
 pub(crate) async fn list(
@@ -180,6 +187,7 @@ pub(crate) async fn list(
                         .is_some_and(|jobs| jobs.is_running(&m.id)),
                     id: m.id,
                     name: m.name,
+                    root_url: m.root_url,
                     category: m.category,
                 }
             })
