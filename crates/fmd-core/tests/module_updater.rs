@@ -846,3 +846,83 @@ fn a_module_reading_a_sibling_file_that_really_fails_init_is_kept_back_with_an_e
     assert!(Arc::ptr_eq(f.modules.current().get("s").unwrap(), &before));
     assert_eq!(f.read("modules/S.lua"), Some(s1));
 }
+
+#[test]
+fn a_module_whose_changed_sibling_file_fails_to_download_is_retried_without_a_failed_init() {
+    let f = Fixture::new();
+    let s1 = module_reading_sibling("s", "v1");
+    f.github.publish(
+        "c1",
+        "\"e1\"",
+        &[
+            ("modules/S.lua", "ss1", &s1),
+            ("modules/Data.txt", "sd1", "data1"),
+        ],
+    );
+    f.updater.sync().unwrap();
+    let s2 = module_reading_sibling("s", "v2").replace(
+        "f:close()",
+        "f:close()\nassert(title == 'data2 v2', 'stale ' .. title)",
+    );
+    let files = [
+        ("modules/S.lua", "ss2", s2.as_str()),
+        ("modules/Data.txt", "sd2", "data2"),
+    ];
+    f.github.publish("c2", "\"e2\"", &files);
+    f.github.set_unavailable(&["modules/Data.txt"]);
+
+    let report = f.updater.sync().unwrap();
+
+    let events = f.db.events().list(&EventQuery::default()).unwrap();
+    assert!(events.is_empty(), "{events:?}");
+    assert!(report.broken.is_empty(), "{:?}", report.broken);
+    assert_eq!(f.read("modules/S.lua"), Some(s1));
+
+    // Once the data file downloads, the next run applies both.
+    f.github.set_unavailable(&[]);
+    f.updater.sync().unwrap();
+    assert!(
+        f.db.events()
+            .list(&EventQuery::default())
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(f.read("modules/S.lua"), Some(s2));
+    assert_eq!(f.read("modules/Data.txt").as_deref(), Some("data2"));
+}
+
+#[test]
+fn a_missing_sibling_file_is_named_by_its_path_in_the_lua_dir() {
+    let f = Fixture::new();
+    f.github.publish(
+        "c1",
+        "\"e1\"",
+        &[
+            ("modules/S.lua", "ss1", &module_reading_sibling("s", "v1")),
+            ("modules/Data.txt", "sd1", "data1"),
+        ],
+    );
+    f.updater.sync().unwrap();
+    let s2 = module_reading_sibling("s", "v2").replace("Data.txt", "Missing.txt");
+    f.github.publish(
+        "c2",
+        "\"e2\"",
+        &[
+            ("modules/S.lua", "ss2", &s2),
+            ("modules/Data.txt", "sd1", "data1"),
+        ],
+    );
+
+    f.updater.sync().unwrap();
+
+    let events = f.db.events().list(&EventQuery::default()).unwrap();
+    assert_eq!(events.len(), 1, "{events:?}");
+    let error = events[0].body["error"].as_str().unwrap();
+    let missing = f
+        .lua_dir()
+        .join("modules/Missing.txt")
+        .display()
+        .to_string();
+    assert!(error.contains(&missing), "{error}");
+    assert!(!error.contains(".fmd2r-staging"), "{error}");
+}
