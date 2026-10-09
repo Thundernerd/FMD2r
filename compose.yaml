@@ -11,7 +11,11 @@ name: fmd2r
 services:
   fmd2r:
     image: ${FMD2R_IMAGE:-ghcr.io/thundernerd/fmd2r:latest}
-    build: .
+    build:
+      context: .
+      args:
+        # The commit GET /api/about reports (the build context has no .git; see README).
+        FMD2R_GIT_REVISION: ${FMD2R_GIT_REVISION:-}
     environment:
       # At startup `serve` writes this into lua/websitebypass/websitebypass_config.json
       # (use_webdriver, flaresolverr_ip, flaresolverr_port), which upstream's cloudflare.lua reads.
