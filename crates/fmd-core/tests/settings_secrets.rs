@@ -156,3 +156,24 @@ fn plain_secrets_from_an_older_build_are_encrypted_on_start() {
         Some(&b"jar"[..])
     );
 }
+
+/// An empty token or server password is no token or password: clearing one unsets it.
+#[test]
+fn an_empty_token_or_server_password_unsets_it() {
+    let (db, _dir) = db();
+    let service = SettingsService::load(db).unwrap();
+    service
+        .update(json!({
+            "module_updater": { "github_token": "token-secret" },
+            "server": { "auth_token": "server-secret" },
+        }))
+        .unwrap();
+    let s = service
+        .update(json!({
+            "module_updater": { "github_token": "" },
+            "server": { "auth_token": "" },
+        }))
+        .unwrap();
+    assert_eq!(s.module_updater.github_token, None);
+    assert_eq!(s.server.auth_token, None);
+}

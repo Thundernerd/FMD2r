@@ -188,7 +188,7 @@ impl From<ProxySettings> for ProxySettingsView {
             host,
             port,
             username,
-            has_password: !password.is_empty(),
+            has_password: is_set(Some(&password)),
         }
     }
 }
@@ -323,7 +323,7 @@ impl From<ProxyOverride> for ProxyOverrideView {
             host,
             port,
             username,
-            has_password: !password.is_empty(),
+            has_password: is_set(Some(&password)),
         }
     }
 }

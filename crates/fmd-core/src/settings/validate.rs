@@ -11,7 +11,8 @@ use super::service::FieldError;
 
 /// Replaces blank values the way FMD2 does when it loads or applies options: the user agent
 /// (mangadownloader/forms/frmMain.pas:6279-6285), the download directory and the rename
-/// templates (mangadownloader/forms/frmMain.pas:5882-5917).
+/// templates (mangadownloader/forms/frmMain.pas:5882-5917). An empty GitHub token or server
+/// password is none, so clearing one (patching it to `""`) unsets it.
 pub(crate) fn normalize(s: &mut Settings) {
     fn reset_blank(value: &mut String, default: &str) {
         if value.trim().is_empty() {
@@ -21,6 +22,11 @@ pub(crate) fn normalize(s: &mut Settings) {
     let c = &mut s.connections;
     c.user_agent = c.user_agent.trim().to_string();
     reset_blank(&mut c.user_agent, DEFAULT_USER_AGENT);
+    for secret in [&mut s.module_updater.github_token, &mut s.server.auth_token] {
+        if secret.as_deref() == Some("") {
+            *secret = None;
+        }
+    }
     let saveto = &mut s.saveto;
     reset_blank(&mut saveto.default_dir, DEFAULT_PATH);
     reset_blank(&mut saveto.manga_rename, DEFAULT_MANGA_CUSTOMRENAME);

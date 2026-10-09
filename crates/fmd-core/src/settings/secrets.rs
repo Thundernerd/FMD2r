@@ -1,7 +1,8 @@
 //! Secrets at rest: the passwords and tokens among the settings are stored encrypted with
 //! `app.db`'s cipher ([`AppDb::cipher`](fmd_store::AppDb::cipher), the `accounts.key` that
-//! accounts use too), as `{"encrypted": "<hex>"}` in place of the plain string. FMD2 keeps them
-//! in plain `settings.json`.
+//! accounts use too), as `{"encrypted": "<hex>"}` in place of the plain string. FMD2 obfuscates
+//! only the global proxy's user and password, with `EncryptString`
+//! (mangadownloader/forms/frmMain.pas:5878-5879).
 //!
 //! The threat model is the accounts' (see `crate::accounts`): copies of `app.db` without the
 //! key file reveal nothing, anyone holding the key file and the database reveals everything.
@@ -57,10 +58,10 @@ pub(super) fn seal_group(
 /// Decrypts every secret of the settings group `json` stored under `key`; [`Found::Plain`] when
 /// one of them was stored in plain text.
 pub(super) fn unseal_group(cipher: &dyn Cipher, key: &str, json: &mut Value) -> Found {
-    group_secrets(key).fold(Found::Sealed, |found, path| {
+    group_secrets(key).fold(Found::NotPlain, |found, path| {
         match unseal(cipher, json, path) {
             Found::Plain => Found::Plain,
-            Found::Sealed => found,
+            Found::NotPlain => found,
         }
     })
 }
@@ -68,8 +69,8 @@ pub(super) fn unseal_group(cipher: &dyn Cipher, key: &str, json: &mut Value) -> 
 /// What [`unseal`] found at a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Found {
-    /// Nothing to decrypt: no secret, an empty one, or one decrypted.
-    Sealed,
+    /// No plain secret: none, an empty one, or an encrypted one (now decrypted).
+    NotPlain,
     /// A plain non-empty string, stored by a build that did not encrypt secrets.
     Plain,
 }
@@ -79,7 +80,7 @@ pub(super) enum Found {
 /// and logged.
 pub(super) fn unseal(cipher: &dyn Cipher, json: &mut Value, path: &[&str]) -> Found {
     let Some(slot) = slot(json, path) else {
-        return Found::Sealed;
+        return Found::NotPlain;
     };
     let opened = match slot {
         Value::String(plain) if !plain.is_empty() => return Found::Plain,
@@ -88,7 +89,7 @@ pub(super) fn unseal(cipher: &dyn Cipher, json: &mut Value, path: &[&str]) -> Fo
             .and_then(Value::as_str)
             .ok_or_else(|| "not an encrypted value".to_owned())
             .and_then(|sealed| open(cipher, sealed)),
-        _ => return Found::Sealed,
+        _ => return Found::NotPlain,
     };
     match opened {
         Ok(plain) => *slot = Value::String(plain),
@@ -98,7 +99,7 @@ pub(super) fn unseal(cipher: &dyn Cipher, json: &mut Value, path: &[&str]) -> Fo
             remove(json, path);
         }
     }
-    Found::Sealed
+    Found::NotPlain
 }
 
 fn open(cipher: &dyn Cipher, sealed: &str) -> Result<String, String> {
