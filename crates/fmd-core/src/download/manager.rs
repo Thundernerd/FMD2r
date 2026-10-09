@@ -237,8 +237,8 @@ impl Inner {
                 continue;
             };
             if self.can_create_task(&module) {
+                log_task(task.id, &task.title, "started");
                 self.start_task(&mut state, task.id, module)?;
-                tracing::info!(target: "fmd_core", "task {} {:?}: started", task.id.0, task.title);
                 count += 1;
             }
         }
@@ -323,7 +323,7 @@ impl Inner {
                     TaskStatus::Disabled
                 };
                 self.set_status(id, status, task.error.as_deref())?;
-                tracing::info!(target: "fmd_core", "task {} {:?}: stopped", id.0, task.title);
+                log_task(id, &task.title, "stopped");
             }
             self.check_and_active_task()
         };
@@ -355,26 +355,28 @@ impl Inner {
                 match self.module(&task.module_id) {
                     None => {
                         self.set_status(task.id, TaskStatus::Stopped, None)?;
-                        tracing::info!(
-                            target: "fmd_core",
-                            "task {} {:?}: stopped: module {} is not installed",
-                            task.id.0,
-                            task.title,
-                            task.module_id
-                        );
+                        let why = format!("stopped: module {} is not installed", task.module_id);
+                        log_task(task.id, &task.title, why);
                     }
                     Some(module) if started < max && self.can_create_task(&module) => {
+                        let was = task.status;
+                        log_task(
+                            task.id,
+                            &task.title,
+                            format!("resumed after a restart ({was:?})"),
+                        );
                         self.start_task(&mut state, task.id, module)?;
                         started += 1;
-                        tracing::info!(
-                            target: "fmd_core",
-                            "task {} {:?}: resumed after a restart ({:?})",
-                            task.id.0,
-                            task.title,
-                            task.status
-                        );
                     }
-                    Some(_) => self.set_status(task.id, TaskStatus::Waiting, None)?,
+                    Some(_) => {
+                        if task.status != TaskStatus::Waiting {
+                            let was = task.status;
+                            let what =
+                                format!("resumed after a restart ({was:?}), waiting to start");
+                            log_task(task.id, &task.title, what);
+                        }
+                        self.set_status(task.id, TaskStatus::Waiting, None)?;
+                    }
                 }
             }
         }
@@ -420,7 +422,7 @@ impl Inner {
             running.terminate.terminate();
         } else if task.status == TaskStatus::Waiting {
             self.set_status(id, TaskStatus::Stopped, None)?;
-            tracing::info!(target: "fmd_core", "task {} {:?}: stopped", id.0, task.title);
+            log_task(id, &task.title, "stopped");
         }
         Ok(())
     }
@@ -615,6 +617,12 @@ fn delete_task_files(save_to: &Path, chapters: &[fmd_store::TaskChapter]) {
     }
     // `RemoveDirUTF8`: only an empty folder goes, so failing here is expected.
     let _ = std::fs::remove_dir(save_to);
+}
+
+/// Logs a step of task `id`'s lifecycle at `info`, naming the manga, so `/api/logs` shows
+/// what the downloads did.
+pub(super) fn log_task(id: TaskId, title: &str, what: impl std::fmt::Display) {
+    tracing::info!(target: "fmd_core", "task {} {title:?}: {what}", id.0);
 }
 
 fn now_ms() -> i64 {
