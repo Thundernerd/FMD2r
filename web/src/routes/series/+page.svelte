@@ -6,6 +6,8 @@
 	import ChapterList from '#lib/components/series/ChapterList.svelte';
 	import DownloadBox from '#lib/components/series/DownloadBox.svelte';
 	import SeriesHeader from '#lib/components/series/SeriesHeader.svelte';
+	import SeriesLayout from '#lib/components/series/SeriesLayout.svelte';
+	import SeriesSkeleton from '#lib/components/series/SeriesSkeleton.svelte';
 
 	const module = $derived(page.url.searchParams.get('module') ?? '');
 	const link = $derived(page.url.searchParams.get('link') ?? '');
@@ -70,28 +72,31 @@
 
 <div class="page">
 	<a class="btn ghost back" href="/">← Library</a>
+	<p class="visually-hidden" aria-live="polite">{!error && !series ? 'Loading series…' : ''}</p>
 	{#if error}
 		<h1>Series</h1>
 		<p class="problem" role="alert">{error}</p>
 	{:else if !series}
-		<p class="muted" aria-live="polite">Loading series…</p>
+		<SeriesSkeleton />
 	{:else}
+		<!-- Snippets don't keep the narrowing to non-null. -->
+		{@const info = series}
 		<SeriesHeader {api} bind:series {website} />
-		<div class="body">
-			<div class="list">
-				<ChapterList chapters={series.chapters} bind:selected />
-			</div>
-			<aside class="side">
+		<SeriesLayout>
+			{#snippet list()}
+				<ChapterList chapters={info.chapters} bind:selected />
+			{/snippet}
+			{#snippet side()}
 				<DownloadBox
 					{api}
-					{series}
+					series={info}
 					{selected}
 					bind:saveTo
 					{format}
 					onqueued={(task) => events.queue.upsert(task)}
 				/>
-			</aside>
-		</div>
+			{/snippet}
+		</SeriesLayout>
 	{/if}
 </div>
 
@@ -106,27 +111,5 @@
 		background: var(--bad-soft);
 		color: var(--bad);
 		max-width: 65ch;
-	}
-	.body {
-		display: flex;
-		gap: 18px;
-		align-items: flex-start;
-		flex-wrap: wrap;
-	}
-	.list {
-		flex: 1 1 480px;
-		min-width: 0;
-	}
-	.side {
-		flex: 0 1 340px;
-		min-width: 0;
-		position: sticky;
-		top: 76px;
-	}
-	@media (max-width: 860px) {
-		.side {
-			flex-basis: 100%;
-			position: static;
-		}
 	}
 </style>

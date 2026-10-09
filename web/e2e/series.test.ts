@@ -55,3 +55,18 @@ test('an unknown series shows why it cannot be shown', async ({ page }) => {
 	await page.goto('/series?module=mangadex&link=%2Fmissing');
 	await expect(page.getByRole('alert')).toContainText('not found');
 });
+
+test('a slow series shows a skeleton of the page until it loads', async ({ page }) => {
+	await page.addInitScript(() => sessionStorage.setItem('fmd2r.mock.series-delay-ms', '1500'));
+	await page.goto('/series?module=mangadex&link=%2Ftitle%2Fabc123%2Ffrieren');
+
+	const skeleton = page.locator('[aria-busy="true"]');
+	await expect(skeleton).toBeVisible();
+	await expect(page.getByText('Loading series…')).toBeAttached();
+	await expect(page.getByRole('region', { name: 'Chapters' })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: '← Library' })).toBeVisible();
+
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Frieren');
+	await expect(skeleton).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Chapters' })).toBeVisible();
+});
