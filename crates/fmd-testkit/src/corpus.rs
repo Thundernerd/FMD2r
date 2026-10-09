@@ -4,7 +4,6 @@ use std::fmt::{self, Display};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-/// Failure to read the corpus fixture from disk.
 #[derive(Debug, thiserror::Error)]
 #[error("cannot read {}: {source}", path.display())]
 pub struct CorpusError {
@@ -12,15 +11,13 @@ pub struct CorpusError {
     source: io::Error,
 }
 
-/// The root of the upstream Lua tree (`fixtures/lua`), which holds `modules/`, `templates/`,
-/// `utils/`, `websitebypass/`, `extras/` and `UPSTREAM_REF`.
+/// `fixtures/lua`.
 pub fn corpus_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/lua")
 }
 
-/// Every website module: the `*.lua` files directly in `modules/` (not recursive), sorted by
-/// path, as FMD2 scans them (baseunits/lua/LuaWebsiteModules.pas:644). FMD2 also accepts
-/// precompiled `*.luac`, which upstream does not ship.
+/// The `*.lua` files directly in `modules/`, sorted, as FMD2 scans them
+/// (baseunits/lua/LuaWebsiteModules.pas:644). Upstream ships no `*.luac`.
 pub fn module_files() -> Result<Vec<PathBuf>, CorpusError> {
     let dir = corpus_root().join("modules");
     let error = |source| CorpusError {
@@ -38,8 +35,7 @@ pub fn module_files() -> Result<Vec<PathBuf>, CorpusError> {
     Ok(files)
 }
 
-/// Runs `check` on every file and collects the failures, so one run names every failing
-/// module instead of stopping at the first.
+/// Runs `check` on every file, collecting all failures rather than stopping at the first.
 pub fn check_each<E: Display>(
     files: &[PathBuf],
     mut check: impl FnMut(&Path) -> Result<(), E>,
@@ -63,8 +59,7 @@ pub fn check_each<E: Display>(
     }
 }
 
-/// The modules that failed a [`check_each`] run. `Debug` prints the same readable report as
-/// `Display`, so `unwrap()` in a test shows it.
+/// `Debug` prints the `Display` report so `unwrap()` in a test shows it.
 #[derive(thiserror::Error)]
 pub struct CorpusReport {
     checked: usize,

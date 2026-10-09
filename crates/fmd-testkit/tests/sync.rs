@@ -1,6 +1,6 @@
 //! `scripts/sync-upstream-lua.sh`, run against a local bare repository instead of GitHub.
 
-// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+// unwrap is fine in tests/, but clippy.toml's exemption misses helpers outside #[test] fns.
 #![allow(clippy::unwrap_used)]
 
 use std::fs;
@@ -32,8 +32,7 @@ fn write(path: &Path, contents: &str) {
     fs::write(path, contents).unwrap();
 }
 
-/// A bare repo shaped like dazedcat19/FMD2: the Lua tree under `lua/` next to other files.
-/// Returns its `file://` URL and the SHA of the `master` commit.
+/// A bare repo shaped like dazedcat19/FMD2. Returns its `file://` URL and `master`'s SHA.
 fn upstream(root: &Path) -> (String, String) {
     let work = root.join("work");
     for (path, contents) in [
