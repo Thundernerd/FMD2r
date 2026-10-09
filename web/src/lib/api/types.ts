@@ -36,6 +36,7 @@ export type FacetValue = Schemas['FacetValue'];
 export type ListEvent = Schemas['ListEvent'];
 export type ListEventKind = Schemas['ListEventKind'];
 export type ListJobKind = Schemas['ListJobKind'];
+export type ListFailureReason = Schemas['ListFailureReason'];
 export type ListJobStarted = Schemas['ListJobStarted'];
 export type AccountInfo = Schemas['AccountInfo'];
 export type AccountRequest = Schemas['AccountRequest'];

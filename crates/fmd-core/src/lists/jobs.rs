@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use fmd_http::TerminateToken;
-use fmd_lua::Module;
+use fmd_lua::{Module, ModuleDef};
 use serde::Serialize;
 use thiserror::Error;
 use utoipa::ToSchema;
@@ -51,8 +51,26 @@ pub struct ListEvent {
     pub total: u64,
     /// Titles added (update) or imported (import), once finished.
     pub titles: Option<u64>,
-    /// Why it failed.
+    /// Why it failed: the technical details.
     pub error: Option<String>,
+    /// What kind of failure it was, to pick a message for `error` by.
+    pub reason: Option<ListFailureReason>,
+}
+
+/// Why a list job failed, for the UI to pick its message from rather than parse
+/// [`ListEvent::error`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ListFailureReason {
+    /// FMD2-DB has no dump for the module (its URL answers 404).
+    NoDump,
+    /// The website, or FMD2-DB's host, could not be reached: a connection error, or an error
+    /// status other than 404.
+    Unreachable,
+    /// The download was not a 7z archive holding a usable database, or was empty.
+    BadArchive,
+    /// Anything else: writing the list, or the module's update-list callbacks.
+    Failed,
 }
 
 /// Why a list job could not be started or cancelled.
@@ -99,6 +117,46 @@ enum JobFailure {
     Update(#[from] ListError),
     #[error(transparent)]
     Import(#[from] ImportError),
+}
+
+impl JobFailure {
+    fn reason(&self) -> ListFailureReason {
+        match self {
+            Self::Update(_) => ListFailureReason::Failed,
+            Self::Import(e) => e.reason(),
+        }
+    }
+}
+
+impl ListFailureReason {
+    /// What the user reads about a `job` of `module` that failed this way. The web UI
+    /// words it the same (`web/src/lib/components/discover/ListActions.svelte`).
+    fn message(self, job: ListJobKind, module: &ModuleDef) -> String {
+        let website = &module.name;
+        match (self, job) {
+            (Self::NoDump, _) if module.on_get_name_and_link.is_some() => format!(
+                "FMD2-DB has no ready-made list for {website}. \
+                 Use Update list to build it from the website."
+            ),
+            (Self::NoDump, _) => format!(
+                "FMD2-DB has no ready-made list for {website}, \
+                 and this website cannot build one itself."
+            ),
+            (Self::Unreachable, _) => format!(
+                "Could not reach FMD2-DB to get the list of {website}. \
+                 Check the connection and try again later."
+            ),
+            (Self::BadArchive, _) => {
+                format!("The list FMD2-DB sent for {website} is damaged or empty.")
+            }
+            (Self::Failed, ListJobKind::Update) => {
+                format!("Updating the list of {website} failed.")
+            }
+            (Self::Failed, ListJobKind::ImportDb) => {
+                format!("Getting the list of {website} from FMD2-DB failed.")
+            }
+        }
+    }
 }
 
 /// Starts and cancels list jobs. Cheap to clone.
@@ -157,13 +215,11 @@ impl ListJobs {
 
     /// Starts updating `module_id`'s list on a thread of its own.
     pub fn update(&self, module_id: &str) -> Result<(), ListJobError> {
-        let module = self
-            .inner
-            .modules
-            .module(module_id)
-            .ok_or_else(|| ListJobError::UnknownModule(module_id.into()))?;
+        let module = self.module(module_id)?;
+        let def = module.def();
         self.start(
             module_id,
+            def,
             ListJobKind::Update,
             move |inner, terminate, events| {
                 let settings = inner.settings.get();
@@ -185,12 +241,11 @@ impl ListJobs {
 
     /// Starts downloading and importing `module_id`'s FMD2-DB dump on a thread of its own.
     pub fn import_db(&self, module_id: &str) -> Result<(), ListJobError> {
-        if self.inner.modules.module(module_id).is_none() {
-            return Err(ListJobError::UnknownModule(module_id.into()));
-        }
+        let def = self.module(module_id)?.def();
         let id = module_id.to_owned();
         self.start(
             module_id,
+            def,
             ListJobKind::ImportDb,
             move |inner, terminate, events| {
                 let url = inner.settings.get().update_lists.db_url.clone();
@@ -210,6 +265,14 @@ impl ListJobs {
         )
     }
 
+    /// The loaded module `module_id`.
+    fn module(&self, module_id: &str) -> Result<Arc<Module>, ListJobError> {
+        self.inner
+            .modules
+            .module(module_id)
+            .ok_or_else(|| ListJobError::UnknownModule(module_id.into()))
+    }
+
     /// Asks the list job of `module_id` to stop.
     pub fn cancel(&self, module_id: &str) -> Result<(), ListJobError> {
         let running = self.inner.running();
@@ -225,11 +288,12 @@ impl ListJobs {
         self.inner.running().contains_key(module_id)
     }
 
-    /// Runs `work` on a new thread unless `module_id` already has a job, reporting it as
-    /// `kind`.
+    /// Runs `work` on a new thread unless `module_id` (defined by `def`) already has a job,
+    /// reporting it as `kind`.
     fn start(
         &self,
         module_id: &str,
+        def: ModuleDef,
         kind: ListJobKind,
         work: impl FnOnce(&Inner, &TerminateToken, &Events<'_>) -> Result<JobOutcome, JobFailure>
         + Send
@@ -267,7 +331,10 @@ impl ListJobs {
                 let result = work(&inner, &terminate, &events);
                 // Out of `running` before the last event, so a client may start the next job
                 // as soon as it hears this one ended.
-                let error = result.as_ref().err().map(|e| format!("{id}: {e}"));
+                let error = result.as_ref().err().map(|e| {
+                    let message = e.reason().message(kind, &def);
+                    format!("{message}\n\nDetails: {id}: {e}")
+                });
                 inner.finished(&id, error);
                 events.end(result);
             });
@@ -389,6 +456,7 @@ impl Events<'_> {
             total: 0,
             titles: None,
             error: None,
+            reason: None,
         }
     }
 
@@ -422,6 +490,7 @@ impl Events<'_> {
                 tracing::warn!(target: "fmd_core", "list job of {}: {error}", self.module_id);
                 ListEvent {
                     error: Some(error.to_string()),
+                    reason: Some(error.reason()),
                     ..self.event(ListEventKind::Failed, String::new())
                 }
             }

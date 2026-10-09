@@ -9,6 +9,8 @@ use fmd_store::{ListsDb, StoreError, read_fmd2_list};
 use sevenz_rust::{Password, SevenZReader};
 use thiserror::Error;
 
+use super::ListFailureReason;
+
 /// The largest database extracted from a dump. The biggest FMD2-DB dumps hold a few hundred
 /// thousand titles, well under this.
 const MAX_DB_BYTES: u64 = 2 << 30;
@@ -34,6 +36,26 @@ pub enum ImportError {
     Io(#[from] std::io::Error),
     #[error("lists.db or the extracted database: {0}")]
     Store(#[from] StoreError),
+}
+
+impl ImportError {
+    /// What kind of failure this is.
+    pub fn reason(&self) -> ListFailureReason {
+        match self {
+            Self::Download { status: 404, .. } => ListFailureReason::NoDump,
+            // A success status with no body (`HTTP.GET` is false on an empty document).
+            Self::Download {
+                status: 200..300, ..
+            }
+            | Self::Archive(_)
+            | Self::NoDatabase
+            | Self::TooLarge => ListFailureReason::BadArchive,
+            Self::Download { .. } => ListFailureReason::Unreachable,
+            Self::Http(_) | Self::Cancelled | Self::Io(_) | Self::Store(_) => {
+                ListFailureReason::Failed
+            }
+        }
+    }
 }
 
 /// `GetDBURL` (baseunits/DBUpdater.pas:56-63): `<website>` in `template` (any case) replaced

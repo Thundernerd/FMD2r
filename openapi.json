@@ -3505,7 +3505,7 @@
               "string",
               "null"
             ],
-            "description": "Why it failed."
+            "description": "Why it failed: the technical details."
           },
           "job": {
             "$ref": "#/components/schemas/ListJobKind"
@@ -3515,6 +3515,17 @@
           },
           "module_id": {
             "type": "string"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ListFailureReason",
+                "description": "What kind of failure it was, to pick a message for `error` by."
+              }
+            ]
           },
           "status_text": {
             "type": "string",
@@ -3569,6 +3580,16 @@
             }
           }
         }
+      },
+      "ListFailureReason": {
+        "type": "string",
+        "description": "Why a list job failed, for the UI to pick its message from rather than parse\n[`ListEvent::error`].",
+        "enum": [
+          "no_dump",
+          "unreachable",
+          "bad_archive",
+          "failed"
+        ]
       },
       "ListItem": {
         "type": "object",

@@ -10,7 +10,9 @@ mod updater;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use import::{DbImporter, ImportError, db_url};
-pub use jobs::{ListEvent, ListEventKind, ListJobError, ListJobKind, ListJobs, ListModules};
+pub use jobs::{
+    ListEvent, ListEventKind, ListFailureReason, ListJobError, ListJobKind, ListJobs, ListModules,
+};
 pub use updater::{ListError, ListPhase, ListProgress, ListUpdater, UpdateOptions, UpdateOutcome};
 
 /// The Julian day number of `DateToJDN(Now)` (baseunits/uBaseUnit.pas:2740-2751) for the

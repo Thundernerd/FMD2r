@@ -141,7 +141,8 @@ export function createMockLists(): MockLists {
 		done: job.done,
 		total: job.total,
 		titles: null,
-		error: null
+		error: null,
+		reason: null
 	});
 
 	return {
