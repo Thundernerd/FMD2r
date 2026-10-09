@@ -89,6 +89,9 @@
 		pick.scrollIntoView?.({ block: 'nearest' });
 	});
 
+	/** Whether the panel shows a module while the selected one's settings load. */
+	const busy = $derived(loading && !!view && !!draft);
+
 	const options = $derived(view ? optionFields(view.options) : []);
 	const websiteDir = $derived(
 		typeof draft?.get('save_to') === 'string' ? String(draft.get('save_to')).trim() : ''
@@ -218,10 +221,12 @@
 		</ul>
 	</div>
 
-	<div class="detail">
+	<!-- While the next module loads, the previous one stays on show, dimmed and out of reach, so
+	     the panel doesn't collapse to "Loading…" and back. -->
+	<section class="detail" class:busy aria-label="Module settings" aria-busy={busy} inert={busy}>
 		{#if !selected}
 			<p class="muted">Pick a module to edit its options and limits.</p>
-		{:else if loading || !view || !draft}
+		{:else if !view || !draft}
 			<p class="muted">Loading…</p>
 		{:else}
 			<h3>{view.name}</h3>
@@ -317,7 +322,7 @@
 				{/each}
 			</fieldset>
 		{/if}
-	</div>
+	</section>
 </div>
 
 <style>
@@ -400,6 +405,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-2);
+	}
+	.detail.busy {
+		opacity: 0.55;
+		transition: opacity 150ms;
 	}
 	fieldset {
 		border: 0;

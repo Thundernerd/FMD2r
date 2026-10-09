@@ -2,6 +2,8 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 import type { ModuleSummary } from '#lib/api/types.ts';
+import { createMockSettings } from '#lib/api/mock-settings.ts';
+import { Draft } from '#lib/settings/draft.svelte.ts';
 import { HACHIRAW, HACHIRAW_ID, summary } from '../modules.fixture.ts';
 import ModuleSettings from './ModuleSettings.svelte';
 
@@ -90,5 +92,58 @@ describe('ModuleSettings', () => {
 		expect(text(document.activeElement as HTMLElement)).toBe('Lone');
 		await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' });
 		expect(text(document.activeElement as HTMLElement)).toBe('mangaDex');
+	});
+});
+
+describe('ModuleSettings while another module loads', () => {
+	const mock = createMockSettings();
+	const settingsOf = (id: string) => {
+		const view = mock.getModule(id);
+		if (!view) throw new Error(`no mock module ${id}`);
+		const draft = new Draft<object>({
+			enabled: view.enabled,
+			limits: view.limits,
+			http: view.http,
+			save_to: view.save_to,
+			options: Object.fromEntries(view.options.map((o) => [o.key, o.value]))
+		});
+		return { view, draft };
+	};
+	const modules = [
+		summary('comick', 'ComicK', 'https://comick.io', 'English'),
+		summary('mangadex', 'MangaDex', 'https://mangadex.org', 'English')
+	];
+	const panel = () => screen.getByRole('region', { name: 'Module settings' });
+
+	it('keeps the previous module on show, marked busy, until the next one is loaded', async () => {
+		const comick = settingsOf('comick');
+		const { rerender } = render(ModuleSettings, {
+			modules,
+			selected: 'comick',
+			...comick,
+			loading: false,
+			onselect: () => {}
+		});
+		expect(panel().getAttribute('aria-busy')).toBe('false');
+
+		await rerender({ selected: 'mangadex', loading: true });
+		expect(screen.queryByText('Loading…')).toBeNull();
+		expect(within(panel()).getByRole('heading', { name: 'ComicK' })).toBeTruthy();
+		expect(panel().getAttribute('aria-busy')).toBe('true');
+
+		await rerender({ ...settingsOf('mangadex'), loading: false });
+		expect(within(panel()).getByRole('heading', { name: 'MangaDex' })).toBeTruthy();
+		expect(panel().getAttribute('aria-busy')).toBe('false');
+	});
+
+	it('shows "Loading…" while the first module loads', () => {
+		render(ModuleSettings, {
+			...props,
+			modules,
+			selected: 'comick',
+			loading: true,
+			onselect: () => {}
+		});
+		expect(screen.getByText('Loading…')).toBeTruthy();
 	});
 });

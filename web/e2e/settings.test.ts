@@ -202,3 +202,68 @@ test('opening a module by link selects it and shows it in the list', async ({ pa
 	await expect(pick).toHaveAttribute('aria-pressed', 'true');
 	await expect(pick).toBeInViewport();
 });
+
+test('picking a module keeps the page where it is', async ({ page }) => {
+	// Slow enough that the page renders while the picked module's settings load.
+	await page.addInitScript(() =>
+		sessionStorage.setItem('fmd2r.mock.module-settings-delay-ms', '500')
+	);
+	await page.goto('/settings?module=mangadex');
+	const modules = page.getByRole('region', { name: 'Website modules' });
+	const panel = modules.getByRole('region', { name: 'Module settings' });
+	await expect(panel.getByRole('heading', { name: 'MangaDex' })).toBeVisible();
+	await expect(panel).toHaveAttribute('aria-busy', 'false');
+	const list = modules.getByRole('list', { name: 'Modules' });
+	const pick = list.getByRole('button', { name: /TuMangaOnline/ });
+	// Scroll the page down, the pick in the middle of the window.
+	await pick.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+	const before = await page.evaluate(() => window.scrollY);
+	expect(before).toBeGreaterThan(0);
+	const listScroll = await list.evaluate((el) => el.scrollTop);
+	// Every position the window scrolls to, to catch a jump that is scrolled back afterwards.
+	const scrolled = await page.evaluateHandle(() => {
+		const positions: number[] = [];
+		addEventListener('scroll', () => positions.push(window.scrollY));
+		return positions;
+	});
+
+	await pick.click();
+	await expect(page).toHaveURL(/[?&]module=tmo\b/);
+	// The previous module stays on show while the picked one loads.
+	await expect(panel).toHaveAttribute('aria-busy', 'true');
+	await expect(panel.getByRole('heading', { name: 'MangaDex' })).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'TuMangaOnline' })).toBeVisible();
+	await expect(panel).toHaveAttribute('aria-busy', 'false');
+	expect(
+		await scrolled.evaluate((positions, y) => positions.filter((p) => p !== y), before)
+	).toEqual([]);
+	expect(await page.evaluate(() => window.scrollY)).toBe(before);
+	expect(await list.evaluate((el) => el.scrollTop)).toBe(listScroll);
+});
+
+test('picking another module asks before dropping the open one’s edits', async ({ page }) => {
+	await page.addInitScript(() =>
+		sessionStorage.setItem('fmd2r.mock.module-settings-delay-ms', '500')
+	);
+	await page.goto('/settings?module=mangadex');
+	const modules = page.getByRole('region', { name: 'Website modules' });
+	const panel = modules.getByRole('region', { name: 'Module settings' });
+	await panel.getByRole('checkbox', { name: 'Data saver' }).check();
+	const saveBar = page.getByRole('region', { name: 'Save changes' });
+	await expect(saveBar).toContainText('Unsaved changes');
+	const pick = modules.getByRole('button', { name: /TuMangaOnline/ });
+
+	page.once('dialog', (dialog) => dialog.dismiss());
+	await pick.click();
+	await expect(page).toHaveURL(/[?&]module=mangadex\b/);
+	await expect(panel.getByRole('checkbox', { name: 'Data saver' })).toBeChecked();
+
+	page.once('dialog', (dialog) => dialog.accept());
+	await pick.click();
+	await expect(page).toHaveURL(/[?&]module=tmo\b/);
+	// The dropped edits are gone while the previous module still shows, so they can't be saved.
+	await expect(panel).toHaveAttribute('aria-busy', 'true');
+	await expect(panel.getByRole('checkbox', { name: 'Data saver' })).not.toBeChecked();
+	await expect(saveBar).toBeHidden();
+	await expect(panel.getByRole('heading', { name: 'TuMangaOnline' })).toBeVisible();
+});

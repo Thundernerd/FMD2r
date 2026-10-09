@@ -104,27 +104,43 @@
 		options: Object.fromEntries(view.options.map((o) => [o.key, o.value]))
 	});
 
+	// The previous module stays on show until the next one is loaded, so the panel doesn't collapse
+	// to "Loading…" and back, changing the page's height under the reader.
 	$effect(() => {
 		const id = selected;
-		moduleView = null;
-		moduleDraft = null;
-		if (!id) return;
+		if (!id) {
+			moduleView = null;
+			moduleDraft = null;
+			moduleLoading = false;
+			return;
+		}
 		moduleLoading = true;
+		/** Whether `id` is still the one to show, not overtaken by a later pick. */
+		const current = () => page.url.searchParams.get('module') === id;
 		api
 			.getModuleSettings(id)
 			.then((view) => {
-				if (page.url.searchParams.get('module') !== id) return;
+				if (!current()) return;
 				moduleView = view;
 				moduleDraft = new Draft(editable(view));
 			})
-			.catch(() => (saveError = `Could not load the settings of module ${id}.`))
-			.finally(() => (moduleLoading = false));
+			.catch(() => {
+				if (!current()) return;
+				moduleView = null;
+				moduleDraft = null;
+				saveError = `Could not load the settings of module ${id}.`;
+			})
+			.finally(() => {
+				if (current()) moduleLoading = false;
+			});
 	});
 
 	function selectModule(id: string) {
 		if (id === selected) return;
-		if (moduleDraft?.dirty && !confirm(`Discard the unsaved changes to ${moduleView?.name}?`)) {
-			return;
+		if (moduleDraft?.dirty) {
+			if (!confirm(`Discard the unsaved changes to ${moduleView?.name}?`)) return;
+			// The module stays on show until the next one loads; its dropped edits mustn't be saved.
+			moduleDraft.reset();
 		}
 		const url = new URL(page.url.href);
 		url.searchParams.set('module', id);
