@@ -4,6 +4,7 @@
 # image uses the native XPath backend only). CI's `docker` job and the release workflow run it.
 #
 # Usage: scripts/docker-smoke.sh [IMAGE]   (default: fmd2r:smoke)
+# With FMD2R_EXPECT_VERSION set (a leading `v` is dropped), GET /api/about must report it.
 set -eu
 
 image=${1:-fmd2r:smoke}
@@ -31,6 +32,12 @@ until [ "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/health")" = 200 ]; 
   sleep 1
 done
 
+if [ -n "${FMD2R_EXPECT_VERSION:-}" ]; then
+  expected=${FMD2R_EXPECT_VERSION#v}
+  echo "GET /api/about reports version $expected"
+  curl -sf "$base/api/about" | grep -q "\"version\":\"$expected\"" ||
+    fail "GET /api/about does not report version $expected"
+fi
 echo "GET / serves the SPA"
 curl -sf "$base/" | grep -q '__sveltekit' || fail "GET / did not return the SPA"
 
