@@ -1,10 +1,16 @@
 import type { ModuleSummary } from '#lib/api/types.ts';
 
-const summary = (id: string, name: string, root_url: string): ModuleSummary => ({
+/** A module summary with no list, in the given category ("Raw" by default). */
+export const summary = (
+	id: string,
+	name: string,
+	root_url: string,
+	category = 'Raw'
+): ModuleSummary => ({
 	id,
 	name,
 	root_url,
-	category: 'Raw',
+	category,
 	option_count: 0,
 	capabilities: { update_list: true, info: true, download: true, account: false },
 	list_size: 0,

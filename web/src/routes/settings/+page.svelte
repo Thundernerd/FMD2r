@@ -14,12 +14,14 @@
 	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
+	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
 	import { showFieldErrors } from '#lib/settings/save.ts';
-	import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
+	import { OWN_SECTION_PATHS, SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 
 	const TOC = [
 		...SETTINGS_SECTIONS.map(({ id, title }) => ({ id, title })),
+		{ id: 'websites', title: 'Websites' },
 		{ id: 'modules', title: 'Website modules' },
 		{ id: 'accounts', title: 'Accounts' }
 	];
@@ -57,7 +59,10 @@
 		dirty: 'Unsaved changes'
 	};
 	function pending(id: string): Pending | null {
-		const paths = SETTINGS_SECTIONS.find((s) => s.id === id)?.fields.map((f) => f.path);
+		const paths =
+			id === 'websites'
+				? OWN_SECTION_PATHS
+				: SETTINGS_SECTIONS.find((s) => s.id === id)?.fields.map((f) => f.path);
 		if (paths) {
 			if (paths.some((p) => draft?.errors[p])) return 'invalid';
 			return paths.some((p) => draft?.isDirty(p)) ? 'dirty' : null;
@@ -269,6 +274,11 @@
 							loading={moduleLoading}
 							onselect={selectModule}
 						/>
+					</section>
+				{:else if active === 'websites'}
+					<section id="section-websites" class="card" aria-labelledby="heading-websites">
+						<h2 id="heading-websites">Websites</h2>
+						<WebsiteSelection {modules} {draft} />
 					</section>
 				{:else if active === 'accounts'}
 					<section id="section-accounts" class="card" aria-labelledby="heading-accounts">

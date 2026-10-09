@@ -99,6 +99,17 @@ async fn json_of(res: Response) -> Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+/// Selects `modules` as Discover's websites (`general.selected_websites`).
+async fn select(state: &AppState, modules: &[&str]) {
+    let patch = json!({ "general": { "selected_websites": modules } });
+    let req = Request::patch("/api/settings")
+        .header("content-type", "application/json")
+        .body(Body::from(patch.to_string()))
+        .unwrap();
+    let res = build_router(state.clone()).oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
 fn titles(body: &Value) -> Vec<&str> {
     body["items"]
         .as_array()
@@ -143,6 +154,7 @@ async fn search_includes_and_excludes_genres() {
 #[tokio::test]
 async fn search_filters_by_status_and_spans_modules_without_one() {
     let (_dir, state) = state();
+    select(&state, &["a", "b"]).await;
 
     let body = json_of(get(&state, "/api/lists/search?status=0").await).await;
     assert_eq!(titles(&body), ["Beta", "Delta"]);
@@ -150,6 +162,34 @@ async fn search_filters_by_status_and_spans_modules_without_one() {
     let body = json_of(get(&state, "/api/lists/search?q=alp").await).await;
     assert_eq!(titles(&body), ["Alpha", "Alpha Two"]);
     assert_eq!(body["items"][1]["module_id"], "b");
+}
+
+#[tokio::test]
+async fn search_without_a_module_covers_only_the_selected_websites() {
+    let (_dir, state) = state();
+    // `gone` is not loaded and is ignored (mangadownloader/forms/frmMain.pas:6464-6470).
+    select(&state, &["b", "gone"]).await;
+
+    let body = json_of(get(&state, "/api/lists/search?q=alp").await).await;
+    assert_eq!(titles(&body), ["Alpha Two"]);
+    assert_eq!(body["total"], 1);
+    let body = json_of(get(&state, "/api/lists/facets").await).await;
+    assert_eq!(body["genres"], json!([{ "value": "Action", "count": 1 }]));
+
+    // A module filter still reaches every loaded module.
+    let body = json_of(get(&state, "/api/lists/search?module=a&q=alp").await).await;
+    assert_eq!(titles(&body), ["Alpha"]);
+}
+
+#[tokio::test]
+async fn search_without_a_module_finds_nothing_when_no_website_is_selected() {
+    let (_dir, state) = state();
+
+    let body = json_of(get(&state, "/api/lists/search").await).await;
+    assert_eq!(titles(&body), Vec::<&str>::new());
+    assert_eq!(body["total"], 0);
+    let body = json_of(get(&state, "/api/lists/facets").await).await;
+    assert_eq!(body, json!({ "genres": [], "statuses": [] }));
 }
 
 #[tokio::test]

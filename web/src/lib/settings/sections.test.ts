@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createMockBackend } from '#lib/api/mock.ts';
 import { createApi } from '#lib/api/client.ts';
 import { secretFlag } from '#lib/settings/fields.ts';
-import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
+import { OWN_SECTION_PATHS, SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 
 // The server's OpenAPI document carries the T18 defaults of every settings group.
 const openapi = JSON.parse(
@@ -24,9 +24,12 @@ function leaves(value: unknown, prefix = ''): string[] {
 describe('settings sections', () => {
 	// The server sends a secret only as its `has_` flag; its control edits the secret itself.
 	it('have a control for every setting of the T18 model, once', () => {
-		const paths = SETTINGS_SECTIONS.flatMap((s) =>
-			s.fields.map((f) => (f.control.kind === 'secret' ? secretFlag(f.path) : f.path))
-		);
+		const paths = [
+			...SETTINGS_SECTIONS.flatMap((s) =>
+				s.fields.map((f) => (f.control.kind === 'secret' ? secretFlag(f.path) : f.path))
+			),
+			...OWN_SECTION_PATHS
+		];
 		expect([...paths].sort()).toEqual(leaves(DEFAULTS).sort());
 	});
 
@@ -88,8 +91,12 @@ describe('settings sections', () => {
 		}
 	});
 
+	// Except the website selection: the mock is an upgraded install with every module selected.
 	it('the mock backend starts from the same defaults as the server', async () => {
 		const api = createApi({ baseUrl: 'http://fmd2r.test', fetch: createMockBackend().fetch });
-		expect(await api.getSettings()).toEqual(DEFAULTS);
+		const settings = await api.getSettings();
+		expect(settings.general.selected_websites.length).toBeGreaterThan(0);
+		settings.general.selected_websites = [];
+		expect(settings).toEqual(DEFAULTS);
 	});
 });

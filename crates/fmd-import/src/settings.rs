@@ -35,6 +35,9 @@ enum Conv {
     ProxyType,
     /// A port typed into a text field; empty means none.
     Port,
+    /// Items joined by commas, as `MangaListSelect` (mangadownloader/forms/frmMain.pas:5990-6004,
+    /// split at :6465); empty items are dropped.
+    List,
     /// Stored with `EncryptString` (read with `DecryptString`, mangadownloader/forms/frmMain.pas:5878-5879).
     Encrypted,
 }
@@ -48,6 +51,12 @@ const MAP: &[(&str, &str, &str, Conv)] = &[
         Conv::Bool,
     ),
     ("view", "LoadMangaCover", "general.load_covers", Conv::Bool),
+    (
+        "general",
+        "MangaListSelect",
+        "general.selected_websites",
+        Conv::List,
+    ),
     ("languages", "Selected", "general.language", Conv::Str),
     (
         "connections",
@@ -329,6 +338,13 @@ fn convert(
             "" => Value::Null,
             port => Value::from(port.parse::<u16>().map_err(|_| not("a port"))?),
         },
+        Conv::List => Value::from(
+            display(value)
+                .split(',')
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .collect::<Vec<_>>(),
+        ),
         Conv::Encrypted => Value::String(
             String::from_utf8(decrypt_string(display(value).as_bytes()))
                 .map_err(|_| "does not decrypt to UTF-8 text".to_string())?,

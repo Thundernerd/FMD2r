@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use fmd_store::{AppDb, StoreError};
+use fmd_store::{AppDb, ListsDb, StoreError};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -159,6 +159,39 @@ impl SettingsService {
         Ok(next)
     }
 
+    /// On the first start of a build with `general.selected_websites` (none is stored yet),
+    /// selects every module that has a list in `lists`, so an existing install's Discover page
+    /// keeps the websites it already had. A fresh install has no lists and selects none. Later
+    /// starts change nothing. Blocking.
+    pub fn select_listed_websites(&self, lists: &ListsDb) -> Result<(), SettingsError> {
+        let _guard = self.write.lock().unwrap_or_else(|e| e.into_inner());
+        let repo = self.db.settings();
+        let mut stored = repo.get::<Value>("general")?.unwrap_or_default();
+        if stored.get("selected_websites").is_some() {
+            return Ok(());
+        }
+        let listed: Vec<String> = lists
+            .masterlist()
+            .summaries()?
+            .into_iter()
+            .filter(|summary| summary.count > 0)
+            .map(|summary| summary.module_id)
+            .collect();
+        // Stored even when empty, so later starts know this one ran.
+        merge(
+            &mut stored,
+            serde_json::json!({ "selected_websites": listed }),
+        );
+        repo.set("general", &stored)?;
+        let current = self.get();
+        if current.general.selected_websites != listed {
+            let mut next = (*current).clone();
+            next.general.selected_websites = listed;
+            self.tx.send_replace(Arc::new(next));
+        }
+        Ok(())
+    }
+
     /// `current` with `patch` applied, normalised and validated.
     fn patched(current: &Settings, mut patch: Value) -> Result<Settings, SettingsError> {
         hash_patched(&mut patch)?;
@@ -245,7 +278,16 @@ impl SettingsService {
                 continue;
             }
             let mut stored = repo.get::<Value>(&key)?.unwrap_or(Value::Null);
+            let unselected = key == "general" && stored.get("selected_websites").is_none();
             merge(&mut stored, group);
+            // An empty selection nobody chose stays unstored, so the upgrade still selects the
+            // listed websites ([`Self::select_listed_websites`]).
+            if unselected
+                && stored.get("selected_websites") == Some(&Value::Array(Vec::new()))
+                && let Value::Object(fields) = &mut stored
+            {
+                fields.remove("selected_websites");
+            }
             seal_group(self.db.cipher(), &key, &mut stored)?;
             changed.push((key, stored));
         }

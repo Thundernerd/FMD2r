@@ -44,6 +44,9 @@ const U32_MAX = 4_294_967_295;
 const RENAME_TOKENS =
 	'Tokens: %MANGA% %CHAPTER% %NUMBERING% %WEBSITE% %AUTHOR% %ARTIST% %FILENAME%.';
 
+/** Settings the Settings page edits in a section of their own rather than as a field. */
+export const OWN_SECTION_PATHS = ['general.selected_websites'];
+
 /**
  * Every application setting (the T18 model), one section per settings group. Ranges are the
  * server's: FMD2's spin edit bounds, or FMD2r's own for settings FMD2 does not have.
