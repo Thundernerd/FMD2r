@@ -312,6 +312,8 @@ export interface MockOptions {
 
 const PASSWORD_KEY = 'fmd2r.mock.password';
 const SESSION_KEY = 'fmd2r.mock.session';
+/** How long, in ms, `GET /api/series` takes; a test sets it to see the page while it loads. */
+const SERIES_DELAY_KEY = 'fmd2r.mock.series-delay-ms';
 
 /** A sessionStorage item, or `null` without storage (tests, private mode). */
 const stored = (key: string): string | null => {
@@ -670,6 +672,8 @@ export function createMockBackend({
 			return json(createTask(body as NewTask), 201);
 		}
 		if (route === 'GET /api/series') {
+			const delay = Number(stored(SERIES_DELAY_KEY) ?? 0);
+			if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 			const info = series(searchParams.get('module') ?? '', searchParams.get('link') ?? '');
 			return info
 				? json(info)
