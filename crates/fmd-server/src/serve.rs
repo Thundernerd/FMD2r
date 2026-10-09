@@ -23,29 +23,22 @@ use crate::lua_catalog::LuaCatalog;
 use crate::module_updates::{self, LuaRuntime};
 use crate::{AppState, CoverConfig, Idle, LogBuffer, LogRotation, SystemTools, build_router};
 
-/// What [`serve`] needs.
 pub struct ServeConfig {
-    /// The address to listen on (`--bind` / `FMD2R_BIND`); `None` takes the `server.bind`
-    /// setting.
+    /// `--bind` / `FMD2R_BIND`; `None` takes the `server.bind` setting.
     pub bind: Option<SocketAddr>,
-    /// Holds `app.db`, `lists.db`, `metadata.db` (once downloaded), the Lua tree (`lua/`), the cover cache (`covers/`) and the log
-    /// files (`logs/`); created when missing.
+    /// Holds the databases, `lua/`, `covers/` and `logs/`; created when missing.
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
     pub auth: Option<String>,
-    /// Used instead of the stored `connections.flaresolverr_url` setting when startup writes
-    /// `lua/websitebypass/websitebypass_config.json`; the setting itself is left as it is.
+    /// Overrides `connections.flaresolverr_url` for this run without changing the setting.
     pub flaresolverr_url: Option<String>,
-    /// The buffer the `tracing` subscriber feeds; `GET /api/logs` reads it and `GET /api/events`
-    /// streams its bus. It is persisted to `<data dir>/logs/` as the `logs` settings say.
+    /// The buffer the `tracing` subscriber feeds; persisted to `<data dir>/logs/`.
     pub logs: LogBuffer,
-    /// Keep the Lua modules in sync with upstream (the `modules` job and its schedule). Off, no
-    /// module updater runs and nothing is fetched from GitHub; the modules already in
-    /// `<data dir>/lua` are still loaded for the download engine.
+    /// Run the module updater. Off, nothing is fetched from GitHub; the modules already in
+    /// `<data dir>/lua` still load.
     pub module_updates: bool,
 }
 
-/// Errors that stop [`serve`].
 #[derive(Debug, Error)]
 pub enum ServeError {
     #[error("data dir {path}: {source}")]
@@ -71,8 +64,7 @@ pub enum ServeError {
     Io(#[from] std::io::Error),
 }
 
-/// Opens the store in `config.data_dir`, then serves the app on `config.bind` (or the
-/// `server.bind` setting) until SIGINT or SIGTERM, letting in-flight requests finish and closing event streams.
+/// Serves until SIGINT or SIGTERM, letting in-flight requests finish and closing event streams.
 pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     std::fs::create_dir_all(&config.data_dir).map_err(|source| ServeError::DataDir {
         path: config.data_dir.clone(),
@@ -80,7 +72,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     })?;
     let db_path = config.data_dir.join("app.db");
     let lists_path = config.data_dir.join("lists.db");
-    // Opening the stores and loading the settings block.
+    // Opening the stores and loading the settings blocks.
     let state = tokio::task::spawn_blocking(move || -> Result<AppState, ServeError> {
         let lists = ListsDb::open(lists_path)?;
         let state = AppState::new(AppDb::open(db_path)?)?;
@@ -96,7 +88,6 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     // Absolute, so `GET /api/about` shows where the data really is.
     let data_dir = std::fs::canonicalize(&config.data_dir).unwrap_or(config.data_dir);
     let lua_dir = data_dir.join("lua");
-    // The flag or environment variable wins for this run without replacing the stored setting.
     let flaresolverr_override = config.flaresolverr_url;
     let flaresolverr_url =
         module_updates::flaresolverr_url(flaresolverr_override.as_deref(), &settings);
@@ -143,7 +134,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }
-    // Loading the modules and resuming the downloads that were running block.
+    // Loading the modules blocks.
     let db = state.db.clone();
     let key_file = data_dir.join(ACCOUNTS_KEY_FILE);
     let dir = lua_dir.clone();
@@ -159,8 +150,6 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
             module_updates::follow_xpath_backend(state.settings.clone(), &runtime);
             let upstream_ref = RepoConfig::from_settings(&settings.module_updater).git_ref;
             let catalog = LuaCatalog::new(&runtime, state.db.clone(), &lua_dir, upstream_ref);
-            // The accounts are the modules' `MODULE.Account`, stored encrypted under the key
-            // file the runtime loaded them with.
             let live = runtime.modules.clone();
             let accounts = AccountService::following(move || live.current(), runtime.pool.clone());
             state = state
@@ -248,9 +237,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     Ok(())
 }
 
-/// Registers the `favorites` job, checking the library on `runtime`'s pool with the modules
-/// `modules` finds, and starts its schedule: a check at startup and on the interval, as the
-/// `favorites` settings say (`tmStartupTimer`/`tmCheckFavorites`,
+/// Registers the `favorites` job and starts its schedule (`tmStartupTimer`/`tmCheckFavorites`,
 /// mangadownloader/forms/frmMain.pas:1871-1878, :2078-2082). Found chapters go to `queue` when
 /// `favorites.auto_download` is on and there is one, else to the inbox.
 fn start_favorites(
@@ -276,9 +263,7 @@ fn start_favorites(
     state.with_favorites(checker)
 }
 
-/// List updates on `runtime`'s pool and FMD2-DB imports (from the `update_lists.db_url`
-/// setting) into `state`'s `lists.db`, for the module `modules` finds when each starts; their
-/// events go out as `job.lists.*`. `None` without a `lists.db`.
+/// List updates and FMD2-DB imports into `lists.db`; `None` without one.
 fn list_jobs(
     state: &AppState,
     runtime: &LuaRuntime,
@@ -295,10 +280,7 @@ fn list_jobs(
     ))
 }
 
-/// The MangaBaka database in `data_dir` (downloaded only when asked for), matched against
-/// `state`'s `lists.db` with MangaDex's cross-site IDs read through `runtime`'s HTTP client, for
-/// the modules `modules` finds; its events go out as `job.metadata.*`. `None` without a
-/// `lists.db`.
+/// The MangaBaka database, matched against `lists.db`; `None` without one.
 fn metadata_jobs(
     state: &AppState,
     runtime: &LuaRuntime,
@@ -319,8 +301,7 @@ fn metadata_jobs(
     ))
 }
 
-/// Installs the SIGINT/SIGTERM handlers now (so no signal sent after this returns is missed) and
-/// returns a future that resolves on the first of them.
+/// Installs the handlers now, so no signal sent after this returns is missed.
 #[cfg(unix)]
 fn shutdown_signal() -> std::io::Result<impl Future<Output = ()>> {
     use tokio::signal::unix::{SignalKind, signal};
@@ -344,9 +325,8 @@ fn shutdown_signal() -> std::io::Result<impl Future<Output = ()>> {
     })
 }
 
-/// Rewrites `websitebypass_config.json` whenever the `connections.flaresolverr_url` setting
-/// differs from `current`, the URL last written. Upstream's `cloudflare.lua` reads the file at every bypass
-/// (lua/websitebypass/cloudflare.lua:271-325, :341), so the next one uses the new URL.
+/// Rewrites `websitebypass_config.json` when `connections.flaresolverr_url` changes;
+/// `cloudflare.lua` reads it at every bypass (lua/websitebypass/cloudflare.lua:271-325, :341).
 async fn follow_flaresolverr_url(
     settings: Arc<SettingsService>,
     lua_dir: PathBuf,
@@ -378,7 +358,6 @@ async fn follow_flaresolverr_url(
     }
 }
 
-/// Applies the `connections` settings to `http` now, then again whenever they change.
 fn follow_connections(settings: Arc<SettingsService>, http: HttpClient) {
     let mut changes = settings.subscribe();
     let mut current = changes.borrow_and_update().connections.clone();
@@ -394,10 +373,9 @@ fn follow_connections(settings: Arc<SettingsService>, http: HttpClient) {
     });
 }
 
-/// Applies the `connections` settings to `http`, as `ApplyOptions` does at startup and on every
-/// save (mangadownloader/forms/frmMain.pas:6264-6295): the retry count, timeout and proxy for new
-/// and existing sessions (`Set…AndApply`, baseunits/httpsendthread.pas:332-392), the user agent
-/// for sessions created from now on (`DefaultUserAgent`).
+/// As `ApplyOptions` (mangadownloader/forms/frmMain.pas:6264-6295): retry count, timeout and proxy
+/// for new and existing sessions (`Set…AndApply`, baseunits/httpsendthread.pas:332-392), the user
+/// agent for new sessions only (`DefaultUserAgent`).
 fn apply_connections(http: &HttpClient, connections: &ConnectionSettings) {
     http.set_default_user_agent(connections.user_agent.clone());
     http.set_default_retry_count(connections.retry_count);

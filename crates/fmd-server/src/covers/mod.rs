@@ -67,7 +67,6 @@ impl CoverResolver for SystemResolver {
 }
 
 impl CoverConfig {
-    /// Caching in `dir` with the default [`CoverSettings`].
     pub fn new(dir: impl AsRef<Path>) -> Self {
         Self::from_settings(dir, &CoverSettings::default())
     }
@@ -102,8 +101,7 @@ pub trait CoverModules: Send + Sync + 'static {
     fn cover_session(&self, id: &str) -> Option<CoverSession>;
 }
 
-/// The proxy URL serving `url`, a cover of module `module`; what other endpoints hand the browser
-/// instead of the site's own cover link.
+/// The proxy URL endpoints hand the browser instead of the site's own cover link.
 pub fn cover_url(module: &str, url: &str) -> String {
     let query = url::form_urlencoded::Serializer::new(String::new())
         .append_pair("module", module)
@@ -308,7 +306,6 @@ async fn on_fetch_thread<T: Send + 'static>(
         .map_err(|_| ApiError::Internal("cover fetch thread died".into()))
 }
 
-/// The cache key of a cover: a hash of the module and URL.
 fn cache_key(module: &str, url: &Url) -> String {
     hex(&Sha256::new()
         .chain_update(module.as_bytes())

@@ -1,6 +1,5 @@
-//! `GET /api/modules` and `GET/PATCH /api/modules/{id}/settings`: a module's declared options
-//! with their current values, its limits and the user's overrides
-//! (`TWebsiteModuleSettings`, baseunits/WebsiteModulesSettings.pas:56-91).
+//! `GET /api/modules` and `GET/PATCH /api/modules/{id}/settings` (`TWebsiteModuleSettings`,
+//! baseunits/WebsiteModulesSettings.pas:56-91).
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -22,10 +21,9 @@ use crate::{ApiError, AppState, Problem};
 
 /// A loaded module, for the module pickers.
 ///
-/// IDs can repeat: FMD2's loader keeps every module a file's `Init` creates without checking
-/// IDs (baseunits/lua/LuaWebsiteModules.pas:523-589), and upstream `lua/modules/Manga1001.lua:18-19`
-/// registers two websites under one ID. `root_url` tells such entries apart; they share the
-/// ID's settings, which FMD2 keys by ID (baseunits/WebsiteModules.pas:545-700).
+/// IDs can repeat: FMD2's loader does not check them (baseunits/lua/LuaWebsiteModules.pas:523-589),
+/// and `lua/modules/Manga1001.lua:18-19` registers two websites under one ID. `root_url` tells
+/// them apart; they share the ID's settings (baseunits/WebsiteModules.pas:545-700).
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ModuleSummary {
     pub id: String,
@@ -42,10 +40,9 @@ pub struct ModuleSummary {
     pub list_updated: Option<String>,
     /// Whether a list update or import of it is running.
     pub list_job_running: bool,
-    /// Whether its settings differ from the defaults: an option's value is not the one it
-    /// declares, or its overrides are on (`Settings.Enabled`,
-    /// baseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting, or it has
-    /// its own download folder.
+    /// Whether its settings differ from the defaults: a changed option, enabled overrides
+    /// (`Settings.Enabled`, baseunits/WebsiteModulesSettings.pas:80) that change a limit or HTTP
+    /// setting, or its own download folder.
     pub customized: bool,
 }
 
@@ -63,9 +60,9 @@ pub struct ModuleSettingsView {
     /// The limits the module itself declares; 0 means unlimited.
     pub module_limits: ModuleLimits,
     pub http: HttpOverridesView,
-    /// The folder the website's downloads go to when the user picks none; empty for the default
-    /// destination (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50).
-    /// Applies whether or not `enabled` is set.
+    /// The website's download folder when the user picks none; empty for the default
+    /// (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Applies even
+    /// when not `enabled`.
     pub save_to: String,
 }
 
@@ -109,7 +106,6 @@ pub enum ModuleOptionSetting {
 }
 
 impl ModuleSettingsView {
-    /// Whether an option's value is not the one the module declares.
     fn options_changed(&self) -> bool {
         self.options.iter().any(|o| match o {
             // The arms differ in their fields' types, so they can't share a pattern.
@@ -223,10 +219,8 @@ pub(crate) async fn list(
     ))
 }
 
-/// Whether `overrides` change any of `module`'s settings, as [`ModuleSummary::customized`]
-/// reports. While they are on, their connection limit replaces the module's, 0 (unlimited)
-/// included (baseunits/WebsiteModulesSettings.pas:126-155), so they lift a declared one even
-/// left at 0.
+/// See [`ModuleSummary::customized`]. Enabled overrides replace the module's connection limit even
+/// at 0 (unlimited) (baseunits/WebsiteModulesSettings.pas:126-155), lifting a declared one.
 fn customized(module: ModuleInfo, overrides: ModuleOverrides) -> bool {
     let overridden = overrides.enabled
         && (overrides.limits != LimitOverrides::default()
@@ -237,8 +231,7 @@ fn customized(module: ModuleInfo, overrides: ModuleOverrides) -> bool {
         || ModuleSettingsView::new(module, overrides).options_changed()
 }
 
-/// The overrides stored for each module that has any. A module whose overrides fail to load is
-/// left out, so one bad row does not hide the module list.
+/// A module whose overrides fail to load is left out, so one bad row does not hide the list.
 fn stored_overrides(db: &AppDb) -> Result<HashMap<String, ModuleOverrides>, ApiError> {
     let repo = db.module_settings();
     let ids = repo

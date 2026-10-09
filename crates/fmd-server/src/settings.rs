@@ -1,5 +1,4 @@
-//! `GET/PATCH /api/settings` over the typed settings model (T18), `POST /api/preview-rename`
-//! and `POST /api/check-folders`.
+//! `/api/settings`, `POST /api/preview-rename` and `POST /api/check-folders`.
 
 use axum::Json;
 use axum::extract::State;
@@ -67,8 +66,8 @@ pub(crate) async fn patch(
     Ok(Json(updated.as_ref().into()))
 }
 
-/// Closes the open event streams when an update changed the password in force: the login
-/// sessions, bound to it, have ended (see `auth.rs`). The command line one leaves them be.
+/// A new stored password ended the login sessions bound to it (see `auth.rs`), so close their
+/// event streams.
 fn end_sessions_on_new_password(state: &AppState, before: &Settings, after: &Settings) {
     if !state.auth.is_fixed() && before.server.auth_token != after.server.auth_token {
         state.end_sessions();
@@ -95,8 +94,7 @@ pub struct SettingsSave {
     pub modules: Option<HashMap<String, Map<String, Value>>>,
 }
 
-/// Update the settings and any modules' settings together, all or nothing. Nothing is stored
-/// unless every patch is valid, and everything is stored in one transaction.
+/// Update the settings and any modules' settings together in one transaction, all or nothing.
 #[utoipa::path(patch, path = "/api/settings/all", tag = "settings",
     operation_id = "patchAllSettings",
     request_body(content = SettingsSave, content_type = "application/json"),
@@ -140,8 +138,7 @@ pub(crate) async fn patch_all(
     }))
 }
 
-/// The sample chapter a rename preview names: as a site might list it, with the series title
-/// in front so `remove_manga_name_from_chapter` shows; its first page is a JPEG.
+/// The series title leads the chapter name so `remove_manga_name_from_chapter` shows.
 const SAMPLE: SampleChapter<'static> = SampleChapter {
     website: "MangaDex",
     title: "Sample Manga",
@@ -173,8 +170,7 @@ pub struct RenamePreview {
     pub filename: String,
     /// The first page's file name with the extension it ends up with.
     pub page: String,
-    /// Where the first page ends up: its file, or the chapter's archive when chapters are
-    /// packed.
+    /// The first page's file, or the chapter's archive when chapters are packed.
     pub path: String,
 }
 
@@ -216,14 +212,13 @@ pub struct FolderCheckRequest {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct FolderCheck {
     pub path: String,
-    /// Why downloads can't be saved there now, or `None` when they can. A missing folder is
-    /// created by the first download into it, so this is a warning, not an error: a disk may be
-    /// unmounted for a while.
+    /// Why downloads can't be saved there now. A warning, not an error: the first download
+    /// creates a missing folder, and a disk may be unmounted for a while.
     pub problem: Option<String>,
 }
 
-/// Check whether folders exist and are writable by the server (T74), for the destinations'
-/// warnings. Relative paths resolve against the server's working directory, as downloads do.
+/// Check whether folders exist and are writable by the server. Relative paths resolve against
+/// the server's working directory, as downloads do.
 #[utoipa::path(post, path = "/api/check-folders", tag = "settings",
     operation_id = "checkFolders",
     request_body(content = FolderCheckRequest, content_type = "application/json"),
@@ -251,8 +246,7 @@ pub(crate) async fn check_folders(
     Ok(Json(checks))
 }
 
-/// Why `dir` can't take downloads: it is missing, not a folder, or a file can't be created in
-/// it (tried with a scratch file that is removed again).
+/// Writability is tried with a scratch file that is removed again.
 fn folder_problem(dir: &std::path::Path) -> Option<String> {
     match std::fs::metadata(dir) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {

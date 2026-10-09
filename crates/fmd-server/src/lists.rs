@@ -1,5 +1,4 @@
-//! Discover: searching every module's manga list (`/api/lists/search`, `/api/lists/facets`) and
-//! starting list updates and FMD2-DB imports (`/api/lists/{module}/...`).
+//! Discover: searching the manga lists, and starting list updates and FMD2-DB imports.
 
 use std::collections::HashSet;
 
@@ -15,7 +14,6 @@ use crate::error::ApiQuery;
 use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
-/// Results per page when the request names none.
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAX_PAGE_SIZE: u32 = 200;
 
@@ -158,9 +156,8 @@ fn split_genres(genres: &str) -> Vec<String> {
         .collect()
 }
 
-/// The modules a search covers: `module` when given, otherwise the selected websites
-/// (`general.selected_websites`) that are loaded, as FMD2's "all websites" search covers only
-/// `SitesList` (baseunits/DBDataProcess.pas:649-683, :1459). `None` when that is no module.
+/// `module` when given, else the loaded selected websites: FMD2's "all websites" search covers
+/// only `SitesList` (baseunits/DBDataProcess.pas:649-683, :1459). `None` when no module.
 fn filters(state: &AppState, module: Option<String>) -> Option<SearchFilters> {
     let module_ids: Vec<String> = match module.filter(|m| !m.is_empty()) {
         Some(module) => vec![module],
@@ -327,7 +324,7 @@ fn list_jobs(state: &AppState) -> Result<ListJobs, ApiError> {
         .ok_or_else(|| ApiError::Unavailable("list jobs are not available".into()))
 }
 
-/// Starts `job` of `module` with `action` off the async threads (it spawns a thread).
+/// Off the async threads, as `action` spawns a thread.
 async fn start(
     state: &AppState,
     module: String,

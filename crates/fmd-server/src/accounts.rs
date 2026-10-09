@@ -1,6 +1,5 @@
-//! `/api/accounts`: the accounts of modules with `AccountSupport`, editing them and logging in
-//! (FMD2's account manager, mangadownloader/forms/frmAccountManager.pas). Passwords and cookies
-//! are write-only: no response carries them.
+//! `/api/accounts`: accounts of modules with `AccountSupport`
+//! (mangadownloader/forms/frmAccountManager.pas). Passwords and cookies are write-only.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -68,8 +67,8 @@ pub struct AccountStateChange {
     pub status: AccountState,
 }
 
-/// The fields to change; a missing field keeps its value. Not `Debug`, so the password cannot
-/// be logged.
+/// The fields to change; a missing field keeps its value. Not `Debug`, so the password is never
+/// logged.
 #[derive(Deserialize, ToSchema)]
 pub struct AccountRequest {
     pub username: Option<String>,
@@ -93,9 +92,8 @@ impl From<AccountError> for ApiError {
     }
 }
 
-/// Runs `f` on the account service on a thread of its own; without a service every module is
-/// unknown. Not on tokio's blocking pool: the service waits for module callbacks with
-/// `Pending::wait`, which refuses to run on a thread inside a runtime.
+/// Runs `f` on the account service on its own thread, not tokio's blocking pool: the service
+/// waits with `Pending::wait`, which refuses to run inside a runtime.
 async fn with_service<T: Send + 'static>(
     state: &AppState,
     f: impl FnOnce(&AccountService) -> Result<T, AccountError> + Send + 'static,
@@ -105,7 +103,7 @@ async fn with_service<T: Send + 'static>(
     std::thread::Builder::new()
         .name("fmd-accounts".into())
         .spawn(move || {
-            // The request may be gone; nothing to tell then.
+            // The request may be gone.
             let _ = tx.send(f(&service));
         })
         .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -172,8 +170,8 @@ pub(crate) async fn delete(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Log in with the module's `OnLogin`, then its `OnAccountState`; answers once the login is
-/// done, with the status the module set. `account.state` events announce the start and the end.
+/// Log in with the module's `OnLogin`, then `OnAccountState`; answers once done. `account.state`
+/// events announce the start and the end.
 #[utoipa::path(post, path = "/api/accounts/{module}/login", tag = "accounts",
     operation_id = "loginAccount",
     params(("module" = String, Path, description = "Module ID")),

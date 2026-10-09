@@ -25,9 +25,7 @@ pub(crate) struct LuaCatalog {
     http: HttpClient,
     /// Where the modules' HTTP settings and the updater's state are stored.
     db: AppDb,
-    /// The Lua tree the modules load from.
     lua_dir: PathBuf,
-    /// The upstream ref the Lua tree follows.
     upstream_ref: String,
     /// The module list of the registry it was built from, rebuilt when a reload swaps it.
     infos: Arc<Mutex<Option<ModuleList>>>,
@@ -40,8 +38,6 @@ struct ModuleList {
 }
 
 impl LuaCatalog {
-    /// The modules of `runtime`, loaded from `lua_dir` following `upstream_ref`, their HTTP
-    /// settings stored in `db`.
     pub(crate) fn new(
         runtime: &LuaRuntime,
         db: AppDb,
@@ -97,8 +93,7 @@ impl LuaCatalog {
         Some(seeded.trim().to_owned()).filter(|sha| !sha.is_empty())
     }
 
-    /// The module files that failed to load into the registry in use now, named by their path
-    /// in the Lua dir (e.g. `modules/Foo.lua`).
+    /// Named by their path in the Lua dir, e.g. `modules/Foo.lua`.
     fn load_failures(&self) -> Vec<LoadFailure> {
         self.modules
             .failures()

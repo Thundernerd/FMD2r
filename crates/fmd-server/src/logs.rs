@@ -103,10 +103,9 @@ impl LogBuffer {
         }
     }
 
-    /// Writes every line to the files in `dir` from now on, rotated as `rotation` says, after
-    /// loading the newest lines already there (from before a restart) into the buffer. Sequence
-    /// numbers continue after the persisted ones, so `since` pages forward across the restart;
-    /// lines buffered before this call are renumbered after them and written too.
+    /// Writes every line to the files in `dir` from now on, after loading the newest lines there
+    /// into the buffer. Sequence numbers continue after the persisted ones so `since` pages
+    /// across a restart; lines buffered before this call are renumbered and written too.
     pub fn persist(&self, dir: &Path, rotation: LogRotation) -> io::Result<()> {
         let writer = LogWriter::open(dir, rotation)?;
         let capacity = self.lock()?.capacity;

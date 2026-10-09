@@ -25,7 +25,6 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 use zip::write::SimpleFileOptions;
 
-/// A server over a fresh data directory.
 struct Server {
     _dir: TempDir,
     db: AppDb,
@@ -85,7 +84,6 @@ impl Server {
         serde_json::from_slice(&body).unwrap()
     }
 
-    /// Waits until an import is running.
     async fn wait_for_import_job(&self) {
         loop {
             let response = build_router(self.state.clone())
@@ -371,7 +369,6 @@ async fn only_one_import_runs_at_a_time() {
         ),
     );
     tx.send(Ok(zip[..10].to_vec())).await.unwrap();
-    // Wait until the first import has started.
     server.wait_for_import_job().await;
 
     let (status, problem) = server.import("", zip.clone()).await;
@@ -403,7 +400,6 @@ async fn an_abandoned_upload_frees_the_import_job() {
     tx.send(Ok(zip[..10].to_vec())).await.unwrap();
     server.wait_for_import_job().await;
 
-    // The client goes away mid-upload.
     first.abort();
     let _ = first.await;
 

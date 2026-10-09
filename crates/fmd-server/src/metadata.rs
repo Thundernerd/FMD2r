@@ -1,5 +1,5 @@
-//! `/api/metadata/mangabaka`: the opt-in local copy of MangaBaka's database (T73) that list
-//! titles are matched against, for Settings → "MangaBaka database".
+//! `/api/metadata/mangabaka`: the opt-in local copy of MangaBaka's database that list titles are
+//! matched against.
 
 use axum::Json;
 use axum::extract::State;

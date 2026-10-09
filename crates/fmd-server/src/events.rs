@@ -96,8 +96,7 @@ pub struct TaskRemoved {
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
 pub struct TasksReordered {}
 
-/// A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites
-/// check, list update, module update, or any other registered job.
+/// A background job and its progress (`job.state`, and the items of `GET /api/jobs`).
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
 pub struct JobState {
     pub id: String,
@@ -289,7 +288,7 @@ pub(crate) async fn stream(
         }
         None => Vec::new(),
     };
-    // An item stored between subscribing and reading the backlog arrives on both; drop the live copy.
+    // An item stored between subscribing and reading the backlog arrives twice; drop the live copy.
     let replayed_up_to = backlog.last().map_or(i64::MIN, |e| e.id.0);
     let live = live.filter(move |event| {
         let replayed = matches!(event, ServerEvent::InboxNew(item)

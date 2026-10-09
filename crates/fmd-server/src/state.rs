@@ -35,9 +35,7 @@ pub struct AppState {
     pub(crate) db: AppDb,
     pub(crate) assets: Arc<dyn Assets>,
     pub(crate) auth: Arc<Auth>,
-    /// Where the server listens, for `GET /api/health`.
     pub(crate) listen_addr: Option<SocketAddr>,
-    /// The settings the command line or environment overrides, as dotted paths.
     pub(crate) overridden: Vec<&'static str>,
     pub(crate) events: EventBus,
     pub(crate) logs: LogBuffer,
@@ -59,14 +57,13 @@ pub struct AppState {
     pub(crate) started: Instant,
     pub(crate) clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
-    /// Bumped whenever login sessions are ended, so open event streams close and reconnect
-    /// through the auth check.
+    /// Bumped when login sessions end, so open event streams reconnect through the auth check.
     pub(crate) sessions_ended: Arc<watch::Sender<u64>>,
 }
 
 impl AppState {
-    /// State backed by `db`, serving the embedded web UI, with the settings stored in `db`, an
-    /// idle engine, no jobs, modules, accounts, covers or tool checks, and no auth configured.
+    /// Serves the embedded web UI with an idle engine, no jobs, modules, accounts, covers or tool
+    /// checks, and auth from the stored settings.
     pub fn new(db: AppDb) -> Result<Self, SettingsError> {
         let events = EventBus::new();
         Ok(Self {
@@ -105,24 +102,20 @@ impl AppState {
         self
     }
 
-    /// Requires `secret` (as a bearer token, or via a `POST /api/login` session) for every API
-    /// route except health, login and the OpenAPI document, instead of the `server.auth_token`
-    /// setting: the password given on the command line or in the environment.
+    /// The password from the command line or environment, overriding `server.auth_token`.
     pub fn with_auth(mut self, secret: impl Into<String>) -> Self {
         self.auth = Auth::fixed(secret.into());
         self
     }
 
-    /// Reports in `GET /api/health` whether `addr`, where the server listens, is a loopback
-    /// address. Without it the server counts as loopback-only.
+    /// For `GET /api/health`; without it the server counts as loopback-only.
     pub fn with_listen_addr(mut self, addr: SocketAddr) -> Self {
         self.listen_addr = Some(addr);
         self
     }
 
-    /// Reports in `GET /api/health` that the command line or environment overrides `settings`
-    /// (dotted paths such as `server.bind`). [`AppState::with_auth`] reports `server.auth_token`
-    /// itself.
+    /// Settings the command line or environment overrides, as dotted paths, for
+    /// `GET /api/health`. [`AppState::with_auth`] reports `server.auth_token` itself.
     pub fn with_overridden(mut self, settings: impl IntoIterator<Item = &'static str>) -> Self {
         self.overridden.extend(settings);
         self
@@ -133,27 +126,23 @@ impl AppState {
         self.auth.current(&self.settings.get())
     }
 
-    /// Reads the wall-clock time from `clock` instead of the system clock (login sessions
-    /// expire by it).
+    /// Replaces the system clock, which login sessions expire by.
     pub fn with_clock(mut self, clock: impl Fn() -> SystemTime + Send + Sync + 'static) -> Self {
         self.clock = Arc::new(clock);
         self
     }
 
-    /// The current wall-clock time.
     pub(crate) fn now(&self) -> SystemTime {
         (self.clock)()
     }
 
-    /// Serves `GET /api/logs` from `logs` (the buffer installed as a `tracing` layer) and streams
-    /// `GET /api/events` from the bus `logs` publishes to.
+    /// Also takes over the bus `logs` publishes to.
     pub fn with_logs(mut self, logs: LogBuffer) -> Self {
         self.events = logs.events().clone();
         self.logs = logs;
         self
     }
 
-    /// Serves `/api/settings` from `settings`, shared with whoever else subscribes to it.
     pub fn with_settings(mut self, settings: Arc<SettingsService>) -> Self {
         self.settings = settings;
         self
@@ -169,59 +158,49 @@ impl AppState {
         self
     }
 
-    /// Lists and controls the jobs in `jobs` via `/api/jobs`, and streams their changes as
-    /// `job.state` events.
     pub fn with_jobs(mut self, jobs: JobRegistry) -> Self {
         self.jobs = jobs;
         self
     }
 
-    /// Reports the Lua modules from `modules` in `GET /api/about`, and serves `/api/resolve` and
-    /// `/api/series` from them.
     pub fn with_modules(mut self, modules: impl ModuleCatalog) -> Self {
         self.modules = Arc::new(modules);
         self.series_cache = Arc::default();
         self
     }
 
-    /// Serves `/api/accounts` from `accounts`, and streams their status changes as
-    /// `account.state` events. Without it no module has an account.
+    /// Without it no module has an account.
     pub fn with_accounts(mut self, accounts: Arc<AccountService>) -> Self {
         self.accounts = Some(accounts);
         self
     }
 
-    /// Checks external tools with `tools` for `GET /api/about`.
     pub fn with_tools(mut self, tools: impl ToolProbe) -> Self {
         self.tools = Arc::new(tools);
         self
     }
 
-    /// Serves `GET /api/covers`, fetching covers through `modules` and caching them as `config`
-    /// says. Without it, every cover is a 404.
+    /// Without it, every cover is a 404.
     pub fn with_covers(mut self, config: CoverConfig, modules: impl CoverModules) -> Self {
         self.covers = Some(Arc::new(Covers::new(config, Arc::new(modules))));
         self
     }
 
-    /// Serves the Discover endpoints (`/api/lists/search`, `/api/lists/facets`) and the list
-    /// sizes in `GET /api/modules` from `lists`. Without it they answer 503.
+    /// Without it the Discover endpoints answer 503.
     pub fn with_lists(mut self, lists: ListsDb) -> Self {
         self.lists = Some(lists);
         self
     }
 
-    /// Starts list updates and FMD2-DB imports (`POST /api/lists/{module}/...`) with `jobs`.
-    /// Without it they answer 503. `jobs` should send its events to [`AppState::events`] as
+    /// Without it list jobs answer 503. `jobs` should send its events to [`AppState::events`] as
     /// [`ServerEvent::Lists`].
     pub fn with_list_jobs(mut self, jobs: ListJobs) -> Self {
         self.list_jobs = Some(jobs);
         self
     }
 
-    /// Starts favorites checks (`POST /api/favorites/check`, `.../check-missing`) with `jobs`.
-    /// Without it they answer 503. A [`fmd_core::favorites::FavoritesChecker`] should send its
-    /// events to [`AppState::favorites_events`].
+    /// Without it favorites checks answer 503. A [`fmd_core::favorites::FavoritesChecker`] should
+    /// send its events to [`AppState::favorites_events`].
     pub fn with_favorites(mut self, jobs: impl FavoritesJobs) -> Self {
         self.favorites = Some(Arc::new(jobs));
         self
@@ -237,9 +216,7 @@ impl AppState {
         }
     }
 
-    /// Serves `/api/metadata/mangabaka` (the MangaBaka database's download, status and removal)
-    /// with `jobs`, and the list titles' MangaBaka metadata on the series page. Without it those
-    /// answer as if no database was downloaded. `jobs` should send its events to
+    /// Without it, no MangaBaka database counts as downloaded. `jobs` should send its events to
     /// [`AppState::metadata_events`].
     pub fn with_metadata(mut self, jobs: MetadataJobs) -> Self {
         self.metadata = Some(jobs);
@@ -264,13 +241,11 @@ impl AppState {
             .ok_or_else(|| ApiError::Unavailable("lists.db is not open".into()))
     }
 
-    /// Reports `dir` and the sizes of the databases in it in `GET /api/about`.
     pub fn with_data_dir(mut self, dir: impl AsRef<Path>) -> Self {
         self.data_dir = Some(dir.as_ref().to_owned());
         self
     }
 
-    /// Caps the size of `POST /api/import` uploads (instead of [`ImportLimits::default`]).
     pub fn with_import_limits(mut self, limits: ImportLimits) -> Self {
         self.import_limits = limits;
         self
@@ -295,8 +270,7 @@ impl AppState {
         }
     }
 
-    /// Closes every open event stream because login sessions ended; clients reconnect, and
-    /// those whose session is gone get a 401.
+    /// Closes every open event stream; clients whose session is gone get a 401 on reconnect.
     pub(crate) fn end_sessions(&self) {
         self.sessions_ended.send_modify(|n| *n = n.wrapping_add(1));
     }
@@ -323,8 +297,8 @@ impl AppState {
         Ok(item)
     }
 
-    /// The folder the module's downloads go to when the user picks none; empty for the default
-    /// destination (its `OverrideSettings.SaveToPath`, T74).
+    /// The module's download folder when the user picks none; empty for the default
+    /// (`OverrideSettings.SaveToPath`).
     pub(crate) async fn website_dir(&self, module_id: &str) -> Result<String, ApiError> {
         let id = module_id.to_owned();
         self.blocking(move |db| -> Result<String, ApiError> {
@@ -337,7 +311,6 @@ impl AppState {
         .await
     }
 
-    /// Runs blocking store work on the blocking thread pool.
     pub(crate) async fn blocking<T, E>(
         &self,
         f: impl FnOnce(&AppDb) -> Result<T, E> + Send + 'static,

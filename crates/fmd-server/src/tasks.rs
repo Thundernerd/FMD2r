@@ -152,7 +152,6 @@ pub struct TaskList {
     pub counts: TaskCounts,
 }
 
-/// Tasks per page when the request does not say.
 const DEFAULT_PER_PAGE: u32 = 100;
 const MAX_PER_PAGE: u32 = 1000;
 

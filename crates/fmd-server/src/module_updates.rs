@@ -45,11 +45,8 @@ pub(crate) struct LuaRuntime {
 }
 
 impl LuaRuntime {
-    /// Loads the modules in `lua_dir` with their settings (options, cookies, accounts) read
-    /// through `db`, credentials and cookies decrypted by the key in `key_file`. Blocks.
-    ///
-    /// `CreateTXQuery` runs on `xpath_backend`, or on the runtime's default when this build
-    /// leaves that backend out.
+    /// Blocks. Credentials and cookies are decrypted with the key in `key_file`; `CreateTXQuery`
+    /// falls back to the default backend when this build leaves `xpath_backend` out.
     pub(crate) fn load(
         db: AppDb,
         lua_dir: &Path,
@@ -69,7 +66,7 @@ impl LuaRuntime {
         let mut config = PoolConfig::new(http.clone());
         config.lua_dir = lua_dir.to_owned();
         config.xpath_backend = lua_xpath_backend(xpath_backend);
-        // The `HTTP` sessions callbacks get are prepared with the module's stored HTTP settings
+        // Callbacks' `HTTP` sessions get the module's stored HTTP settings
         // (`PrepareHTTP`, baseunits/WebsiteModules.pas:353-380).
         config.http_settings = Some(Arc::new(move |module: &Module| {
             Arc::new(StoredModuleHttpSettings::new(db.clone(), module.def().id))
@@ -121,14 +118,9 @@ pub(crate) fn follow_xpath_backend(settings: Arc<SettingsService>, runtime: &Lua
     });
 }
 
-/// Registers the `modules` job over `runtime`'s modules, then runs it at startup and every
-/// `module_updater.interval_minutes` while `module_updater.auto_update` is on. A tree with no
-/// modules yet is synced at startup either way (the first-run bootstrap).
-///
-/// The repository, token and keep-last-good settings are read once: changes apply on the next
-/// start. The FlareSolverr URL (`flaresolverr_override`, else the `connections.flaresolverr_url`
-/// setting at that time) is written back into `websitebypass_config.json` whenever a sync
-/// replaces it with upstream's.
+/// Registers the `modules` job and runs it on its schedule while `auto_update` is on; a tree
+/// without modules is synced at startup regardless. Repository, token and keep-last-good are read
+/// once. A sync that replaces `websitebypass_config.json` gets the FlareSolverr URL written back.
 pub(crate) fn start(
     state: AppState,
     runtime: &LuaRuntime,
@@ -161,8 +153,7 @@ pub(crate) fn start(
     tokio::spawn(schedule(job, state, lua_dir));
 }
 
-/// The FlareSolverr URL `websitebypass_config.json` points at: the flag or environment variable
-/// (`flaresolverr_override`) for this run, else the stored `connections.flaresolverr_url`.
+/// The flag or environment override, else the stored `connections.flaresolverr_url`.
 pub(crate) fn flaresolverr_url(flaresolverr_override: Option<&str>, settings: &Settings) -> String {
     flaresolverr_override
         .unwrap_or(&settings.connections.flaresolverr_url)

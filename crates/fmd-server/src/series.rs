@@ -164,8 +164,7 @@ struct MangaBakaMetadata {
     year: Option<i64>,
 }
 
-/// The MangaBaka metadata of `module`'s series at the first of `links` with an accepted match;
-/// `None` without the database or a match. A failed lookup only leaves the metadata out.
+/// From the first of `links` with an accepted match; a failed lookup only leaves it out.
 async fn mangabaka_metadata(
     state: &AppState,
     module: &str,
@@ -203,7 +202,7 @@ async fn mangabaka_metadata(
     }
 }
 
-/// The info of the series at `link` from module `module`, from the cache when it is recent.
+/// Served from the cache when recent.
 pub(crate) async fn fetch_info(
     state: &AppState,
     module: &str,
@@ -225,8 +224,7 @@ pub(crate) async fn fetch_info(
     Ok(info)
 }
 
-/// How long a series' info is served without asking the module again: long enough for going
-/// back and forth between pages, short enough that new chapters show up soon.
+/// Long enough for going back and forth between pages, short enough that new chapters show soon.
 const CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 /// Series kept at most; the oldest is dropped past it.
 const CACHE_ENTRIES: usize = 64;

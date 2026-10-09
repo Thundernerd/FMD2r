@@ -91,8 +91,7 @@ impl Transport for Site {
     }
 }
 
-/// The loaded fixture modules and the pool running their callbacks, as the composition root
-/// would hand them to the server.
+/// The loaded fixture modules and the pool running their callbacks.
 struct Modules {
     registry: ModuleRegistry,
     pool: Arc<WorkerPool>,
