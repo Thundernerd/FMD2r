@@ -36,7 +36,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Cargo.toml's version on main is not bumped per release: the tag sets it.
       - name: Set the version from the tag
         run: scripts/set-version.sh "$VERSION"
@@ -114,7 +114,7 @@ jobs:
       CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
       AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Cargo.toml's version on main is not bumped per release: the tag sets it.
       - name: Set the version from the tag
         run: scripts/set-version.sh "$VERSION"

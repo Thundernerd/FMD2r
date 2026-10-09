@@ -61,7 +61,7 @@ jobs:
       run:
         working-directory: crates/xpath-fpc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install FPC
         run: sudo apt-get update && sudo apt-get install -y fpc
       - run: rustup toolchain install
