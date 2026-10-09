@@ -91,3 +91,12 @@ describe('CoverThumb', () => {
 		expect(container.querySelector('.cover.blank')?.textContent).toBe('Alpha');
 	});
 });
+
+describe('CoverThumb without IntersectionObserver', () => {
+	it('keeps the placeholder and asks for nothing', () => {
+		vi.stubGlobal('IntersectionObserver', undefined);
+		const { container } = render(CoverThumb, { src: SRC, title: 'Alpha' });
+		expect(container.querySelector('img')).toBeNull();
+		expect(container.querySelector('.cover.blank')?.textContent).toBe('Alpha');
+	});
+});

@@ -20,8 +20,10 @@
 	 * scrolls away, which cancels its request. */
 	const showImage = $derived(url !== null && !failed && (visible || loaded));
 
-	/** Tracks whether `node` is on screen. */
+	/** Tracks whether `node` is on screen. Where that cannot be told, it never is, so a long
+	 * list does not ask for every cover at once. */
 	function onScreen(node: HTMLElement) {
+		if (typeof IntersectionObserver === 'undefined') return;
 		const observer = new IntersectionObserver((entries) => {
 			visible = entries.some((e) => e.isIntersecting);
 		});
