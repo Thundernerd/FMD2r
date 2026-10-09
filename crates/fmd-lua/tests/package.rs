@@ -19,6 +19,23 @@ fn fmd_env_lua_directory_is_the_configured_lua_dir_with_a_trailing_separator() {
     assert_eq!(lua_dir, format!("{}/", dir.path().display()));
 }
 
+/// MangaHub's `GetPageNumber` needs a revision of at least 6920 (lua/templates/MangaHub.lua:122);
+/// FMD2's builds set it to the commit count, a decimal string (git2revision.bat).
+#[test]
+fn fmd_env_revision_is_a_numeric_string_of_at_least_6920() {
+    let runtime = Runtime::new().unwrap();
+
+    let digits: bool = runtime
+        .eval("return require 'fmd.env'.Revision:match('^%d+$') ~= nil")
+        .unwrap();
+    let revision: f64 = runtime
+        .eval("return tonumber(require 'fmd.env'.Revision)")
+        .unwrap();
+
+    assert!(digits);
+    assert!(revision >= 6920.0, "{revision}");
+}
+
 /// A runtime whose lua dir is a fresh temporary directory holding `files` (path, source).
 fn runtime_with_files(files: &[(&str, &str)]) -> (Runtime, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
