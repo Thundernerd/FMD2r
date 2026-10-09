@@ -421,6 +421,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/logout': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** End the session whose cookie comes with the request, and clear the cookie. */
+		post: operations['logout'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/logs': {
 		parameters: {
 			query?: never;
@@ -544,6 +561,23 @@ export interface paths {
 		get: operations['getSeries'];
 		put?: never;
 		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/sessions/revoke-all': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** End every session, this one included. Bearer tokens keep working. */
+		post: operations['revokeAllSessions'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -1165,6 +1199,8 @@ export interface components {
 			lua_dir: string;
 		};
 		Health: {
+			/** @description Whether the API requires the password (as a bearer token or a login session). */
+			auth: boolean;
 			/** @description Always `ok` while the server answers. */
 			status: string;
 		};
@@ -1878,6 +1914,19 @@ export interface components {
 			 * @default 0.0.0.0:8080
 			 */
 			bind: string;
+			/**
+			 * Format: int32
+			 * @description Days a login session may go unused before it ends; every authorized request restarts
+			 *     the count.
+			 * @default 7
+			 */
+			session_idle_days: number;
+			/**
+			 * Format: int32
+			 * @description Days a login session lasts at most, however often it is used.
+			 * @default 30
+			 */
+			session_lifetime_days: number;
 		};
 		/** @description Every application setting. Stored one group per key in `app.db`'s `settings` table. */
 		Settings: {
@@ -1988,7 +2037,9 @@ export interface components {
 			/**
 			 * @default {
 			 *       "auth_token": null,
-			 *       "bind": "0.0.0.0:8080"
+			 *       "bind": "0.0.0.0:8080",
+			 *       "session_idle_days": 7,
+			 *       "session_lifetime_days": 30
 			 *     }
 			 */
 			server: components['schemas']['ServerSettings'];
@@ -3199,6 +3250,24 @@ export interface operations {
 			};
 		};
 	};
+	logout: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Logged out; the session cookie is cleared (also without a live session) */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+		};
+	};
 	listLogs: {
 		parameters: {
 			query?: {
@@ -3476,6 +3545,33 @@ export interface operations {
 			};
 			/** @description The website could not be reached */
 			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	revokeAllSessions: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Every session ended; this client's cookie is cleared */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Not authorized */
+			401: {
 				headers: {
 					[name: string]: unknown;
 				};

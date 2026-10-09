@@ -12,6 +12,7 @@ mod inbox;
 mod jobs;
 mod lists;
 mod logs;
+mod lua_catalog;
 mod module_settings;
 mod module_updates;
 mod series;
@@ -35,7 +36,9 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange};
-pub use covers::{CoverConfig, CoverModules, CoverSession, cover_url};
+pub use covers::{
+    CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
+};
 pub use error::{ApiError, FieldProblem, Problem};
 pub use events::{
     EventBus, JobState, ServerEvent, TaskProgress, TaskRemoved, TaskState, TaskStatusChange,
@@ -87,11 +90,13 @@ fn public_api() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::health))
         .routes(routes!(auth::login))
+        .routes(routes!(auth::logout))
 }
 
 /// Routes behind the auth layer (when auth is configured).
 fn protected_api() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .routes(routes!(auth::revoke_all))
         .routes(routes!(events::stream))
         .routes(routes!(inbox::list))
         .routes(routes!(inbox::mark_read))

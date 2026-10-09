@@ -300,7 +300,45 @@ export interface MockBackend {
 	taskFilesUrl: (id: number) => string;
 }
 
-export function createMockBackend(): MockBackend {
+export interface MockOptions {
+	/**
+	 * The password the mock requires, like `fmd2r serve --password`; `null` turns auth off.
+	 * Defaults to `sessionStorage['fmd2r.mock.password']`, so a test can turn auth on.
+	 */
+	password?: string | null;
+}
+
+const PASSWORD_KEY = 'fmd2r.mock.password';
+const SESSION_KEY = 'fmd2r.mock.session';
+
+/** A sessionStorage item, or `null` without storage (tests, private mode). */
+const stored = (key: string): string | null => {
+	try {
+		return globalThis.sessionStorage?.getItem(key) ?? null;
+	} catch {
+		return null;
+	}
+};
+
+/** Sets (or, with `null`, removes) a sessionStorage item; does nothing without storage. */
+const store = (key: string, value: string | null) => {
+	try {
+		if (value === null) globalThis.sessionStorage?.removeItem(key);
+		else globalThis.sessionStorage?.setItem(key, value);
+	} catch {
+		// Not persisted; the in-memory state still works.
+	}
+};
+
+export function createMockBackend({
+	password = stored(PASSWORD_KEY)
+}: MockOptions = {}): MockBackend {
+	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
+	let loggedIn = stored(SESSION_KEY) !== null;
+	const setLoggedIn = (value: boolean) => {
+		loggedIn = value;
+		store(SESSION_KEY, value ? '1' : null);
+	};
 	const inbox = seedInbox();
 	let tasks = seedTasks(Date.now());
 	/** Every open fake event stream, so API calls can announce what they changed. */
@@ -509,6 +547,22 @@ export function createMockBackend(): MockBackend {
 		const { pathname, searchParams } = new URL(req.url);
 		const route = `${req.method} ${pathname}`;
 
+		if (route === 'GET /api/health') return json({ status: 'ok', auth: password !== null });
+		if (route === 'POST /api/login') {
+			const body = (await req.json()) as { password?: unknown } | null;
+			if (password !== null && body?.password !== password) {
+				return json({ status: 401, title: 'Unauthorized' }, 401);
+			}
+			if (password !== null) setLoggedIn(true);
+			return new Response(null, { status: 204 });
+		}
+		if (route === 'POST /api/logout') {
+			setLoggedIn(false);
+			return new Response(null, { status: 204 });
+		}
+		if (password !== null && !loggedIn) {
+			return json({ status: 401, title: 'Unauthorized' }, 401);
+		}
 		if (route === 'GET /api/inbox') return json(inbox);
 		if (route === 'GET /api/tasks') {
 			const counts = { downloading: 0, waiting: 0, stopped: 0, finished: 0 };

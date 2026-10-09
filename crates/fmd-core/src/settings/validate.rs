@@ -97,6 +97,14 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         out_of(s.module_updater.interval_minutes, 1..=u32::MAX),
     );
     check(
+        "server.session_idle_days",
+        out_of(s.server.session_idle_days, 1..=365),
+    );
+    check(
+        "server.session_lifetime_days",
+        out_of(s.server.session_lifetime_days, 1..=3650),
+    );
+    check(
         "covers.cache_size_mb",
         out_of(s.covers.cache_size_mb, 1..=u32::MAX),
     );

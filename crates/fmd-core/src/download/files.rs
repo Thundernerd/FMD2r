@@ -56,8 +56,9 @@ fn image_ext(data: &[u8]) -> Option<&'static str> {
 /// `SaveImageStreamToFile` (baseunits/uBaseUnit.pas:2391-2480): saves `data` in `dir` as
 /// `name` plus the extension its content shows, converting PNG and WebP as the image settings
 /// say unless ImageMagick converts later. Returns the saved file, or `None` when `data` is
-/// empty, no image, or could not be written. The file keeps the time it was written: FMD2's
-/// `Last-Modified` file date (:2482-2494) is not reproduced.
+/// empty, no image, or could not be written. The file appears only once it is whole
+/// (`fmd_pack::write_whole`); FMD2 writes it in place. The file keeps the time it was
+/// written: FMD2's `Last-Modified` file date (:2482-2494) is not reproduced.
 pub(super) fn save_image(
     data: &[u8],
     dir: &Path,
@@ -80,7 +81,9 @@ pub(super) fn save_image(
     if path.exists() {
         let _ = fs::remove_file(&path);
     }
-    match fs::write(&path, converted.as_deref().unwrap_or(data)) {
+    match fmd_pack::write_whole(&path, |part| {
+        fs::write(part, converted.as_deref().unwrap_or(data))
+    }) {
         Ok(()) => Some(path),
         Err(e) => {
             tracing::warn!(target: "fmd_core", "saving {}: {e}", path.display());
@@ -122,6 +125,20 @@ pub(super) fn final_page_ext(images: &ImageSettings, ext: &str) -> String {
         magick.save_as.to_ascii_lowercase()
     } else {
         convert_target(images, ext).map_or_else(|| ext.to_owned(), |t| t.extension().to_owned())
+    }
+}
+
+/// Removes the part files [`save_image`] left for `base` under any image extension when the
+/// process was killed mid-write.
+pub(super) fn remove_partial_images(base: &Path) {
+    for ext in IMAGE_EXTENSIONS {
+        let mut path = base.as_os_str().to_owned();
+        path.push(".");
+        path.push(ext);
+        let part = fmd_pack::part_path(Path::new(&path));
+        if part.is_file() {
+            let _ = fs::remove_file(&part);
+        }
     }
 }
 

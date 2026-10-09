@@ -330,7 +330,10 @@ impl Inner {
         }
     }
 
-    /// `CheckAndActiveTaskAtStartup` (baseunits/uDownloadsManager.pas:1859-1893).
+    /// `CheckAndActiveTaskAtStartup` (baseunits/uDownloadsManager.pas:1859-1893). FMD2
+    /// resumes Downloading, Preparing and Waiting tasks; a process killed while converting or
+    /// packing leaves its task Converting or Compressing, so those resume too
+    /// (docs/tickets/T44-download-hard-crash-resume.md).
     pub(super) fn check_and_active_task_at_startup(self: &Arc<Self>) -> Result<(), EngineError> {
         let max = self.settings().connections.max_parallel_tasks;
         let mut started = 0;
@@ -339,7 +342,11 @@ impl Inner {
             for task in self.config.db.tasks().list()? {
                 if !matches!(
                     task.status,
-                    TaskStatus::Downloading | TaskStatus::Preparing | TaskStatus::Waiting
+                    TaskStatus::Downloading
+                        | TaskStatus::Preparing
+                        | TaskStatus::Waiting
+                        | TaskStatus::Converting
+                        | TaskStatus::Compressing
                 ) {
                     continue;
                 }

@@ -22,6 +22,7 @@ export type ModuleSummary = Schemas['ModuleSummary'];
 export type ModuleSettingsView = Schemas['ModuleSettingsView'];
 export type ModuleOptionSetting = Schemas['ModuleOptionSetting'];
 export type Problem = Schemas['Problem'];
+export type Health = Schemas['Health'];
 export type SeriesInfo = Schemas['SeriesInfo'];
 export type ChapterInfo = Schemas['ChapterInfo'];
 export type SeriesStatus = Schemas['SeriesStatus'];

@@ -7,6 +7,7 @@ import type {
 	AccountRequest,
 	FavoritePatch,
 	FavoriteView,
+	Health,
 	InboxItem,
 	JobState,
 	ListFacets,
@@ -63,6 +64,12 @@ export type MergePatch =
 
 /** Everything the UI asks of fmd-server. Pages talk to this, never to `fetch` directly. */
 export interface Api {
+	/** Liveness, and whether the server requires the password. Never needs auth. */
+	health(): Promise<Health>;
+	/** Trades the password for a session cookie; resolves to `false` when it is wrong. */
+	login(password: string): Promise<boolean>;
+	/** Ends this browser's session and clears its cookie. */
+	logout(): Promise<void>;
 	listInbox(): Promise<InboxItem[]>;
 	markRead(id: string): Promise<void>;
 	/** The whole download queue, in queue order. */
@@ -165,10 +172,24 @@ export interface ApiOptions {
 	fetch?: (input: Request) => Promise<Response>;
 	/** Overrides where task files download from (mock mode has no server to link to). */
 	taskFilesUrl?: (id: number) => string;
+	/** Called whenever the server answers 401 to anything but a login attempt. */
+	onUnauthorized?: () => void;
 }
 
-export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}): Api {
-	const client = createClient<paths>({ baseUrl, ...(fetch ? { fetch } : {}) });
+export function createApi({
+	baseUrl = '',
+	fetch = (input) => globalThis.fetch(input),
+	taskFilesUrl,
+	onUnauthorized
+}: ApiOptions = {}): Api {
+	const client = createClient<paths>({
+		baseUrl,
+		fetch: async (input) => {
+			const res = await fetch(input);
+			if (res.status === 401 && new URL(input.url).pathname !== '/api/login') onUnauthorized?.();
+			return res;
+		}
+	});
 
 	const unwrap = <T>(what: string, res: { data?: T; response: Response }): T => {
 		if (!res.response.ok || res.data === undefined) throw new ApiError(res.response.status, what);
@@ -192,6 +213,19 @@ export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}
 	};
 
 	return {
+		async health() {
+			return unwrap('health', await client.GET('/api/health'));
+		},
+		async login(password) {
+			const { response } = await client.POST('/api/login', { body: { password } });
+			if (response.status === 401) return false;
+			if (!response.ok) throw new ApiError(response.status, 'login');
+			return true;
+		},
+		async logout() {
+			const { response } = await client.POST('/api/logout');
+			if (!response.ok) throw new ApiError(response.status, 'logout');
+		},
 		async listInbox() {
 			return unwrap('listInbox', await client.GET('/api/inbox'));
 		},

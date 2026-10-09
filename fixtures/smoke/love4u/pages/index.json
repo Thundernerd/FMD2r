@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "id": "0001",
+      "method": "GET",
+      "url": "https://love4u.net/wlmr-moeko-to-hatake-to-otera-gohan-chapter-1.html",
+      "status": 301
+    },
+    {
+      "id": "0002",
+      "method": "GET",
+      "url": "https://love4u.net/manga-6433/moeko-to-hatake-to-otera-gohan-chapter-1.225122.html",
+      "status": 200
+    },
+    {
+      "id": "0003",
+      "method": "GET",
+      "url": "https://love4u.net/app/manga/controllers/cont.listImg.php?cid=225122",
+      "status": 200
+    }
+  ]
+}
