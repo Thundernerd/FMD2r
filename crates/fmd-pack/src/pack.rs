@@ -57,12 +57,9 @@ impl Default for PackOptions {
     }
 }
 
-/// Packs the images in `dir` into `out_path` plus the format's extension, and returns the
-/// written path (`TPacker.Execute`, baseunits/uPacker.pas:255-330). The archive appears under
-/// that path only once it is whole ([`write_whole`]).
-///
-/// Images are the files in `dir` (not subfolders) with an image extension, in natural order.
-/// `Folder` moves `dir` to `out_path` unless they are the same.
+/// Packs the images directly in `dir`, in natural order, into `out_path` plus the format's
+/// extension (`TPacker.Execute`, baseunits/uPacker.pas:255-330), written via [`write_whole`].
+/// `Folder` moves `dir` to `out_path`.
 pub fn pack(
     dir: &Path,
     format: PackFormat,

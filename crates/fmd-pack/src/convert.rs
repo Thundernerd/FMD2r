@@ -47,9 +47,8 @@ impl ConvertTarget {
     }
 }
 
-/// Converts the image file at `path` to `target`, writing it next to the source with the
-/// target's extension and deleting the source. Returns the new path, or `path` unchanged
-/// when the file already is in the target format.
+/// Replaces the image at `path` with one in `target`'s format and extension; returns the new
+/// path, or `path` when it already is in that format.
 pub fn convert(path: &Path, target: ConvertTarget) -> Result<PathBuf, PackError> {
     let bytes = std::fs::read(path)?;
     let Some(data) = convert_bytes(&bytes, target)? else {

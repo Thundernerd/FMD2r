@@ -11,11 +11,9 @@ pub fn part_path(path: &Path) -> PathBuf {
     part.into()
 }
 
-/// Writes `path` through `write`, which is given [`part_path`] to write to; once it returned
-/// the file is synced to disk and renamed to `path`, so a process killed or a machine losing
-/// power mid-write leaves no partial file under `path`. FMD2 writes its pages and archives in
-/// place (docs/tickets/T44-download-hard-crash-resume.md). A failed write removes the part
-/// file; one left by a killed process is overwritten by the next write of `path`.
+/// Has `write` write to [`part_path`], then syncs and renames it to `path`, so a crash mid-write
+/// leaves no partial file under `path` (FMD2 writes in place; see
+/// docs/tickets/T44-download-hard-crash-resume.md). A failed write removes the part file.
 pub fn write_whole<E: From<io::Error>>(
     path: &Path,
     write: impl FnOnce(&Path) -> Result<(), E>,
