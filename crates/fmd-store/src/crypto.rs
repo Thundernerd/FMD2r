@@ -9,28 +9,25 @@ use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 
 use crate::error::{Result, StoreError};
 
-/// Encrypts and decrypts secrets stored in `app.db`. Injected into [`crate::AppDb::accounts`] so
-/// the scheme can be swapped without touching the repositories.
+/// Encrypts secrets stored in `app.db`; injected so the scheme can be swapped.
 pub trait Cipher: Send + Sync {
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>>;
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>>;
 }
 
-/// File name of the [`KeyFileCipher`] key for account credentials, inside the data directory.
+/// File name of the account credentials key, inside the data directory.
 pub const ACCOUNTS_KEY_FILE: &str = "accounts.key";
 
 const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 24;
 
-/// XChaCha20-Poly1305 with a random 256-bit key kept in a file (e.g. in the data directory).
-/// Each ciphertext is `nonce || sealed`, with a fresh random nonce per call.
+/// XChaCha20-Poly1305 with a key kept in a file; each ciphertext is `nonce || sealed`.
 pub struct KeyFileCipher {
     aead: XChaCha20Poly1305,
 }
 
 impl KeyFileCipher {
-    /// Loads the key from `path`, or generates one and writes it there (mode 0600 on Unix) when
-    /// the file does not exist yet.
+    /// Loads the key, or creates it (mode 0600 on Unix) when missing.
     pub fn open_or_create(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let key = match fs::read(path) {
@@ -50,8 +47,7 @@ impl KeyFileCipher {
         })
     }
 
-    /// A cipher with a fresh random key that is never written anywhere, for an in-memory
-    /// database whose secrets die with it.
+    /// An unsaved random key, for an in-memory database.
     pub(crate) fn random() -> Self {
         Self {
             aead: XChaCha20Poly1305::new(&XChaCha20Poly1305::generate_key(&mut OsRng)),
@@ -59,9 +55,8 @@ impl KeyFileCipher {
     }
 }
 
-/// Writes a fresh key to a temporary file next to `path` and publishes it with `hard_link`, which
-/// fails if `path` already exists. Readers therefore never see a partially written key, and a
-/// crash mid-write leaves only the temporary file behind.
+/// Writes the key to a temporary file and publishes it with `hard_link`, which fails if `path`
+/// exists, so readers never see a partial key and concurrent creators don't clobber each other.
 fn create_key_file(path: &Path) -> Result<Vec<u8>> {
     let key = XChaCha20Poly1305::generate_key(&mut OsRng).to_vec();
     let mut tmp_name = path.as_os_str().to_owned();

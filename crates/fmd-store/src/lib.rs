@@ -1,12 +1,7 @@
 //! rusqlite schema, migrations and repositories (`app.db`, `lists.db`).
 //!
-//! # Concurrency
-//!
-//! [`AppDb`] and [`ListsDb`] each own a single SQLite connection behind a `Mutex` and are cheap to
-//! clone (`Arc`). Repository methods are blocking: call them directly from worker threads, and
-//! wrap them in `tokio::task::spawn_blocking` from async code. Each method holds the lock for one
-//! statement or one transaction only. Both databases run in WAL mode with foreign keys on and a
-//! busy timeout.
+//! Repository methods block on a shared connection: call them from worker threads or inside
+//! `tokio::task::spawn_blocking`.
 
 mod app;
 mod crypto;

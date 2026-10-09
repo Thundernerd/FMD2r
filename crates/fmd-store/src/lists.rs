@@ -16,43 +16,42 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/lists_v3.sql"),
 ];
 
-/// Records that `module_id`'s list changed now, inside the transaction that changed it.
+/// Run inside the transaction that changed `module_id`'s list.
 const MARK_UPDATED: &str = "INSERT INTO list_updates (module_id, updated_at)
     VALUES (?1, CAST(unixepoch('subsec') * 1000 AS INTEGER))
     ON CONFLICT (module_id) DO UPDATE SET updated_at = excluded.updated_at";
 
-/// Handle to `lists.db`. Clone it to share between threads.
+/// Handle to `lists.db`.
 #[derive(Clone)]
 pub struct ListsDb {
     db: Db,
 }
 
 impl ListsDb {
-    /// Opens `lists.db` at `path`, creating it and running pending migrations.
+    /// Opens or creates `lists.db` and runs pending migrations.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         Ok(Self {
             db: Db::open(path.as_ref(), "lists.db", MIGRATIONS)?,
         })
     }
 
-    /// The schema version recorded in the database (`PRAGMA user_version`).
+    /// `PRAGMA user_version`.
     pub fn schema_version(&self) -> Result<u32> {
         self.db.schema_version()
     }
 
-    /// The master list of every module.
     pub fn masterlist(&self) -> MasterListRepo<'_> {
         MasterListRepo { db: &self.db }
     }
 
-    /// The list titles' matches in MangaBaka's database.
+    /// The list titles' MangaBaka matches.
     pub fn matches(&self) -> MatchRepo<'_> {
         MatchRepo { db: &self.db }
     }
 }
 
-/// One manga in a module's list: the columns of FMD2's per-site list table
-/// (baseunits/DBDataProcess.pas:143-153), with `jdn` renamed `added_jdn`.
+/// The columns of FMD2's per-site list table (baseunits/DBDataProcess.pas:143-153), with `jdn`
+/// renamed `added_jdn`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MangaListing {
     pub link: String,
@@ -64,109 +63,96 @@ pub struct MangaListing {
     pub status: String,
     pub summary: String,
     pub numchapter: u32,
-    /// Julian day number of the day the manga was first listed.
+    /// Julian day number of when the manga was first listed.
     pub added_jdn: i64,
 }
 
-/// A [`MangaListing`] together with the module it belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MasterListEntry {
     pub module_id: String,
     pub listing: MangaListing,
-    /// The format of its accepted MangaBaka match; `None` without one, or when it does not say.
+    /// From the accepted MangaBaka match, if any.
     pub format: Option<String>,
-    /// The publication status of its accepted MangaBaka match; `None` without one, or when it
-    /// does not say.
+    /// From the accepted MangaBaka match, if any.
     pub publication: Option<String>,
 }
 
-/// Filters applied on top of the text query by [`MasterListRepo::search`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SearchFilters {
-    /// Only these modules; empty means all modules.
+    /// Empty means all modules.
     pub module_ids: Vec<String>,
     /// Every one of these must occur in `genres`.
     pub include_genres: Vec<String>,
     /// None of these may occur in `genres`.
     pub exclude_genres: Vec<String>,
-    /// Exact `status` value.
     pub status: Option<String>,
-    /// The format of the title's accepted MangaBaka match (`manga`, `manhwa`, `manhua`, `oel`,
-    /// `other`), or [`UNKNOWN`] for a title without one.
+    /// The accepted MangaBaka match's format (`manga`, `manhwa`, `manhua`, `oel`, `other`), or
+    /// [`UNKNOWN`].
     pub format: Option<String>,
-    /// The publication status of the title's accepted MangaBaka match (`ongoing`, `completed`,
-    /// `hiatus`, `cancelled`), or [`UNKNOWN`] for a title without one.
+    /// The accepted MangaBaka match's publication status (`ongoing`, `completed`, `hiatus`,
+    /// `cancelled`), or [`UNKNOWN`].
     pub publication: Option<String>,
 }
 
-/// [`UNKNOWN`], for SQL put together with `concat!`.
+/// [`UNKNOWN`], usable in `concat!`.
 macro_rules! unknown {
     () => {
         "unknown"
     };
 }
 
-/// The format or publication status of a title with no accepted MangaBaka match, or whose match
-/// does not say.
+/// Format or publication status when no accepted MangaBaka match gives one.
 pub const UNKNOWN: &str = unknown!();
 
-/// Which slice of the ordered results to return.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageRequest {
     pub offset: u32,
     pub limit: u32,
 }
 
-/// One page of search results and the number of matches across all pages.
+/// One page of results; `total` counts all pages.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchResults {
     pub total: u64,
     pub entries: Vec<MasterListEntry>,
 }
 
-/// How many listings carry one genre or status.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FacetCount {
     pub value: String,
     pub count: u64,
 }
 
-/// The genres and statuses of a set of listings, from [`MasterListRepo::facets`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Facets {
     pub genres: Vec<FacetCount>,
     pub statuses: Vec<FacetCount>,
-    /// The formats of the listings' accepted MangaBaka matches, [`UNKNOWN`] for the rest.
+    /// From accepted MangaBaka matches, [`UNKNOWN`] for the rest.
     pub formats: Vec<FacetCount>,
-    /// The publication statuses of the listings' accepted MangaBaka matches, [`UNKNOWN`] for the
-    /// rest.
+    /// From accepted MangaBaka matches, [`UNKNOWN`] for the rest.
     pub publications: Vec<FacetCount>,
 }
 
-/// A module's list at a glance, from [`MasterListRepo::summaries`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListSummary {
     pub module_id: String,
-    /// Titles listed.
     pub count: u64,
-    /// When the list was last updated or imported (even if that added nothing), in Unix
-    /// milliseconds.
+    /// Last update or import, even one that added nothing, in Unix milliseconds.
     pub updated_at: Option<i64>,
 }
 
-/// Repository for the master list. Obtain it with [`ListsDb::masterlist`].
 pub struct MasterListRepo<'a> {
     db: &'a Db,
 }
 
-/// The per-row insert/delete triggers that keep `masterlist_fts` in sync.
+/// Per-row triggers that keep `masterlist_fts` in sync.
 const BULK_TRIGGERS: [&str; 2] = ["masterlist_ai", "masterlist_ad"];
 
 const INSERT: &str = "INSERT INTO masterlist
     (module_id, link, title, alttitles, authors, artists, genres, status, summary, numchapter, added_jdn)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
 
-/// Inserts `l`; returns the number of rows changed (0 when a conflict clause skipped it).
+/// Returns 0 when a conflict clause skipped the row.
 fn execute_insert(stmt: &mut Statement<'_>, module_id: &str, l: &MangaListing) -> Result<usize> {
     Ok(stmt.execute(params![
         module_id,
@@ -204,11 +190,9 @@ fn entry_from_row(row: &Row<'_>) -> rusqlite::Result<MasterListEntry> {
 }
 
 impl MasterListRepo<'_> {
-    /// Replaces the whole list of `module_id` with `rows` in one transaction. This is the bulk
-    /// import path: the per-row FTS triggers are dropped for the duration of the transaction (and
-    /// recreated from their stored SQL before commit, or restored by the rollback on error), the
-    /// rows go through one prepared statement, and the index is synced with two set-based
-    /// statements. This is several times faster than letting the triggers fire per row.
+    /// Replaces `module_id`'s whole list in one transaction. For speed, the per-row FTS triggers
+    /// are dropped and the index synced set-based; the triggers are recreated before commit (or
+    /// restored by rollback).
     pub fn replace_module<I>(&self, module_id: &str, rows: I) -> Result<()>
     where
         I: IntoIterator,
@@ -256,7 +240,6 @@ impl MasterListRepo<'_> {
         Ok(())
     }
 
-    /// Inserts the listing, or overwrites the stored one with the same (`module_id`, `link`).
     pub fn upsert(&self, module_id: &str, listing: &MangaListing) -> Result<()> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare_cached(&format!(
@@ -271,9 +254,8 @@ impl MasterListRepo<'_> {
         Ok(())
     }
 
-    /// Adds the listings whose link `module_id` does not list yet, in one transaction, and keeps
-    /// the stored ones as they are, like FMD2's `INSERT OR IGNORE` (baseunits/DBDataProcess.pas:1089).
-    /// Returns how many were added.
+    /// Adds listings with new links and keeps existing ones, like FMD2's `INSERT OR IGNORE`
+    /// (baseunits/DBDataProcess.pas:1089). Returns how many were added.
     pub fn insert_new<I>(&self, module_id: &str, rows: I) -> Result<u64>
     where
         I: IntoIterator,
@@ -293,7 +275,6 @@ impl MasterListRepo<'_> {
         Ok(added)
     }
 
-    /// Every link `module_id` lists.
     pub fn links(&self, module_id: &str) -> Result<HashSet<String>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare("SELECT link FROM masterlist WHERE module_id = ?1")?;
@@ -303,7 +284,7 @@ impl MasterListRepo<'_> {
         Ok(links)
     }
 
-    /// Number of listings of `module_id`, or of every module for `None`.
+    /// `None` counts every module.
     pub fn count(&self, module_id: Option<&str>) -> Result<u64> {
         let conn = self.db.lock();
         Ok(conn.query_row(
@@ -313,13 +294,10 @@ impl MasterListRepo<'_> {
         )?)
     }
 
-    /// Searches titles and alternative titles (as FMD2's `Search`, baseunits/DBDataProcess.pas:1255)
-    /// through the FTS index: every word of `query` must match the start of a word, so partial
-    /// input like `one pi` finds "One Piece". An empty query matches everything.
-    ///
-    /// Genre filters match substrings of the `genres` column like FMD2's `Filter`
-    /// (baseunits/DBDataProcess.pas:1367): included genres must all occur, excluded ones must not.
-    /// Results are ordered by title, then module and link, so pages are stable.
+    /// Searches titles and alt titles like FMD2's `Search` (baseunits/DBDataProcess.pas:1255),
+    /// each word as a prefix, so `one pi` finds "One Piece". Genre filters match substrings
+    /// like FMD2's `Filter` (baseunits/DBDataProcess.pas:1367). Ordered by title, module and
+    /// link so pages are stable.
     pub fn search(
         &self,
         query: &str,
@@ -353,9 +331,8 @@ impl MasterListRepo<'_> {
 }
 
 impl MasterListRepo<'_> {
-    /// How many of the listings [`MasterListRepo::search`] matches carry each genre and each
-    /// status. `genres` is FMD2's comma-separated list (e.g. `Action, Comedy`); each trimmed,
-    /// non-empty item counts once per listing. Both are ordered by count, then name.
+    /// Counts per genre, status, format and publication over what [`MasterListRepo::search`]
+    /// matches. Each genre in the comma-separated list counts once per listing.
     pub fn facets(&self, query: &str, filters: &SearchFilters) -> Result<Facets> {
         let (where_clause, args) = where_clause(query, filters);
         let conn = self.db.lock();
@@ -393,7 +370,6 @@ impl MasterListRepo<'_> {
         })
     }
 
-    /// The size and last change of every module's list, by module ID.
     pub fn summaries(&self) -> Result<Vec<ListSummary>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare(
@@ -417,7 +393,7 @@ impl MasterListRepo<'_> {
     }
 }
 
-/// `(value, count)` pairs by descending count, then value.
+/// By descending count, then value.
 fn sorted_counts(counts: HashMap<String, u64>) -> Vec<FacetCount> {
     let mut counts: Vec<FacetCount> = counts
         .into_iter()
@@ -427,7 +403,6 @@ fn sorted_counts(counts: HashMap<String, u64>) -> Vec<FacetCount> {
     counts
 }
 
-/// Each listing's MangaBaka match, as `mm`.
 const MATCH_JOIN: &str = "LEFT JOIN metadata_matches mm
     ON mm.module_id = m.module_id AND mm.link = m.link";
 /// A listing's format facet value: its accepted match's, else [`UNKNOWN`].
@@ -443,8 +418,7 @@ const PUBLICATION_VALUE: &str = concat!(
     "')"
 );
 
-/// The `WHERE` clause (empty when nothing filters) and its arguments for
-/// [`MasterListRepo::search`] and [`MasterListRepo::facets`], over `masterlist m` [`MATCH_JOIN`]ed.
+/// The `WHERE` clause and arguments over `masterlist m` [`MATCH_JOIN`]ed.
 fn where_clause(query: &str, filters: &SearchFilters) -> (String, Vec<Value>) {
     let mut conds: Vec<String> = Vec::new();
     let mut args: Vec<Value> = Vec::new();
@@ -488,9 +462,7 @@ fn where_clause(query: &str, filters: &SearchFilters) -> (String, Vec<Value>) {
     }
 }
 
-/// Turns user input into an FTS5 query over `title` and `alttitles`: each word becomes a quoted
-/// prefix term, so FTS5 operators in the input are treated as text. `None` when the input has no
-/// searchable characters.
+/// Quotes each word as a prefix term so FTS5 operators in user input are treated as text.
 fn fts_query(query: &str) -> Option<String> {
     let terms: Vec<String> = query
         .split_whitespace()
@@ -506,10 +478,9 @@ fn escape_like(s: &str) -> String {
         .replace('_', "\\_")
 }
 
-/// Reads the list in an FMD2 per-site database (`<module id>.db`, as FMD2-DB ships them): the
-/// `masterlist` table of baseunits/DBDataProcess.pas:143-153, `jdn` read as `added_jdn`. FMD2
-/// leaves SQLite's type affinity alone, so a value of the wrong type converts the way SQLite
-/// casts it, NULL becomes empty or 0, and text that is not UTF-8 is decoded lossily.
+/// Reads an FMD2 per-site database's `masterlist` (baseunits/DBDataProcess.pas:143-153). FMD2
+/// ignores type affinity, so values are cast as SQLite would, NULL becomes empty or 0, and
+/// non-UTF-8 text is decoded lossily.
 pub fn read_fmd2_list(path: impl AsRef<Path>) -> Result<Vec<MangaListing>> {
     let conn = rusqlite::Connection::open_with_flags(
         path.as_ref(),
@@ -541,7 +512,6 @@ pub fn read_fmd2_list(path: impl AsRef<Path>) -> Result<Vec<MangaListing>> {
     Ok(rows)
 }
 
-/// Column `i` as text: NULL is empty, numbers are formatted, bytes decoded lossily.
 fn lossy_text(row: &Row<'_>, i: usize) -> rusqlite::Result<String> {
     use rusqlite::types::ValueRef;
     Ok(match row.get_ref(i)? {
@@ -585,7 +555,6 @@ impl MatchConfidence {
         Self::None,
     ];
 
-    /// The name stored in `lists.db`.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Link => "link",
@@ -602,7 +571,6 @@ impl MatchConfidence {
         Self::ALL.into_iter().find(|c| c.as_str() == s)
     }
 
-    /// Whether the match is used anywhere.
     pub fn is_accepted(self) -> bool {
         matches!(
             self,
@@ -611,7 +579,6 @@ impl MatchConfidence {
     }
 }
 
-/// A list title to match: what matching reads of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchInput {
     pub link: String,
@@ -619,36 +586,32 @@ pub struct MatchInput {
     pub alttitles: String,
     pub authors: String,
     pub artists: String,
-    /// What the title is matched on, and against which database, as stored with its match.
+    /// What the title was matched on, and against which database.
     pub fingerprint: String,
 }
 
-/// A list title's match, as stored.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredMatch {
-    /// The matched series; only for an accepted confidence.
+    /// Only for an accepted confidence.
     pub series_id: Option<i64>,
     pub confidence: MatchConfidence,
-    /// The series' format facet value (`manga`, `manhwa`, `manhua`, `oel`, `other`).
+    /// `manga`, `manhwa`, `manhua`, `oel` or `other`.
     pub format: Option<String>,
-    /// The series' publication facet value (`ongoing`, `completed`, `hiatus`, `cancelled`).
+    /// `ongoing`, `completed`, `hiatus` or `cancelled`.
     pub publication: Option<String>,
     pub year: Option<i64>,
 }
 
-/// The fingerprint of a `masterlist m` row matched against the database whose build ID is the
-/// query's `?2`: the columns matching reads, and that ID.
+/// The columns matching reads, plus the database build ID in `?2`.
 const FINGERPRINT: &str = "m.title || char(31) || m.alttitles || char(31) || m.authors \
     || char(31) || m.artists || char(31) || ?2";
 
-/// Repository for the list titles' MangaBaka matches. Obtain it with [`ListsDb::matches`].
 pub struct MatchRepo<'a> {
     db: &'a Db,
 }
 
 impl MatchRepo<'_> {
-    /// The titles of `module_id` that have no match yet, or changed since they were matched, or
-    /// were matched against another database than the one with build ID `build_id`.
+    /// Titles unmatched, changed since matching, or matched against another database build.
     pub fn pending(&self, module_id: &str, build_id: &str) -> Result<Vec<MatchInput>> {
         self.inputs(
             module_id,
@@ -657,7 +620,6 @@ impl MatchRepo<'_> {
         )
     }
 
-    /// Every title of `module_id`, to match against the database with build ID `build_id`.
     pub fn all(&self, module_id: &str, build_id: &str) -> Result<Vec<MatchInput>> {
         self.inputs(module_id, build_id, "")
     }
@@ -685,8 +647,6 @@ impl MatchRepo<'_> {
         Ok(inputs)
     }
 
-    /// Stores the matches of `module_id`'s titles, each with the fingerprint of the input it was
-    /// decided on, in one transaction.
     pub fn store<'m, I>(&self, module_id: &str, matches: I) -> Result<()>
     where
         I: IntoIterator<Item = (&'m MatchInput, &'m StoredMatch)>,
@@ -716,7 +676,6 @@ impl MatchRepo<'_> {
         Ok(())
     }
 
-    /// Drops the matches of titles `module_id` no longer lists.
     pub fn prune(&self, module_id: &str) -> Result<()> {
         let conn = self.db.lock();
         conn.execute(
@@ -727,13 +686,11 @@ impl MatchRepo<'_> {
         Ok(())
     }
 
-    /// Drops every match, as when the database they point into is removed.
     pub fn clear(&self) -> Result<()> {
         self.db.lock().execute("DELETE FROM metadata_matches", [])?;
         Ok(())
     }
 
-    /// The stored match of `module_id`'s title at `link`.
     pub fn get(&self, module_id: &str, link: &str) -> Result<Option<StoredMatch>> {
         let conn = self.db.lock();
         let row = conn

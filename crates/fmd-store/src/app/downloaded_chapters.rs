@@ -6,10 +6,8 @@ use rusqlite::params;
 use crate::db::Db;
 use crate::error::Result;
 
-/// Repository for downloaded chapters. Obtain it with [`crate::AppDb::downloaded_chapters`].
-///
-/// Module ids and links compare case-insensitively, as FMD2 lowercases the key and merges chapter
-/// lists with `MergeCaseInsensitive` (baseunits/DownloadedChaptersDB.pas:70-73).
+/// Ids and links compare case-insensitively, as FMD2 lowercases the key and merges with
+/// `MergeCaseInsensitive` (baseunits/DownloadedChaptersDB.pas:70-73).
 pub struct DownloadedChaptersRepo<'a> {
     db: &'a Db,
 }
@@ -19,7 +17,7 @@ impl<'a> DownloadedChaptersRepo<'a> {
         Self { db }
     }
 
-    /// Records `chapter_links` as downloaded for the manga. Already recorded chapters are ignored.
+    /// Already recorded chapters are ignored.
     pub fn mark(&self, module_id: &str, manga_link: &str, chapter_links: &[&str]) -> Result<()> {
         let mut conn = self.db.lock();
         let tx = conn.transaction()?;
@@ -45,7 +43,7 @@ impl<'a> DownloadedChaptersRepo<'a> {
         Ok(stmt.query_row(params![module_id, manga_link, chapter_link], |r| r.get(0))?)
     }
 
-    /// The manga's downloaded chapter links, sorted case-insensitively.
+    /// Sorted case-insensitively.
     pub fn list_for(&self, module_id: &str, manga_link: &str) -> Result<Vec<String>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare_cached(

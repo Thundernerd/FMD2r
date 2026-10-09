@@ -15,14 +15,12 @@ text_enum! {
     }
 }
 
-/// Primary key of an event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct EventId(pub i64);
 
-/// Fields supplied when pushing an event.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewEvent {
-    /// Free-form category, e.g. `module_update` or `new_chapters`.
+    /// Free-form, e.g. `module_update` or `new_chapters`.
     pub kind: String,
     pub severity: EventSeverity,
     pub module_id: Option<String>,
@@ -31,7 +29,6 @@ pub struct NewEvent {
     pub body: serde_json::Value,
 }
 
-/// A stored event.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {
     pub id: EventId,
@@ -46,17 +43,16 @@ pub struct Event {
     pub read: bool,
 }
 
-/// Which events [`EventRepo::list`] returns.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EventQuery {
     pub unread_only: bool,
-    /// Maximum number of events; `None` for all.
+    /// `None` for all.
     pub limit: Option<u32>,
 }
 
 const COLUMNS: &str = "id, ts, kind, severity, module_id, task_id, title, body, read";
 
-/// Reads a row of [`COLUMNS`]; the body comes back as raw JSON text to be parsed outside rusqlite.
+/// The body comes back as raw JSON, parsed outside rusqlite.
 fn event_from_row(row: &Row<'_>) -> rusqlite::Result<(Event, String)> {
     Ok((
         Event {
@@ -79,7 +75,6 @@ fn with_body((mut event, body): (Event, String)) -> Result<Event> {
     Ok(event)
 }
 
-/// Repository for events. Obtain it with [`crate::AppDb::events`].
 pub struct EventRepo<'a> {
     db: &'a Db,
 }
@@ -89,7 +84,6 @@ impl<'a> EventRepo<'a> {
         Self { db }
     }
 
-    /// Stores an unread event stamped with the current time.
     pub fn push(&self, new: &NewEvent) -> Result<Event> {
         let body = serde_json::to_string(&new.body)?;
         let conn = self.db.lock();
@@ -127,7 +121,6 @@ impl<'a> EventRepo<'a> {
         rows.into_iter().map(with_body).collect()
     }
 
-    /// The event with `id`, if any.
     pub fn get(&self, id: EventId) -> Result<Option<Event>> {
         let row = {
             let conn = self.db.lock();
@@ -141,7 +134,7 @@ impl<'a> EventRepo<'a> {
         row.map(with_body).transpose()
     }
 
-    /// Events stored after `after` (by id), oldest first; at most `limit` of them.
+    /// Oldest first.
     pub fn list_after(&self, after: EventId, limit: u32) -> Result<Vec<Event>> {
         let rows: Vec<(Event, String)> = {
             let conn = self.db.lock();

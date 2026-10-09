@@ -5,8 +5,7 @@ use rusqlite::{OptionalExtension, params};
 use crate::db::Db;
 use crate::error::Result;
 
-/// Repository for login sessions, keyed by a hash of the session cookie. Obtain it with
-/// [`crate::AppDb::sessions`]. Timestamps are Unix milliseconds.
+/// Login sessions keyed by a hash of the session cookie. Timestamps are Unix milliseconds.
 pub struct SessionRepo<'a> {
     db: &'a Db,
 }
@@ -16,7 +15,6 @@ impl<'a> SessionRepo<'a> {
         Self { db }
     }
 
-    /// Records a session created (and last seen) at `now`.
     pub fn create(&self, token_hash: &[u8], now: i64) -> Result<()> {
         let conn = self.db.lock();
         conn.execute(
@@ -26,9 +24,8 @@ impl<'a> SessionRepo<'a> {
         Ok(())
     }
 
-    /// Whether the session exists, was last seen at or after `seen_since` and was created at or
-    /// after `created_since`. A live session last seen before `renew_before` is marked seen at
-    /// `now`; the others are left alone, so frequent requests don't each cost a write.
+    /// Whether the session is live. It is only marked seen when last seen before
+    /// `renew_before`, so frequent requests don't each cost a write.
     pub fn renew(
         &self,
         token_hash: &[u8],
@@ -58,21 +55,19 @@ impl<'a> SessionRepo<'a> {
         Ok(true)
     }
 
-    /// Ends one session; ending an unknown one is not an error.
+    /// An unknown session is not an error.
     pub fn delete(&self, token_hash: &[u8]) -> Result<()> {
         let conn = self.db.lock();
         conn.execute("DELETE FROM sessions WHERE token_hash = ?1", [token_hash])?;
         Ok(())
     }
 
-    /// Ends every session.
     pub fn delete_all(&self) -> Result<()> {
         let conn = self.db.lock();
         conn.execute("DELETE FROM sessions", [])?;
         Ok(())
     }
 
-    /// Drops the sessions last seen before `seen_since` or created before `created_since`.
     pub fn delete_expired(&self, seen_since: i64, created_since: i64) -> Result<()> {
         let conn = self.db.lock();
         conn.execute(

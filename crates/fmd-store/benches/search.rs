@@ -49,7 +49,7 @@ fn listing(i: usize) -> MangaListing {
     }
 }
 
-/// The median of `runs` timings of `f`.
+/// Prints the median of `runs` timings of `f`.
 fn time(name: &str, runs: usize, mut f: impl FnMut()) {
     let mut times: Vec<Duration> = (0..runs)
         .map(|_| {

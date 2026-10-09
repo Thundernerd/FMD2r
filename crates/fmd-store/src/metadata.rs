@@ -1,6 +1,5 @@
-//! `metadata.db`: the compact local copy of MangaBaka's database that list titles are matched
-//! against. It is built in one go into a fresh file ([`MetadataBuilder`]) and only read after
-//! that ([`MetadataDb`]); a newer build replaces the whole file.
+//! `metadata.db`: a compact local copy of MangaBaka's database, built once into a fresh file
+//! and then only read; a newer build replaces the whole file.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -11,16 +10,13 @@ use crate::error::Result;
 
 const SCHEMA: &str = include_str!("migrations/metadata_v1.sql");
 
-/// The schema version a build writes (`PRAGMA user_version`); a file with another is not read.
+/// A file with another `user_version` is not read.
 const SCHEMA_VERSION: u32 = 1;
 
-/// A MangaBaka series, as kept for matching and display. A title kept only for matching is in
-/// the title index, not here.
+/// A MangaBaka series. Titles kept only for matching live in the title index.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MetadataSeries {
-    /// MangaBaka's series ID.
     pub id: i64,
-    /// The main title.
     pub title: String,
     /// MangaBaka's `type`: `manga`, `manhwa`, `manhua`, `oel`, `novel`, `other`, ...
     pub kind: String,
@@ -39,17 +35,16 @@ pub struct MetadataSeries {
     pub cover_x350: Option<String>,
 }
 
-/// Writes a new `metadata.db`. Everything goes into one transaction, committed by
-/// [`MetadataBuilder::finish`]; dropping the builder before that leaves an empty file.
+/// Writes a new `metadata.db` in one transaction committed by [`MetadataBuilder::finish`];
+/// dropping the builder first leaves an empty file.
 pub struct MetadataBuilder {
     conn: Connection,
 }
 
 impl MetadataBuilder {
-    /// Creates the schema in the empty file at `path`.
     pub fn create(path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open(path.as_ref())?;
-        // A file built once and swapped in whole needs no journal: a failed build is thrown away.
+        // No journal: a failed build is thrown away.
         conn.pragma_update(None, "journal_mode", "OFF")?;
         conn.pragma_update(None, "synchronous", "OFF")?;
         conn.execute_batch("BEGIN")?;
@@ -57,7 +52,6 @@ impl MetadataBuilder {
         Ok(Self { conn })
     }
 
-    /// Adds an active series.
     pub fn add_series(&mut self, s: &MetadataSeries) -> Result<()> {
         let mut stmt = self.conn.prepare_cached(
             "INSERT OR REPLACE INTO series (id, title, type, status, year, content_rating,
@@ -81,7 +75,6 @@ impl MetadataBuilder {
         Ok(())
     }
 
-    /// Indexes the normalised title `key` for `series`.
     pub fn add_title(&mut self, key: &str, series: i64) -> Result<()> {
         let mut stmt = self
             .conn
@@ -90,7 +83,7 @@ impl MetadataBuilder {
         Ok(())
     }
 
-    /// Indexes a site link `key` (e.g. `webtoons:4956`) for `series`.
+    /// `key` is e.g. `webtoons:4956`.
     pub fn add_link(&mut self, key: &str, series: i64) -> Result<()> {
         let mut stmt = self
             .conn
@@ -99,7 +92,7 @@ impl MetadataBuilder {
         Ok(())
     }
 
-    /// Indexes `series`' ID `xid` on `site` (`anilist`, `manga_updates`, ...).
+    /// `site` is e.g. `anilist` or `manga_updates`.
     pub fn add_xid(&mut self, site: &str, xid: &str, series: i64) -> Result<()> {
         let mut stmt = self
             .conn
@@ -108,7 +101,6 @@ impl MetadataBuilder {
         Ok(())
     }
 
-    /// Records that `series` was merged into `into`.
     pub fn add_merge(&mut self, series: i64, into: i64) -> Result<()> {
         let mut stmt = self
             .conn
@@ -117,9 +109,8 @@ impl MetadataBuilder {
         Ok(())
     }
 
-    /// Points the titles, links and IDs of merged series at the series they were finally merged
-    /// into, drops what points at no active series, stamps the build time (Unix milliseconds)
-    /// and `build_id` (unique to this build), and commits.
+    /// Repoints index entries of merged series at their final series, drops dangling ones,
+    /// stamps `built_at` (Unix ms) and `build_id`, and commits.
     pub fn finish(self, built_at: i64, build_id: &str) -> Result<()> {
         self.conn.execute_batch(
             "-- Follow chains of merges to their end; a cycle stops where it repeats.
@@ -153,13 +144,12 @@ impl MetadataBuilder {
     }
 }
 
-/// A built `metadata.db`, opened read-only. Cheap to share behind an `Arc`.
+/// A built `metadata.db`, opened read-only.
 pub struct MetadataDb {
     conn: Mutex<Connection>,
 }
 
 impl MetadataDb {
-    /// Opens the database built at `path`.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open_with_flags(
             path.as_ref(),
@@ -179,16 +169,16 @@ impl MetadataDb {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Connection> {
-        // A read-only connection has no state a panic could leave half-changed.
+        // Read-only: a panic can't leave anything half-changed.
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// When the database was built, in Unix milliseconds.
+    /// Unix milliseconds.
     pub fn built_at(&self) -> Result<Option<i64>> {
         Ok(self.meta("built_at")?.and_then(|v| v.parse().ok()))
     }
 
-    /// What tells this build from every other.
+    /// Unique per build.
     pub fn build_id(&self) -> Result<String> {
         Ok(self.meta("build_id")?.unwrap_or_default())
     }
@@ -200,7 +190,7 @@ impl MetadataDb {
             .optional()?)
     }
 
-    /// The active series `id`; `None` for a merged, deleted or unknown one.
+    /// `None` for a merged, deleted or unknown series.
     pub fn series(&self, id: i64) -> Result<Option<MetadataSeries>> {
         let conn = self.lock();
         let mut stmt = conn.prepare_cached(
@@ -234,7 +224,6 @@ impl MetadataDb {
             .optional()?)
     }
 
-    /// The series one of whose titles normalises to `key`, by ID.
     pub fn by_title_key(&self, key: &str) -> Result<Vec<i64>> {
         self.ids(
             "SELECT DISTINCT series FROM titles WHERE key = ?1 ORDER BY series",
@@ -242,7 +231,6 @@ impl MetadataDb {
         )
     }
 
-    /// The series with the site link `key`, by ID.
     pub fn by_link_key(&self, key: &str) -> Result<Vec<i64>> {
         self.ids(
             "SELECT DISTINCT series FROM links WHERE key = ?1 ORDER BY series",
@@ -250,7 +238,6 @@ impl MetadataDb {
         )
     }
 
-    /// The series with ID `xid` on `site`, by ID.
     pub fn by_xid(&self, site: &str, xid: &str) -> Result<Vec<i64>> {
         self.ids(
             "SELECT DISTINCT series FROM xids WHERE site = ?1 AND xid = ?2 ORDER BY series",
