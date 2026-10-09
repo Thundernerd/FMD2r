@@ -1,6 +1,7 @@
 #!/bin/sh
 # Smoke-tests the FMD2r container image: the server answers, the SPA is embedded, the bundled Lua
-# modules load, and the tools upstream scripts call are on PATH. CI's `docker` job runs it.
+# modules load, the tools upstream scripts call are on PATH, and there is no libfmdxpath.so (the
+# image uses the native XPath backend only). CI's `docker` job and the release workflow run it.
 #
 # Usage: scripts/docker-smoke.sh [IMAGE]   (default: fmd2r:smoke)
 set -eu
@@ -41,10 +42,8 @@ echo "first start seeded /data/lua"
 docker exec "$name" sh -c 'ls /data/lua/modules/*.lua >/dev/null' || fail "/data/lua/modules is empty"
 
 echo "native XPath backend only: no libfmdxpath.so, and fmd2r doesn't link it"
-docker exec "$name" ldd /usr/local/bin/fmd2r >/dev/null || fail "ldd fmd2r"
-if docker exec "$name" ldd /usr/local/bin/fmd2r | grep -q libfmdxpath; then
-  fail "fmd2r links libfmdxpath.so"
-fi
+deps=$(docker exec "$name" ldd /usr/local/bin/fmd2r) || fail "ldd fmd2r"
+case $deps in *libfmdxpath*) fail "fmd2r links libfmdxpath.so" ;; esac
 lib=$(docker exec "$name" find / -xdev -name 'libfmdxpath*' 2>/dev/null || true)
 [ -z "$lib" ] || fail "the image contains $lib"
 

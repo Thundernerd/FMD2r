@@ -28,7 +28,7 @@ RUN case "$TARGETARCH" in \
       arm64) arch=aarch64 pkg=aarch64 ;; \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac \
- && echo "$arch-unknown-linux-gnu" > /target \
+ && echo "$arch-unknown-linux-gnu" > /rust-target \
  && if [ "$TARGETARCH" != "$BUILDARCH" ]; then \
       apt-get update \
       && apt-get install -y --no-install-recommends "gcc-$pkg-linux-gnu" "libc6-dev-$TARGETARCH-cross" \
@@ -46,7 +46,7 @@ ENV FMD2R_GIT_REVISION=${FMD2R_GIT_REVISION}
 WORKDIR /src
 COPY . .
 COPY --from=web /src/web/build web/build
-RUN target=$(cat /target) \
+RUN target=$(cat /rust-target) \
  && rustup target add "$target" \
  && cargo build --release --locked -p fmd2r --target "$target" \
  && cp "target/$target/release/fmd2r" /usr/local/bin/fmd2r
