@@ -145,7 +145,6 @@ impl Smoke {
         toml::from_str(&text).map_err(|source| SmokeError::ListParse { path, source })
     }
 
-    /// The entry named `name`.
     pub fn entry(&self, name: &str) -> Result<Entry, SmokeError> {
         self.list()?
             .entries
@@ -175,9 +174,8 @@ impl Smoke {
         })
     }
 
-    /// Records the entry from the live site, replacing its fixtures and snapshots: each step's
-    /// traffic is recorded, image bodies are dropped, and the step is replayed; the replay's
-    /// output, which must match the live one, becomes the snapshot.
+    /// Records the entry from the live site, replacing its fixtures and snapshots. Image bodies
+    /// are dropped, then the replay's output, which must match the live one, becomes the snapshot.
     pub fn record(&self, entry: &Entry) -> Result<(), SmokeError> {
         for step in Step::ALL {
             let failed = |detail: String| SmokeError::Record {
@@ -202,7 +200,6 @@ impl Smoke {
         Ok(())
     }
 
-    /// Runs `step` on the entry's info and pages steps, collecting a result for each.
     fn run_steps(
         &self,
         entry: &Entry,
@@ -238,10 +235,9 @@ impl Smoke {
             .join(format!("{}.json", step.command()))
     }
 
-    /// Runs `fmd2r module <step> <url> --module <id>` in `mode` and returns its stdout, or why
-    /// it failed. It runs in a fresh working directory, removed afterwards: a module that runs
-    /// node (lua/utils/nodejs.lua) writes its scripts and npm packages under it, the way FMD2
-    /// writes them under its own directory.
+    /// Runs `fmd2r module <step> <url> --module <id>` and returns its stdout, or why it failed.
+    /// Uses a fresh working directory because node modules (lua/utils/nodejs.lua) write scripts
+    /// and npm packages under it.
     fn run(&self, entry: &Entry, step: Step, mode: Mode) -> Result<String, String> {
         let absolute = |path: &Path| std::path::absolute(path).unwrap_or_else(|_| path.to_owned());
         let work = WorkDir::new().map_err(|e| format!("cannot create a working directory: {e}"))?;
@@ -305,7 +301,6 @@ impl Drop for WorkDir {
     }
 }
 
-/// A process's outcome.
 struct Output {
     success: bool,
     stdout: String,

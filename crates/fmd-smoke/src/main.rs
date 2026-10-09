@@ -27,8 +27,8 @@ struct Paths {
     /// The smoke list's directory (`list.toml` and the recorded entries).
     #[arg(long, global = true, default_value = "fixtures/smoke")]
     dir: PathBuf,
-    /// Record every XPath evaluation of the runs into this differential corpus directory
-    /// (fixtures/xpath-corpus), adding to what is there.
+    /// Append every XPath evaluation to this differential corpus directory
+    /// (fixtures/xpath-corpus).
     #[arg(long, global = true, value_name = "DIR")]
     xpath_corpus: Option<PathBuf>,
 }
@@ -52,8 +52,8 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Classify a live and a replay run's results as Markdown: entries whose replay failed are
-    /// FMD2r regressions, entries failing only live had their site or module change.
+    /// Classify live and replay results as Markdown: a failed replay is an FMD2r regression, a
+    /// live-only failure a site or module change.
     Report {
         #[arg(long)]
         live: PathBuf,
