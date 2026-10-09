@@ -125,3 +125,62 @@ scripts/xpath-corpus.sh
 
 `fmd2r xpath eval [--backend fpc|native] [--css] FILE EXPR` prints one evaluation in the same
 normalized form, for debugging a mismatch.
+
+## `fmd2/`: files a real FMD2 binary wrote
+
+Ciphertext from FMD2 itself, so `EncryptString`/`DecryptString` (baseunits/uBaseUnit.pas:1556-1589)
+and the importer's account and proxy-password decryption are checked against FMD2, not against a
+reproduction of DCPcrypt's recipe (T43).
+
+```
+fmd2/
+  encrypt_string.tsv  `plaintext hex <TAB> ciphertext`, one EncryptString call per line
+  vectors.lua         the throwaway Lua module that produced encrypt_string.tsv
+  userdata/           an FMD2 userdata directory: modules.json, settings.json and the
+                      (empty) downloads.db, favorites.db and downloadedchapters.db
+```
+
+`crates/fmd-lua/tests/crypto.rs` checks `encrypt_string`/`decrypt_string` against
+`encrypt_string.tsv`; `crates/fmd-import/tests/real_fmd2.rs` runs `fmd_import::import()` on
+`userdata/`. None of the credentials are real. There is no `accounts.db`: FMD2 keeps accounts in
+`modules.json`, and only names `ACCOUNTS_FILE` (baseunits/FMDOptions.pas:289) in its backup list
+(mangadownloader/forms/uBackupSettings.pas:69), so it never wrote one.
+
+### How they were made
+
+FMD2 **2.0.34.5**, the `fmd_2.0.34.5_x86_64-win64.7z` release asset of
+[dazedcat19/FMD2](https://github.com/dazedcat19/FMD2/releases/tag/2.0.34.5) (SHA-256
+`dd35300ee22ef04fd56523ba241fd972fada5c780ed8b6ad4d06fd83bf231434`), run under Wine 11.18 in a
+fresh prefix with a fresh `userdata` directory. FMD2 has no headless mode, and its account and
+proxy fields are only set from the GUI, so the files were made in two runs instead of by typing
+into the GUI:
+
+1. Put `lua/templates`, `lua/utils` and `lua/modules/{ComX,MangaDex}.lua` from `fixtures/lua`,
+   plus `vectors.lua`, into the release's `lua/` directory, and a `userdata/settings.json` with
+   `{"update":{"AutoCheckLatestVersion":false},"dialogs":{"ShowQuitDialog":false}}` (no update
+   check, no quit dialog). Start `fmd.exe`. `vectors.lua`'s `Init` writes
+   `userdata/vectors.tsv`: FMD2's `crypto.EncryptString` of each plaintext (which calls
+   `EncryptString` in uBaseUnit.pas) and `DecryptString` of the result. Close FMD2 with
+   `wine taskkill /IM fmd.exe` (a close message, so `FormClose` saves `modules.json` and
+   `settings.json`). `encrypt_string.tsv` is that file without the round-trip column.
+2. Remove `vectors.lua`. In the saved files, set Com-X's account (enabled, `asValid`,
+   `Username`/`Password` = the FMD2 ciphertexts of `fixture-user@example.test` and
+   `not-a-real-password`, `Cookies` = FMD2r's ciphertext of `sid=1\0tail`), a few module
+   settings and options, and in `settings.json` the proxy (`UseProxy`, `ProxyType` `HTTP`, host,
+   port, `User`/`Pass` = the FMD2 ciphertexts of `proxy-user` and `pr0xy päss €`) and
+   `connections/NumberOfTasks` 3. Start FMD2 again and close it the same way: it decrypts the
+   credentials on load (`TWebsiteModules.LoadFromFile`, baseunits/WebsiteModules.pas:609-611;
+   `LoadOptions`, mangadownloader/forms/frmMain.pas:5878-5879) and encrypts them again on save
+   (WebsiteModules.pas:671-673; frmMain.pas:6074-6075). `userdata/` is what it wrote.
+
+What the runs showed besides the vectors:
+
+- FMD2 wrote every ciphertext back byte for byte, including the NUL cookie, so its
+  `DecryptString` and `EncryptString` don't stop at a NUL. (2.0.34.5's Lua binding does: it
+  passed `luaToString`/`lua_pushstring`, so `crypto.EncryptString('nul\0inside')` encrypted
+  `nul`. Current FMD2 uses length-aware strings, baseunits/lua/LuaCrypto.pas:15-30, as FMD2r
+  does, so that row is left out of `encrypt_string.tsv`.)
+- A `ProxyType` of `SOCKS5` came back as `""`; `HTTP`, the combo box's design-time text
+  (frmMain.lfm:3566), survives. Setting `cbOptionProxyType.Text` (frmMain.pas:5875) on a
+  `csDropDownList` combo box at that point doesn't select the item, under Wine at least, and
+  FMD2 then treats `""` as no proxy (baseunits/httpsendthread.pas:853-873).
