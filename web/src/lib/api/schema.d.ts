@@ -1394,11 +1394,12 @@ export interface components {
 			 * @description Work items of the current step done.
 			 */
 			done: number;
-			/** @description Why it failed. */
+			/** @description Why it failed: the technical details. */
 			error?: string | null;
 			job: components['schemas']['ListJobKind'];
 			kind: components['schemas']['ListEventKind'];
 			module_id: string;
+			reason?: null | components['schemas']['ListFailureReason'];
 			/** @description FMD2's status text, or the module's own. */
 			status_text: string;
 			/**
@@ -1422,6 +1423,12 @@ export interface components {
 			genres: components['schemas']['FacetValue'][];
 			statuses: components['schemas']['FacetValue'][];
 		};
+		/**
+		 * @description Why a list job failed, for the UI to pick its message from rather than parse
+		 *     [`ListEvent::error`].
+		 * @enum {string}
+		 */
+		ListFailureReason: 'no_dump' | 'unreachable' | 'bad_archive' | 'failed';
 		/** @description One title of a module's list. */
 		ListItem: {
 			/**

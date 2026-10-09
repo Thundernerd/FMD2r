@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
-	import type { ListEvent, ListJobKind, ModuleSummary } from '#lib/api/types.ts';
+	import type { ListEvent, ListFailureReason, ListJobKind, ModuleSummary } from '#lib/api/types.ts';
 	import type { EventStore } from '#lib/events.svelte.ts';
 
 	let {
@@ -27,6 +27,24 @@
 		update: 'Updating the list',
 		import_db: 'Getting the list from FMD2-DB'
 	};
+
+	/** What a failed job of the module says, by why it failed; the server words the Jobs panel's
+	 * "Last error" the same (`crates/fmd-core/src/lists/jobs.rs`). */
+	function failedText(reason: ListFailureReason | null | undefined, job: ListJobKind): string {
+		const site = module.name;
+		switch (reason) {
+			case 'no_dump':
+				return `FMD2-DB has no ready-made list for ${site}. Use Update list to build it from the website.`;
+			case 'unreachable':
+				return `Could not reach FMD2-DB to get the list of ${site}. Check the connection and try again later.`;
+			case 'bad_archive':
+				return `The list FMD2-DB sent for ${site} is damaged or empty.`;
+			default:
+				return job === 'update'
+					? `Updating the list of ${site} failed.`
+					: `Getting the list of ${site} from FMD2-DB failed.`;
+		}
+	}
 
 	// Reload once a job ends; the event that ended it is the last one until the next job.
 	let ended: ListEvent | null = null;
@@ -121,7 +139,25 @@
 					: `Imported ${event.titles ?? 0} titles.`}
 			</p>
 		{:else if event?.kind === 'failed'}
-			<p class="small bad" role="alert">{event.error ?? 'The job failed.'}</p>
+			<div class="failed small" role="alert">
+				<p class="bad">{failedText(event.reason, event.job)}</p>
+				{#if event.reason === 'no_dump'}
+					<div class="row">
+						<button
+							class="btn sm"
+							type="button"
+							disabled={busy || !module.capabilities.update_list}
+							onclick={() => start('update')}>Update list</button
+						>
+					</div>
+				{/if}
+				{#if event.error}
+					<details>
+						<summary class="muted">Details</summary>
+						<pre class="mono">{event.error}</pre>
+					</details>
+				{/if}
+			</div>
 		{:else if event?.kind === 'cancelled'}
 			<p class="small muted" role="status">Cancelled.</p>
 		{/if}
@@ -133,7 +169,8 @@
 
 <style>
 	.actions,
-	.job {
+	.job,
+	.failed {
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-2);
@@ -153,6 +190,14 @@
 	}
 	p {
 		margin: 0;
+	}
+	summary {
+		cursor: pointer;
+	}
+	pre {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+		margin: var(--sp-1) 0 0;
 	}
 	.ok {
 		color: var(--ok);
