@@ -1,8 +1,8 @@
 //! List updates and FMD2-DB imports as background jobs, one at a time per module, reporting
-//! their progress as [`ListEvent`]s.
+//! their progress as [`ListEvent`]s. Together they are the `lists` job of the [`JobRegistry`].
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use fmd_http::TerminateToken;
 use fmd_lua::Module;
@@ -13,6 +13,7 @@ use utoipa::ToSchema;
 use super::{
     DbImporter, ImportError, ListError, ListPhase, ListProgress, ListUpdater, UpdateOptions,
 };
+use crate::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
 use crate::settings::SettingsService;
 
 /// Which job a [`ListEvent`] is about.
@@ -72,6 +73,16 @@ pub trait ListModules: Send + Sync + 'static {
     fn module(&self, id: &str) -> Option<Arc<Module>>;
 }
 
+/// A lookup like the download engine's [`crate::download::ModuleLookup`].
+impl<F> ListModules for F
+where
+    F: Fn(&str) -> Option<Arc<Module>> + Send + Sync + 'static,
+{
+    fn module(&self, id: &str) -> Option<Arc<Module>> {
+        self(id)
+    }
+}
+
 type EventSink = dyn Fn(ListEvent) + Send + Sync;
 
 /// How a list job that did not fail ended.
@@ -102,10 +113,17 @@ struct Inner {
     settings: Arc<SettingsService>,
     modules: Arc<dyn ListModules>,
     running: Mutex<HashMap<String, TerminateToken>>,
+    /// The `lists` job: the list jobs since none was running. Locked after `running`.
+    status: Mutex<JobStatus>,
+    /// Where the `lists` job announces its changes, once registered.
+    registry: OnceLock<JobRegistry>,
     on_event: Box<EventSink>,
 }
 
 impl ListJobs {
+    /// The `lists` job's id in `/api/jobs/{id}`.
+    pub const ID: &str = "lists";
+
     /// Jobs reading their options from `settings` (`connections.max_update_list_threads`,
     /// `update_lists.no_manga_info`, `update_lists.db_url`) and passing every event to
     /// `on_event`.
@@ -123,6 +141,15 @@ impl ListJobs {
                 settings,
                 modules: Arc::new(modules),
                 running: Mutex::default(),
+                status: Mutex::new(JobStatus {
+                    phase: JobPhase::Idle,
+                    done: 0,
+                    total: 0,
+                    last_run: None,
+                    next_run: None,
+                    last_error: None,
+                }),
+                registry: OnceLock::new(),
                 on_event: Box::new(on_event),
             }),
         }
@@ -214,8 +241,18 @@ impl ListJobs {
             if running.contains_key(module_id) {
                 return Err(ListJobError::AlreadyRunning(module_id.into()));
             }
+            let mut status = self.inner.status();
+            if running.is_empty() {
+                status.done = 0;
+                status.total = 0;
+                status.last_error = None;
+            }
+            status.phase = JobPhase::Running;
+            status.total += 1;
+            status.last_run = Some(now_ms());
             running.insert(module_id.to_owned(), terminate.clone());
         }
+        self.inner.changed();
         let inner = self.inner.clone();
         let id = module_id.to_owned();
         let spawned = std::thread::Builder::new()
@@ -230,11 +267,13 @@ impl ListJobs {
                 let result = work(&inner, &terminate, &events);
                 // Out of `running` before the last event, so a client may start the next job
                 // as soon as it hears this one ended.
-                inner.running().remove(&id);
+                let error = result.as_ref().err().map(|e| format!("{id}: {e}"));
+                inner.finished(&id, error);
                 events.end(result);
             });
         if let Err(e) = spawned {
-            self.inner.running().remove(module_id);
+            self.inner
+                .finished(module_id, Some(format!("{module_id}: {e}")));
             return Err(e.into());
         }
         Ok(())
@@ -246,6 +285,90 @@ impl Inner {
         // The map stays consistent even if a holder panicked.
         self.running.lock().unwrap_or_else(PoisonError::into_inner)
     }
+
+    fn status(&self) -> std::sync::MutexGuard<'_, JobStatus> {
+        self.status.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Ends `module_id`'s job, which failed with `error` when one is given.
+    fn finished(&self, module_id: &str, error: Option<String>) {
+        {
+            let mut running = self.running();
+            running.remove(module_id);
+            let mut status = self.status();
+            status.done += 1;
+            if error.is_some() {
+                status.last_error = error;
+            }
+            if running.is_empty() {
+                status.phase = if status.last_error.is_some() {
+                    JobPhase::Failed
+                } else {
+                    JobPhase::Done
+                };
+            }
+        }
+        self.changed();
+    }
+
+    fn changed(&self) {
+        if let Some(registry) = self.registry.get() {
+            registry.changed(ListJobs::ID);
+        }
+    }
+}
+
+impl ListJobs {
+    /// Adds the list jobs to `registry` as the `lists` job and announces their changes there.
+    pub fn register(&self, registry: &JobRegistry) {
+        // Registered once; a second registry is not told about changes.
+        let _ = self.inner.registry.set(registry.clone());
+        registry.register(self.clone());
+        registry.changed(Self::ID);
+    }
+}
+
+/// The list jobs as one job, like FMD2's single update-list thread working through the chosen
+/// websites (`TUpdateListManagerThread`, baseunits/uUpdateThread.pas): running while any module's
+/// list job runs, counting the jobs since none was running.
+impl Job for ListJobs {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn title(&self) -> &str {
+        "Update lists"
+    }
+
+    fn status(&self) -> JobStatus {
+        self.inner.status().clone()
+    }
+
+    /// A list job is for one module: it starts from `POST /api/lists/{module}/...`.
+    fn run(&self) -> Result<(), JobError> {
+        Err(JobError::Unsupported(
+            "list updates start per module, from the Discover page".into(),
+        ))
+    }
+
+    /// Asks every running list job to stop.
+    fn cancel(&self) -> Result<(), JobError> {
+        let running = self.inner.running();
+        if running.is_empty() {
+            return Err(JobError::NotRunning);
+        }
+        for token in running.values() {
+            token.terminate();
+        }
+        Ok(())
+    }
+}
+
+/// Now, in Unix milliseconds.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
 /// Sends the events of one job.

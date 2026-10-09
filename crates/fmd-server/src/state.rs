@@ -133,6 +133,12 @@ impl AppState {
         self
     }
 
+    /// [`AppState::with_engine`] for an engine others hold too.
+    pub(crate) fn with_shared_engine(mut self, engine: Arc<dyn DownloadEngine>) -> Self {
+        self.engine = engine;
+        self
+    }
+
     /// Lists and controls the jobs in `jobs` via `/api/jobs`, and streams their changes as
     /// `job.state` events.
     pub fn with_jobs(mut self, jobs: JobRegistry) -> Self {
