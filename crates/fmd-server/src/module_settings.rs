@@ -7,12 +7,14 @@ use axum::extract::{Path, State};
 use std::collections::HashMap;
 
 use fmd_core::modules::{ModuleCapabilities, ModuleInfo, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
-use fmd_core::settings::{HttpOverridesView, LimitOverrides, ModuleLimits, ModuleOverrides};
+use fmd_core::settings::{
+    HttpOverrides, HttpOverridesView, LimitOverrides, ModuleLimits, ModuleOverrides,
+};
 use serde::Serialize;
 use serde_json::Value;
 use utoipa::ToSchema;
 
-use fmd_store::ListSummary;
+use fmd_store::{AppDb, ListSummary};
 
 use crate::error::ApiJson;
 use crate::state::off_thread;
@@ -40,6 +42,10 @@ pub struct ModuleSummary {
     pub list_updated: Option<String>,
     /// Whether a list update or import of it is running.
     pub list_job_running: bool,
+    /// Whether its settings differ from the defaults: an option's value is not the one it
+    /// declares, or its overrides are on (`Settings.Enabled`,
+    /// baseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting.
+    pub customized: bool,
 }
 
 /// A module's settings.
@@ -98,6 +104,17 @@ pub enum ModuleOptionSetting {
 }
 
 impl ModuleSettingsView {
+    /// Whether an option's value is not the one the module declares.
+    fn options_changed(&self) -> bool {
+        self.options.iter().any(|o| match o {
+            // The arms differ in their fields' types, so they can't share a pattern.
+            ModuleOptionSetting::Checkbox { default, value, .. } => default != value,
+            ModuleOptionSetting::Edit { default, value, .. } => default != value,
+            ModuleOptionSetting::Spinedit { default, value, .. }
+            | ModuleOptionSetting::Combobox { default, value, .. } => default != value,
+        })
+    }
+
     /// Option values resolve like `MODULE.GetOption`: the stored value when it has the option's
     /// type, else the default (`fmd_lua::Module::option_value`,
     /// baseunits/lua/LuaWebsiteModules.pas:921-949).
@@ -167,6 +184,7 @@ pub(crate) async fn list(
             .collect(),
         None => HashMap::new(),
     };
+    let overrides = state.blocking(stored_overrides).await?;
     Ok(Json(
         state
             .modules
@@ -174,7 +192,11 @@ pub(crate) async fn list(
             .into_iter()
             .map(|m| {
                 let list = lists.get(&m.id);
+                let customized = overrides
+                    .get(&m.id)
+                    .is_some_and(|o| customized(m.clone(), o.clone()));
                 ModuleSummary {
+                    customized,
                     option_count: m.options.len(),
                     capabilities: m.capabilities,
                     list_size: list.map_or(0, |l| l.count),
@@ -193,6 +215,37 @@ pub(crate) async fn list(
             })
             .collect(),
     ))
+}
+
+/// Whether `overrides` change any of `module`'s settings, as [`ModuleSummary::customized`]
+/// reports. While they are on, their connection limit replaces the module's, 0 (unlimited)
+/// included (baseunits/WebsiteModulesSettings.pas:126-155), so they lift a declared one even
+/// left at 0.
+fn customized(module: ModuleInfo, overrides: ModuleOverrides) -> bool {
+    let overridden = overrides.enabled
+        && (overrides.limits != LimitOverrides::default()
+            || overrides.http != HttpOverrides::default()
+            || module.limits.max_connection_limit != 0);
+    overridden || ModuleSettingsView::new(module, overrides).options_changed()
+}
+
+/// The overrides stored for each module that has any. A module whose overrides fail to load is
+/// left out, so one bad row does not hide the module list.
+fn stored_overrides(db: &AppDb) -> Result<HashMap<String, ModuleOverrides>, ApiError> {
+    let repo = db.module_settings();
+    let ids = repo
+        .module_ids()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(ids
+        .into_iter()
+        .filter_map(|id| match ModuleOverrides::load(&repo, &id) {
+            Ok(overrides) => Some((id, overrides)),
+            Err(e) => {
+                tracing::warn!(target: "fmd_server", "settings of module {id}: {e}");
+                None
+            }
+        })
+        .collect())
 }
 
 /// A module's options, limits and overrides.

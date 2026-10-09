@@ -15,7 +15,8 @@ export const summary = (
 	capabilities: { update_list: true, info: true, download: true, account: false },
 	list_size: 0,
 	list_updated: null,
-	list_job_running: false
+	list_job_running: false,
+	customized: false
 });
 
 /** The ID upstream lua/modules/Manga1001.lua:18-19 registers two websites under. */

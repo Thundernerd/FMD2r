@@ -1,6 +1,12 @@
 <script lang="ts">
 	import type { ModuleSummary } from '#lib/api/types.ts';
-	import { groupModules, moduleKey, moduleLabel, repeatedNames } from '#lib/modules.ts';
+	import {
+		groupModules,
+		matchesSearch,
+		moduleKey,
+		moduleLabel,
+		repeatedNames
+	} from '#lib/modules.ts';
 
 	let {
 		modules,
@@ -24,9 +30,11 @@
 	const groups = $derived.by(() => {
 		const listed = new Set(websites);
 		return groupModules(
-			modules.filter((m) => listed.has(m.id)),
-			search,
-			(m) => m.id === selected
+			modules.filter(
+				(m) =>
+					m.id === selected ||
+					(listed.has(m.id) && matchesSearch(`${m.name} ${m.category}`, search))
+			)
 		);
 	});
 	const shown = $derived(groups.reduce((n, g) => n + g.modules.length, 0));

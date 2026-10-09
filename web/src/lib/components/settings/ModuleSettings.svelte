@@ -1,7 +1,13 @@
 <script lang="ts">
 	import type { ModuleSettingsView, ModuleSummary } from '#lib/api/types.ts';
 	import type { Draft } from '#lib/settings/draft.svelte.ts';
-	import { moduleHost, moduleKey, repeatedNames } from '#lib/modules.ts';
+	import {
+		groupModules,
+		matchesSearch,
+		moduleHost,
+		moduleKey,
+		repeatedNames
+	} from '#lib/modules.ts';
 	import { optionFields, type Field } from '#lib/settings/fields.ts';
 	import SettingField from './SettingField.svelte';
 
@@ -23,14 +29,57 @@
 		onselect: (id: string) => void;
 	} = $props();
 
+	const uid = $props.id();
 	let query = $state('');
-	const matches = $derived.by(() => {
-		const q = query.trim().toLowerCase();
-		return q
-			? modules.filter((m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
-			: modules;
-	});
+	/** The modules whose name, category, host or ID contains every word of the search. */
+	const matches = $derived(
+		modules.filter((m) => matchesSearch(`${m.name} ${m.category} ${moduleHost(m)} ${m.id}`, query))
+	);
+	const groups = $derived(groupModules(matches));
+	const count = $derived(
+		matches.length === modules.length
+			? `${modules.length} ${modules.length === 1 ? 'module' : 'modules'}`
+			: `${matches.length} of ${modules.length}`
+	);
 	const repeated = $derived(repeatedNames(modules));
+
+	let list: HTMLUListElement | undefined = $state();
+	/**
+	 * Arrow keys move the focus through the modules, from the search box into the list; Home and
+	 * End jump to the first and last. Enter selects the focused one, as it presses any button.
+	 */
+	function navigate(event: KeyboardEvent) {
+		if (!list) return;
+		const picks = [...list.querySelectorAll<HTMLButtonElement>('.pick')];
+		// The focused module's index; -1 in the search box.
+		const at = picks.indexOf(event.target as HTMLButtonElement);
+		const next = {
+			ArrowDown: at + 1,
+			ArrowUp: at - 1,
+			Home: 0,
+			End: picks.length - 1
+		}[event.key];
+		// In the search box only ArrowDown leaves it; the other keys keep moving the caret.
+		if (next === undefined || (at < 0 && event.key !== 'ArrowDown')) return;
+		const target = picks[Math.max(0, Math.min(next, picks.length - 1))];
+		if (!target) return;
+		event.preventDefault();
+		target.focus();
+	}
+
+	/** The module last brought into view, so searching later doesn't scroll back to it. */
+	let shownSelected: string | null = null;
+	// Bring the selected module into view once it is listed, e.g. when the page opens with
+	// `?module=` before the modules have loaded.
+	$effect(() => {
+		void groups; // Re-run when the list changes, e.g. once the modules have loaded.
+		if (!selected || !list || selected === shownSelected) return;
+		const pick = list.querySelector<HTMLElement>('.pick[aria-pressed="true"]');
+		if (!pick) return;
+		shownSelected = selected;
+		// jsdom has no scrollIntoView.
+		pick.scrollIntoView?.({ block: 'nearest' });
+	});
 
 	const options = $derived(view ? optionFields(view.options) : []);
 	const enabled = $derived(draft?.get('enabled') === true);
@@ -95,36 +144,57 @@
 </script>
 
 <div class="modules">
-	<div class="picker">
+	<!-- The keys move the focus between the buttons inside, which take them; the div only
+	     listens so one handler serves the search box and every module. -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="picker" onkeydown={navigate}>
+		<div class="heading">
+			<span class="label">Pick a website to edit its settings</span>
+			<span class="small muted" aria-live="polite">{count}</span>
+		</div>
 		<input
 			class="input"
 			type="search"
-			placeholder="Search modules"
+			placeholder="Search by name, category or host"
 			aria-label="Search modules"
 			bind:value={query}
 		/>
-		<ul class="list" aria-label="Modules">
-			{#each matches as m (moduleKey(m))}
-				<li>
-					<button
-						type="button"
-						class="pick"
-						aria-pressed={m.id === selected}
-						onclick={() => onselect(m.id)}
-					>
-						<span>
-							{m.name}
-							{#if repeated.has(m.name)}
-								<span class="host small muted">{moduleHost(m)}</span>
-							{/if}
-						</span>
-						{#if m.option_count}
-							<span class="count small muted"
-								>{m.option_count}
-								{m.option_count === 1 ? 'option' : 'options'}</span
-							>
-						{/if}
-					</button>
+		<ul class="list" aria-label="Modules" bind:this={list}>
+			{#each groups as group, i (group.category)}
+				<li class="group">
+					<h4 class="category small muted" id="{uid}-group-{i}">
+						{group.category}
+					</h4>
+					<ul aria-labelledby="{uid}-group-{i}">
+						{#each group.modules as m (moduleKey(m))}
+							<li>
+								<button
+									type="button"
+									class="pick"
+									aria-pressed={m.id === selected}
+									onclick={() => onselect(m.id)}
+								>
+									<span>
+										{m.name}
+										{#if repeated.has(m.name)}
+											<span class="host small muted">{moduleHost(m)}</span>
+										{/if}
+										{#if m.customized}
+											<span class="custom small" title="Its settings differ from the defaults"
+												>Custom</span
+											>
+										{/if}
+									</span>
+									{#if m.option_count}
+										<span class="count small muted"
+											>{m.option_count}
+											{m.option_count === 1 ? 'option' : 'options'}</span
+										>
+									{/if}
+								</button>
+							</li>
+						{/each}
+					</ul>
 				</li>
 			{:else}
 				<li class="small muted empty">
@@ -216,10 +286,19 @@
 		flex-direction: column;
 		gap: var(--sp-2);
 	}
-	.list {
+	.heading {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: var(--sp-2);
+	}
+	.list,
+	.list ul {
 		list-style: none;
 		margin: 0;
 		padding: 0;
+	}
+	.list {
 		max-height: 360px;
 		overflow-y: auto;
 		border: 1px solid var(--line);
@@ -239,6 +318,24 @@
 	}
 	.host {
 		font-weight: 400;
+	}
+	.category {
+		position: sticky;
+		top: 0;
+		margin: 0;
+		padding: var(--sp-1) var(--sp-3);
+		background: var(--surface-2);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.custom {
+		margin-left: var(--sp-1);
+		padding: 0 var(--sp-1);
+		border-radius: var(--r);
+		background: var(--warn-soft);
+		color: var(--warn);
+		font-weight: 600;
 	}
 	.pick:hover {
 		background: var(--surface-2);

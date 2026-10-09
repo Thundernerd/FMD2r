@@ -28,27 +28,40 @@ export function repeatedNames(modules: ModuleSummary[]): Set<string> {
 export const moduleLabel = (m: ModuleSummary, repeated: Set<string>): string =>
 	repeated.has(m.name) ? `${m.name} (${moduleHost(m)})` : m.name;
 
+/** A category of modules, as the pickers list them. */
+export interface ModuleGroup {
+	category: string;
+	modules: ModuleSummary[];
+}
+
+/** The category a module is listed under; modules without one are listed under "Other". */
+export const moduleCategory = (m: ModuleSummary): string => m.category || 'Other';
+
+const compareIgnoringCase = (a: string, b: string) =>
+	a.localeCompare(b, undefined, { sensitivity: 'base' });
+
 /**
- * The modules matching every word of `search` (in name or category), or for which `keep` holds,
- * grouped by category, groups and modules sorted by label.
+ * `modules` grouped by category, the groups sorted by category and each group's modules by name,
+ * ignoring case; modules sharing a name are sorted by host.
  */
-export function groupModules(
-	modules: ModuleSummary[],
-	search: string,
-	keep: (m: ModuleSummary) => boolean = () => false
-): { category: string; modules: ModuleSummary[] }[] {
-	const repeated = repeatedNames(modules);
-	const label = (m: ModuleSummary) => moduleLabel(m, repeated);
-	const words = search.toLowerCase().split(/\s+/).filter(Boolean);
-	const shown = modules.filter((m) => {
-		const text = `${m.name} ${m.category}`.toLowerCase();
-		return keep(m) || words.every((w) => text.includes(w));
-	});
-	const byCategory = Object.groupBy(shown, (m) => m.category || 'Other');
-	return Object.entries(byCategory)
-		.sort(([a], [b]) => a.localeCompare(b))
+export function groupModules(modules: ModuleSummary[]): ModuleGroup[] {
+	return Object.entries(Object.groupBy(modules, moduleCategory))
+		.sort(([a], [b]) => compareIgnoringCase(a, b))
 		.map(([category, list = []]) => ({
 			category,
-			modules: list.toSorted((a, b) => label(a).localeCompare(label(b)))
+			modules: list.toSorted(
+				(a, b) =>
+					compareIgnoringCase(a.name, b.name) || compareIgnoringCase(moduleHost(a), moduleHost(b))
+			)
 		}));
+}
+
+/** Whether `text` contains every word of the search `query`, ignoring case. */
+export function matchesSearch(text: string, query: string): boolean {
+	const lower = text.toLowerCase();
+	return query
+		.toLowerCase()
+		.split(/\s+/)
+		.filter(Boolean)
+		.every((w) => lower.includes(w));
 }

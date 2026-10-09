@@ -13,6 +13,7 @@ const MODULE: ModuleSummary = {
 	category: 'English',
 	capabilities: { account: false, download: true, info: true, update_list: true },
 	list_job_running: false,
+	customized: false,
 	list_size: 0,
 	list_updated: null,
 	option_count: 0

@@ -229,7 +229,7 @@ const MODULES: MockModule[] = [
 /** What the settings know of a module for `GET /api/modules`; the list fields come from the lists mock. */
 export type ModuleBasics = Pick<
 	ModuleSummary,
-	'id' | 'name' | 'root_url' | 'category' | 'option_count'
+	'id' | 'name' | 'root_url' | 'category' | 'option_count' | 'customized'
 >;
 
 type Overrides = Pick<ModuleSettingsView, 'enabled' | 'limits' | 'http'> & {
@@ -468,7 +468,21 @@ export function createMockSettings() {
 		previewRename,
 
 		listModules: (): ModuleBasics[] =>
-			MODULES.map((m) => ({ ...m.summary, option_count: m.options.length })),
+			MODULES.map((m) => {
+				const { enabled, limits, http, options } = view(m);
+				const defaults = defaultOverrides();
+				// As the server decides it: overrides that are on lift a declared connection limit.
+				const overridden =
+					enabled &&
+					(JSON.stringify(limits) !== JSON.stringify(defaults.limits) ||
+						JSON.stringify(http) !== JSON.stringify(defaults.http) ||
+						m.limits.max_connection_limit !== 0);
+				return {
+					...m.summary,
+					option_count: m.options.length,
+					customized: overridden || options.some((o) => o.value !== o.default)
+				};
+			}),
 
 		getModule(id: string): ModuleSettingsView | null {
 			const module = find(id);

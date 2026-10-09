@@ -1,7 +1,13 @@
 <script lang="ts">
 	import type { ModuleSummary } from '#lib/api/types.ts';
 	import type { Draft } from '#lib/settings/draft.svelte.ts';
-	import { groupModules, moduleKey, moduleLabel, repeatedNames } from '#lib/modules.ts';
+	import {
+		groupModules,
+		matchesSearch,
+		moduleKey,
+		moduleLabel,
+		repeatedNames
+	} from '#lib/modules.ts';
 
 	let {
 		modules,
@@ -29,7 +35,9 @@
 	const label = (m: ModuleSummary) => moduleLabel(m, repeated);
 
 	/** The modules matching the search, grouped by category. */
-	const groups = $derived(groupModules(modules, search));
+	const groups = $derived(
+		groupModules(modules.filter((m) => matchesSearch(`${m.name} ${m.category}`, search)))
+	);
 
 	/** Selects or deselects `ids`, keeping the order of the rest. */
 	function toggle(ids: string[], on: boolean) {

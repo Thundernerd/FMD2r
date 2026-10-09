@@ -4044,7 +4044,8 @@
           "option_count",
           "capabilities",
           "list_size",
-          "list_job_running"
+          "list_job_running",
+          "customized"
         ],
         "properties": {
           "capabilities": {
@@ -4052,6 +4053,10 @@
           },
           "category": {
             "type": "string"
+          },
+          "customized": {
+            "type": "boolean",
+            "description": "Whether its settings differ from the defaults: an option's value is not the one it\ndeclares, or its overrides are on (`Settings.Enabled`,\nbaseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting."
           },
           "id": {
             "type": "string"

@@ -352,6 +352,7 @@ async fn modules_are_listed_for_the_picker() {
             "list_size": 0,
             "list_updated": null,
             "list_job_running": false,
+            "customized": false,
         }])
     );
 }
@@ -421,4 +422,90 @@ async fn a_module_proxy_password_is_never_returned_only_whether_it_is_set() {
     send(&h.state, patch_json("/api/modules/fixture/settings", clear)).await;
     let body = body_json(send(&h.state, get("/api/modules/fixture/settings")).await).await;
     assert_eq!(body["http"]["proxy"]["has_password"], false);
+}
+
+/// What `GET /api/modules` reports as `customized` for the fixture module.
+async fn customized(h: &Harness) -> serde_json::Value {
+    let body = body_json(send(&h.state, get("/api/modules")).await).await;
+    body[0]["customized"].clone()
+}
+
+#[tokio::test]
+async fn a_module_is_customized_while_its_settings_differ_from_the_defaults() {
+    let h = harness();
+    assert_eq!(customized(&h).await, json!(false));
+
+    let uri = "/api/modules/fixture/settings";
+    let change = json!({ "options": { "lang": "fr" } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, change)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(true));
+    let reset = json!({ "options": { "lang": null } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, reset)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(false));
+
+    let change = json!({ "enabled": true, "limits": { "max_task_limit": 1 } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, change)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(true));
+    let reset = json!({ "enabled": false, "limits": { "max_task_limit": 0 } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, reset)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(false));
+
+    // An option set to its declared default is not a change.
+    let same = json!({ "options": { "hq": true } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, same)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(false));
+}
+
+/// A module declaring no limits: turning its overrides on changes nothing until one is set.
+const NO_LIMITS: &str = r#"
+function Init()
+  local m = NewWebsiteModule()
+  m.ID = 'fixture'
+  m.Name = 'Fixture'
+  m.RootURL = 'https://fixture.example'
+end
+"#;
+
+#[tokio::test]
+async fn overrides_turned_on_at_their_defaults_are_not_customized() {
+    let h = harness_with(NO_LIMITS);
+    let uri = "/api/modules/fixture/settings";
+    let on = json!({ "enabled": true });
+    assert_eq!(
+        send(&h.state, patch_json(uri, on)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(false));
+    let cookies = json!({ "http": { "cookies": "a=b" } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, cookies)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(true));
+}
+
+#[tokio::test]
+async fn overrides_turned_on_lift_a_declared_connection_limit() {
+    // While overrides are on, their connection limit of 0 (unlimited) replaces the module's 4
+    // (baseunits/WebsiteModulesSettings.pas:126-155).
+    let h = harness();
+    let on = json!({ "enabled": true });
+    let res = send(&h.state, patch_json("/api/modules/fixture/settings", on)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(customized(&h).await, json!(true));
 }

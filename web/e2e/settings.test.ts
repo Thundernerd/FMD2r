@@ -192,3 +192,13 @@ test('the rename preview follows the chapter settings', async ({ page }) => {
 	await page.getByRole('checkbox', { name: 'Create a folder per chapter' }).uncheck();
 	await expect(preview).toContainText('downloads/Sample Manga/001.jpg');
 });
+
+test('opening a module by link selects it and shows it in the list', async ({ page }) => {
+	await page.goto('/settings?module=tmo');
+	const list = page
+		.getByRole('region', { name: 'Website modules' })
+		.getByRole('list', { name: 'Modules' });
+	const pick = list.getByRole('button', { name: /TuMangaOnline/ });
+	await expect(pick).toHaveAttribute('aria-pressed', 'true');
+	await expect(pick).toBeInViewport();
+});
