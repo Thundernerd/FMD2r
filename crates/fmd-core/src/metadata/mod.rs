@@ -18,8 +18,7 @@ pub use jobs::{
 pub use matcher::{ListModule, MangaDexLinks, MatchReport, MatchScope, Matcher};
 pub use source::{Download, DumpSource, HttpDumpSource, USER_AGENT};
 
-/// Why building `metadata.db` (or matching against it) failed. A failed build leaves the
-/// database it would have replaced as it was.
+/// A failed build leaves the previous database as it was.
 #[derive(Debug, Error)]
 pub enum MetadataError {
     #[error("downloading {url} failed with HTTP status {status}")]

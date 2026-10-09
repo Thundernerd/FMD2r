@@ -1,21 +1,16 @@
-//! Turning what `OnGetInfo` filled in into a list row, as `TMangaInformation.GetInfoFromURL`
-//! cleans it up (baseunits/uData.pas:85-208) and `AddInfoToData` stores it
-//! (baseunits/uData.pas:217-227).
+//! `OnGetInfo` results as list rows (`GetInfoFromURL`, baseunits/uData.pas:85-208;
+//! `AddInfoToData`, :217-227).
 
 use std::collections::HashSet;
 
 use fmd_lua::MangaInfo;
 use fmd_store::MangaListing;
 
-/// The row stored for the title listed as `name` at `link`, from the info its `OnGetInfo`
-/// produced, first listed on day `jdn`.
+/// The row for the title listed as `name` at `link`, first listed on day `jdn`.
 ///
-/// This reproduces the clean-up that matters for the list: line breaks, no-break spaces and
-/// byte order marks out of the one-line fields, trailing commas off the people and genre lists,
-/// placeholder values (`-`, `:`, or HTML) dropped, and an empty title filled from the list
-/// (`FillBaseMangaInfo`, baseunits/uBaseUnit.pas:2865-2875: FMD2 pre-fills `MANGAINFO.Title`
-/// with the listed name) or else `N/A`. HTML entity decoding (`CommonStringFilter`) is left to
-/// the modules, which decode with their XPath queries.
+/// An empty title falls back to the listed name (`FillBaseMangaInfo`,
+/// baseunits/uBaseUnit.pas:2865-2875), else `N/A`. HTML entity decoding (`CommonStringFilter`)
+/// is left to the modules' XPath queries.
 pub(super) fn listing(info: &MangaInfo, name: &str, link: &str, jdn: i64) -> MangaListing {
     let mut title = one_line(&info.title);
     if title.is_empty() {
@@ -24,8 +19,7 @@ pub(super) fn listing(info: &MangaInfo, name: &str, link: &str, jdn: i64) -> Man
     if title.is_empty() {
         title = "N/A".into();
     }
-    // `if Link = '' then Link := RemoveHostFromURL(MangaInfo.URL)` (baseunits/uData.pas:111-112);
-    // `MANGAINFO.URL` is the listed link with the module's host.
+    // `if Link = '' then Link := RemoveHostFromURL(MangaInfo.URL)` (baseunits/uData.pas:111-112).
     let link = match info.link.trim() {
         "" => link.to_owned(),
         own => remove_host(own),
@@ -50,27 +44,24 @@ pub(super) fn listing(info: &MangaInfo, name: &str, link: &str, jdn: i64) -> Man
     }
 }
 
-/// `FixWhiteSpace` (baseunits/uBaseUnit.pas:1913-1926): no-break spaces and byte order marks
-/// removed.
+/// `FixWhiteSpace` (baseunits/uBaseUnit.pas:1913-1926).
 fn fix_white_space(s: &str) -> String {
     s.replace(['\u{a0}', '\u{feff}'], "")
 }
 
-/// `Trim(FixWhiteSpace(RemoveStringBreaks(...)))`: line breaks removed.
+/// `Trim(FixWhiteSpace(RemoveStringBreaks(...)))`.
 fn one_line(s: &str) -> String {
     fix_white_space(&s.replace(['\r', '\n'], ""))
         .trim()
         .to_owned()
 }
 
-/// [`one_line`] without trailing commas (`TrimRightChar(..., [','])`), for FMD2's
-/// comma-separated people and genre lists.
+/// [`one_line`] plus `TrimRightChar(..., [','])`.
 fn comma_list(s: &str) -> String {
     one_line(s).trim_end_matches(',').trim().to_owned()
 }
 
-/// Drops the placeholders FMD2 drops: a value starting with `<`, or `-` or `:`
-/// (baseunits/uData.pas:129-138).
+/// baseunits/uData.pas:129-138.
 fn drop_placeholder(s: String) -> String {
     if s.starts_with('<') || s == "-" || s == ":" {
         String::new()
@@ -79,8 +70,8 @@ fn drop_placeholder(s: String) -> String {
     }
 }
 
-/// `NumChapter := ChapterLinks.Count` after empty and duplicate (case-insensitive) links are
-/// removed (baseunits/uData.pas:142-206).
+/// `NumChapter` after removing empty and case-insensitively duplicate links
+/// (baseunits/uData.pas:142-206).
 fn chapter_count(links: &[String]) -> u32 {
     let distinct: HashSet<String> = links
         .iter()
@@ -91,7 +82,7 @@ fn chapter_count(links: &[String]) -> u32 {
     u32::try_from(distinct.len()).unwrap_or(u32::MAX)
 }
 
-/// `RemoveHostFromURL` (baseunits/uBaseUnit.pas:969-972): the path of `url` (`SplitURL`).
+/// `RemoveHostFromURL` (baseunits/uBaseUnit.pas:969-972).
 pub(super) fn remove_host(url: &str) -> String {
     let (_, path) = fmd_http::split_url_bytes(url.as_bytes());
     String::from_utf8_lossy(&path).into_owned()

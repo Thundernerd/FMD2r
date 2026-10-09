@@ -1,23 +1,19 @@
-//! `lua/websitebypass/websitebypass_config.json`, which upstream's `cloudflare.lua` reads to
-//! decide whether to ask FlareSolverr for Cloudflare cookies, and where it runs
-//! (lua/websitebypass/cloudflare.lua:271-325). FMD2r writes it from the `flaresolverr_url`
-//! setting at startup.
+//! Writes `websitebypass_config.json`, which `cloudflare.lua` reads to find FlareSolverr
+//! (lua/websitebypass/cloudflare.lua:271-325).
 
 use std::path::Path;
 
 use serde_json::{Map, Value};
 
-/// FlareSolverr's own port, used when the URL names none.
+/// FlareSolverr's default port.
 const FLARESOLVERR_PORT: u16 = 8191;
 
 /// Writes `<lua_dir>/websitebypass/websitebypass_config.json` for `flaresolverr_url`.
 ///
-/// A URL turns the webdriver path on (`use_webdriver`, which is how `cloudflare.lua` reaches
-/// FlareSolverr) with its host and port (8191 when it names none); an empty one writes
-/// upstream's defaults: off, `localhost:8191` (lua/websitebypass/websitebypass_config.json). A
-/// URL that is not `http(s)://host[:port]` is an `InvalidInput` error and writes nothing.
-/// `debug`, `testing` and keys FMD2r does not know keep the values the file has. The file is
-/// replaced whole, so a reader never sees it half-written.
+/// A URL sets `use_webdriver` (how `cloudflare.lua` reaches FlareSolverr) with its host and
+/// port; empty writes upstream's defaults, off and `localhost:8191`
+/// (lua/websitebypass/websitebypass_config.json). A non-`http(s)` URL is `InvalidInput`. Other
+/// keys keep their values.
 pub fn write_websitebypass_config(lua_dir: &Path, flaresolverr_url: &str) -> std::io::Result<()> {
     let file = lua_dir.join("websitebypass/websitebypass_config.json");
     let mut config = std::fs::read(&file)

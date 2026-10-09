@@ -132,7 +132,6 @@ fn partial_patch_updates_only_given_keys_and_notifies_once() {
     assert_eq!(**rx.borrow_and_update(), expected);
     assert!(!rx.has_changed().unwrap());
 
-    // Persisted.
     assert_eq!(*SettingsService::load(db).unwrap().get(), expected);
 
     // A patch that changes nothing does not notify.

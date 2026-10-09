@@ -24,10 +24,9 @@ pub(super) const WAITING: &str = "W";
 pub(super) const DONE: &str = "D";
 pub(super) const DYNAMIC: &str = "G";
 
-/// How often finished pages are written to `app.db` while a chapter downloads.
 const PAGE_FLUSH_INTERVAL: Duration = Duration::from_secs(1);
 
-/// What the page threads of a phase do (`TTaskThread.Flag`).
+/// `TTaskThread.Flag`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Phase {
     /// `CS_GETPAGELINK`: `OnGetImageURL` for every page without a link.
@@ -36,8 +35,7 @@ pub(super) enum Phase {
     Download,
 }
 
-/// The task's state the task and page threads share (`TTaskContainer`): what `TASK` shows a
-/// module, plus the counters of the current phase.
+/// `TTaskContainer`, shared by the task and page threads.
 pub(super) struct Container {
     pub(super) task: fmd_lua::Task,
     pub(super) chapters_status: Vec<ChapterStatus>,
@@ -46,12 +44,10 @@ pub(super) struct Container {
     /// `DownCounter`: pages done in the current phase.
     pub(super) down_counter: usize,
     pub(super) bytes: u64,
-    /// Pages changed since they were last written to `app.db`.
     dirty: BTreeSet<usize>,
     flushed_at: Instant,
 }
 
-/// One run of a task thread.
 pub(super) struct TaskRun<'a> {
     pub(super) inner: &'a Arc<Inner>,
     pub(super) id: TaskId,
@@ -61,26 +57,23 @@ pub(super) struct TaskRun<'a> {
     pub(super) settings: Arc<Settings>,
     title: String,
     save_to: PathBuf,
-    /// The chapters as queued. `TASK.ChapterLinks`/`ChapterNames` start as these, but what a
-    /// module does to its copies does not move the task's own chapter list.
+    /// As queued; a module changing `TASK.ChapterLinks`/`ChapterNames` does not affect these.
     chapter_links: Vec<String>,
     chapter_names: Vec<String>,
-    /// The manga's link, as queued, for `downloaded_chapters`.
+    /// For `downloaded_chapters`.
     manga_link: String,
     pub(super) container: Mutex<Container>,
-    /// The worker running the task thread's own callbacks, its Lua state.
+    /// The worker running the task thread's own callbacks.
     affinity: Affinity,
     /// `TTaskThread.HTTP`.
     http: Option<HttpSession>,
     pub(super) chapter: usize,
     pub(super) chapter_link: String,
     pub(super) working_dir: PathBuf,
-    /// `CurrentCustomFileName`: the file-name template with everything but `%FILENAME%`
-    /// filled in.
+    /// `CurrentCustomFileName`.
     custom_file_name: String,
 }
 
-/// Runs task `id` until it finishes, fails or is terminated.
 pub(super) fn run(
     inner: &Arc<Inner>,
     id: TaskId,
@@ -160,7 +153,6 @@ impl<'a> TaskRun<'a> {
         self.inner.set_status(self.id, status, None)
     }
 
-    /// A callback runner on the worker `affinity` names, tied to the task's terminate token.
     pub(super) fn caller(&self, affinity: Affinity, http: Option<HttpSession>) -> Caller<'_> {
         let caller = self
             .inner
@@ -175,8 +167,7 @@ impl<'a> TaskRun<'a> {
         }
     }
 
-    /// A new session for the module (`TModuleContainer.CreateHTTP`,
-    /// baseunits/WebsiteModules.pas:353-379), tied to the task's terminate token.
+    /// `TModuleContainer.CreateHTTP` (baseunits/WebsiteModules.pas:353-379).
     pub(super) fn new_session(&self) -> HttpSession {
         let module = HttpModule {
             http: self.module.http().clone(),
@@ -190,7 +181,6 @@ impl<'a> TaskRun<'a> {
         session
     }
 
-    /// Reports the current phase's progress.
     pub(super) fn progress(&self, force: bool) {
         let c = self.container();
         let progress = Progress {
@@ -205,8 +195,8 @@ impl<'a> TaskRun<'a> {
         self.inner.progress(progress, force);
     }
 
-    /// `GetFileName` (baseunits/uDownloadsManager.pas:530-552): the module's file name for the
-    /// page when it named every page, else the page number, put into the file-name template.
+    /// `GetFileName` (baseunits/uDownloadsManager.pas:530-552): the module's name for the page
+    /// when it named every page, else the page number.
     pub(super) fn file_name(&self, work_id: usize) -> String {
         let name = {
             let c = self.container();
@@ -218,8 +208,8 @@ impl<'a> TaskRun<'a> {
         page_file_name(&self.custom_file_name, name.as_deref(), work_id)
     }
 
-    /// Marks page `work_id` changed, and writes the changed pages to `app.db` when they were
-    /// last written a while ago or `force` is set.
+    /// Marks page `work_id` changed; flushes to `app.db` at most every
+    /// [`PAGE_FLUSH_INTERVAL`] unless `force`.
     pub(super) fn page_changed(&self, work_id: Option<usize>, force: bool) {
         let pages = {
             let mut c = self.container();
@@ -260,7 +250,6 @@ impl<'a> TaskRun<'a> {
         }
     }
 
-    /// Writes the current chapter's whole page list to `app.db`.
     fn save_pages(&self) -> Result<(), EngineError> {
         let pages: Vec<NewPage> = {
             let mut c = self.container();
@@ -290,8 +279,7 @@ impl<'a> TaskRun<'a> {
         Ok(())
     }
 
-    /// The current chapter's pages as they were saved, so a resumed task does not ask the
-    /// module for them again.
+    /// So a resumed task does not ask the module for the pages again.
     fn load_pages(&self) -> Result<(), EngineError> {
         let chapter = u32::try_from(self.chapter).unwrap_or(u32::MAX);
         let pages = self.inner.config.db.tasks().pages(self.id, chapter)?;
@@ -316,7 +304,7 @@ impl<'a> TaskRun<'a> {
         Ok(())
     }
 
-    /// Runs a callback of the task thread itself; `TASK` comes back as the module left it.
+    /// `TASK` comes back as the module left it.
     fn task_callback(
         &mut self,
         call: impl FnOnce(Caller<'_>, fmd_lua::Task) -> fmd_lua::Pending<Reply<fmd_lua::TaskReply>>,
@@ -503,7 +491,6 @@ impl<'a> TaskRun<'a> {
         log_task(self.id, &self.title, format!("failed: {reason}"));
     }
 
-    /// The names of the chapters that failed, quoted.
     fn failed_chapter_names(&self) -> Vec<String> {
         self.container()
             .chapters_status
@@ -514,7 +501,6 @@ impl<'a> TaskRun<'a> {
             .collect()
     }
 
-    /// Records the chapter the task is at.
     fn enter_chapter(&mut self) -> Result<(), EngineError> {
         self.chapter_link = self.chapter_links[self.chapter].clone();
         self.container().task.current_download_chapter_ptr =
@@ -532,8 +518,7 @@ impl<'a> TaskRun<'a> {
         Ok(())
     }
 
-    /// Marks the chapter downloaded or failed and forgets its pages
-    /// (baseunits/uDownloadsManager.pas:1312-1323); a downloaded chapter is recorded in
+    /// baseunits/uDownloadsManager.pas:1312-1323; records a downloaded chapter in
     /// `downloaded_chapters` (baseunits/DownloadedChaptersDB.pas:67-91).
     fn leave_chapter(&mut self, failed: bool) -> Result<(), EngineError> {
         let status = if failed {
@@ -547,8 +532,8 @@ impl<'a> TaskRun<'a> {
             c.task.page_links.clear();
             c.task.page_container_links.clear();
             c.task.file_names.clear();
-            // The next chapter's first progress frame comes before `DoGetPageNumber` zeroes
-            // this (baseunits/uDownloadsManager.pas:835), so it must not show this chapter's.
+            // The next chapter's first progress frame precedes `DoGetPageNumber` zeroing this
+            // (baseunits/uDownloadsManager.pas:835).
             c.task.page_number = 0;
         }
         let db = &self.inner.config.db;
@@ -580,7 +565,6 @@ impl<'a> TaskRun<'a> {
             .position(|s| *s == ChapterStatus::Failed)
     }
 
-    /// Starts a phase's counters at 0 (`WorkCounter`, `DownCounter`).
     fn reset_phase(&self) {
         let mut c = self.container();
         c.work_counter = 0;
@@ -609,8 +593,7 @@ impl<'a> TaskRun<'a> {
         }
     }
 
-    /// `CheckForExists` (baseunits/uDownloadsManager.pas:1003-1064): marks the pages whose
-    /// image, or the chapter's archive, is on disk downloaded, and the others not.
+    /// `CheckForExists` (baseunits/uDownloadsManager.pas:1003-1064).
     fn check_for_exists(&self, dynamic_page_link: bool) -> usize {
         let pages = self.container().task.page_links.len();
         let magick = &self.settings.images.imagemagick;
@@ -640,14 +623,12 @@ impl<'a> TaskRun<'a> {
         found
     }
 
-    /// Where the chapter is packed: `<save to>/<chapter name>`, which `fmd_pack::pack` adds
-    /// the format's extension to (baseunits/uDownloadsManager.pas:553-611).
+    /// Without extension; `fmd_pack::pack` adds it (baseunits/uDownloadsManager.pas:553-611).
     fn pack_target(&self) -> PathBuf {
         self.save_to.join(&self.chapter_names[self.chapter])
     }
 
-    /// The chapter's archive, when the output format packs chapters
-    /// (baseunits/uDownloadsManager.pas:1027-1041).
+    /// baseunits/uDownloadsManager.pas:1027-1041.
     fn archive(&self) -> Option<PathBuf> {
         let format = pack_format(self.settings.output.format)?;
         Some(archive_path(
@@ -657,21 +638,13 @@ impl<'a> TaskRun<'a> {
         ))
     }
 
-    /// The folder [`TaskRun::compress`] moves the pages into to pack them.
     fn staging_dir(&self) -> PathBuf {
         self.working_dir.join(&self.chapter_names[self.chapter])
     }
 
-    /// Recovers the chapter's pages from a process killed while saving or packing them
-    /// (docs/tickets/T44-download-hard-crash-resume.md), before `CheckForExists` looks for
-    /// them:
-    /// - half-saved pages are removed;
-    /// - pages left in the staging folder are put back. An archive on disk is whole, as
-    ///   `fmd_pack::pack` only renames it into place once written, so then the pages are what
-    ///   was left of removing the packed ones: they go instead of being packed again over the
-    ///   archive.
-    ///
-    /// FMD2 saves and packs in place and has no staging folder.
+    /// Cleans up after a process killed while saving or packing (T44): removes half-saved
+    /// pages and puts staged pages back, or deletes them when the archive exists (it is only
+    /// renamed into place once whole).
     fn recover_interrupted_writes(&self) {
         let pages = self.container().task.page_links.len();
         for i in 0..pages {
@@ -705,8 +678,7 @@ impl<'a> TaskRun<'a> {
         let _ = std::fs::remove_dir(&staging);
     }
 
-    /// `CheckForPrepare` (baseunits/uDownloadsManager.pas:980-1001): whether a page still
-    /// lacks its link.
+    /// `CheckForPrepare` (baseunits/uDownloadsManager.pas:980-1001).
     fn check_for_prepare(&self) -> bool {
         let c = self.container();
         c.task.page_links.is_empty()
@@ -716,8 +688,7 @@ impl<'a> TaskRun<'a> {
                 .any(|l| l == WAITING || l.is_empty())
     }
 
-    /// `CheckForFinish` (baseunits/uDownloadsManager.pas:1066-1103): whether every page is on
-    /// disk.
+    /// `CheckForFinish` (baseunits/uDownloadsManager.pas:1066-1103).
     fn check_for_finish(&self, dynamic_page_link: bool) -> bool {
         let pages = self.container().task.page_links.len();
         if pages == 0 {
@@ -730,7 +701,6 @@ impl<'a> TaskRun<'a> {
         self.save_pages().is_ok() && missing == 0
     }
 
-    /// The saved image of every page, in page order.
     fn page_files(&self, ext: &str) -> Vec<PathBuf> {
         let pages = self.container().task.page_links.len();
         (0..pages)
@@ -738,8 +708,8 @@ impl<'a> TaskRun<'a> {
             .collect()
     }
 
-    /// `TTaskThread.Convert` (baseunits/uDownloadsManager.pas:613-711): ImageMagick, when
-    /// enabled; the built-in conversions happen as pages are saved.
+    /// `TTaskThread.Convert` (baseunits/uDownloadsManager.pas:613-711): ImageMagick only; the
+    /// built-in conversions happen as pages are saved.
     fn convert(&self) -> bool {
         let magick = &self.settings.images.imagemagick;
         if !magick.enabled {
@@ -761,11 +731,9 @@ impl<'a> TaskRun<'a> {
         }
     }
 
-    /// `TTaskThread.Compress` (baseunits/uDownloadsManager.pas:553-611): packs the chapter's
-    /// page images (:579-590) into `<save to>/<chapter name>` plus the format's extension.
-    /// `fmd_pack::pack` takes a whole folder, so the pages are first moved into one of their
-    /// own, named after the chapter (the PDF and EPUB title, baseunits/uPacker.pas:186, :225);
-    /// other files in the working directory stay out of the archive.
+    /// `TTaskThread.Compress` (baseunits/uDownloadsManager.pas:553-611, :579-590). The pages
+    /// are moved into a folder named after the chapter first (the PDF/EPUB title,
+    /// baseunits/uPacker.pas:186, :225), so other files stay out of the archive.
     fn compress(&self) -> bool {
         let Some(format) = pack_format(self.settings.output.format) else {
             return true;
@@ -804,9 +772,7 @@ impl<'a> TaskRun<'a> {
     }
 }
 
-/// The directory a chapter's pages are saved in: its own folder in the task's directory when
-/// chapter folders are generated, else the task's directory
-/// (baseunits/uDownloadsManager.pas:1143-1152).
+/// baseunits/uDownloadsManager.pas:1143-1152.
 pub(super) fn working_dir(saveto: &SaveToSettings, save_to: &Path, chapter_name: &str) -> PathBuf {
     if saveto.generate_chapter_folder {
         save_to.join(chapter_name)
@@ -815,8 +781,8 @@ pub(super) fn working_dir(saveto: &SaveToSettings, save_to: &Path, chapter_name:
     }
 }
 
-/// `CurrentCustomFileName` (baseunits/uDownloadsManager.pas:1168-1178): the file-name template
-/// renamed for a chapter, with `%FILENAME%` left for [`page_file_name`] to fill in.
+/// `CurrentCustomFileName` (baseunits/uDownloadsManager.pas:1168-1178), with `%FILENAME%` left
+/// for [`page_file_name`].
 pub(super) fn custom_file_name(
     saveto: &SaveToSettings,
     website: &str,
@@ -827,7 +793,6 @@ pub(super) fn custom_file_name(
         website,
         manga: title,
         chapter: chapter_name,
-        // `CR_FILENAME` stays for `GetFileName` to fill in.
         filename: "%FILENAME%",
         ..RenameContext::default()
     };
@@ -838,22 +803,19 @@ pub(super) fn custom_file_name(
     custom_rename(template, &ctx, &rename_options(saveto))
 }
 
-/// `GetFileName` (baseunits/uDownloadsManager.pas:530-552) for page `work_id` (0-based), given
-/// the module's name for it if any, cut to fit the path limit.
+/// `GetFileName` (baseunits/uDownloadsManager.pas:530-552), cut to fit the path limit.
 pub(super) fn page_file_name(custom_file_name: &str, name: Option<&str>, work_id: usize) -> String {
     let name = fmd_pack::page_file_name(custom_file_name, name, work_id);
     fmd_pack::fit_file_name(&name, MAX_IMAGE_FILE_PATH)
 }
 
-/// The archive a packed chapter becomes: `<save to>/<chapter name>` plus the format's extension
-/// (baseunits/uDownloadsManager.pas:553-611).
+/// baseunits/uDownloadsManager.pas:553-611.
 pub(super) fn archive_path(save_to: &Path, chapter_name: &str, format: PackFormat) -> PathBuf {
     let mut path = save_to.join(chapter_name).into_os_string();
     path.push(format.extension());
     PathBuf::from(path)
 }
 
-/// The page count of a page list.
 fn page_count(links: &[String]) -> i32 {
     i32::try_from(links.len()).unwrap_or(i32::MAX)
 }
@@ -866,8 +828,8 @@ fn page_status(link: &str) -> PageStatus {
     }
 }
 
-/// A callback that raised an error makes FMD2's `Do*` function return false, after logging
-/// it (e.g. baseunits/lua/LuaWebsiteModules.pas:298-301).
+/// A failing callback is logged and its `Do*` returns false
+/// (e.g. baseunits/lua/LuaWebsiteModules.pas:298-301).
 pub(super) fn log_callback_error(id: TaskId, error: &JobError) {
     match error {
         JobError::NoCallback { .. } => {}

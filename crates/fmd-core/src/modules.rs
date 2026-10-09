@@ -1,6 +1,4 @@
-//! What the rest of the app needs to know about a loaded website module: its declared limits and
-//! the options its `Init` declared with `AddOption*`, plus the `app.db`-backed store the Lua
-//! `MODULE` object reads those options, its cookies and its account from.
+//! Loaded modules' declared limits and options, and the `app.db`-backed module settings store.
 
 use std::ops::RangeInclusive;
 use std::sync::Arc;
@@ -15,21 +13,20 @@ use utoipa::ToSchema;
 
 use crate::settings::ModuleLimits;
 
-/// The range a spin-edit option accepts: `TSpinEditBindValue.Create` sets `MinValue := 0` and
-/// `MaxValue := 10000` (mangadownloader/forms/frmWebsiteOptionCustom.pas:162-168).
+/// `TSpinEditBindValue.Create`'s `MinValue`/`MaxValue`
+/// (mangadownloader/forms/frmWebsiteOptionCustom.pas:162-168).
 pub const SPIN_EDIT_RANGE: RangeInclusive<i32> = 0..=10000;
 
-/// A loaded module as the settings see it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleInfo {
     pub id: String,
     pub name: String,
-    /// Lowercased, as the loader leaves it.
+    /// Lowercased.
     pub root_url: String,
     pub category: String,
-    /// The limits the module declares; a negative one counts as 0 (unlimited).
+    /// A negative limit counts as 0 (unlimited).
     pub limits: ModuleLimits,
-    /// The options a user can set, in declaration order.
+    /// In declaration order.
     pub options: Vec<OptionDef>,
     pub capabilities: ModuleCapabilities,
 }
@@ -47,10 +44,9 @@ pub struct ModuleCapabilities {
     pub account: bool,
 }
 
-/// One option a module declared with `AddOption*`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OptionDef {
-    /// The name the value is stored under ([`fmd_lua::ModuleOption::settings_key`]).
+    /// [`fmd_lua::ModuleOption::settings_key`].
     pub key: String,
     pub caption: String,
     pub kind: OptionDefKind,
@@ -76,9 +72,8 @@ pub enum OptionDefKind {
 }
 
 impl From<&ModuleDef> for ModuleInfo {
-    /// Keeps the options FMD2 lists in its website options: `TModuleContainer.AddOption` drops
-    /// an option without a name (baseunits/WebsiteModules.pas:422-437). One whose cleaned name
-    /// is empty is dropped too, as no value could be stored for it.
+    /// Drops unnamed options like `TModuleContainer.AddOption`
+    /// (baseunits/WebsiteModules.pas:422-437), and ones whose cleaned name is empty.
     fn from(def: &ModuleDef) -> Self {
         let limit = |value: i32| u32::try_from(value).unwrap_or(0);
         ModuleInfo {
@@ -125,9 +120,8 @@ impl From<&ModuleDef> for ModuleInfo {
     }
 }
 
-/// Splits `text` into lines like assigning `TStrings.Text` (combo items are set that way,
-/// mangadownloader/forms/frmWebsiteOptionCustom.pas:410): CR LF, LF and CR all end a line, and a
-/// final line break does not add an empty item.
+/// Like assigning `TStrings.Text` (mangadownloader/forms/frmWebsiteOptionCustom.pas:410): CR LF,
+/// LF and CR end a line; a final line break adds no empty item.
 fn text_lines(text: &str) -> Vec<String> {
     let text = text.replace("\r\n", "\n").replace('\r', "\n");
     let mut lines: Vec<String> = text.split('\n').map(str::to_owned).collect();
@@ -137,15 +131,13 @@ fn text_lines(text: &str) -> Vec<String> {
     lines
 }
 
-/// A stored option value as the integer a spin edit or combo box holds, if it is one.
+/// A stored spin edit or combo box value.
 pub fn as_i32(value: &Value) -> Option<i32> {
     value.as_i64().and_then(|n| i32::try_from(n).ok())
 }
 
-/// The [`ModuleSettingsStore`] over `app.db`'s `module_settings` and `accounts` tables, so
-/// option values the settings page saves are what `MODULE.GetOption` returns, and cookies and
-/// accounts survive restarts (FMD2's `modules.json`, baseunits/WebsiteModules.pas:545-696).
-/// Account credentials and cookies are encrypted with `cipher`.
+/// The [`ModuleSettingsStore`] over `app.db` (FMD2's `modules.json`,
+/// baseunits/WebsiteModules.pas:545-696). Account credentials and cookies are encrypted.
 pub struct StoreModuleSettings {
     db: AppDb,
     cipher: Arc<dyn Cipher>,
@@ -243,18 +235,15 @@ impl ModuleSettingsStore for StoreModuleSettings {
     }
 }
 
-/// Where a manga URL leads: the module handling it and the link FMD2 opens and stores for it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Located<'a> {
     pub module: &'a ModuleInfo,
-    /// The URL's path (and query), relative to the module's `RootURL`.
+    /// Path and query, relative to the module's `RootURL`.
     pub link: String,
 }
 
-/// The module handling `url`, as FMD2's "paste URL" box finds it (`edURLButtonClick`,
-/// mangadownloader/forms/frmMain.pas:6578-6606): `SplitURL` splits off the host, which
-/// [`locate_by_host`] matches lowercased, and the path is the link. A URL without a host or a
-/// path matches nothing. `modules` must be sorted by ID.
+/// FMD2's "paste URL" lookup (`edURLButtonClick`, mangadownloader/forms/frmMain.pas:6578-6606).
+/// A URL without a host or a path matches nothing. `modules` must be sorted by ID.
 pub fn locate_by_url<'a>(modules: &'a [ModuleInfo], url: &str) -> Option<Located<'a>> {
     let (host, link) = fmd_http::split_url_bytes(url.as_bytes());
     if host.is_empty() || link.is_empty() {
@@ -269,12 +258,9 @@ pub fn locate_by_url<'a>(modules: &'a [ModuleInfo], url: &str) -> Option<Located
 }
 
 /// `TWebsiteModules.LocateModuleByHost` (baseunits/WebsiteModules.pas:500-530): the last module
-/// (by ID) whose `RootURL` contains `host`; failing that, the last one containing `host` without
-/// its scheme and port; failing that, the last one containing that bare host minus its first
-/// four characters, when it starts with `www.` or matches `w+\d*`. FMD2's `Exec` finds that
-/// pattern anywhere, so any host holding a `w` gets the second retry. FMD2's shortcut through the
-/// last located module is left out: it only changes which of several matching modules wins.
-/// `modules` must be sorted by ID.
+/// whose `RootURL` contains `host`, else the bare host, else the bare host minus its first four
+/// characters when it matches `w+\d*` (FMD2's `Exec` matches anywhere, so any `w` will do).
+/// FMD2's last-located shortcut is left out. `modules` must be sorted by ID.
 pub fn locate_by_host<'a>(modules: &'a [ModuleInfo], host: &str) -> Option<&'a ModuleInfo> {
     // `Pos` of an empty string is 0, so it matches nothing.
     let pos = |s: &str| {
@@ -295,13 +281,13 @@ pub fn locate_by_host<'a>(modules: &'a [ModuleInfo], host: &str) -> Option<&'a M
         return Some(module);
     }
     if bare.starts_with("www.") || bare.contains('w') {
-        // `Substring(4)`: everything after the first four characters.
+        // `Substring(4)`.
         return pos(&String::from_utf8_lossy(bare.as_bytes().get(4..)?));
     }
     None
 }
 
-/// `SplitURL(h, @h, nil, False, False)` (baseunits/httpsendthread.pas:191-276): the host of `url`
+/// `SplitURL(h, @h, nil, False, False)` (baseunits/httpsendthread.pas:191-276): the host
 /// without scheme or port.
 fn bare_host(url: &str) -> String {
     let (host, _) = fmd_http::split_url_bytes(url.as_bytes());

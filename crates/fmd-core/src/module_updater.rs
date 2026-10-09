@@ -1,7 +1,5 @@
-//! Keeping the Lua tree in sync with upstream, the way FMD2's module updater does
-//! (mangadownloader/forms/frmLuaModulesUpdater.pas, baseunits/GitHubRepoV3.pas): the last commit
-//! with a conditional ETag request, the tree of that commit diffed by blob SHA against
-//! `module_files`, then deletes and downloads.
+//! Syncs the Lua tree with upstream like FMD2's module updater
+//! (mangadownloader/forms/frmLuaModulesUpdater.pas, baseunits/GitHubRepoV3.pas).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -28,24 +26,20 @@ const USER_AGENT: &str = "curl/7.70.0";
 /// baseunits/FMDOptions.pas:292).
 const STATE_KEY: &str = "module_updater.repo";
 
-/// The inbox event kind of the updater's reports.
 pub const EVENT_KIND: &str = "module_update";
 
-/// Downloads running at once when the config does not say.
 const DEFAULT_DOWNLOADS: usize = 4;
 
 /// Where the Lua tree comes from: FMD2's `GitHub` block (dist/config.json:8-15).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepoConfig {
-    /// Base URL of the GitHub API.
     pub api_url: String,
-    /// Base URL raw files are downloaded from.
+    /// Base URL of raw file downloads.
     pub download_url: String,
     pub owner: String,
     pub name: String,
-    /// The branch (or other ref) to follow.
     pub git_ref: String,
-    /// The directory of the repository that holds the Lua tree.
+    /// Repository directory holding the Lua tree.
     pub path: String,
 }
 
@@ -113,7 +107,7 @@ impl RepoConfig {
     }
 }
 
-/// `AppendURLDelim`: `url` ending with a `/`.
+/// `AppendURLDelim`.
 fn with_slash(url: &str) -> String {
     if url.ends_with('/') {
         url.to_owned()
@@ -122,27 +116,23 @@ fn with_slash(url: &str) -> String {
     }
 }
 
-/// How a [`ModuleUpdater`] syncs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdaterConfig {
     pub repo: RepoConfig,
-    /// Sent as a bearer token to the API, for a higher rate limit.
+    /// Bearer token, for a higher rate limit.
     pub token: Option<String>,
     /// Keep the loaded version of a module whose updated file fails to load.
     pub keep_last_good: bool,
-    /// The Lua tree to sync into.
     pub lua_dir: PathBuf,
     /// Files downloaded at once; at least one.
     pub downloads: usize,
 }
 
 impl UpdaterConfig {
-    /// The default settings' repository, synced into `lua_dir`.
     pub fn new(lua_dir: impl Into<PathBuf>) -> UpdaterConfig {
         UpdaterConfig::from_settings(&ModuleUpdaterSettings::default(), lua_dir)
     }
 
-    /// The repository, token and keep-last-good choice of `settings`, synced into `lua_dir`.
     pub fn from_settings(
         settings: &ModuleUpdaterSettings,
         lua_dir: impl Into<PathBuf>,
@@ -157,7 +147,6 @@ impl UpdaterConfig {
     }
 }
 
-/// Why a sync stopped.
 #[derive(Debug, Error)]
 pub enum UpdateError {
     #[error(transparent)]
@@ -174,8 +163,8 @@ pub enum UpdateError {
     /// The tree names a path that is absolute or climbs out of the Lua dir.
     #[error("unsafe path in the tree: {0}")]
     UnsafePath(String),
-    /// A file next to the staged module `0` failed to download, so the module is not checked
-    /// against a stale copy of it; both are retried next run.
+    /// A file next to the staged module failed to download; the module is held back rather
+    /// than checked against a stale sibling.
     #[error("{0}: a file next to it failed to download")]
     SiblingNotDownloaded(String),
     #[error(transparent)]
@@ -187,16 +176,13 @@ pub enum UpdateError {
     },
 }
 
-/// What a sync did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SyncReport {
-    /// The upstream commit the tree is synced to.
     pub commit: String,
-    /// Files written, relative to the Lua dir.
+    /// Relative to the Lua dir.
     pub downloaded: Vec<String>,
-    /// Files deleted because upstream removed them.
     pub deleted: Vec<String>,
-    /// Files that failed to download; they are retried next run.
+    /// Retried next run.
     pub failed: Vec<String>,
     /// Module files that failed to load after the update.
     pub broken: Vec<String>,
@@ -209,29 +195,24 @@ pub struct SyncReport {
 struct RepoState {
     last_commit_sha: String,
     last_commit_etag: String,
-    /// The SHA each file failing to load was last reported at, so it is reported once per
-    /// version.
+    /// SHA each failing file was last reported at, so it is reported once per version.
     failed_init: BTreeMap<String, String>,
-    /// The SHA each file using unknown Host API names was last reported at.
     unknown_api: BTreeMap<String, String>,
 }
 
-/// The modules currently loaded, swapped whole when an update reloads them. Holders of an
-/// earlier registry keep it until they let go.
+/// The modules currently loaded, swapped whole when an update reloads them.
 pub struct LiveModules {
     settings: Arc<dyn ModuleSettingsStore>,
     current: RwLock<LoadedModules>,
 }
 
-/// A registry and the module files that failed to load into it.
 struct LoadedModules {
     registry: Arc<ModuleRegistry>,
     failures: Arc<Vec<LoadFailure>>,
 }
 
 impl LiveModules {
-    /// Loads every module in `<lua_dir>/modules`, their options and cookies in `settings`. A
-    /// file that fails is logged and left out.
+    /// Loads every module in `<lua_dir>/modules`; a file that fails is logged and left out.
     pub fn load(lua_dir: &Path, settings: Arc<dyn ModuleSettingsStore>) -> LiveModules {
         let report = ModuleRegistry::load_dir_with(lua_dir, settings.clone());
         for failure in &report.failures {
@@ -246,7 +227,6 @@ impl LiveModules {
         }
     }
 
-    /// The registry in use now.
     pub fn current(&self) -> Arc<ModuleRegistry> {
         self.current
             .read()
@@ -255,8 +235,7 @@ impl LiveModules {
             .clone()
     }
 
-    /// The module files that failed to load into [`current`](LiveModules::current), sorted by
-    /// path: left out of it, or kept at their earlier version.
+    /// Module files that failed to load (left out or kept at their earlier version), by path.
     pub fn failures(&self) -> Arc<Vec<LoadFailure>> {
         self.current
             .read()
@@ -273,14 +252,12 @@ impl LiveModules {
     }
 }
 
-/// The upstream commit the Lua tree in `db`'s updater state was last fully synced to; empty
-/// before the first sync (`ModuleUpdater::synced_commit` without an updater).
+/// The upstream commit last fully synced to; empty before the first sync.
 pub fn synced_commit(db: &AppDb) -> Result<String, UpdateError> {
     let state: Option<RepoState> = db.settings().get(STATE_KEY)?;
     Ok(state.map(|s| s.last_commit_sha).unwrap_or_default())
 }
 
-/// What [`ModuleUpdater::with_after_sync`] calls.
 type AfterSync = dyn Fn(&SyncReport) + Send + Sync;
 
 /// Syncs the Lua tree with upstream and reloads the modules that changed.
@@ -289,25 +266,20 @@ pub struct ModuleUpdater {
     db: AppDb,
     http: HttpClient,
     modules: Arc<LiveModules>,
-    /// Told which modules changed, so its workers rebuild their states.
     pool: Option<Arc<WorkerPool>>,
     after_sync: Option<Box<AfterSync>>,
-    /// When the API's rate limit resets, in Unix seconds, once a response said none is left.
+    /// Unix seconds when an exhausted API rate limit resets.
     rate_limit_reset: Mutex<Option<i64>>,
-    /// Terminating it cancels the running sync's requests.
     terminate: Mutex<TerminateToken>,
-    /// One sync at a time.
     running: Mutex<()>,
 }
 
-/// One answer of the GitHub API.
 struct ApiResponse {
     code: i32,
     etag: String,
     body: Vec<u8>,
 }
 
-/// One entry of a commit's tree.
 #[derive(Deserialize)]
 struct TreeEntry {
     path: String,
@@ -348,16 +320,13 @@ impl ModuleUpdater {
         }
     }
 
-    /// Invalidates the modules a sync changed in `pool`: each worker rebuilds its state from
-    /// the new file when it next runs one, while callbacks already running finish on the old
-    /// state.
+    /// Invalidates changed modules in `pool`; running callbacks finish on the old state.
     pub fn with_pool(mut self, pool: Arc<WorkerPool>) -> ModuleUpdater {
         self.pool = Some(pool);
         self
     }
 
-    /// Calls `hook` after a sync changed files and reloaded the modules, e.g. to write local
-    /// settings back into a config file upstream ships.
+    /// Calls `hook` after a sync changed files, e.g. to rewrite a config file upstream ships.
     pub fn with_after_sync(
         mut self,
         hook: impl Fn(&SyncReport) + Send + Sync + 'static,
@@ -366,35 +335,31 @@ impl ModuleUpdater {
         self
     }
 
-    /// The modules this updater reloads.
     pub fn modules(&self) -> &Arc<LiveModules> {
         &self.modules
     }
 
-    /// The upstream commit the Lua tree was last fully synced to; empty before the first sync.
     pub fn synced_commit(&self) -> Result<String, UpdateError> {
         synced_commit(&self.db)
     }
 
-    /// The followed ref, e.g. `master`.
     pub fn git_ref(&self) -> &str {
         &self.config.repo.git_ref
     }
 
-    /// Cancels the running sync: its requests stop, files not downloaded yet are retried next
-    /// run, and it returns [`UpdateError::Cancelled`].
+    /// Makes the running sync return [`UpdateError::Cancelled`]; undownloaded files are
+    /// retried next run.
     pub fn cancel(&self) {
         lock(&self.terminate).terminate();
     }
 
-    /// Runs one sync (`TCheckUpdateThread.DoSync`,
-    /// mangadownloader/forms/frmLuaModulesUpdater.pas:769-890). Blocking: run it on a thread
-    /// of its own, outside any tokio runtime.
+    /// `TCheckUpdateThread.DoSync` (mangadownloader/forms/frmLuaModulesUpdater.pas:769-890).
+    /// Blocking: run it outside any tokio runtime.
     pub fn sync(&self) -> Result<SyncReport, UpdateError> {
         let _running = lock(&self.running);
         let terminate = lock(&self.terminate).clone();
         let result = self.sync_with(&terminate);
-        // Whatever a sync staged is in place or rejected by now, even when it stopped early.
+        // Staged files are in place or rejected by now, even if the sync stopped early.
         remove_staging(&self.config.lua_dir);
         // A cancel reaches the sync it was meant for, even one about to start, and no later one.
         *lock(&self.terminate) = TerminateToken::new();
@@ -514,8 +479,7 @@ impl ModuleUpdater {
                 after_sync(&report);
             }
         }
-        // A failed download keeps the old commit, so the next run diffs the tree again and
-        // retries it (FMD2 keeps it flagged `fFailedDownload`,
+        // Keep the old commit so the next run retries failed downloads (`fFailedDownload`,
         // mangadownloader/forms/frmLuaModulesUpdater.pas:871-874).
         if !report.failed.is_empty() {
             next.last_commit_sha = state.last_commit_sha;
@@ -530,16 +494,12 @@ impl ModuleUpdater {
         Ok(report)
     }
 
-    /// Loads the module files `changed` touched again and swaps the registry, like
-    /// `ScanAndLoadFiles` (baseunits/lua/LuaWebsiteModules.pas:636-656) restricted to them. A
-    /// changed file outside `modules/` may be `require`d by any module, so then every module
-    /// loads again.
+    /// Reloads the `changed` module files and swaps the registry, like `ScanAndLoadFiles`
+    /// (baseunits/lua/LuaWebsiteModules.pas:636-656). A changed file outside `modules/` may be
+    /// `require`d by any module, so then everything reloads.
     ///
-    /// A file that fails to load is reported to the inbox once per version, and so is each of
-    /// `kept_out` (by path): module files whose update failed to load and never
-    /// replaced the version that is loaded, which stays, with its `module_files` row, until
-    /// upstream next changes it. A module that breaks because a file it `require`s changed has
-    /// no earlier version on disk to go back to, so it is dropped.
+    /// Load failures and `kept_out` files are reported to the inbox once per version. A module
+    /// broken by a changed `require`d file has no earlier version on disk, so it is dropped.
     fn reload(
         &self,
         changed: &[String],
@@ -614,8 +574,8 @@ impl ModuleUpdater {
             .filter(|def| reloaded(&def.file))
             .map(|def| def.id)
             .collect();
-        // The failures of files this reload left alone stand; the rest are this load's. The
-        // module directory was read, so its own failure is gone.
+        // Failures of files not reloaded stand. The module directory was read, so its own
+        // failure is gone.
         let modules_dir = lua_dir.join("modules");
         let mut live_failures: BTreeMap<PathBuf, String> = self
             .modules
@@ -648,7 +608,6 @@ impl ModuleUpdater {
         Ok(())
     }
 
-    /// The blob SHA `module_files` holds for `path`; empty when none.
     fn synced_sha(&self, path: &str) -> Result<String, UpdateError> {
         Ok(self
             .db
@@ -658,9 +617,8 @@ impl ModuleUpdater {
             .unwrap_or_default())
     }
 
-    /// Reports each of the module files `paths` that references Host API names a callback's
-    /// Lua state lacks (the T02 scan checked against the T14 state, as the Host API corpus
-    /// report does), once per version. `modules` are the modules they declared.
+    /// Reports each module file referencing Host API names the Lua state lacks, once per
+    /// version.
     fn check_host_api(
         &self,
         paths: &[&String],
@@ -709,8 +667,7 @@ impl ModuleUpdater {
         Ok(())
     }
 
-    /// Posts "module X failed Init" to the inbox, with FMD2's `DoInit` error
-    /// (baseunits/lua/LuaWebsiteModules.pas:473-500).
+    /// FMD2's `DoInit` error (baseunits/lua/LuaWebsiteModules.pas:473-500).
     fn report_failure(
         &self,
         path: &str,
@@ -725,7 +682,6 @@ impl ModuleUpdater {
         )
     }
 
-    /// Posts an updater report about `module` to the inbox.
     fn push_event(
         &self,
         severity: EventSeverity,
@@ -770,9 +726,8 @@ impl ModuleUpdater {
         }))
     }
 
-    /// `GetTree` (baseunits/GitHubRepoV3.pas:243-272): every file (blob) under the path,
-    /// by path. An empty or truncated tree is refused rather than taken as "everything was
-    /// deleted".
+    /// `GetTree` (baseunits/GitHubRepoV3.pas:243-272): blob SHA by path. An empty or truncated
+    /// tree is refused rather than taken as "everything was deleted".
     fn tree(&self, sha: &str) -> Result<BTreeMap<String, String>, UpdateError> {
         let url = self.config.repo.tree_url(sha);
         let response = self.api_get(&url, "")?;
@@ -805,13 +760,11 @@ impl ModuleUpdater {
         Ok(files)
     }
 
-    /// A GET on the API like `TGitHubRepo`'s session (baseunits/GitHubRepoV3.pas:120-122):
-    /// curl's user agent, no redirects, and `If-None-Match` when an ETag is known (:173-176).
+    /// A GET like `TGitHubRepo`'s session (baseunits/GitHubRepoV3.pas:120-122, :173-176).
     ///
-    /// Where FMD2 asks `rate_limit` before a sync and only warns (`CheckRateLimited`, :306-341,
-    /// called at mangadownloader/forms/frmLuaModulesUpdater.pas:779-782), this reads the
-    /// `X-RateLimit-Remaining` and `X-RateLimit-Reset` headers of every answer and sends
-    /// nothing more once none are left, until the reset.
+    /// FMD2 only warns from `CheckRateLimited` (:306-341, called at
+    /// mangadownloader/forms/frmLuaModulesUpdater.pas:779-782); this stops sending once the
+    /// `X-RateLimit-*` headers say none are left, until the reset.
     fn api_get(&self, url: &str, etag: &str) -> Result<ApiResponse, UpdateError> {
         if let Some(at) = *lock(&self.rate_limit_reset)
             && now_ms() / 1000 < at
@@ -872,10 +825,8 @@ impl ModuleUpdater {
         Ok(())
     }
 
-    /// The paths of `files` that download into the staging dir instead of the Lua dir: with
-    /// keep-last-good, the module files on disk whose current version is loaded. Their new version
-    /// replaces it only once it loads, so no worker building a state from the file in between
-    /// ever runs a version that fails to load.
+    /// With keep-last-good, the loaded module files, which download into the staging dir and
+    /// replace the live file only once they load, so no worker runs a broken version.
     fn to_stage(&self, files: &[Wanted]) -> BTreeSet<String> {
         if !self.config.keep_last_good {
             return BTreeSet::new();
@@ -892,9 +843,8 @@ impl ModuleUpdater {
             .collect()
     }
 
-    /// `results` of downloading `files`, with each staged module whose directory had a file that
-    /// is not a module fail to download turned into a failure: it would be checked against the
-    /// old copy of that file, and the commit is retried next run anyway.
+    /// Fails each staged module whose directory had a non-module file fail to download, as it
+    /// would be validated against the stale copy; the commit is retried next run anyway.
     fn hold_back_without_siblings(
         &self,
         files: &[Wanted],
@@ -925,14 +875,9 @@ impl ModuleUpdater {
             .collect()
     }
 
-    /// Copies the files next to each `staged` module in the Lua dir that are not module files
-    /// into the staging dir beside it, so a module reading one of them when it loads (MangaPlus.lua
-    /// reads `MangaPlus.proto` from its own directory, lua/modules/MangaPlus.lua:98-110) finds it
-    /// there, as `DoInit` would in the Lua dir (baseunits/lua/LuaWebsiteModules.pas:473-500).
-    /// The other files of this sync that downloaded are already in the Lua dir, so each copy is
-    /// the version the module will run with (a module whose sibling failed to download is held
-    /// back before this). A sibling that fails to copy is logged; validation then reports the
-    /// module that needed it.
+    /// Copies the non-module files next to each staged module into the staging dir, so a
+    /// module that reads one on load (e.g. `MangaPlus.proto`, lua/modules/MangaPlus.lua:98-110)
+    /// finds it, as `DoInit` would (baseunits/lua/LuaWebsiteModules.pas:473-500).
     fn stage_siblings(&self, staged: &[PathBuf]) {
         let lua_dir = &self.config.lua_dir;
         let staging = lua_dir.join(STAGING_DIR);
@@ -969,9 +914,8 @@ impl ModuleUpdater {
         }
     }
 
-    /// Loads each staged module file as the scan would from the Lua dir (`DoInit`,
-    /// baseunits/lua/LuaWebsiteModules.pas:473-500), in scratch states. Returns the ones that
-    /// fail, with their errors naming the file they would replace.
+    /// Loads each staged module in a scratch state (`DoInit`,
+    /// baseunits/lua/LuaWebsiteModules.pas:473-500); the failures, named by their live path.
     fn validate(&self, staged: impl Iterator<Item = PathBuf>) -> BTreeMap<PathBuf, String> {
         let staged: Vec<PathBuf> = staged.collect();
         if staged.is_empty() {
@@ -1001,10 +945,8 @@ impl ModuleUpdater {
             .collect()
     }
 
-    /// Downloads `files` on at most `downloads` threads at once (FMD2's `TDownloadThread`s,
-    /// bounded by `OptionMaxThreads`, mangadownloader/forms/frmLuaModulesUpdater.pas:714-737),
-    /// the ones in `to_stage` into the staging dir. Results come back in `files` order: each file's
-    /// size, or why it failed.
+    /// Downloads `files` on at most `downloads` threads (`TDownloadThread`,
+    /// mangadownloader/forms/frmLuaModulesUpdater.pas:714-737); results in `files` order.
     fn download_all(
         &self,
         commit: &str,
@@ -1032,9 +974,8 @@ impl ModuleUpdater {
         results.into_iter().map(|(_, r)| r).collect()
     }
 
-    /// `TDownloadThread.Execute` (mangadownloader/forms/frmLuaModulesUpdater.pas:395-440), but
-    /// written to a temp file and renamed over the old one, so a failure never leaves a
-    /// half-written module; a `staged` file is written into the staging dir instead.
+    /// `TDownloadThread.Execute` (mangadownloader/forms/frmLuaModulesUpdater.pas:395-440),
+    /// written atomically so a failure never leaves a half-written module.
     fn download(&self, commit: &str, path: &str, staged: bool) -> Result<Downloaded, UpdateError> {
         let live = safe_join(&self.config.lua_dir, path)?;
         let file = if staged {
@@ -1059,8 +1000,7 @@ impl ModuleUpdater {
     }
 }
 
-/// The module updater as the `modules` background job: each run syncs on a thread of its own.
-/// Cheap to clone; clones share the job.
+/// The module updater as the `modules` background job. Clones share the job.
 #[derive(Clone)]
 pub struct ModuleUpdaterJob {
     inner: Arc<JobInner>,
@@ -1073,10 +1013,8 @@ struct JobInner {
 }
 
 impl ModuleUpdaterJob {
-    /// The job's id in `/api/jobs/{id}`.
     pub const ID: &str = "modules";
 
-    /// The job over `updater`, announcing its changes on `jobs`.
     pub fn new(updater: Arc<ModuleUpdater>, jobs: JobRegistry) -> ModuleUpdaterJob {
         ModuleUpdaterJob {
             inner: Arc::new(JobInner {
@@ -1094,7 +1032,7 @@ impl ModuleUpdaterJob {
         }
     }
 
-    /// Records when the scheduler runs the job next, in Unix milliseconds.
+    /// Unix milliseconds.
     pub fn set_next_run(&self, at: Option<i64>) {
         self.update(|status| status.next_run = at);
     }
@@ -1169,7 +1107,6 @@ impl Job for ModuleUpdaterJob {
     }
 }
 
-/// What `GetLastCommit` read.
 struct LastCommit {
     sha: String,
     etag: String,
@@ -1177,20 +1114,15 @@ struct LastCommit {
 
 /// A module file whose downloaded update failed to load, so it never replaced the loaded one.
 struct KeptOut {
-    /// The blob SHA of the update.
     sha: String,
-    /// Why it failed to load.
     error: String,
 }
 
-/// A file written by a download.
 struct Downloaded {
     size: u64,
-    /// Where it was staged, when it was not written into place.
     staged: Option<PathBuf>,
 }
 
-/// A file to download.
 struct Wanted {
     path: String,
     sha: String,
@@ -1204,9 +1136,8 @@ struct Plan {
 }
 
 impl Plan {
-    /// Diffs `upstream` (when a new tree was read) against the synced `rows` by SHA: new and
-    /// changed files download, files gone upstream are deleted. A synced file missing from
-    /// `lua_dir` downloads again (mangadownloader/forms/frmLuaModulesUpdater.pas:791-806).
+    /// Diffs `upstream` (when a new tree was read) against `rows` by SHA. A synced file missing
+    /// from `lua_dir` downloads again (mangadownloader/forms/frmLuaModulesUpdater.pas:791-806).
     fn new(
         rows: &BTreeMap<String, ModuleFile>,
         upstream: Option<&BTreeMap<String, String>>,
@@ -1237,8 +1168,7 @@ impl Plan {
     }
 }
 
-/// Whether `path` (relative to the Lua dir) is a file the module scan loads: a `*.lua` or
-/// `*.luac` directly in `modules/` (baseunits/lua/LuaWebsiteModules.pas:644).
+/// A `*.lua` or `*.luac` directly in `modules/` (baseunits/lua/LuaWebsiteModules.pas:644).
 fn is_module_file(path: &str) -> bool {
     let Some(name) = path.strip_prefix("modules/") else {
         return false;
@@ -1249,7 +1179,7 @@ fn is_module_file(path: &str) -> bool {
             .is_some_and(|e| e.eq_ignore_ascii_case("lua") || e.eq_ignore_ascii_case("luac"))
 }
 
-/// `file` relative to `lua_dir`, with `/` separators like the tree's paths.
+/// `file` relative to `lua_dir`, with `/` separators.
 fn relative(lua_dir: &Path, file: &Path) -> String {
     let relative = file.strip_prefix(lua_dir).unwrap_or(file);
     relative
@@ -1259,19 +1189,17 @@ fn relative(lua_dir: &Path, file: &Path) -> String {
         .join("/")
 }
 
-/// The last component of `path` (`ExtractFileName`, as `DoInit` names the file it reports,
-/// baseunits/lua/LuaWebsiteModules.pas:497).
+/// `ExtractFileName`, as `DoInit` reports it (baseunits/lua/LuaWebsiteModules.pas:497).
 fn file_name(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
-/// Whether `<lua_dir>/modules` is missing or holds nothing: the tree was never synced, or was
-/// wiped, and a sync reads it all again (the first-run bootstrap).
+/// Whether `<lua_dir>/modules` is missing or empty, so a sync reads the whole tree again.
 pub fn has_no_modules(lua_dir: &Path) -> bool {
     std::fs::read_dir(lua_dir.join("modules")).map_or(true, |mut entries| entries.next().is_none())
 }
 
-/// `root/path`, refusing a `path` that is absolute or climbs out of `root`.
+/// Refuses a `path` that is absolute or climbs out of `root`.
 fn safe_join(root: &Path, path: &str) -> Result<PathBuf, UpdateError> {
     use std::path::Component;
     let relative = Path::new(path);
@@ -1284,10 +1212,9 @@ fn safe_join(root: &Path, path: &str) -> Result<PathBuf, UpdateError> {
     Ok(root.join(relative))
 }
 
-/// The directory of the Lua dir that module updates are staged in until they load.
+/// Where module updates wait in the Lua dir until they load.
 const STAGING_DIR: &str = ".fmd2r-staging";
 
-/// Removes the staging dir and whatever a sync left in it.
 fn remove_staging(lua_dir: &Path) {
     match std::fs::remove_dir_all(lua_dir.join(STAGING_DIR)) {
         Ok(()) => {}
@@ -1296,7 +1223,6 @@ fn remove_staging(lua_dir: &Path) {
     }
 }
 
-/// Writes `bytes` to a temp file next to `file`, then renames it over `file`.
 fn write_atomically(file: &Path, bytes: &[u8]) -> Result<(), UpdateError> {
     let io = |source| UpdateError::Io {
         path: file.to_owned(),
@@ -1324,12 +1250,11 @@ fn parse<T: serde::de::DeserializeOwned>(url: &str, body: &[u8]) -> Result<T, Up
     })
 }
 
-/// Locks `mutex`; what it guards stays consistent even if a holder panicked.
+/// Ignores poisoning: what the mutexes guard stays consistent if a holder panicked.
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Now, in Unix milliseconds.
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

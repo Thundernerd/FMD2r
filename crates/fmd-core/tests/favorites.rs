@@ -1,8 +1,6 @@
-//! The favorites checker through the public `FavoritesChecker` API, with a real `WorkerPool`
-//! running a fixture module whose stub site lists chapters, and a temp `app.db`
-//! (docs/tickets/T25-library-favorites.md, "Seams under test").
+//! The favorites checker through `FavoritesChecker` (docs/tickets/T25-library-favorites.md).
 //!
-//! Expected behaviour comes from FMD2's `TFavoriteThread.DoCheck`/`DoCheckMissing`
+//! Expected behaviour: `TFavoriteThread.DoCheck`/`DoCheckMissing`
 //! (baseunits/uFavoritesManager.pas:329-531) and `TFavoriteManager.ShowResult` (:954-1178).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
@@ -502,7 +500,6 @@ async fn completed_series_stay_by_default() {
     );
 }
 
-/// Waits for the event matching `wanted` on `events`.
 async fn until(
     events: &mut tokio::sync::mpsc::UnboundedReceiver<CheckerEvent>,
     wanted: impl Fn(&CheckerEvent) -> bool,

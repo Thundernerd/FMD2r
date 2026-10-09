@@ -1,9 +1,7 @@
-//! The module updater against a stub GitHub (API and raw downloads behind injectable base URLs),
-//! a temp Lua dir and a temp `app.db` (docs/tickets/T29-module-updater.md, "Seams under test").
+//! The module updater against a stub GitHub (docs/tickets/T29-module-updater.md).
 //!
-//! Expected values come from FMD2's updater: the ETag and commit/tree flow of
-//! `TGitHubRepo` (baseunits/GitHubRepoV3.pas:163-272) and the SHA diff, deletes and downloads of
-//! `TCheckUpdateThread` (mangadownloader/forms/frmLuaModulesUpdater.pas:588-890).
+//! Expected values: `TGitHubRepo`'s ETag and commit/tree flow (baseunits/GitHubRepoV3.pas:163-272)
+//! and `TCheckUpdateThread`'s SHA diff (mangadownloader/forms/frmLuaModulesUpdater.pas:588-890).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -30,7 +28,6 @@ struct Remote {
     commit: String,
     etag: String,
     files: BTreeMap<String, (String, Vec<u8>)>,
-    /// Files whose download fails.
     unavailable: Vec<String>,
     /// When set, the API answers 403 with no requests left until this Unix time.
     rate_limited_until: Option<i64>,
@@ -153,7 +150,6 @@ fn module(id: &str, title: &str) -> String {
     )
 }
 
-/// A temp Lua dir and `app.db`, a stub GitHub and an updater syncing between them.
 struct Fixture {
     dir: tempfile::TempDir,
     db: AppDb,
@@ -431,7 +427,6 @@ fn a_module_referencing_unknown_host_api_names_is_reported_once() {
         events[0].body["names"],
         json!(["MODULE.NoSuchMember", "fmd.nosuchlib"])
     );
-    // The module still loads.
     assert!(f.modules.current().get("a").is_some());
 
     // Re-downloading the same version does not report it again.
@@ -559,8 +554,6 @@ fn a_token_is_sent_to_the_api_only() {
     }
 }
 
-/// Module `a`, whose `GetInfo` makes one request and titles the manga after whether
-/// `websitebypass.lua` ran for it.
 impl Fixture {
     /// A fixture whose updater invalidates a one-thread pool, and that pool.
     fn pooled() -> (Fixture, Arc<WorkerPool>) {
@@ -577,6 +570,8 @@ impl Fixture {
     }
 }
 
+/// Module `a`, whose `GetInfo` makes one request and titles the manga after whether
+/// `websitebypass.lua` ran for it.
 const BYPASS_PROBE: &str = "function Init() local m = NewWebsiteModule(); m.ID='a'; m.Name='a'; \
      m.RootURL='https://a'; m.OnGetInfo='GetInfo' end\n\
      function GetInfo() BYPASSED = false; HTTP.GET('http://site.test/'); \

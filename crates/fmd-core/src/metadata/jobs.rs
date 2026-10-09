@@ -1,6 +1,4 @@
-//! The MangaBaka database as a background job: downloading and building it, then matching every
-//! list against it, reported like the list jobs. Also matches a list after it changed, and
-//! refreshes the database on its schedule (`metadata.mangabaka.refresh_days`).
+//! The MangaBaka database as a background job: download, refresh, and matching lists.
 
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Duration;
@@ -18,7 +16,6 @@ use super::{
 use crate::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
 use crate::settings::SettingsService;
 
-/// How often the schedule checks whether the database is due for a refresh.
 const SCHEDULE_TICK: Duration = Duration::from_secs(60 * 60);
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
@@ -57,7 +54,6 @@ pub struct MetadataEvent {
     pub error: Option<String>,
 }
 
-/// Why the database job could not do what was asked.
 #[derive(Debug, Error)]
 pub enum MetadataJobError {
     #[error("the MangaBaka database is already being downloaded")]
@@ -70,7 +66,6 @@ pub enum MetadataJobError {
     Metadata(#[from] MetadataError),
 }
 
-/// The `RootURL` of a loaded module, which its list's links are relative to.
 pub trait ModuleRoots: Send + Sync + 'static {
     fn root_url(&self, module_id: &str) -> Option<String>;
 }
@@ -86,7 +81,6 @@ where
 
 type EventSink = dyn Fn(MetadataEvent) + Send + Sync;
 
-/// Downloads, refreshes and removes the MangaBaka database, and matches lists against it.
 /// Cheap to clone.
 #[derive(Clone)]
 pub struct MetadataJobs {
@@ -99,25 +93,21 @@ struct Inner {
     lists: ListsDb,
     modules: Box<dyn ModuleRoots>,
     settings: Arc<SettingsService>,
-    /// The running download's token.
     running: Mutex<Option<TerminateToken>>,
     status: Mutex<JobStatus>,
-    /// When the last download failed; the schedule waits a day before trying again.
+    /// The schedule waits a day after a failure.
     failed_at: Mutex<Option<i64>>,
-    /// The last event of the running download, for a page opened while it runs.
+    /// For a page opened while the download runs.
     last_event: Mutex<Option<MetadataEvent>>,
-    /// Held while matching, so a list update and a refresh do not match the same list at once.
+    /// So a list update and a refresh do not match the same list at once.
     matching: Mutex<()>,
     registry: OnceLock<JobRegistry>,
     on_event: Box<EventSink>,
 }
 
 impl MetadataJobs {
-    /// The job's id in `/api/jobs/{id}`.
     pub const ID: &str = "mangabaka";
 
-    /// Jobs on `db`, matching `lists` with `matcher` (the modules' root URLs from `modules`),
-    /// refreshing as `settings` say, and passing every event to `on_event`.
     pub fn new(
         db: Arc<MangaBakaDb>,
         matcher: Matcher,
@@ -153,22 +143,18 @@ impl MetadataJobs {
         jobs
     }
 
-    /// The database, when one is downloaded.
     pub fn current(&self) -> Option<Arc<Metadata>> {
         self.inner.db.current()
     }
 
-    /// When the database was built and how large it is; `None` when there is none.
     pub fn info(&self) -> Option<DbInfo> {
         self.inner.db.info()
     }
 
-    /// Whether a download is running.
     pub fn is_running(&self) -> bool {
         lock(&self.inner.running).is_some()
     }
 
-    /// The last event of the running download.
     pub fn progress(&self) -> Option<MetadataEvent> {
         if self.is_running() {
             lock(&self.inner.last_event).clone()
@@ -177,8 +163,7 @@ impl MetadataJobs {
         }
     }
 
-    /// Starts downloading (or refreshing) the database on a thread of its own, then matching
-    /// every list against it.
+    /// Downloads the database on a new thread, then matches every list against it.
     pub fn download(&self) -> Result<(), MetadataJobError> {
         let terminate = TerminateToken::new();
         {
@@ -206,7 +191,7 @@ impl MetadataJobs {
         Ok(())
     }
 
-    /// Asks the running download to stop. The database it would have replaced stays.
+    /// The database it would have replaced stays.
     pub fn cancel(&self) -> Result<(), MetadataJobError> {
         match lock(&self.inner.running).as_ref() {
             Some(token) => {
@@ -217,7 +202,7 @@ impl MetadataJobs {
         }
     }
 
-    /// Deletes the database and every list title's match in it.
+    /// Also deletes every list title's match.
     pub fn remove(&self) -> Result<(), MetadataJobError> {
         if self.is_running() {
             return Err(MetadataJobError::AlreadyRunning);
@@ -234,8 +219,7 @@ impl MetadataJobs {
         Ok(())
     }
 
-    /// Matches the titles of `module_id`'s list that are new or changed, after a list update or
-    /// FMD2-DB import. Does nothing without a database. Blocks.
+    /// Matches new or changed titles of the list. Blocking.
     pub fn list_changed(&self, module_id: &str, terminate: &TerminateToken) {
         let Some(meta) = self.inner.db.current() else {
             return;
@@ -261,9 +245,8 @@ impl MetadataJobs {
         }
     }
 
-    /// Matches the titles every list still owes a match: new, changed, matched against an older
-    /// database (a refresh whose matching was cancelled or failed), or matched while MangaDex
-    /// could not be asked. Does nothing without a database. Blocks.
+    /// Matches titles still owing a match: new, changed, matched against an older database, or
+    /// matched while MangaDex could not be asked. Blocking.
     pub fn catch_up(&self) {
         let summaries = match self.inner.lists.masterlist().summaries() {
             Ok(summaries) => summaries,
@@ -281,7 +264,6 @@ impl MetadataJobs {
         }
     }
 
-    /// Adds the job to `registry` and announces its changes there.
     pub fn register(&self, registry: &JobRegistry) {
         // Registered once; a second registry is not told about changes.
         let _ = self.inner.registry.set(registry.clone());
@@ -289,10 +271,8 @@ impl MetadataJobs {
         registry.changed(Self::ID);
     }
 
-    /// Refreshes a downloaded database every `metadata.mangabaka.refresh_days` days (never when
-    /// 0, nor before the first download; a day after a failed one), and catches up on the matches
-    /// lists still owe ([`MetadataJobs::catch_up`]) at startup and every hour. Runs until the
-    /// task is dropped.
+    /// Refreshes a downloaded database every `refresh_days` (0 = never; a day after a failure)
+    /// and runs [`MetadataJobs::catch_up`] at startup and hourly. Runs until dropped.
     pub async fn schedule(self) {
         let mut tick = tokio::time::interval(SCHEDULE_TICK);
         let mut settings = self.inner.settings.subscribe();
@@ -348,8 +328,6 @@ impl Inner {
         }
     }
 
-    /// When the downloaded database is due for a refresh; `None` without one, or when automatic
-    /// refreshes are off.
     fn next_refresh(&self) -> Option<i64> {
         let days = self.settings.get().metadata.mangabaka.refresh_days;
         if days == 0 {
@@ -361,7 +339,6 @@ impl Inner {
         Some(due.max(retry.unwrap_or(due)))
     }
 
-    /// Records `event`'s counts as the job's progress and sends it.
     fn report(&self, event: MetadataEvent) {
         {
             let mut status = self.status();
@@ -379,7 +356,6 @@ impl Inner {
         (self.on_event)(event);
     }
 
-    /// The download job's thread.
     fn run(&self, terminate: &TerminateToken) {
         self.send(event(
             MetadataEventKind::Started,
@@ -425,8 +401,7 @@ impl Inner {
         }
     }
 
-    /// Matches every list with titles against the new database. Returns whether it was
-    /// cancelled.
+    /// Returns whether it was cancelled.
     fn match_all(&self, terminate: &TerminateToken) -> Result<bool, MetadataError> {
         let Some(meta) = self.db.current() else {
             return Ok(false);
@@ -484,7 +459,6 @@ impl Inner {
         self.send(event);
     }
 
-    /// Ends the running download, which failed with `error` when one is given.
     fn finished(&self, error: Option<String>) {
         {
             let mut running = lock(&self.running);
@@ -504,7 +478,6 @@ impl Inner {
     }
 }
 
-/// The database job as one of the jobs the System page lists.
 impl Job for MetadataJobs {
     fn id(&self) -> &str {
         Self::ID

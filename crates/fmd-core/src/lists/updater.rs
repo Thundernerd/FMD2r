@@ -15,18 +15,15 @@ use super::today_jdn;
 /// `INFORMATION_NOT_FOUND` (baseunits/WebsiteModules.pas:21).
 const INFORMATION_NOT_FOUND: u8 = 2;
 
-/// How a list update runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateOptions {
     /// Workers when the module declares no `MaxThreadPerTaskLimit`
-    /// (`OptionMaxUpdateListThreads`, `connections.max_update_list_threads`).
+    /// (`OptionMaxUpdateListThreads`).
     pub max_threads: u32,
-    /// Store new titles with their listed name only, without running `OnGetInfo` on each
-    /// (`OptionUpdateListNoMangaInfo`, `update_lists.no_manga_info`).
+    /// Skip `OnGetInfo` for new titles (`OptionUpdateListNoMangaInfo`).
     pub no_manga_info: bool,
 }
 
-/// The step a list update is at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ListPhase {
     Preparing,
@@ -39,31 +36,26 @@ pub enum ListPhase {
     Saving,
 }
 
-/// Where a list update is, as FMD2's update-list status bar shows it
-/// (baseunits/uUpdateThread.pas:607-624, :862-897).
+/// FMD2's update-list status bar (baseunits/uUpdateThread.pas:607-624, :862-897).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListProgress {
     pub phase: ListPhase,
-    /// Work items of the phase handed out so far.
+    /// Handed out so far.
     pub done: u64,
-    /// Work items of the phase; grows when a module raises `UPDATELIST.CurrentDirectoryPageNumber`.
+    /// Grows when a module raises `UPDATELIST.CurrentDirectoryPageNumber`.
     pub total: u64,
     /// FMD2's status text, or the module's own from `UPDATELIST.UpdateStatusText`.
     pub status_text: String,
 }
 
-/// What a list update did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct UpdateOutcome {
-    /// Titles added to the list.
     pub added: u64,
     /// Whether a sorted list stopped at a page holding an already listed title.
     pub stopped_early: bool,
-    /// Whether the update was terminated.
     pub cancelled: bool,
 }
 
-/// Why a list update stopped.
 #[derive(Debug, Error)]
 pub enum ListError {
     #[error("lists.db: {0}")]
@@ -72,27 +64,24 @@ pub enum ListError {
     Pool(JobError),
 }
 
-/// Updates modules' lists in `lists.db` by running their update-list callbacks on a
-/// [`WorkerPool`].
 pub struct ListUpdater {
     pool: Arc<WorkerPool>,
     lists: ListsDb,
 }
 
-/// The state of one update, shared by its phases.
 struct Run<'a> {
     module: &'a Arc<Module>,
     def: ModuleDef,
     terminate: &'a TerminateToken,
     progress: &'a mut dyn FnMut(&ListProgress),
     phase: ListPhase,
-    /// `FCurrentGetInfoLimit`: the work items of the current phase.
+    /// `FCurrentGetInfoLimit`.
     limit: i32,
-    /// `workPtr`: the work items handed out.
+    /// `workPtr`.
     handed_out: i32,
     /// The listed links (`mainDataProcess`).
     known: HashSet<String>,
-    /// The new titles, as `(link, name)` in the order found (`tempDataProcess`).
+    /// `(link, name)` in the order found (`tempDataProcess`).
     found: Vec<(String, String)>,
     found_links: HashSet<String>,
     /// `isFinishSearchingForNewManga`.
@@ -112,8 +101,7 @@ impl Run<'_> {
         (self.progress)(&progress);
     }
 
-    /// Reports the module's `UpdateStatusText` and takes a raised
-    /// `CurrentDirectoryPageNumber`, which only ever grows the current phase
+    /// A raised `CurrentDirectoryPageNumber` only ever grows the phase
     /// (`SetCurrentDirectoryPageNumber`, baseunits/uUpdateThread.pas:451-460).
     fn read_back(&mut self, list: UpdateList) {
         if list.current_directory_page_number > self.limit {
@@ -124,8 +112,7 @@ impl Run<'_> {
         }
     }
 
-    /// The `UPDATELIST` a callback sees: `CurrentDirectoryPageNumber` reads the current
-    /// phase's limit (baseunits/uUpdateThread.pas:118).
+    /// `CurrentDirectoryPageNumber` reads the phase's limit (baseunits/uUpdateThread.pas:118).
     fn list(&self) -> UpdateList {
         UpdateList {
             current_directory_page_number: self.limit,
@@ -134,8 +121,8 @@ impl Run<'_> {
     }
 }
 
-/// A failed callback is logged and its work item skipped, as FMD2's workers catch and log
-/// exceptions (e.g. baseunits/uUpdateThread.pas:207-210); a pool that is gone ends the update.
+/// A failed callback is logged and skipped (e.g. baseunits/uUpdateThread.pas:207-210); a pool
+/// that is gone ends the update.
 fn callback_result<T>(module: &str, result: Result<T, JobError>) -> Result<Option<T>, ListError> {
     match result {
         Ok(value) => Ok(Some(value)),
@@ -152,11 +139,9 @@ impl ListUpdater {
         Self { pool, lists }
     }
 
-    /// Updates `module`'s list and returns what it added. Blocks until done, so call it from a
-    /// thread outside any tokio runtime. Terminating `terminate` stops it after the callbacks in
-    /// flight; what it found is then kept only as FMD2 keeps it (see below).
+    /// Blocking. Terminating stops it after the callbacks in flight.
     ///
-    /// The steps are FMD2's (baseunits/uUpdateThread.pas:626-780):
+    /// FMD2's steps (baseunits/uUpdateThread.pas:626-780):
     /// 1. `OnAfterUpdateList`, then `OnBeforeUpdateList` (:672-675).
     /// 2. `OnGetDirectoryPageNumber` for each of the module's `TotalDirectory` directories, with
     ///    `PAGENUMBER` 1 and `WORKPTR` the directory; fewer than 1 page counts as 1 (:192-212).
@@ -171,8 +156,7 @@ impl ListUpdater {
     ///    (:282-284).
     /// 6. The new titles are merged into the list; listed titles are never removed.
     ///
-    /// Workers: `MaxThreadPerTaskLimit` when the module declares one, else `max_threads`, at
-    /// most `MaxConnectionLimit` and at least 1 (`GetCurrentLimit`, :826-840).
+    /// Workers as `GetCurrentLimit` (:826-840).
     pub fn update(
         &self,
         module: &Arc<Module>,
@@ -242,8 +226,8 @@ impl ListUpdater {
             self.info(&mut run, threads, jdn)?;
         }
 
-        // FMD2 saves unless a sorted list was terminated, which would leave titles between
-        // the stored ones that a later early stop never reaches (:743-748).
+        // Not saved when a sorted list was terminated: a later early stop would never reach
+        // the gap (:743-748).
         let cancelled = terminate.is_terminated();
         if cancelled && sorted {
             return Ok(self::cancelled());
@@ -259,7 +243,7 @@ impl ListUpdater {
     }
 
     /// `OnBeforeUpdateList` (baseunits/uUpdateThread.pas:674-675, :705-706) or
-    /// `OnAfterUpdateList` (:672-673, :683-684), when declared; the result is not looked at.
+    /// `OnAfterUpdateList` (:672-673, :683-684); the result is ignored.
     fn update_list_callback(&self, run: &mut Run<'_>, before: bool) -> Result<(), ListError> {
         let declared = if before {
             &run.def.on_before_update_list
@@ -287,8 +271,7 @@ impl ListUpdater {
             .with_terminate(run.terminate.clone())
     }
 
-    /// The page count of each directory (`TotalDirectoryPage`, `CS_DIRECTORY_COUNT`,
-    /// baseunits/uUpdateThread.pas:183-213).
+    /// `TotalDirectoryPage`, `CS_DIRECTORY_COUNT` (baseunits/uUpdateThread.pas:183-213).
     fn directory_page_counts(
         &self,
         run: &mut Run<'_>,
@@ -326,8 +309,7 @@ impl ListUpdater {
         Ok(pages)
     }
 
-    /// The names and links of `directory`'s `pages` pages (`CS_DIRECTORY_PAGE`,
-    /// baseunits/uUpdateThread.pas:215-276, :690-702).
+    /// `CS_DIRECTORY_PAGE` (baseunits/uUpdateThread.pas:215-276, :690-702).
     fn directory_pages(
         &self,
         run: &mut Run<'_>,
@@ -368,7 +350,7 @@ impl ListUpdater {
         )
     }
 
-    /// The info of each new title (`CS_INFO`, baseunits/uUpdateThread.pas:278-307).
+    /// `CS_INFO` (baseunits/uUpdateThread.pas:278-307).
     fn info(&self, run: &mut Run<'_>, threads: usize, jdn: i64) -> Result<(), ListError> {
         run.start_phase(
             ListPhase::Info,
@@ -402,7 +384,7 @@ impl ListUpdater {
 }
 
 impl Run<'_> {
-    /// Starts a `CheckOut` of `limit` work items (baseunits/uUpdateThread.pas:441-449).
+    /// baseunits/uUpdateThread.pas:441-449.
     fn start_phase(&mut self, phase: ListPhase, limit: i32) {
         self.phase = phase;
         self.limit = limit;
@@ -410,7 +392,6 @@ impl Run<'_> {
         self.finished = false;
     }
 
-    /// The `(link, name)` of new title `i`.
     fn found_title(&self, i: i32) -> (String, String) {
         usize::try_from(i)
             .ok()
@@ -419,7 +400,7 @@ impl Run<'_> {
             .unwrap_or_default()
     }
 
-    /// Takes the names and links one page produced (baseunits/uUpdateThread.pas:236-264).
+    /// baseunits/uUpdateThread.pas:236-264.
     fn add_links(&mut self, names: &[String], links: &[String], pre_list: bool) {
         // `RemoveHostFromURLsPair` only strips hosts, and drops pairs whose link becomes
         // empty, when both lists are the same length (baseunits/uBaseUnit.pas:983-1000).
@@ -473,12 +454,9 @@ fn threads(def: &ModuleDef, options: &UpdateOptions) -> usize {
     usize::try_from(threads.max(1)).unwrap_or(1)
 }
 
-/// One `CheckOut` (baseunits/uUpdateThread.pas:441-449): hands out work items `0..run.limit`
-/// to at most `threads` callbacks at a time, as `GetNext` does (:842-903), and handles each
-/// result in the order handed out. Nothing more is handed out once the run is terminated or
-/// `run.finished` is set; callbacks in flight still finish. FMD2's workers take the next item
-/// as each finishes, so with several workers a slow page can make this hand out the next
-/// items a little later than FMD2 would; what is fetched and stored is the same.
+/// One `CheckOut` (baseunits/uUpdateThread.pas:441-449; `GetNext`, :842-903), handling results
+/// in the order handed out. Stops handing out once terminated or `run.finished`. Handing out may
+/// lag FMD2's behind a slow page, but what is fetched and stored is the same.
 fn check_out<'r, T: 'static>(
     run: &mut Run<'r>,
     threads: usize,

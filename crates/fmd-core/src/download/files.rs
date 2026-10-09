@@ -8,8 +8,7 @@ use fmd_pack::ConvertTarget;
 
 use crate::settings::{ImageSettings, PngCompression, WebpSaveAs};
 
-/// The extensions of FMD2's image handlers, in registration order
-/// (baseunits/ImgInfos.pas:634-639).
+/// In registration order (baseunits/ImgInfos.pas:634-639).
 const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "png", "webp", "gif", "bmp", "tif"];
 
 /// `FindImageFile` (baseunits/uBaseUnit.pas:2506-2525): `base` with the extension `ext` (when
@@ -33,8 +32,7 @@ pub(super) fn find_image_file(base: &Path, ext: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// `GetImageStreamExt` (baseunits/ImgInfos.pas:124-127): the extension of the first image
-/// handler whose check accepts `data`, `None` when none does (baseunits/ImgInfos.pas:350-582).
+/// `GetImageStreamExt` (baseunits/ImgInfos.pas:124-127, :350-582).
 fn image_ext(data: &[u8]) -> Option<&'static str> {
     if data.starts_with(&[0xff, 0xd8]) {
         Some("jpg")
@@ -53,12 +51,9 @@ fn image_ext(data: &[u8]) -> Option<&'static str> {
     }
 }
 
-/// `SaveImageStreamToFile` (baseunits/uBaseUnit.pas:2391-2480): saves `data` in `dir` as
-/// `name` plus the extension its content shows, converting PNG and WebP as the image settings
-/// say unless ImageMagick converts later. Returns the saved file, or `None` when `data` is
-/// empty, no image, or could not be written. The file appears only once it is whole
-/// (`fmd_pack::write_whole`); FMD2 writes it in place. The file keeps the time it was
-/// written: FMD2's `Last-Modified` file date (:2482-2494) is not reproduced.
+/// `SaveImageStreamToFile` (baseunits/uBaseUnit.pas:2391-2480), named by its sniffed content
+/// type. Unlike FMD2 the file appears only once whole, and the `Last-Modified` file date
+/// (:2482-2494) is not reproduced.
 pub(super) fn save_image(
     data: &[u8],
     dir: &Path,
@@ -92,9 +87,7 @@ pub(super) fn save_image(
     }
 }
 
-/// The format a saved `ext` image is converted to as it is saved: PNG to JPEG and WebP to PNG or
-/// JPEG as the image settings say, nothing when ImageMagick converts later
-/// (baseunits/uBaseUnit.pas:2411-2437).
+/// None when ImageMagick converts later (baseunits/uBaseUnit.pas:2411-2437).
 fn convert_target(images: &ImageSettings, ext: &str) -> Option<ConvertTarget> {
     if images.imagemagick.enabled {
         return None;
@@ -116,8 +109,7 @@ fn convert_target(images: &ImageSettings, ext: &str) -> Option<ConvertTarget> {
     }
 }
 
-/// The extension a page whose content shows `ext` ends up with once the chapter is done: the
-/// one it is saved under, or ImageMagick's format when that converts the chapter
+/// The page's extension once the chapter is done, after any ImageMagick conversion
 /// (baseunits/uDownloadsManager.pas:613-711).
 pub(super) fn final_page_ext(images: &ImageSettings, ext: &str) -> String {
     let magick = &images.imagemagick;
@@ -128,8 +120,7 @@ pub(super) fn final_page_ext(images: &ImageSettings, ext: &str) -> String {
     }
 }
 
-/// Removes the part files [`save_image`] left for `base` under any image extension when the
-/// process was killed mid-write.
+/// Removes part files [`save_image`] left when the process was killed mid-write.
 pub(super) fn remove_partial_images(base: &Path) {
     for ext in IMAGE_EXTENSIONS {
         let mut path = base.as_os_str().to_owned();

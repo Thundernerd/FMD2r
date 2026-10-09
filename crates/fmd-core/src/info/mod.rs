@@ -12,12 +12,11 @@ use self::text::{
     remove_string_breaks, trim, trim_right_commas,
 };
 
-/// What FMD2 shows of a series after `GetInfoFromURL`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MangaInfo {
     pub title: String,
     pub alt_titles: String,
-    /// The series link relative to the module's `RootURL`.
+    /// Relative to the module's `RootURL`.
     pub link: String,
     pub cover_link: String,
     pub authors: String,
@@ -37,14 +36,12 @@ pub struct Chapter {
     pub link: String,
 }
 
-/// The settings `GetInfoFromURL` reads.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct InfoOptions {
     /// `OptionRemoveMangaNameFromChapter`.
     pub remove_manga_name_from_chapter: bool,
 }
 
-/// Why there is no info.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum InfoError {
     #[error("no such module")]
@@ -56,7 +53,7 @@ pub enum InfoError {
     /// `net_problem`.
     #[error("the website could not be reached")]
     NetProblem,
-    /// The worker pool failed (shut down, ...).
+    /// The worker pool failed.
     #[error("{0}")]
     Failed(String),
 }
@@ -66,8 +63,7 @@ const NET_PROBLEM: u8 = 1;
 /// `no_error` (`NO_ERROR`, baseunits/uBaseUnit.pas:191).
 const NO_ERROR: u8 = 0;
 
-/// Runs `module`'s `OnGetInfo` for the series at `link` on `pool` and cleans up what it reports
-/// (`GetInfoFromURL`, baseunits/uData.pas:85-208).
+/// `GetInfoFromURL` (baseunits/uData.pas:85-208).
 pub async fn get_info(
     pool: &WorkerPool,
     module: &Arc<Module>,
@@ -98,7 +94,7 @@ pub async fn get_info(
     Ok(clean_up(reply.info, options))
 }
 
-/// The clean-up `GetInfoFromURL` runs once `OnGetInfo` returned (baseunits/uData.pas:111-205).
+/// baseunits/uData.pas:111-205.
 fn clean_up(raw: fmd_lua::MangaInfo, options: InfoOptions) -> MangaInfo {
     let link = if raw.link.is_empty() {
         // `RemoveHostFromURL(MangaInfo.URL)`.
@@ -148,9 +144,7 @@ fn clean_up(raw: fmd_lua::MangaInfo, options: InfoOptions) -> MangaInfo {
     }
 }
 
-/// The chapter clean-up of `GetInfoFromURL` (baseunits/uData.pas:150-202): names padded or cut to
-/// the links, duplicate links dropped (the last one stays), hosts removed from links (dropping
-/// the ones left empty), names cleaned and, when `options` say so, stripped of the title.
+/// baseunits/uData.pas:150-202.
 fn clean_chapters(
     links: Vec<String>,
     mut names: Vec<String>,
@@ -197,8 +191,7 @@ fn clean_chapters(
     chapters
 }
 
-/// `OptionRemoveMangaNameFromChapter` (baseunits/uData.pas:186-200): `name` without a leading
-/// `title` (ignoring case) and a `- ` after it, when it is longer than the title.
+/// `OptionRemoveMangaNameFromChapter` (baseunits/uData.pas:186-200).
 pub(crate) fn remove_manga_name(name: &str, title: &str) -> String {
     if !title.is_empty()
         && name.len() > title.len()
@@ -212,7 +205,7 @@ pub(crate) fn remove_manga_name(name: &str, title: &str) -> String {
     }
 }
 
-/// `RemoveHostFromURL` (baseunits/uBaseUnit.pas:969-972): the path `SplitURL` finds.
+/// `RemoveHostFromURL` (baseunits/uBaseUnit.pas:969-972).
 fn path_of(url: &str) -> String {
     let (_, path) = fmd_http::split_url_bytes(url.as_bytes());
     String::from_utf8_lossy(&path).into_owned()

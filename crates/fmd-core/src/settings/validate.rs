@@ -9,10 +9,10 @@ use super::model::{
 };
 use super::service::FieldError;
 
-/// Replaces blank values the way FMD2 does when it loads or applies options: the user agent
+/// Resets blank values to their defaults as FMD2 does: the user agent
 /// (mangadownloader/forms/frmMain.pas:6279-6285), the download directory and the rename
 /// templates (mangadownloader/forms/frmMain.pas:5882-5917). An empty GitHub token or server
-/// password is none, so clearing one (patching it to `""`) unsets it.
+/// password becomes `None`.
 pub(crate) fn normalize(s: &mut Settings) {
     fn reset_blank(value: &mut String, default: &str) {
         if value.trim().is_empty() {
@@ -38,10 +38,9 @@ pub(crate) fn normalize(s: &mut Settings) {
     }
 }
 
-/// Keeps `saveto.default_dir` and the default destination in step after an update from
-/// `current` to `next`: a patch that changed `default_dir` but not the destinations moves the
-/// default destination there (so API clients and the FMD2 import that only know
-/// `default_dir` keep working); otherwise `default_dir` takes the default destination's path.
+/// Keeps `saveto.default_dir` and the default destination in step: a patch that changed only
+/// `default_dir` moves the default destination (for clients that only know `default_dir`);
+/// otherwise `default_dir` follows the default destination.
 pub(crate) fn sync_default_dir(current: &SaveToSettings, next: &mut SaveToSettings) {
     if next.default_dir != current.default_dir && next.destinations == current.destinations {
         let dir = next.default_dir.clone();
@@ -52,9 +51,7 @@ pub(crate) fn sync_default_dir(current: &SaveToSettings, next: &mut SaveToSettin
     next.default_dir = next.default_path().to_string();
 }
 
-/// The destination problems of an update from `current` to `next`: names that are empty or
-/// repeat an earlier one (ignoring case), empty paths, and not exactly one default, which is
-/// reported as removing it when `current`'s default is gone.
+/// Empty or duplicate (ignoring case) names, empty paths, and not exactly one default.
 pub(super) fn validate_destinations(
     current: &SaveToSettings,
     next: &SaveToSettings,
@@ -99,9 +96,8 @@ pub(super) fn validate_destinations(
     errors
 }
 
-/// Checks every numeric setting against the range FMD2's spin edit allows (cited on each field
-/// in `model.rs` and published there as its `#[schema(minimum, maximum)]`) and the FMD2r-only
-/// settings against their own constraints.
+/// Checks numeric settings against FMD2's spin edit ranges (cited in `model.rs`, mirrored by its
+/// `#[schema(minimum, maximum)]`) and FMD2r-only settings against their own constraints.
 pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
     let mut errors = Vec::new();
     let mut check = |field: &str, error: Option<String>| {

@@ -1,5 +1,4 @@
-//! List updates and FMD2-DB imports as background jobs, one at a time per module, reporting
-//! their progress as [`ListEvent`]s. Together they are the `lists` job of the [`JobRegistry`].
+//! List updates and FMD2-DB imports as background jobs, one per module at a time.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
@@ -73,7 +72,6 @@ pub enum ListFailureReason {
     Failed,
 }
 
-/// Why a list job could not be started or cancelled.
 #[derive(Debug, Error)]
 pub enum ListJobError {
     #[error("no module {0} is loaded")]
@@ -86,12 +84,10 @@ pub enum ListJobError {
     Spawn(#[from] std::io::Error),
 }
 
-/// The loaded modules, looked up when a job starts.
 pub trait ListModules: Send + Sync + 'static {
     fn module(&self, id: &str) -> Option<Arc<Module>>;
 }
 
-/// A lookup like the download engine's [`crate::download::ModuleLookup`].
 impl<F> ListModules for F
 where
     F: Fn(&str) -> Option<Arc<Module>> + Send + Sync + 'static,
@@ -104,14 +100,11 @@ where
 type EventSink = dyn Fn(ListEvent) + Send + Sync;
 type ChangeHook = dyn Fn(&str, &TerminateToken) + Send + Sync;
 
-/// How a list job that did not fail ended.
 struct JobOutcome {
-    /// Titles added (update) or imported (import).
     titles: u64,
     cancelled: bool,
 }
 
-/// Why a list job failed.
 #[derive(Debug, Error)]
 enum JobFailure {
     #[error(transparent)]
@@ -130,8 +123,7 @@ impl JobFailure {
 }
 
 impl ListFailureReason {
-    /// What the user reads about a `job` of `module` that failed this way. The web UI
-    /// words it the same (`web/src/lib/components/discover/ListActions.svelte`).
+    /// Keep in step with `web/src/lib/components/discover/ListActions.svelte`.
     fn message(self, job: ListJobKind, module: &ModuleDef) -> String {
         let website = &module.name;
         match (self, job) {
@@ -160,7 +152,7 @@ impl ListFailureReason {
     }
 }
 
-/// Starts and cancels list jobs. Cheap to clone.
+/// Cheap to clone.
 #[derive(Clone)]
 pub struct ListJobs {
     inner: Arc<Inner>,
@@ -172,22 +164,16 @@ struct Inner {
     settings: Arc<SettingsService>,
     modules: Arc<dyn ListModules>,
     running: Mutex<HashMap<String, TerminateToken>>,
-    /// The `lists` job: the list jobs since none was running. Locked after `running`.
+    /// Covers the list jobs since none was running. Locked after `running`.
     status: Mutex<JobStatus>,
-    /// Where the `lists` job announces its changes, once registered.
     registry: OnceLock<JobRegistry>,
     on_event: Box<EventSink>,
-    /// Runs on the job's thread after a list changed, before the job's last event.
     on_list_changed: OnceLock<Box<ChangeHook>>,
 }
 
 impl ListJobs {
-    /// The `lists` job's id in `/api/jobs/{id}`.
     pub const ID: &str = "lists";
 
-    /// Jobs reading their options from `settings` (`connections.max_update_list_threads`,
-    /// `update_lists.no_manga_info`, `update_lists.db_url`) and passing every event to
-    /// `on_event`.
     pub fn new(
         updater: ListUpdater,
         importer: DbImporter,
@@ -217,14 +203,12 @@ impl ListJobs {
         }
     }
 
-    /// Calls `hook` with the module ID on the job's thread whenever a list update or FMD2-DB
-    /// import changed a list (before the job's last event), as matching the new titles against
-    /// MangaBaka's database does. Set once; later hooks are ignored.
+    /// Calls `hook` on the job's thread after a job changed a list, before its last event.
+    /// Set once; later hooks are ignored.
     pub fn on_list_changed(&self, hook: impl Fn(&str, &TerminateToken) + Send + Sync + 'static) {
         let _ = self.inner.on_list_changed.set(Box::new(hook));
     }
 
-    /// Starts updating `module_id`'s list on a thread of its own.
     pub fn update(&self, module_id: &str) -> Result<(), ListJobError> {
         let module = self.module(module_id)?;
         let def = module.def();
@@ -250,7 +234,6 @@ impl ListJobs {
         )
     }
 
-    /// Starts downloading and importing `module_id`'s FMD2-DB dump on a thread of its own.
     pub fn import_db(&self, module_id: &str) -> Result<(), ListJobError> {
         let def = self.module(module_id)?.def();
         let id = module_id.to_owned();
@@ -276,7 +259,6 @@ impl ListJobs {
         )
     }
 
-    /// The loaded module `module_id`.
     fn module(&self, module_id: &str) -> Result<Arc<Module>, ListJobError> {
         self.inner
             .modules
@@ -284,7 +266,6 @@ impl ListJobs {
             .ok_or_else(|| ListJobError::UnknownModule(module_id.into()))
     }
 
-    /// Asks the list job of `module_id` to stop.
     pub fn cancel(&self, module_id: &str) -> Result<(), ListJobError> {
         let running = self.inner.running();
         let token = running
@@ -294,13 +275,11 @@ impl ListJobs {
         Ok(())
     }
 
-    /// Whether a list job of `module_id` is running.
     pub fn is_running(&self, module_id: &str) -> bool {
         self.inner.running().contains_key(module_id)
     }
 
-    /// Runs `work` on a new thread unless `module_id` (defined by `def`) already has a job,
-    /// reporting it as `kind`.
+    /// Runs `work` on a new thread unless `module_id` already has a job.
     fn start(
         &self,
         module_id: &str,
@@ -373,7 +352,6 @@ impl Inner {
         self.status.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Ends `module_id`'s job, which failed with `error` when one is given.
     fn finished(&self, module_id: &str, error: Option<String>) {
         {
             let mut running = self.running();
@@ -402,7 +380,6 @@ impl Inner {
 }
 
 impl ListJobs {
-    /// Adds the list jobs to `registry` as the `lists` job and announces their changes there.
     pub fn register(&self, registry: &JobRegistry) {
         // Registered once; a second registry is not told about changes.
         let _ = self.inner.registry.set(registry.clone());
@@ -411,9 +388,8 @@ impl ListJobs {
     }
 }
 
-/// The list jobs as one job, like FMD2's single update-list thread working through the chosen
-/// websites (`TUpdateListManagerThread.Execute`, baseunits/uUpdateThread.pas:626-779): running while any module's
-/// list job runs, counting the jobs since none was running.
+/// The list jobs as one, like FMD2's single update-list thread (`TUpdateListManagerThread`,
+/// baseunits/uUpdateThread.pas:626-779).
 impl Job for ListJobs {
     fn id(&self) -> &str {
         Self::ID
@@ -427,14 +403,13 @@ impl Job for ListJobs {
         self.inner.status().clone()
     }
 
-    /// A list job is for one module: it starts from `POST /api/lists/{module}/...`.
+    /// List jobs are per module: they start from `POST /api/lists/{module}/...`.
     fn run(&self) -> Result<(), JobError> {
         Err(JobError::Unsupported(
             "list updates start per module, from the Discover page".into(),
         ))
     }
 
-    /// Asks every running list job to stop.
     fn cancel(&self) -> Result<(), JobError> {
         let running = self.inner.running();
         if running.is_empty() {
@@ -447,14 +422,12 @@ impl Job for ListJobs {
     }
 }
 
-/// Now, in Unix milliseconds.
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
-/// Sends the events of one job.
 struct Events<'a> {
     inner: &'a Inner,
     module_id: &'a str,

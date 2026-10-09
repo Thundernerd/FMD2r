@@ -21,7 +21,6 @@ fn destination(name: &str, path: &str, default: bool) -> Destination {
     }
 }
 
-/// The fields an update rejected.
 fn rejected(result: Result<impl std::fmt::Debug, SettingsError>) -> Vec<(String, String)> {
     match result {
         Err(SettingsError::Invalid(errors)) => {
@@ -138,7 +137,6 @@ fn names_must_be_unique_and_not_empty_and_paths_not_empty() {
         ],
         "{errors:?}"
     );
-    // Nothing changed.
     assert_eq!(service.get().saveto.destinations.len(), 1);
 }
 

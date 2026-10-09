@@ -1,6 +1,5 @@
-//! Building `metadata.db` from MangaBaka's dump (docs/tickets/T73-mangabaka-metadata.md, "Seams
-//! under test"): the recorded records in tests/fixtures/mangabaka/series.jsonl, compressed as the
-//! dump is, served by a stub source.
+//! Building `metadata.db` from the recorded MangaBaka dump
+//! (docs/tickets/T73-mangabaka-metadata.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -38,7 +37,6 @@ fn active_series_are_kept_with_their_metadata() {
     // Any of its titles, in any language, finds it.
     assert_eq!(meta.find_by_title("Narutaru").unwrap(), vec![2092]);
     assert_eq!(meta.find_by_title("なるたる").unwrap(), vec![2092]);
-    // Cross-site IDs and WebToons links.
     assert_eq!(meta.find_by_xid("anilist", "31153").unwrap(), vec![2092]);
     assert_eq!(
         meta.find_by_link("https://www.webtoons.com/en/drama/reborn-rich/list?title_no=4956")

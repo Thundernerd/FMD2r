@@ -1,10 +1,7 @@
-//! The download engine through the public `DownloadManager` API, with a real `WorkerPool`
-//! running fixture modules, a stub HTTP transport serving images, a temp `app.db` and a temp
-//! output dir (docs/tickets/T20-download-engine.md, "Seams under test").
+//! The download engine through `DownloadManager` (docs/tickets/T20-download-engine.md).
 //!
-//! Expected values come from FMD2's `TTaskThread.Execute` and `TDownloadThread.DownloadImage`
-//! (baseunits/uDownloadsManager.pas:334-412, :975-1374) and its `TDownloadManager`
-//! (baseunits/uDownloadsManager.pas:1784-1985).
+//! Expected values: `TTaskThread.Execute`, `TDownloadThread.DownloadImage` and
+//! `TDownloadManager` (baseunits/uDownloadsManager.pas:334-412, :975-1374, :1784-1985).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
@@ -110,7 +107,6 @@ function GPN()
 end
 "#;
 
-/// A lua dir with fixture modules, an `app.db`, an output dir and what the engine runs on.
 struct Fixture {
     dir: tempfile::TempDir,
     db: AppDb,
@@ -213,7 +209,6 @@ async fn statuses(
     seen
 }
 
-/// The entries of the zip at `path`, in order.
 fn entries(path: &Path) -> Vec<String> {
     let mut zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
     (0..zip.len())
@@ -429,7 +424,6 @@ async fn without_retries_a_chapter_missing_a_page_fails_the_task() {
     );
 }
 
-/// Waits until `check` holds.
 async fn eventually(what: &str, check: impl Fn() -> bool) {
     let wait = async {
         while !check() {
@@ -785,7 +779,6 @@ async fn logged_once(title: &str, what: &str) -> Vec<String> {
     logged(title)
 }
 
-/// The lines of `lines` holding `what`.
 fn holding(lines: &[String], what: &str) -> usize {
     lines.iter().filter(|l| l.contains(what)).count()
 }

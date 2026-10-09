@@ -1,7 +1,6 @@
-//! Matching list titles against `metadata.db` (docs/tickets/T73-mangabaka-metadata.md, "Seams
-//! under test"). The cases are T71's probe cases (docs/research/metadata-probe/results-*.csv),
-//! with the expected series and confidence the probe's final rules gave; the series are the
-//! recorded ones in tests/fixtures/mangabaka/series.jsonl. MangaDex's API is a stub.
+//! Matching list titles against `metadata.db` (docs/tickets/T73-mangabaka-metadata.md).
+//!
+//! Cases and expected results are T71's probe (docs/research/metadata-probe/results-*.csv).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

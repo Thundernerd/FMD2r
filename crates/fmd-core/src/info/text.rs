@@ -265,8 +265,7 @@ pub(super) fn clean_url(url: &str) -> String {
         Some(i) => (&result[..i + 3], result[i + 3..].trim_start_matches('/')),
         None => ("", result),
     };
-    // `ReplaceRegExpr('([^:])[\/]{2,}', ..., '$1/')`: a character other than `:` followed by two
-    // or more slashes keeps one of them.
+    // `ReplaceRegExpr('([^:])[\/]{2,}', ..., '$1/')`.
     let chars: Vec<char> = rest.chars().collect();
     let mut out = String::with_capacity(rest.len());
     let mut i = 0;

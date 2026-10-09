@@ -1,6 +1,6 @@
-//! FMD2-DB import: a prebuilt `<module id>.7z` dump in FMD2's per-site schema
-//! (baseunits/DBDataProcess.pas:143-153) into `masterlist` (docs/tickets/T26-discover-list-update.md,
-//! "Seams under test"). The fixtures are real FMD2-DB dumps (tests/fixtures/fmd2-db/README.md).
+//! FMD2-DB import of a `<module id>.7z` dump in FMD2's per-site schema
+//! (baseunits/DBDataProcess.pas:143-153) into `masterlist`
+//! (docs/tickets/T26-discover-list-update.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

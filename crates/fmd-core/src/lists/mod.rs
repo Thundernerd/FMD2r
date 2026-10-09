@@ -1,6 +1,5 @@
-//! Each module's manga list in `lists.db`: built by running the module's update-list callbacks
-//! ([`ListUpdater`]) or bootstrapped from FMD2-DB's prebuilt dumps ([`DbImporter`]), and run as
-//! background jobs ([`ListJobs`]).
+//! Each module's manga list in `lists.db`, built by [`ListUpdater`] or imported by
+//! [`DbImporter`], run as [`ListJobs`].
 
 mod import;
 mod info;
@@ -15,8 +14,8 @@ pub use jobs::{
 };
 pub use updater::{ListError, ListPhase, ListProgress, ListUpdater, UpdateOptions, UpdateOutcome};
 
-/// The Julian day number of `DateToJDN(Now)` (baseunits/uBaseUnit.pas:2740-2751) for the
-/// current UTC date: FMD2 uses the local date.
+/// `DateToJDN(Now)` (baseunits/uBaseUnit.pas:2740-2751), for the UTC date where FMD2 uses the
+/// local one.
 pub fn today_jdn() -> i64 {
     /// `DateToJDN` of 1970-01-01.
     const UNIX_EPOCH_JDN: i64 = 2_440_588;

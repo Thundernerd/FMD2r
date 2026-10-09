@@ -1,8 +1,7 @@
-//! The list update job against a fixture module (3 directory pages, `SortedList` true) and a
-//! stub HTTP transport (docs/tickets/T26-discover-list-update.md, "Seams under test").
+//! The list update job against a fixture module (docs/tickets/T26-discover-list-update.md).
 //!
-//! Expected behaviour comes from FMD2's `TUpdateListManagerThread.Execute` and
-//! `TUpdateListThread` (baseunits/uUpdateThread.pas:173-313, :626-780, :842-903).
+//! Expected behaviour: `TUpdateListManagerThread.Execute` and `TUpdateListThread`
+//! (baseunits/uUpdateThread.pas:173-313, :626-780, :842-903).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

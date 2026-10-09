@@ -1,8 +1,6 @@
-//! The settings as the API shows them: every secret (a password or token) is replaced by a
-//! `has_<name>` flag, as accounts show `has_password`, so no response ever carries one.
+//! The settings as the API shows them, each secret replaced by a `has_<name>` flag.
 //!
-//! Each view destructures its model type without `..`, so a field added to the model must be
-//! added here too.
+//! Views destructure their model without `..` so a new model field must be added here too.
 
 use serde::Serialize;
 use utoipa::ToSchema;
@@ -248,8 +246,7 @@ pub struct ServerSettingsView {
     pub bind: String,
     /// Whether a password is set. Patch `auth_token` to set it; an empty one clears it.
     pub has_auth_token: bool,
-    /// Days a login session may go unused before it ends; every authorized request restarts
-    /// the count.
+    /// Days a login session may go unused; every authorized request restarts the count.
     #[schema(minimum = 1, maximum = 365)]
     pub session_idle_days: u32,
     /// Days a login session lasts at most, however often it is used.

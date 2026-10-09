@@ -1,6 +1,4 @@
-//! Where the engine saves a chapter's first page, for previewing the naming settings: the same
-//! steps a download takes, from the chapter list `GetInfoFromURL` cleans up to the file the
-//! task thread writes.
+//! Where a download would save a chapter's first page, for previewing the naming settings.
 
 use std::path::PathBuf;
 
@@ -11,39 +9,34 @@ use super::task::{archive_path, custom_file_name, page_file_name, working_dir};
 use crate::info::remove_manga_name;
 use crate::settings::Settings;
 
-/// A series and one of its chapters, as a module lists them.
 #[derive(Debug, Clone, Default)]
 pub struct SampleChapter<'a> {
-    /// The module's name (`%WEBSITE%`).
+    /// `%WEBSITE%`.
     pub website: &'a str,
     pub title: &'a str,
     pub authors: &'a str,
     pub artists: &'a str,
-    /// The chapter's name as the module lists it.
     pub chapter: &'a str,
-    /// The chapter's 1-based position in the list (`%NUMBERING%`).
+    /// 1-based (`%NUMBERING%`).
     pub number: u32,
-    /// What the first page's content is, as an extension: `jpg`, `png`, `webp`, ...
+    /// The first page's content type as an extension, e.g. `jpg`.
     pub page_ext: &'a str,
 }
 
-/// The names a download of a [`SampleChapter`] gets.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PagePlacement {
     /// The manga folder's name, whether or not one is generated.
     pub manga_folder: String,
-    /// The chapter's name: its folder, or its archive without extension.
+    /// Its folder, or its archive without extension.
     pub chapter: String,
-    /// The first page's file name without extension.
+    /// Without extension.
     pub filename: String,
-    /// The first page's file name, in its folder or archive.
     pub page: String,
-    /// The first page's file, or the chapter's archive when chapters are packed.
+    /// The page's file, or the chapter's archive when chapters are packed.
     pub path: PathBuf,
 }
 
-/// Where a download of `sample` with `settings` puts its first page. `settings` may be an
-/// unsaved draft: blank templates count as their defaults, as they do once saved.
+/// `settings` may be an unsaved draft; it is normalised as saving would.
 pub fn first_page(settings: &Settings, sample: &SampleChapter<'_>) -> PagePlacement {
     let mut settings = settings.clone();
     crate::settings::normalize(&mut settings);

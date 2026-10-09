@@ -34,9 +34,8 @@ pub struct ModuleOverrides {
 }
 
 impl ModuleOverrides {
-    /// The stored overrides for `module_id`, or the defaults (disabled, nothing overridden) when
-    /// none are stored. Missing fields take their defaults; unknown ones are ignored. The proxy
-    /// password is decrypted.
+    /// The stored overrides for `module_id`, or the defaults when none are stored, with the
+    /// proxy password decrypted.
     pub fn load(repo: &ModuleSettingsRepo<'_>, module_id: &str) -> Result<Self, SettingsError> {
         let Some(mut stored) = repo.get(module_id)? else {
             return Ok(Self::default());
@@ -54,9 +53,8 @@ impl ModuleOverrides {
         })
     }
 
-    /// Stores these overrides for `module_id`, keeping its cookie jar. `http` and `limits` are
-    /// merged over what is stored, so keys this build does not know survive. Option values are
-    /// replaced wholesale; use `ModuleSettingsRepo::set_option` to change a single option.
+    /// Stores these overrides, keeping the cookie jar. `http` and `limits` are merged over what
+    /// is stored so keys unknown to this build survive; `options` is replaced wholesale.
     pub fn save(
         &self,
         repo: &ModuleSettingsRepo<'_>,
@@ -207,7 +205,6 @@ impl StoredModuleHttpSettings {
         }
     }
 
-    /// Loads the module's overrides, changes them with `change` and stores them.
     fn update(&self, change: impl FnOnce(&mut ModuleOverrides)) -> Result<(), SettingsStoreError> {
         let repo = self.db.module_settings();
         let mut overrides =
@@ -332,8 +329,7 @@ pub struct ModuleLimits {
 /// The limits that apply to one module's downloads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EffectiveLimits {
-    /// Tasks of this module that may run at once. The global `max_parallel_tasks` still bounds
-    /// all modules' tasks together.
+    /// Tasks of this module that may run at once; `max_parallel_tasks` still bounds the total.
     pub max_tasks: u32,
     /// Page threads per task; at least 1.
     pub threads_per_task: u32,
