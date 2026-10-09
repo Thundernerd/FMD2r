@@ -3,24 +3,39 @@
 // Duktape 2.3.0's duktape.c (vendored in crates/fmd-duktape-ref) with its default config;
 // tests/duktape_reference.rs compares each with a Duktape build. docs/duktape-differences.md
 // lists what is not reproduced.
+//
+// Returns `native(fn)`, which marks a function written here in JS as one of Duktape's native
+// functions for Function.prototype.toString.
 (function () {
   'use strict';
   var define = Object.defineProperty;
   var fromCharCode = String.fromCharCode;
   var Bytes = Uint8Array;
 
+  // The functions written here that are native functions in Duktape.
+  var natives = new WeakSet();
+  function native(fn) {
+    natives.add(fn);
+    return fn;
+  }
+
   // Defines `value` on `target` like a built-in property: writable, configurable, not
   // enumerable. Functions are passed as methods (`{ name() {} }.name`), which like Duktape's
   // native functions have no `prototype`; this file only runs on QuickJS, so ES2015 syntax is
   // fine.
   function builtin(target, name, value) {
+    if (typeof value === 'function') {
+      native(value);
+    }
     define(target, name, { value: value, writable: true, enumerable: false, configurable: true });
   }
 
-  // Defines the accessors of `accessors` (`{ get name() {} }`) on `target` like built-in ones.
+  // Defines the accessors of `accessors` (`{ get name() {} }`) on `target` like built-in ones,
+  // whose functions have no name of their own in Duktape.
   function getters(target, accessors) {
     Object.getOwnPropertyNames(accessors).forEach(function (name) {
-      var get = Object.getOwnPropertyDescriptor(accessors, name).get;
+      var get = native(Object.getOwnPropertyDescriptor(accessors, name).get);
+      delete get.name;
       define(target, name, { get: get, enumerable: false, configurable: true });
     });
   }
@@ -439,6 +454,260 @@
     throw new TypeError('buffer required');
   } }.plainOf);
 
+  // Dates as FMD2's Windows build of Duktape prints and parses them. That build has no platform
+  // date formatter or parser (duk_config.h, "Windows"), so every string form is Duktape's ISO
+  // 8601 one (duk__format_parts_iso8601), toLocale*String included, and strings are parsed by
+  // its ISO 8601 subset parser alone (duk__parse_string_iso8601_subset).
+  var QuickDate = Date;
+  var quickGetTime = QuickDate.prototype.getTime;
+  var construct = Reflect.construct;
+
+  function pad(n, width) {
+    var s = String(n);
+    while (s.length < width) {
+      s = '0' + s;
+    }
+    return s;
+  }
+
+  // The parts of the Date `date` in local time or UTC, or null when its time value is NaN.
+  function dateParts(date, local) {
+    var t = quickGetTime.call(date);
+    if (t !== t) {
+      return null;
+    }
+    var d = new QuickDate(t);
+    return local
+      ? [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(),
+        d.getSeconds(), d.getMilliseconds(), -d.getTimezoneOffset()]
+      : [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), d.getUTCHours(),
+        d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds()];
+  }
+
+  // duk__format_parts_iso8601: `YYYY-MM-DD`, `HH:MM:SS.mmm` and the offset (`+HH:MM` in local
+  // time, `Z` in UTC), as `which` selects; years outside 0-9999 have a sign and six digits.
+  function formatDate(date, local, which) {
+    var p = dateParts(date, local);
+    if (p === null) {
+      return 'Invalid Date';
+    }
+    var year = p[0] >= 0 && p[0] <= 9999 ? pad(p[0], 4)
+      : (p[0] >= 0 ? '+' : '-') + pad(Math.abs(p[0]), 6);
+    var day = year + '-' + pad(p[1], 2) + '-' + pad(p[2], 2);
+    var zone = 'Z';
+    if (local) {
+      var offset = Math.abs(p[7]);
+      zone = (p[7] >= 0 ? '+' : '-') + pad(Math.floor(offset / 60), 2) + ':' + pad(offset % 60, 2);
+    }
+    var time = pad(p[3], 2) + ':' + pad(p[4], 2) + ':' + pad(p[5], 2) + '.' + pad(p[6], 3) + zone;
+    return which === 'date' ? day : which === 'time' ? time : day + ' ' + time;
+  }
+
+  var dateMethods = {
+    toString() { return formatDate(this, true, 'both'); },
+    toDateString() { return formatDate(this, true, 'date'); },
+    toTimeString() { return formatDate(this, true, 'time'); },
+    toLocaleString() { return formatDate(this, true, 'both'); },
+    toLocaleDateString() { return formatDate(this, true, 'date'); },
+    toLocaleTimeString() { return formatDate(this, true, 'time'); },
+    toUTCString() { return formatDate(this, false, 'both'); }
+  };
+  Object.keys(dateMethods).forEach(function (name) {
+    builtin(QuickDate.prototype, name, dateMethods[name]);
+  });
+  builtin(QuickDate.prototype, 'toGMTString', dateMethods.toUTCString);
+
+  // duk__parse_iso8601_control: which separator may follow which part, and what comes next.
+  // A rule is a mask of parts (bits 0-8), a mask of separators (bits 9-16), the next part (bits
+  // 17-20) and flags (bits 21+): 1 sets a negative offset, 2 accepts, 4 accepts at the end.
+  var SEPARATORS = '+-T :.Z';
+  function rule(parts, separators, next, flags) {
+    var mask = 0;
+    for (var i = 0; i < separators.length; i++) {
+      mask |= 1 << (separators[i] === '\0' ? 7 : SEPARATORS.indexOf(separators[i]));
+    }
+    return parts + mask * 512 + next * 131072 + flags * 2097152;
+  }
+  var YMD = 1 | 2 | 4;
+  var ANY_TIME = YMD | 8 | 16 | 32 | 64;
+  var PARSE_RULES = [
+    rule(1, '-', 1, 0),
+    rule(2, '-', 2, 0),
+    rule(YMD, 'T ', 3, 0),
+    rule(8, ':', 4, 0),
+    rule(16, ':', 5, 0),
+    rule(32, '.', 6, 0),
+    rule(128, ':', 8, 0),
+    rule(ANY_TIME, '+', 7, 0),
+    rule(ANY_TIME, '-', 7, 1),
+    rule(ANY_TIME, 'Z', 0, 4),
+    rule(ANY_TIME | 128 | 256, '\0', 0, 2)
+  ];
+
+  // duk__parse_string_iso8601_subset: year[-month[-day[(T| )hour[:minute[:second[.fraction]]]]]]
+  // then Z, +hh[:mm] or -hh[:mm]; a missing offset is UTC. Any other string is NaN. The string
+  // is read as a C string, so it ends at a NUL.
+  function parseDate(str) {
+    var nul = str.indexOf('\0');
+    if (nul >= 0) {
+      str = str.substring(0, nul);
+    }
+    // year, month, day, hour, minute, second, millisecond, offset hours, offset minutes
+    var parts = [0, 1, 1, 0, 0, 0, 0, 0, 0];
+    var part = 0;
+    var accum = 0;
+    var digits = 0;
+    var negYear = false;
+    var negOffset = false;
+    var p = 0;
+    if (str.charAt(0) === '+') {
+      p++;
+    } else if (str.charAt(0) === '-') {
+      negYear = true;
+      p++;
+    }
+    for (;;) {
+      var c = p < str.length ? str.charCodeAt(p) : 0;
+      p++;
+      if (c >= 0x30 && c <= 0x39) {
+        if (digits >= 9) {
+          return NaN;
+        }
+        if (part !== 6 || digits < 3) {
+          accum = accum * 10 + (c - 0x30);
+          digits++;
+        }
+        continue;
+      }
+      if (digits <= 0) {
+        return NaN;
+      }
+      if (part === 6) {
+        while (digits < 3) {
+          accum *= 10;
+          digits++;
+        }
+      }
+      parts[part] = accum;
+      accum = 0;
+      digits = 0;
+      var separator = c === 0 ? 7 : c < 0x80 ? SEPARATORS.indexOf(String.fromCharCode(c)) : -1;
+      if (separator < 0) {
+        return NaN;
+      }
+      var match = (1 << part) + (1 << (separator + 9));
+      var found = -1;
+      for (var i = 0; i < PARSE_RULES.length; i++) {
+        if ((PARSE_RULES[i] & match) === match) {
+          found = PARSE_RULES[i];
+          break;
+        }
+      }
+      if (found < 0) {
+        return NaN;
+      }
+      var flags = Math.floor(found / 2097152);
+      if (flags & 1) {
+        negOffset = true;
+      }
+      if (flags & 2) {
+        break;
+      }
+      if (flags & 4) {
+        if (p >= str.length) {
+          break;
+        }
+        return NaN;
+      }
+      part = Math.floor(found / 131072) & 0xf;
+      if (c === 0) {
+        return NaN;
+      }
+    }
+    var sign = negOffset ? 1 : -1;
+    var year = negYear ? -parts[0] : parts[0];
+    var hour = parts[3] + sign * parts[7];
+    var minute = parts[4] + sign * parts[8];
+    // Date.UTC reads years 0-99 as 1900-1999; 400 years later is the same calendar.
+    if (year >= 0 && year <= 99) {
+      return quickUTC(year + 400, parts[1] - 1, parts[2], hour, minute, parts[5], parts[6]) -
+        146097 * 86400000;
+    }
+    return quickUTC(year, parts[1] - 1, parts[2], hour, minute, parts[5], parts[6]);
+  }
+
+  // ToPrimitive with no hint, as ES5's [[DefaultValue]]: a Date prefers its string, any other
+  // object its number.
+  function toPrimitive(value) {
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+      return value;
+    }
+    var order = value instanceof QuickDate ? ['toString', 'valueOf'] : ['valueOf', 'toString'];
+    for (var i = 0; i < 2; i++) {
+      var method = value[order[i]];
+      if (typeof method === 'function') {
+        var result = method.call(value);
+        if (result === null || (typeof result !== 'object' && typeof result !== 'function')) {
+          return result;
+        }
+      }
+    }
+    throw new TypeError('coercion to primitive failed');
+  }
+
+  // The Date constructor: `new Date(string)` parses with parseDate, `Date()` is the current time
+  // as toString prints it; anything else is QuickJS's.
+  var DuktapeDate = function Date(year, month, day, hours, minutes, seconds, ms) {
+    if (new.target === undefined) {
+      return formatDate(new QuickDate(), true, 'both');
+    }
+    if (arguments.length === 1) {
+      var value = toPrimitive(year);
+      return construct(QuickDate, [typeof value === 'string' ? parseDate(value) : value],
+        new.target);
+    }
+    return construct(QuickDate, arguments, new.target);
+  };
+  define(DuktapeDate, 'prototype', { value: QuickDate.prototype, writable: false });
+  builtin(QuickDate.prototype, 'constructor', DuktapeDate);
+  // ES5's Date.UTC: a missing month is NaN, so is the result (ES2017 defaults it to 0).
+  var quickUTC = QuickDate.UTC;
+  builtin(DuktapeDate, 'UTC', { UTC(year, month, date, hours, minutes, seconds, ms) {
+    if (arguments.length < 2) {
+      Number(year);
+      return NaN;
+    }
+    return quickUTC.apply(null, arguments);
+  } }.UTC);
+  builtin(DuktapeDate, 'now', QuickDate.now);
+  builtin(DuktapeDate, 'parse', { parse(string) {
+    return parseDate(String(string));
+  } }.parse);
+  builtin(globalThis, 'Date', DuktapeDate);
+
+  // Function.prototype.toString (duk_bi_function_prototype_to_string): `function NAME() {
+  // [ecmascript code] }`, with `[native code]` for native functions and `[bound code]` for
+  // bound ones, NAME being ToString(this.name) or '' when that is undefined. Bound functions are
+  // the ones `bind` returned; native ones are QuickJS's (which it prints as below) and the
+  // functions marked with `native`.
+  var quickToString = Function.prototype.toString;
+  var quickBind = Function.prototype.bind;
+  var QUICKJS_NATIVE = /^function [^(]*\(\) \{\n {4}\[native code\]\n\}$/;
+  var bound = new WeakSet();
+  builtin(Function.prototype, 'bind', { bind(thisArg) {
+    var fn = quickBind.apply(this, arguments);
+    bound.add(fn);
+    return fn;
+  } }.bind);
+  builtin(Function.prototype, 'toString', { toString() {
+    var source = quickToString.call(this);
+    var name = this.name;
+    name = name === undefined ? '' : String(name);
+    var kind = bound.has(this) ? 'bound'
+      : natives.has(this) || QUICKJS_NATIVE.test(source) ? 'native' : 'ecmascript';
+    return 'function ' + name + '() { [' + kind + ' code] }';
+  } }.toString);
+
   // Duktape's JSON.stringify writes lone surrogates as they are and escapes U+2028 and U+2029
   // (DUK_USE_NONSTD_JSON_ESC_U2028_U2029); QuickJS does the opposite (ES2019). An escaped
   // backslash is matched first so `\\ud800` stays as it is.
@@ -455,4 +724,6 @@
       return m.length === 1 ? '\\u' + m.charCodeAt(0).toString(16) : m;
     });
   } }.stringify);
+
+  return native;
 })

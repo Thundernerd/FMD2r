@@ -5,7 +5,7 @@
 //   baseunits/Duktape.Api.pas:1408; extras/module-duktape/duk_module_duktape.c in the Duktape
 //   sources), with `Duktape.modLoaded` and FMD2's `Duktape.modSearch` (baseunits/Duktape.pas:39-75),
 //   which calls the host's `modSearch(id)`: the module's source, or undefined when no file exists.
-(function (modSearch, log) {
+(function (modSearch, log, native) {
   'use strict';
   var geval = eval;
   var hasOwn = Object.prototype.hasOwnProperty;
@@ -19,9 +19,9 @@
   // FMD2's modSearch (baseunits/Duktape.pas:39-67) is called with (id, require, exports, module)
   // and reads only the id.
   define(Duktape, 'modSearch', {
-    value: { modSearch(id) {
+    value: native({ modSearch(id) {
       return modSearch(String(id));
-    } }.modSearch,
+    } }.modSearch),
     writable: true,
     configurable: true
   });
@@ -73,7 +73,7 @@
   // named after the id's last term (or `module.name`) with `this` the module's first exports.
   function makeRequire(moduleId) {
     // A method, so it has no `prototype`, like the native function Duktape creates.
-    var require = { require(id) {
+    var require = native({ require(id) {
       if (typeof id !== 'string') {
         throw new TypeError('string required');
       }
@@ -107,7 +107,7 @@
         throw e;
       }
       return module.exports;
-    } }.require;
+    } }.require);
     define(require, 'name', { value: 'require' });
     if (moduleId !== undefined) {
       define(require, 'id', { value: moduleId, configurable: true });
@@ -115,8 +115,8 @@
     return require;
   }
 
-  globalThis.print = { print() {
+  globalThis.print = native({ print() {
     log(Array.prototype.map.call(arguments, String).join(' '));
-  } }.print;
+  } }.print);
   define(globalThis, 'require', { value: makeRequire(undefined), writable: true, configurable: true });
 })

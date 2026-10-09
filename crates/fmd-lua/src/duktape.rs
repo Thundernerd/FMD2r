@@ -116,12 +116,12 @@ fn eval(source: &[u8], lua_dir: &Path, settings: JsSettings) -> Result<Vec<u8>, 
 /// Duktape lacks (`surface.js`).
 fn install_globals<'js>(ctx: &Ctx<'js>, lua_dir: PathBuf) -> rquickjs::Result<()> {
     let builtins: Function = ctx.eval(include_str!("duktape/builtins.js"))?;
-    builtins.call::<_, ()>(())?;
+    let native: Function = builtins.call(())?;
     let prelude: Function = ctx.eval(include_str!("duktape/prelude.js"))?;
     let mod_search = Function::new(ctx.clone(), move |id: String| mod_search(&lua_dir, &id))?;
     // baseunits/Duktape.pas:28.
     let log = Function::new(ctx.clone(), |text: String| tracing::info!("{text}"))?;
-    prelude.call::<_, ()>((mod_search, log))?;
+    prelude.call::<_, ()>((mod_search, log, native))?;
     let surface: Function = ctx.eval(include_str!("duktape/surface.js"))?;
     surface.call::<_, ()>(())
 }

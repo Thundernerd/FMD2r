@@ -16,8 +16,12 @@ use fmd_lua::{Globals, LuaHttp, ModuleRegistry, Runtime};
 /// (baseunits/lua/LuaDuktape.pas:14-24): the result up to its first NUL, or no value when the
 /// script fails.
 fn runtime() -> Runtime {
+    runtime_in(fmd_testkit::corpus_root())
+}
+
+/// `runtime()` with `lua_dir` as the Lua directory of both engines.
+fn runtime_in(lua_dir: PathBuf) -> Runtime {
     let runtime = Runtime::new().unwrap();
-    let lua_dir = fmd_testkit::corpus_root();
     runtime.set_lua_dir(&lua_dir);
     let lua = runtime.lua();
     let reference = lua
@@ -370,6 +374,133 @@ fn builtin_members_match_duktape() {
             -- reference built here.
             assert(require('fmd.duktape').ExecJS('Duktape.env') == 'll u nl p2 a8 x64 windows mingw')
             same('[require.name, typeof require.length, "length" in print, "name" in print].join()')
+            "#,
+        )
+        .unwrap();
+}
+
+/// `require` as Duktape's module loader (extras/module-duktape) runs it with FMD2's `modSearch`
+/// (baseunits/Duktape.pas:39-67, 106-121).
+#[test]
+fn require_matches_duktape() {
+    let dir = tempfile::tempdir().unwrap();
+    for (path, source) in [
+        ("utils/a.js", "exports.name = 'a:' + require('./b').name + ':' + require.id;"),
+        ("utils/b.js", "exports.name = 'b' + require('../top.js').n;"),
+        ("top.js", "module.exports = { n: 7 };"),
+        ("this.js", "exports.same = (this === exports); exports.callee = arguments.callee.name;"),
+        ("swap.js", "var first = exports; module.exports = { first: first === this };"),
+        ("cycle1.js", "exports.early = 1; exports.other = require('cycle2').seen;"),
+        ("cycle2.js", "exports.seen = require('cycle1').early;"),
+        ("throws.js", "var g = new Function('return this')(); g.tries = (g.tries || 0) + 1; throw new Error('no');"),
+        ("module.js", "exports.keys = Object.getOwnPropertyNames(module).sort().join(); exports.id = module.id;"),
+        ("bare", "exports.ext = 'none';"),
+    ] {
+        let path = dir.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, source).unwrap();
+    }
+    runtime_in(dir.path().to_path_buf())
+        .exec(
+            r#"
+            same('require("utils/a.js").name')
+            same('require("./utils/a").name')
+            same('require("utils//a").name')
+            same('require("bare").ext')
+            same('[require("this").same, require("this").callee].join()')
+            same('require("swap").first')
+            same('require("cycle1").other')
+            same('JSON.stringify(require("missing"))')
+            same('try { require("throws") } catch (e) {}; try { require("throws") } catch (e) {}; tries')
+            same('require("module").keys + "|" + require("module").id')
+            same('require("/top")')
+            same('require("../top")')
+            same('require("utils/")')
+            same('require("")')
+            same('require(5)')
+            same('require()')
+            same('[typeof Duktape.modLoaded, Object.getPrototypeOf(Duktape.modLoaded), typeof Duktape.modSearch].join()')
+            same('require("top"); Object.keys(Duktape.modLoaded).join()')
+            same('Duktape.modSearch = function (id) { return "exports.id = " + JSON.stringify(id) }; require("anything/x").id')
+            same('Duktape.modLoaded.fake = { exports: 42 }; require("fake")')
+            same('var D = Duktape; Duktape = {}; D.modSearch = function () { return "exports.ok = 1" }; require("q").ok')
+            same('[require.name, require.id, Object.getOwnPropertyNames(require).sort().join()].join("|")')
+            same('Object.getOwnPropertyDescriptor(this, "require").enumerable')
+            "#,
+        )
+        .unwrap();
+}
+
+/// `Function.prototype.toString` gives Duktape's placeholders, not the source text
+/// (duk_bi_function_prototype_to_string), which packed scripts may test or hash.
+#[test]
+fn function_to_string_matches_duktape() {
+    runtime()
+        .exec(
+            r#"
+            same('function foo(a, b) { return a + b } foo.toString()')
+            same('(function () {}).toString()')
+            same('String(function named() {})')
+            same('(function f() {}) + ""')
+            same('(function () { return arguments.callee.toString() })()')
+            same('new Function("a", "return a").toString()')
+            same('Math.max.toString()')
+            same('String(eval) + String(Date) + String(Function.prototype)')
+            same('Function.prototype.toString.call(Math.max)')
+            same('(function f() {}).bind(null).toString()')
+            same('Math.max.bind(null).toString()')
+            same('var b = (function f(a, b) {}).bind(null, 1); [b.name, b.length, typeof b.prototype].join()')
+            same('String(print) + String(require) + String(JSON.stringify) + String(Duktape.enc)')
+            same('String(TextDecoder) + String(new TextDecoder().decode) + String(Uint8Array.allocPlain)')
+            same('String(Object.getOwnPropertyDescriptor(TextEncoder.prototype, "encoding").get)')
+            same('String(Function.prototype.toString) + String(Function.prototype.bind)')
+            same('[Function.prototype.toString.length, Function.prototype.bind.length, Function.prototype.bind.name].join()')
+            same('var fs = [function () {}]; fs[0].name = "x"; String(fs[0])')
+            same('var o = { m: function () {} }; Object.defineProperty(o.m, "name", { value: 42 }); String(o.m)')
+            same('try { Function.prototype.toString.call({}) } catch (e) { e.name }')
+            same('/\\[native code\\]/.test(String(Math.random)) + "," + /\\{\\s*\\[native code\\]\\s*\\}/.test(String(function x(){}))')
+            "#,
+        )
+        .unwrap();
+}
+
+/// Dates print and parse as in FMD2's Windows build of Duktape, which has no platform date
+/// formatter or parser: everything is Duktape's ISO 8601 form (duk__format_parts_iso8601,
+/// duk__parse_string_iso8601_subset), and a time without an offset is UTC.
+#[test]
+fn dates_match_duktape() {
+    runtime()
+        .exec(
+            r#"
+            same('var d = new Date(2020, 5, 7, 8, 9, 10, 11); [d.toString(), d.toDateString(), d.toTimeString(), d.toLocaleString(), d.toLocaleDateString(), d.toLocaleTimeString(), d.toUTCString(), d.toGMTString(), d.toISOString(), d.toJSON(), String(d), d + "", JSON.stringify([d])].join("|")')
+            same('var d = new Date(2021, 0, 31, 23, 59, 59, 999); [d.toString(), d.toTimeString()].join("|")')
+            same('[new Date(NaN).toString(), new Date(NaN).toUTCString(), new Date(NaN).toDateString(), new Date(NaN).toLocaleTimeString()].join("|")')
+            same('try { new Date(NaN).toISOString() } catch (e) { e.name }')
+            same('[new Date(-1e14).toUTCString(), new Date(8.64e15).toUTCString(), new Date(Date.UTC(-5, 0, 1)).toUTCString(), new Date(Date.UTC(10000, 0, 1)).toUTCString(), new Date(Date.UTC(99, 11, 31)).toUTCString()].join("|")')
+            same('Date.prototype.toGMTString === Date.prototype.toUTCString')
+            same('typeof Date() + "," + (Date().length === new Date().toString().length)')
+            same('try { Date.prototype.toString.call({}) } catch (e) { e.name }')
+            same('[Date.length, Date.name, Date.prototype.constructor === Date, new Date(0) instanceof Date, Object.prototype.toString.call(new Date(0))].join()')
+            same('[Date.UTC(2020, 0), Date.UTC(2020), Date.UTC(99, 0, 1), Date.UTC(2020, 13, 40, 25, 61, 61, 1001)].join()')
+            same('[new Date(2020, 0).getTime() === new Date(2020, 0, 1, 0, 0, 0, 0).getTime(), new Date(0).getTime(), new Date("0").getTime(), new Date(true).getTime(), new Date(null).getTime(), new Date(undefined).getTime()].join()')
+            local parses = {
+              '2020-01-02', '2020-01', '2020', '+002020-01-02T00:00:00Z', '-000001-01-01T00:00:00Z',
+              '2020-01-02T03:04:05', '2020-01-02 03:04:05', '2020-01-02T03:04:05Z', '2020-01-02T03:04Z',
+              '2020-01-02T03Z', '2020-01-02T03:04:05.5+01:00', '2020-01-02T03:04:05.123456Z',
+              '2020-01-02T03:04:05+0100', '2020-01-02T03:04:05+01', '2020-01-02T03:04:05-01:30',
+              '2020-01-02T24:00:00Z', '2020-13-02', '2020-02-30', '2020-01-02T03:04:05.Z',
+              '2020-01-02T03:04:05Zx', '2020/01/02', 'Jan 2, 2020', 'Thu, 02 Jan 2020 03:04:05 GMT', '',
+              ' 2020-01-02', '2020-01-02 ', '1234567890', '12345678901', '2020-01-02T03:04:05 +01:00',
+              '2020-06-07 08:09:10.011+02:00', '2020-06-07 06:09:10.011Z', 'Invalid Date', '2020-1-2',
+              '0099-01-01T00:00:00Z', '0000-01-01', '2020-01-02T03:04:05.1234567891Z',
+            }
+            for _, s in ipairs(parses) do
+              same('[Date.parse(' .. string.format('%q', s) .. '), new Date(' .. string.format('%q', s) .. ').getTime()].join()')
+            end
+            same('var d = new Date(2020, 5, 7, 8, 9, 10, 11); [Date.parse(d.toString()), Date.parse(d.toUTCString()), Date.parse(d.toISOString()), new Date(d).getTime(), new Date(d.toString()).getTime()].join()')
+            same('new Date({ valueOf: function () { return 5 }, toString: function () { return "2020-01-01" } }).getTime()')
+            same('new Date({ toString: function () { return "2020-01-01" } }).getTime()')
+            same('Date.parse({ toString: function () { return "2020-01-01" } })')
             "#,
         )
         .unwrap();
