@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use fmd_http::TerminateToken;
-use fmd_lua::Module;
+use fmd_lua::{Module, ModuleDef};
 use serde::Serialize;
 use thiserror::Error;
 use utoipa::ToSchema;
@@ -129,13 +129,18 @@ impl JobFailure {
 }
 
 impl ListFailureReason {
-    /// What the user reads about a `job` of website `website` that failed this way. The web UI
+    /// What the user reads about a `job` of `module` that failed this way. The web UI
     /// words it the same (`web/src/lib/components/discover/ListActions.svelte`).
-    fn message(self, job: ListJobKind, website: &str) -> String {
+    fn message(self, job: ListJobKind, module: &ModuleDef) -> String {
+        let website = &module.name;
         match (self, job) {
-            (Self::NoDump, _) => format!(
+            (Self::NoDump, _) if module.on_get_name_and_link.is_some() => format!(
                 "FMD2-DB has no ready-made list for {website}. \
                  Use Update list to build it from the website."
+            ),
+            (Self::NoDump, _) => format!(
+                "FMD2-DB has no ready-made list for {website}, \
+                 and this website cannot build one itself."
             ),
             (Self::Unreachable, _) => format!(
                 "Could not reach FMD2-DB to get the list of {website}. \
@@ -210,15 +215,11 @@ impl ListJobs {
 
     /// Starts updating `module_id`'s list on a thread of its own.
     pub fn update(&self, module_id: &str) -> Result<(), ListJobError> {
-        let module = self
-            .inner
-            .modules
-            .module(module_id)
-            .ok_or_else(|| ListJobError::UnknownModule(module_id.into()))?;
-        let website = module.def().name;
+        let module = self.module(module_id)?;
+        let def = module.def();
         self.start(
             module_id,
-            &website,
+            def,
             ListJobKind::Update,
             move |inner, terminate, events| {
                 let settings = inner.settings.get();
@@ -240,17 +241,11 @@ impl ListJobs {
 
     /// Starts downloading and importing `module_id`'s FMD2-DB dump on a thread of its own.
     pub fn import_db(&self, module_id: &str) -> Result<(), ListJobError> {
-        let website = self
-            .inner
-            .modules
-            .module(module_id)
-            .ok_or_else(|| ListJobError::UnknownModule(module_id.into()))?
-            .def()
-            .name;
+        let def = self.module(module_id)?.def();
         let id = module_id.to_owned();
         self.start(
             module_id,
-            &website,
+            def,
             ListJobKind::ImportDb,
             move |inner, terminate, events| {
                 let url = inner.settings.get().update_lists.db_url.clone();
@@ -270,6 +265,14 @@ impl ListJobs {
         )
     }
 
+    /// The loaded module `module_id`.
+    fn module(&self, module_id: &str) -> Result<Arc<Module>, ListJobError> {
+        self.inner
+            .modules
+            .module(module_id)
+            .ok_or_else(|| ListJobError::UnknownModule(module_id.into()))
+    }
+
     /// Asks the list job of `module_id` to stop.
     pub fn cancel(&self, module_id: &str) -> Result<(), ListJobError> {
         let running = self.inner.running();
@@ -285,12 +288,12 @@ impl ListJobs {
         self.inner.running().contains_key(module_id)
     }
 
-    /// Runs `work` on a new thread unless `module_id` (named `website`) already has a job,
+    /// Runs `work` on a new thread unless `module_id` (defined by `def`) already has a job,
     /// reporting it as `kind`.
     fn start(
         &self,
         module_id: &str,
-        website: &str,
+        def: ModuleDef,
         kind: ListJobKind,
         work: impl FnOnce(&Inner, &TerminateToken, &Events<'_>) -> Result<JobOutcome, JobFailure>
         + Send
@@ -316,7 +319,6 @@ impl ListJobs {
         self.inner.changed();
         let inner = self.inner.clone();
         let id = module_id.to_owned();
-        let website = website.to_owned();
         let spawned = std::thread::Builder::new()
             .name(format!("fmd-list-{id}"))
             .spawn(move || {
@@ -330,7 +332,7 @@ impl ListJobs {
                 // Out of `running` before the last event, so a client may start the next job
                 // as soon as it hears this one ended.
                 let error = result.as_ref().err().map(|e| {
-                    let message = e.reason().message(kind, &website);
+                    let message = e.reason().message(kind, &def);
                     format!("{message}\n\nDetails: {id}: {e}")
                 });
                 inner.finished(&id, error);

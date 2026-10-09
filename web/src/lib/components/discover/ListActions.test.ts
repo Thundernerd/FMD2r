@@ -34,12 +34,12 @@ function failed(reason: ListEvent['reason'], error: string): ListEvent {
 	};
 }
 
-function setup(event: ListEvent) {
+function setup(event: ListEvent, module: ModuleSummary = MODULE) {
 	const store = new EventStore({ url: '/api/events', connect: () => ({}) as never });
 	store.lists[MODULE.id] = event;
 	const updateList = vi.fn(() => Promise.resolve());
 	const api = { updateList } as unknown as Api;
-	render(ListActions, { api, store, module: MODULE, onfinished: () => {} });
+	render(ListActions, { api, store, module, onfinished: () => {} });
 	return { updateList };
 }
 
@@ -60,6 +60,19 @@ describe('ListActions', () => {
 
 		await fireEvent.click(within(alert).getByRole('button', { name: 'Update list' }));
 		expect(updateList).toHaveBeenCalledWith(MODULE.id);
+	});
+
+	it('does not point to Update list when the website cannot build its list', () => {
+		setup(failed('no_dump', `${MODULE.id}: downloading ${URL} failed with HTTP status 404`), {
+			...MODULE,
+			capabilities: { ...MODULE.capabilities, update_list: false }
+		});
+
+		const alert = screen.getByRole('alert');
+		expect(alert.textContent).toContain(
+			'FMD2-DB has no ready-made list for MangaDex, and this website cannot build one itself.'
+		);
+		expect(within(alert).queryByRole('button', { name: 'Update list' })).toBeNull();
 	});
 
 	it('words an unreachable FMD2-DB plainly, details aside', () => {

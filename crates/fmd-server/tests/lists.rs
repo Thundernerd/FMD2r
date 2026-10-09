@@ -233,14 +233,15 @@ impl Transport for NoDumps {
     }
 }
 
-/// `state()` with list jobs for one module, `site` ("Site"), whose HTTP goes to `NoDumps`.
+/// `state()` with list jobs for one module, `site` ("Site", which can update its list), whose
+/// HTTP goes to `NoDumps`.
 fn state_with_list_jobs() -> (TempDir, AppState) {
     let (dir, state) = state();
     std::fs::create_dir_all(dir.path().join("lua/modules")).unwrap();
     std::fs::write(
         dir.path().join("lua/modules/Site.lua"),
         "function Init()\n  local m = NewWebsiteModule()\n  m.ID = 'site'; m.Name = 'Site'; \
-         m.RootURL = 'https://site.test'\nend\n",
+         m.RootURL = 'https://site.test'; m.OnGetNameAndLink = 'GetNameAndLink'\nend\n",
     )
     .unwrap();
     let report = ModuleRegistry::load_dir(&dir.path().join("lua"));

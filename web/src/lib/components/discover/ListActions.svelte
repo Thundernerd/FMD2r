@@ -34,7 +34,9 @@
 		const site = module.name;
 		switch (reason) {
 			case 'no_dump':
-				return `FMD2-DB has no ready-made list for ${site}. Use Update list to build it from the website.`;
+				return module.capabilities.update_list
+					? `FMD2-DB has no ready-made list for ${site}. Use Update list to build it from the website.`
+					: `FMD2-DB has no ready-made list for ${site}, and this website cannot build one itself.`;
 			case 'unreachable':
 				return `Could not reach FMD2-DB to get the list of ${site}. Check the connection and try again later.`;
 			case 'bad_archive':
@@ -141,13 +143,10 @@
 		{:else if event?.kind === 'failed'}
 			<div class="failed small" role="alert">
 				<p class="bad">{failedText(event.reason, event.job)}</p>
-				{#if event.reason === 'no_dump'}
+				{#if event.reason === 'no_dump' && module.capabilities.update_list}
 					<div class="row">
-						<button
-							class="btn sm"
-							type="button"
-							disabled={busy || !module.capabilities.update_list}
-							onclick={() => start('update')}>Update list</button
+						<button class="btn sm" type="button" disabled={busy} onclick={() => start('update')}
+							>Update list</button
 						>
 					</div>
 				{/if}
