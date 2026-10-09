@@ -19,7 +19,7 @@ fn fmd_env_lua_directory_is_the_configured_lua_dir_with_a_trailing_separator() {
     assert_eq!(lua_dir, format!("{}/", dir.path().display()));
 }
 
-/// MangaHub's `GetPageNumber` needs a revision of at least 6920 (templates/MangaHub.lua:122);
+/// MangaHub's `GetPageNumber` needs a revision of at least 6920 (lua/templates/MangaHub.lua:122);
 /// FMD2's builds set it to the commit count, a decimal string (git2revision.bat).
 #[test]
 fn fmd_env_revision_is_a_numeric_string_of_at_least_6920() {

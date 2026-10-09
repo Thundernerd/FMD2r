@@ -33,7 +33,7 @@
 #   redirect, is out of date.
 # - MangaHub: every mirror goes through api.mghcdn.com, which answers with a Cloudflare
 #   challenge. (The template's GetPageNumber also needs a numeric fmd.env.Revision of at least
-#   6920, templates/MangaHub.lua:122, which FMD2r sets since T52.)
+#   6920, lua/templates/MangaHub.lua:122, which FMD2r sets since T52.)
 # - FMReader is covered for GetInfo only: every live module (Love4u, RawINU, MangaGun, WeLoMa)
 #   overrides GetPageNumber.
 #

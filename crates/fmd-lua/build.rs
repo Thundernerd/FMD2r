@@ -30,7 +30,7 @@ fn main() {
 /// Emits `FMD_ENV_REVISION`, failing the build when the override is not a decimal number, since
 /// modules compare it with numbers (lua/templates/MangaHub.lua:122).
 fn revision() {
-    println!("cargo:rerun-if-env-changed=FMD2R_REVISION");
+    println!("cargo::rerun-if-env-changed=FMD2R_REVISION");
     let revision = std::env::var("FMD2R_REVISION")
         .ok()
         .filter(|r| !r.is_empty())
@@ -39,5 +39,5 @@ fn revision() {
         println!("cargo::error=FMD2R_REVISION must be a decimal number, got {revision:?}");
         return;
     }
-    println!("cargo:rustc-env=FMD_ENV_REVISION={revision}");
+    println!("cargo::rustc-env=FMD_ENV_REVISION={revision}");
 }
