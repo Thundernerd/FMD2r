@@ -657,3 +657,57 @@ fn a_flaresolverr_change_is_read_by_the_next_bypass_without_a_restart() {
 
     assert_eq!(title(), "solver-b");
 }
+
+#[test]
+fn a_broken_module_from_a_sync_is_never_loaded_by_a_concurrent_job() {
+    let mut f = Fixture::new();
+    let pool = Arc::new(WorkerPool::new(pool_config(&f)).unwrap());
+    f.updater = f.updater.with_pool(pool.clone());
+    publish_first(&f.github);
+    f.updater.sync().unwrap();
+    // Its `Init` signals that the update is being loaded, holds it there until released, then
+    // fails; a state built from it titles every manga `BROKEN`.
+    let started = f.dir.path().join("started");
+    let release = f.dir.path().join("release");
+    let broken = format!(
+        "function Init()\n\
+           local s = io.open([[{}]], 'w'); s:close()\n\
+           while not io.open([[{}]], 'r') do end\n\
+           error('broken')\n\
+         end\n\
+         function GetInfo() MANGAINFO.Title = 'BROKEN'; return no_error end\n",
+        started.display(),
+        release.display()
+    );
+    f.github.publish(
+        "c2",
+        "\"e2\"",
+        &[
+            ("modules/A.lua", "sa2", &broken),
+            ("modules/B.lua", "sb1", &module("b", "B1")),
+            ("utils/helper.lua", "sh1", "return {}"),
+        ],
+    );
+
+    let title = std::thread::scope(|scope| {
+        let sync = scope.spawn(|| f.updater.sync().unwrap());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !started.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        // The pool has never run `a`, so its worker compiles the module file now.
+        let a = f.modules.current().get("a").unwrap().clone();
+        let title = pool
+            .on(&a)
+            .get_info("/m")
+            .wait()
+            .map(|r| r.value.info.title);
+        std::fs::write(&release, "").unwrap();
+        sync.join().unwrap();
+        title
+    });
+
+    assert!(started.exists(), "the update's Init never ran");
+    assert_eq!(title.unwrap(), "A1");
+    assert_eq!(f.read("modules/A.lua"), Some(module("a", "A1")));
+}

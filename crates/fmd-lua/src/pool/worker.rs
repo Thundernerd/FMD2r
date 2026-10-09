@@ -77,8 +77,7 @@ struct Loaded {
     /// (e.g. `lua_toboolean(L.Handle, -1)`, baseunits/lua/LuaWebsiteModules.pas:165).
     /// Not modelled: FMD2's anti-bot bypass runs in the same state and clears its stack
     /// afterwards (`L.ClearStack`, baseunits/lua/LuaWebsiteBypass.pas:139), so there a
-    /// callback that went through the bypass and returns nothing reads `nil`. The bypass
-    /// arrives with T30.
+    /// callback that went through the bypass and returns nothing reads `nil`.
     top: Value,
     bottom: Option<Value>,
     runtime: Runtime,
