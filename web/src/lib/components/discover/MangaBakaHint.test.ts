@@ -21,8 +21,8 @@ describe('MangaBakaHint', () => {
 		render(MangaBakaHint, { status: NONE });
 
 		const hint = screen.getByRole('note');
-		expect(hint.textContent).toContain(
-			'Get covers, formats and status for list titles from MangaBaka (~390 MB download).'
+		expect(hint.textContent?.replace(/\s+/g, ' ')).toContain(
+			'Get formats, publication status and descriptions for list titles from MangaBaka (~390 MB download).'
 		);
 		const link = screen.getByRole('link', { name: /MangaBaka database/ });
 		expect(link.getAttribute('href')).toBe('/settings#section-metadata');

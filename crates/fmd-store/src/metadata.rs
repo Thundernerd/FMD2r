@@ -118,9 +118,9 @@ impl MetadataBuilder {
     }
 
     /// Points the titles, links and IDs of merged series at the series they were finally merged
-    /// into, drops what points at no active series, indexes the tables, stamps the build time
-    /// (Unix milliseconds) and commits.
-    pub fn finish(self, built_at: i64) -> Result<()> {
+    /// into, drops what points at no active series, stamps the build time (Unix milliseconds)
+    /// and `build_id` (unique to this build), and commits.
+    pub fn finish(self, built_at: i64, build_id: &str) -> Result<()> {
         self.conn.execute_batch(
             "-- Follow chains of merges to their end; a cycle stops where it repeats.
              CREATE TEMP TABLE final AS
@@ -142,8 +142,8 @@ impl MetadataBuilder {
              DELETE FROM merged;",
         )?;
         self.conn.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES ('built_at', ?1)",
-            [built_at.to_string()],
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('built_at', ?1), ('build_id', ?2)",
+            [built_at.to_string(), build_id.to_owned()],
         )?;
         self.conn
             .pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -185,13 +185,19 @@ impl MetadataDb {
 
     /// When the database was built, in Unix milliseconds.
     pub fn built_at(&self) -> Result<Option<i64>> {
+        Ok(self.meta("built_at")?.and_then(|v| v.parse().ok()))
+    }
+
+    /// What tells this build from every other.
+    pub fn build_id(&self) -> Result<String> {
+        Ok(self.meta("build_id")?.unwrap_or_default())
+    }
+
+    fn meta(&self, key: &str) -> Result<Option<String>> {
         let conn = self.lock();
-        let value: Option<String> = conn
-            .query_row("SELECT value FROM meta WHERE key = 'built_at'", [], |r| {
-                r.get(0)
-            })
-            .optional()?;
-        Ok(value.and_then(|v| v.parse().ok()))
+        Ok(conn
+            .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+            .optional()?)
     }
 
     /// The active series `id`; `None` for a merged, deleted or unknown one.

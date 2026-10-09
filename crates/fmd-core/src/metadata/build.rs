@@ -52,10 +52,8 @@ pub(super) struct Counting<R> {
 impl<R: Read> Read for Counting<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.terminate.is_terminated() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "cancelled",
-            ));
+            // Not `Interrupted`: readers retry that, and would spin here forever.
+            return Err(std::io::Error::other("cancelled"));
         }
         let n = self.inner.read(buf)?;
         self.bytes

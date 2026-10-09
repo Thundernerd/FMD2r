@@ -29,7 +29,8 @@
 {#if status?.available && !status.downloaded && !dismissed}
 	<div class="hint" role="note">
 		<p class="small">
-			Get covers, formats and status for list titles from MangaBaka (~390 MB download).
+			Get formats, publication status and descriptions for list titles from MangaBaka (~390 MB
+			download).
 			<a href="/settings#section-metadata">Set up the MangaBaka database</a>
 		</p>
 		<button class="btn ghost sm" type="button" aria-label="Dismiss" onclick={dismiss}>✕</button>

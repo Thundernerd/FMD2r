@@ -79,65 +79,83 @@ impl MangaDexLinks {
         }
     }
 
-    /// The MangaBaka `(site, id)` pairs MangaDex links each title of `uuids` to, by UUID: one
-    /// `GET /manga?ids[]=...` per 100 titles, spaced to stay under MangaDex's rate limit.
-    fn links(
-        &self,
-        uuids: &[String],
-        terminate: &TerminateToken,
-    ) -> Result<HashMap<String, Vec<(String, String)>>, MetadataError> {
-        let mut out = HashMap::new();
-        for batch in uuids.chunks(MANGADEX_BATCH) {
+    /// The MangaBaka `(site, id)` pairs MangaDex links each title of `uuids` to: one
+    /// `GET /manga?ids[]=...` per 100 titles, spaced to stay under MangaDex's rate limit. After a
+    /// request fails, the rest are not asked and count as unanswered.
+    fn links(&self, uuids: &[String], terminate: &TerminateToken) -> CrossIds {
+        let mut out = CrossIds::default();
+        let mut batches = uuids.chunks(MANGADEX_BATCH);
+        for batch in batches.by_ref() {
             if terminate.is_terminated() {
+                out.unanswered.extend(batch.iter().cloned());
                 break;
             }
-            self.wait(terminate);
-            let mut url = format!("https://api.mangadex.org/manga?limit={MANGADEX_BATCH}");
-            for rating in ["safe", "suggestive", "erotica", "pornographic"] {
-                url.push_str("&contentRating[]=");
-                url.push_str(rating);
+            match self.batch(batch, terminate) {
+                Ok(links) => out.links.extend(links),
+                Err(e) => {
+                    tracing::warn!(target: "fmd_core", "MangaDex cross-site IDs: {e}");
+                    out.unanswered.extend(batch.iter().cloned());
+                    break;
+                }
             }
-            for uuid in batch {
-                url.push_str("&ids[]=");
-                url.push_str(uuid);
-            }
-            let mut http = self.http.session();
-            http.set_terminate_token(terminate.clone());
-            http.set_user_agent(USER_AGENT);
-            http.headers_mut().set_value("Accept", "application/json");
-            let ok = http
-                .get(&url)
-                .map_err(|e| MetadataError::Http(e.to_string()))?;
-            let code = http.result_code();
-            if !ok || code >= 300 {
-                return Err(MetadataError::Download {
-                    url,
-                    status: u16::try_from(code).unwrap_or(0),
-                });
-            }
-            let body: Value = serde_json::from_slice(http.document())
-                .map_err(|e| MetadataError::Http(format!("MangaDex's answer: {e}")))?;
-            for manga in body["data"].as_array().into_iter().flatten() {
-                let Some(id) = manga["id"].as_str() else {
-                    continue;
-                };
-                // MangaDex sends `[]` (or `null`) for a title without links.
-                let Some(links) = manga["attributes"]["links"].as_object() else {
-                    continue;
-                };
-                let pairs = MANGADEX_LINKS
-                    .iter()
-                    .filter_map(|(key, site)| {
-                        let xid = match links.get(*key)? {
-                            Value::String(s) if !s.is_empty() => s.clone(),
-                            Value::Number(n) => n.to_string(),
-                            _ => return None,
-                        };
-                        Some(((*site).to_owned(), xid))
-                    })
-                    .collect();
-                out.insert(id.to_lowercase(), pairs);
-            }
+        }
+        out.unanswered.extend(batches.flatten().cloned());
+        out
+    }
+
+    /// The links of one batch of at most 100 titles, by UUID.
+    fn batch(
+        &self,
+        batch: &[String],
+        terminate: &TerminateToken,
+    ) -> Result<HashMap<String, Vec<(String, String)>>, MetadataError> {
+        self.wait(terminate);
+        let mut url = format!("https://api.mangadex.org/manga?limit={MANGADEX_BATCH}");
+        for rating in ["safe", "suggestive", "erotica", "pornographic"] {
+            url.push_str("&contentRating[]=");
+            url.push_str(rating);
+        }
+        for uuid in batch {
+            url.push_str("&ids[]=");
+            url.push_str(uuid);
+        }
+        let mut http = self.http.session();
+        http.set_terminate_token(terminate.clone());
+        http.set_user_agent(USER_AGENT);
+        http.headers_mut().set_value("Accept", "application/json");
+        let ok = http
+            .get(&url)
+            .map_err(|e| MetadataError::Http(e.to_string()))?;
+        let code = http.result_code();
+        if !ok || code >= 300 || terminate.is_terminated() {
+            return Err(MetadataError::Download {
+                url,
+                status: u16::try_from(code).unwrap_or(0),
+            });
+        }
+        let body: Value = serde_json::from_slice(http.document())
+            .map_err(|e| MetadataError::Http(format!("MangaDex's answer: {e}")))?;
+        let mut out = HashMap::new();
+        for manga in body["data"].as_array().into_iter().flatten() {
+            let Some(id) = manga["id"].as_str() else {
+                continue;
+            };
+            // MangaDex sends `[]` (or `null`) for a title without links.
+            let Some(links) = manga["attributes"]["links"].as_object() else {
+                continue;
+            };
+            let pairs = MANGADEX_LINKS
+                .iter()
+                .filter_map(|(key, site)| {
+                    let xid = match links.get(*key)? {
+                        Value::String(s) if !s.is_empty() => s.clone(),
+                        Value::Number(n) => n.to_string(),
+                        _ => return None,
+                    };
+                    Some(((*site).to_owned(), xid))
+                })
+                .collect();
+            out.insert(id.to_lowercase(), pairs);
         }
         Ok(out)
     }
@@ -161,9 +179,13 @@ pub struct Matcher {
     mangadex: MangaDexLinks,
 }
 
-/// A series that a list title's title matches.
-struct Candidate {
-    series: MetadataSeries,
+/// What MangaDex said about a list's titles.
+#[derive(Default)]
+struct CrossIds {
+    /// The MangaBaka `(site, id)` pairs of each title MangaDex answered for, by UUID.
+    links: HashMap<String, Vec<(String, String)>>,
+    /// The titles MangaDex could not be asked about.
+    unanswered: HashSet<String>,
 }
 
 impl Matcher {
@@ -183,9 +205,10 @@ impl Matcher {
     ) -> Result<MatchReport, MetadataError> {
         let matches = self.lists.matches();
         matches.prune(&module.id).map_err(MetadataError::Lists)?;
-        let inputs = match scope {
-            MatchScope::Changed => matches.pending(&module.id),
-            MatchScope::All => matches.all(&module.id),
+        let build_id = meta.build_id()?;
+        let mut inputs = match scope {
+            MatchScope::Changed => matches.pending(&module.id, &build_id),
+            MatchScope::All => matches.all(&module.id, &build_id),
         }
         .map_err(MetadataError::Lists)?;
         let cross_ids = if is_mangadex(&module.root_url) {
@@ -193,17 +216,17 @@ impl Matcher {
                 .iter()
                 .filter_map(|i| mangadex_uuid(&i.link))
                 .collect();
-            match self.mangadex.links(&uuids, terminate) {
-                Ok(links) => links,
-                // Titles still match by title; the next run asks again.
-                Err(e) => {
-                    tracing::warn!(target: "fmd_core", "MangaDex cross-site IDs: {e}");
-                    HashMap::new()
-                }
-            }
+            self.mangadex.links(&uuids, terminate)
         } else {
-            HashMap::new()
+            CrossIds::default()
         };
+        // A title MangaDex could not be asked about still matches by its title now, and is
+        // stored as changed, so the next run asks again.
+        for input in &mut inputs {
+            if mangadex_uuid(&input.link).is_some_and(|u| cross_ids.unanswered.contains(&u)) {
+                input.fingerprint.clear();
+            }
+        }
 
         let mut report = MatchReport::default();
         for batch in inputs.chunks(STORE_BATCH) {
@@ -215,7 +238,7 @@ impl Matcher {
                 .iter()
                 .map(|input| {
                     let xids = mangadex_uuid(&input.link)
-                        .and_then(|uuid| cross_ids.get(&uuid))
+                        .and_then(|uuid| cross_ids.links.get(&uuid))
                         .map(Vec::as_slice)
                         .unwrap_or_default();
                     decide(meta, module, input, xids)
@@ -277,18 +300,22 @@ fn decide(
     let mut candidates = Vec::with_capacity(ids.len());
     for id in ids {
         if let Some(series) = meta.series(id)? {
-            candidates.push(Candidate { series });
+            candidates.push(series);
         }
     }
     Ok(pick(input, candidates, &want))
 }
 
 /// T71's `decide`: the candidate the title and people point at.
-fn pick(input: &MatchInput, candidates: Vec<Candidate>, want: &HashSet<String>) -> StoredMatch {
+fn pick(
+    input: &MatchInput,
+    candidates: Vec<MetadataSeries>,
+    want: &HashSet<String>,
+) -> StoredMatch {
     // Lists hold comics; a novel's entry is not the comic's.
-    let hits: Vec<Candidate> = candidates
+    let hits: Vec<MetadataSeries> = candidates
         .into_iter()
-        .filter(|c| c.series.kind != "novel")
+        .filter(|c| c.kind != "novel")
         .collect();
     if hits.is_empty() {
         return rejected(MatchConfidence::None);
@@ -297,9 +324,9 @@ fn pick(input: &MatchInput, candidates: Vec<Candidate>, want: &HashSet<String>) 
     let (pool, confidence) = if people.is_empty() {
         (hits, MatchConfidence::TitleUnique)
     } else {
-        let agree: Vec<Candidate> = hits
+        let agree: Vec<MetadataSeries> = hits
             .into_iter()
-            .filter(|c| people_agree(&c.series.people, &people))
+            .filter(|c| people_agree(&c.people, &people))
             .collect();
         if agree.is_empty() {
             return rejected(MatchConfidence::AuthorConflict);
@@ -307,16 +334,16 @@ fn pick(input: &MatchInput, candidates: Vec<Candidate>, want: &HashSet<String>) 
         (agree, MatchConfidence::TitleAuthor)
     };
     match narrow(pool, want).as_slice() {
-        [only] => accepted(confidence, &only.series),
+        [only] => accepted(confidence, only),
         _ => rejected(MatchConfidence::Ambiguous),
     }
 }
 
 /// Ties go to the candidates whose main title matches.
-fn narrow(candidates: Vec<Candidate>, want: &HashSet<String>) -> Vec<Candidate> {
+fn narrow(candidates: Vec<MetadataSeries>, want: &HashSet<String>) -> Vec<MetadataSeries> {
     let (main, rest): (Vec<_>, Vec<_>) = candidates
         .into_iter()
-        .partition(|c| title_keys(&c.series.title).iter().any(|k| want.contains(k)));
+        .partition(|c| title_keys(&c.title).iter().any(|k| want.contains(k)));
     if main.is_empty() { rest } else { main }
 }
 
@@ -340,7 +367,7 @@ fn accepted(confidence: MatchConfidence, series: &MetadataSeries) -> StoredMatch
         series_id: Some(series.id),
         confidence,
         format: Some(format_of(&series.kind).to_owned()),
-        status: publication_of(&series.status).map(str::to_owned),
+        publication: publication_of(&series.status).map(str::to_owned),
         year: series.year,
     }
 }
@@ -350,7 +377,7 @@ fn rejected(confidence: MatchConfidence) -> StoredMatch {
         series_id: None,
         confidence,
         format: None,
-        status: None,
+        publication: None,
         year: None,
     }
 }

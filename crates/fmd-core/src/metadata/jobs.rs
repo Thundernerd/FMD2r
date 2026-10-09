@@ -102,6 +102,8 @@ struct Inner {
     /// The running download's token.
     running: Mutex<Option<TerminateToken>>,
     status: Mutex<JobStatus>,
+    /// When the last download failed; the schedule waits a day before trying again.
+    failed_at: Mutex<Option<i64>>,
     /// The last event of the running download, for a page opened while it runs.
     last_event: Mutex<Option<MetadataEvent>>,
     /// Held while matching, so a list update and a refresh do not match the same list at once.
@@ -140,6 +142,7 @@ impl MetadataJobs {
                     next_run: None,
                     last_error: None,
                 }),
+                failed_at: Mutex::default(),
                 last_event: Mutex::default(),
                 matching: Mutex::default(),
                 registry: OnceLock::new(),
@@ -258,6 +261,26 @@ impl MetadataJobs {
         }
     }
 
+    /// Matches the titles every list still owes a match: new, changed, matched against an older
+    /// database (a refresh whose matching was cancelled or failed), or matched while MangaDex
+    /// could not be asked. Does nothing without a database. Blocks.
+    pub fn catch_up(&self) {
+        let summaries = match self.inner.lists.masterlist().summaries() {
+            Ok(summaries) => summaries,
+            Err(e) => {
+                tracing::warn!(target: "fmd_core", "catching up MangaBaka matches: {e}");
+                return;
+            }
+        };
+        let terminate = TerminateToken::new();
+        for summary in summaries.into_iter().filter(|s| s.count > 0) {
+            if self.is_running() {
+                return;
+            }
+            self.list_changed(&summary.module_id, &terminate);
+        }
+    }
+
     /// Adds the job to `registry` and announces its changes there.
     pub fn register(&self, registry: &JobRegistry) {
         // Registered once; a second registry is not told about changes.
@@ -267,15 +290,17 @@ impl MetadataJobs {
     }
 
     /// Refreshes a downloaded database every `metadata.mangabaka.refresh_days` days (never when
-    /// 0, nor before the first download). Runs until the task is dropped.
+    /// 0, nor before the first download; a day after a failed one), and catches up on the matches
+    /// lists still owe ([`MetadataJobs::catch_up`]) at startup and every hour. Runs until the
+    /// task is dropped.
     pub async fn schedule(self) {
         let mut tick = tokio::time::interval(SCHEDULE_TICK);
         let mut settings = self.inner.settings.subscribe();
         loop {
-            tokio::select! {
-                _ = tick.tick() => {}
-                changed = settings.changed() => if changed.is_err() { return },
-            }
+            let ticked = tokio::select! {
+                _ = tick.tick() => true,
+                changed = settings.changed() => if changed.is_err() { return } else { false },
+            };
             let next = self.inner.next_refresh();
             if self.inner.status().next_run != next {
                 self.inner.status().next_run = next;
@@ -288,8 +313,22 @@ impl MetadataJobs {
                 if let Ok(Err(e)) = started {
                     tracing::warn!(target: "fmd_core", "refreshing the MangaBaka database: {e}");
                 }
+            } else if ticked && !self.is_running() && self.current().is_some() {
+                let jobs = self.clone();
+                let _ = tokio::task::spawn_blocking(move || jobs.catch_up()).await;
             }
         }
+    }
+}
+
+fn event(kind: MetadataEventKind, phase: MetadataPhase, status_text: String) -> MetadataEvent {
+    MetadataEvent {
+        kind,
+        phase,
+        status_text,
+        done: 0,
+        total: 0,
+        error: None,
     }
 }
 
@@ -317,23 +356,20 @@ impl Inner {
             return None;
         }
         let built_at = self.db.info()?.built_at;
-        Some(built_at.saturating_add(i64::from(days) * DAY_MS))
+        let due = built_at.saturating_add(i64::from(days) * DAY_MS);
+        let retry = lock(&self.failed_at).map(|at| at.saturating_add(DAY_MS));
+        Some(due.max(retry.unwrap_or(due)))
     }
 
-    fn event(
-        &self,
-        kind: MetadataEventKind,
-        phase: MetadataPhase,
-        status_text: String,
-    ) -> MetadataEvent {
-        MetadataEvent {
-            kind,
-            phase,
-            status_text,
-            done: 0,
-            total: 0,
-            error: None,
+    /// Records `event`'s counts as the job's progress and sends it.
+    fn report(&self, event: MetadataEvent) {
+        {
+            let mut status = self.status();
+            status.done = event.done;
+            status.total = event.total;
         }
+        self.changed();
+        self.send(event);
     }
 
     fn send(&self, event: MetadataEvent) {
@@ -345,7 +381,7 @@ impl Inner {
 
     /// The download job's thread.
     fn run(&self, terminate: &TerminateToken) {
-        self.send(self.event(
+        self.send(event(
             MetadataEventKind::Started,
             MetadataPhase::Downloading,
             "Downloading...".into(),
@@ -357,20 +393,14 @@ impl Inner {
                 return;
             }
             last_report = Some(std::time::Instant::now());
-            let mut event = self.event(
+            let mut event = event(
                 MetadataEventKind::Progress,
                 MetadataPhase::Downloading,
                 format!("Downloading and building... {} series", p.series),
             );
             event.done = p.bytes;
             event.total = p.total_bytes.unwrap_or(0);
-            {
-                let mut status = self.status();
-                status.done = event.done;
-                status.total = event.total;
-            }
-            self.changed();
-            self.send(event);
+            self.report(event);
         });
         let summary = match built {
             Ok(summary) => summary,
@@ -384,7 +414,7 @@ impl Inner {
         match self.match_all(terminate) {
             Ok(false) => {
                 self.finished(None);
-                self.send(self.event(
+                self.send(event(
                     MetadataEventKind::Finished,
                     MetadataPhase::Matching,
                     format!("{} series", summary.series),
@@ -422,20 +452,14 @@ impl Inner {
             if terminate.is_terminated() {
                 return Ok(true);
             }
-            let mut event = self.event(
+            let mut event = event(
                 MetadataEventKind::Progress,
                 MetadataPhase::Matching,
                 "Matching the lists...".into(),
             );
             event.done = done as u64;
             event.total = total;
-            {
-                let mut status = self.status();
-                status.done = event.done;
-                status.total = event.total;
-            }
-            self.changed();
-            self.send(event);
+            self.report(event);
             let report = self
                 .matcher
                 .match_module(&meta, module, MatchScope::All, terminate)?;
@@ -448,14 +472,14 @@ impl Inner {
 
     fn end_cancelled(&self, phase: MetadataPhase) {
         self.finished(None);
-        self.send(self.event(MetadataEventKind::Cancelled, phase, String::new()));
+        self.send(event(MetadataEventKind::Cancelled, phase, String::new()));
     }
 
     fn end_failed(&self, phase: MetadataPhase, error: &MetadataError) {
         tracing::warn!(target: "fmd_core", "MangaBaka database: {error}");
         let message = error.to_string();
         self.finished(Some(message.clone()));
-        let mut event = self.event(MetadataEventKind::Failed, phase, String::new());
+        let mut event = event(MetadataEventKind::Failed, phase, String::new());
         event.error = Some(message);
         self.send(event);
     }
@@ -472,6 +496,7 @@ impl Inner {
             } else {
                 JobPhase::Done
             };
+            *lock(&self.failed_at) = error.is_some().then(now_ms);
             status.last_error = error;
             status.next_run = self.next_refresh();
         }

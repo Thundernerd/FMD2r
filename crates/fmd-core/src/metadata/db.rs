@@ -63,6 +63,11 @@ impl Metadata {
         }
     }
 
+    /// What tells this build of the database from every other.
+    pub(super) fn build_id(&self) -> Result<String, StoreError> {
+        self.db.build_id()
+    }
+
     /// The series with a title that normalises to `key`.
     pub(super) fn by_title_key(&self, key: &str) -> Result<Vec<i64>, StoreError> {
         self.db.by_title_key(key)
@@ -159,7 +164,9 @@ impl MangaBakaDb {
                 series,
             });
         })?;
-        builder.finish(now_ms())?;
+        let built_at = now_ms();
+        let build_id = format!("{built_at}-{}", std::process::id());
+        builder.finish(built_at, &build_id)?;
 
         let path = self.path();
         part.persist(&path)

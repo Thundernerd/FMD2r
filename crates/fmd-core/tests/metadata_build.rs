@@ -136,3 +136,29 @@ fn removing_deletes_the_database() {
     assert!(db.info().is_none());
     assert!(!dir.path().join("metadata.db").exists());
 }
+
+#[test]
+fn a_cancelled_build_stops_and_keeps_the_old_database() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MangaBakaDb::open(dir.path(), FixtureSource::new(&fixture_records()));
+    db.refresh(&TerminateToken::new(), &mut |_| {}).unwrap();
+    let before = db.info().unwrap();
+
+    // Cancelled while the download is being read.
+    let terminate = TerminateToken::new();
+    terminate.terminate();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let result = db.refresh(&terminate, &mut |_| {});
+        let _ = tx.send((db, result));
+    });
+    let (db, result) = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("the cancelled build stops");
+
+    assert!(
+        matches!(result, Err(MetadataError::Cancelled)),
+        "{result:?}"
+    );
+    assert_eq!(db.info().unwrap(), before);
+}

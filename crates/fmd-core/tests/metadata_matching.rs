@@ -27,6 +27,8 @@ const WEBTOONS: &str = "18f636ec7fdf47fabe95d940ad0b548f";
 struct MangaDexApi {
     links: Vec<(&'static str, Value)>,
     requests: Mutex<Vec<WireRequest>>,
+    /// While set, every request fails as if MangaDex were unreachable.
+    down: std::sync::atomic::AtomicBool,
 }
 
 impl Transport for MangaDexApi {
@@ -34,6 +36,10 @@ impl Transport for MangaDexApi {
         &self,
         request: WireRequest,
     ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
+        if self.down.load(std::sync::atomic::Ordering::SeqCst) {
+            self.requests.lock().unwrap().push(request);
+            return Box::pin(async { Err(TransportError("unreachable".into())) });
+        }
         let url = decoded(&request.url);
         let data: Vec<Value> = self
             .links
@@ -78,6 +84,7 @@ fn fixture(records: &[Value]) -> Fixture {
             json!({ "mu": "mxtfjrx", "mal": "147924", "raw": "https://example.com" }),
         )],
         requests: Mutex::default(),
+        down: std::sync::atomic::AtomicBool::new(false),
     });
     let http = HttpClient::with_transport(mangadex.clone()).unwrap();
     let matcher = Matcher::new(lists.clone(), MangaDexLinks::new(http));
@@ -149,7 +156,7 @@ fn a_webtoons_title_matches_by_its_title_no() {
     assert_eq!(m.confidence, MatchConfidence::Link);
     assert_eq!(m.series_id, Some(189));
     assert_eq!(m.format.as_deref(), Some("manhwa"));
-    assert_eq!(m.status.as_deref(), Some("ongoing"));
+    assert_eq!(m.publication.as_deref(), Some("ongoing"));
     assert_eq!(m.year, Some(2022));
 }
 
@@ -407,4 +414,44 @@ fn matches_of_titles_no_longer_listed_are_dropped() {
             .unwrap()
             .is_none()
     );
+}
+
+#[test]
+fn titles_matched_against_an_older_database_count_as_changed() {
+    let f = fixture(&fixture_records());
+    let mangafire = module(MANGAFIRE, "https://mangafire.to");
+    let shadow = entry("/manga/narutaruu.pj6q", "Shadow Star☆", "", "Mohiro Kitoh");
+    let blue = entry("/manga/blue", "Blue", "", "Kiriko Nananan");
+    f.match_list(&mangafire, &[shadow, blue]);
+
+    // A refresh whose matching was cancelled: the next run still owes every title.
+    f.db.refresh(&TerminateToken::new(), &mut |_| {}).unwrap();
+    assert_eq!(f.run(&mangafire, MatchScope::Changed), 2);
+    assert_eq!(f.run(&mangafire, MatchScope::Changed), 0);
+}
+
+#[test]
+fn titles_matched_while_mangadex_was_unreachable_are_asked_again() {
+    let f = fixture(&fixture_records());
+    let mangadex = module(MANGADEX, "https://mangadex.org");
+    let link = "/title/f2cb9465-c314-46a3-97fd-05210d3af0a7";
+    f.mangadex
+        .down
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    f.match_list(
+        &mangadex,
+        &[entry(
+            link,
+            "The Scholar's Reincarnation",
+            "",
+            "Yu Hyun So (소유현)",
+        )],
+    );
+    assert_ne!(f.get(MANGADEX, link).confidence, MatchConfidence::CrossId);
+
+    f.mangadex
+        .down
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(f.run(&mangadex, MatchScope::Changed), 1);
+    assert_eq!(f.get(MANGADEX, link).confidence, MatchConfidence::CrossId);
 }

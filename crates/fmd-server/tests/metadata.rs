@@ -143,7 +143,7 @@ fn titles(body: &Value) -> Vec<&str> {
 /// Stores matches for the `fire` list as matching would: Shadow Star☆ a completed manga,
 /// Baskerville an ongoing manhwa, One Piece rejected.
 fn store_matches(lists: &ListsDb) {
-    let inputs = lists.matches().all("fire").unwrap();
+    let inputs = lists.matches().all("fire", "test").unwrap();
     let decided: Vec<(MatchInput, StoredMatch)> = inputs
         .into_iter()
         .filter_map(|input| {
@@ -154,7 +154,7 @@ fn store_matches(lists: &ListsDb) {
                     series_id: None,
                     confidence: MatchConfidence::Ambiguous,
                     format: None,
-                    status: None,
+                    publication: None,
                     year: None,
                 },
                 _ => return None,
@@ -173,7 +173,7 @@ fn accepted(id: i64, format: &str, status: Option<&str>) -> StoredMatch {
         series_id: Some(id),
         confidence: MatchConfidence::TitleAuthor,
         format: Some(format.into()),
-        status: status.map(str::to_owned),
+        publication: status.map(str::to_owned),
         year: Some(2000),
     }
 }

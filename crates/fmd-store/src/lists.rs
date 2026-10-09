@@ -99,9 +99,16 @@ pub struct SearchFilters {
     pub publication: Option<String>,
 }
 
+/// [`UNKNOWN`], for SQL put together with `concat!`.
+macro_rules! unknown {
+    () => {
+        "unknown"
+    };
+}
+
 /// The format or publication status of a title with no accepted MangaBaka match, or whose match
 /// does not say.
-pub const UNKNOWN: &str = "unknown";
+pub const UNKNOWN: &str = unknown!();
 
 /// Which slice of the ordered results to return.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -424,9 +431,17 @@ fn sorted_counts(counts: HashMap<String, u64>) -> Vec<FacetCount> {
 const MATCH_JOIN: &str = "LEFT JOIN metadata_matches mm
     ON mm.module_id = m.module_id AND mm.link = m.link";
 /// A listing's format facet value: its accepted match's, else [`UNKNOWN`].
-const FORMAT_VALUE: &str = "CASE WHEN mm.series_id IS NOT NULL AND mm.format IS NOT NULL THEN mm.format ELSE 'unknown' END";
+const FORMAT_VALUE: &str = concat!(
+    "COALESCE(IIF(mm.series_id IS NULL, NULL, mm.format), '",
+    unknown!(),
+    "')"
+);
 /// A listing's publication facet value: its accepted match's, else [`UNKNOWN`].
-const PUBLICATION_VALUE: &str = "CASE WHEN mm.series_id IS NOT NULL AND mm.status IS NOT NULL THEN mm.status ELSE 'unknown' END";
+const PUBLICATION_VALUE: &str = concat!(
+    "COALESCE(IIF(mm.series_id IS NULL, NULL, mm.status), '",
+    unknown!(),
+    "')"
+);
 
 /// The `WHERE` clause (empty when nothing filters) and its arguments for
 /// [`MasterListRepo::search`] and [`MasterListRepo::facets`], over `masterlist m` [`MATCH_JOIN`]ed.
@@ -604,7 +619,7 @@ pub struct MatchInput {
     pub alttitles: String,
     pub authors: String,
     pub artists: String,
-    /// What the title is matched on, as stored with its match.
+    /// What the title is matched on, and against which database, as stored with its match.
     pub fingerprint: String,
 }
 
@@ -617,13 +632,14 @@ pub struct StoredMatch {
     /// The series' format facet value (`manga`, `manhwa`, `manhua`, `oel`, `other`).
     pub format: Option<String>,
     /// The series' publication facet value (`ongoing`, `completed`, `hiatus`, `cancelled`).
-    pub status: Option<String>,
+    pub publication: Option<String>,
     pub year: Option<i64>,
 }
 
-/// The fingerprint of a `masterlist m` row: the columns matching reads.
-const FINGERPRINT: &str =
-    "m.title || char(31) || m.alttitles || char(31) || m.authors || char(31) || m.artists";
+/// The fingerprint of a `masterlist m` row matched against the database whose build ID is the
+/// query's `?2`: the columns matching reads, and that ID.
+const FINGERPRINT: &str = "m.title || char(31) || m.alttitles || char(31) || m.authors \
+    || char(31) || m.artists || char(31) || ?2";
 
 /// Repository for the list titles' MangaBaka matches. Obtain it with [`ListsDb::matches`].
 pub struct MatchRepo<'a> {
@@ -631,20 +647,22 @@ pub struct MatchRepo<'a> {
 }
 
 impl MatchRepo<'_> {
-    /// The titles of `module_id` that have no match yet, or changed since they were matched.
-    pub fn pending(&self, module_id: &str) -> Result<Vec<MatchInput>> {
+    /// The titles of `module_id` that have no match yet, or changed since they were matched, or
+    /// were matched against another database than the one with build ID `build_id`.
+    pub fn pending(&self, module_id: &str, build_id: &str) -> Result<Vec<MatchInput>> {
         self.inputs(
             module_id,
+            build_id,
             &format!("AND (mm.link IS NULL OR mm.fingerprint <> {FINGERPRINT})"),
         )
     }
 
-    /// Every title of `module_id`.
-    pub fn all(&self, module_id: &str) -> Result<Vec<MatchInput>> {
-        self.inputs(module_id, "")
+    /// Every title of `module_id`, to match against the database with build ID `build_id`.
+    pub fn all(&self, module_id: &str, build_id: &str) -> Result<Vec<MatchInput>> {
+        self.inputs(module_id, build_id, "")
     }
 
-    fn inputs(&self, module_id: &str, condition: &str) -> Result<Vec<MatchInput>> {
+    fn inputs(&self, module_id: &str, build_id: &str, condition: &str) -> Result<Vec<MatchInput>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare(&format!(
             "SELECT m.link, m.title, m.alttitles, m.authors, m.artists, {FINGERPRINT}
@@ -653,7 +671,7 @@ impl MatchRepo<'_> {
              ORDER BY m.id"
         ))?;
         let inputs = stmt
-            .query_map([module_id], |r| {
+            .query_map([module_id, build_id], |r| {
                 Ok(MatchInput {
                     link: r.get(0)?,
                     title: r.get(1)?,
@@ -688,7 +706,7 @@ impl MatchRepo<'_> {
                     m.series_id,
                     m.confidence.as_str(),
                     m.format,
-                    m.status,
+                    m.publication,
                     m.year,
                     input.fingerprint,
                 ])?;
@@ -731,7 +749,7 @@ impl MatchRepo<'_> {
                             series_id: r.get(0)?,
                             confidence: MatchConfidence::None,
                             format: r.get(2)?,
-                            status: r.get(3)?,
+                            publication: r.get(3)?,
                             year: r.get(4)?,
                         },
                     ))
