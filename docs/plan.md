@@ -234,6 +234,21 @@ Found by reading every merged PR's notes after T35. Wiring first: T37 → T38 �
 | T51 | Sign off decisions flagged in the merged PRs (owner: maintainer) | — |
 | T52 | A numeric `fmd.env.Revision` (found by T42; MangaHub needs it) | — |
 
+### Follow-ups (end-to-end verification, 2026-10-09)
+Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53 and T54 block real use (the Settings page crashes; the proxy and other connection settings do nothing); the rest are independent.
+
+| # | Ticket | Deps |
+|---|---|---|
+| T53 | Modules that share an ID crash the Settings and Discover pages | — |
+| T54 | Apply the connection settings to the HTTP client | — |
+| T55 | Local Docker builds: work without BuildKit, report the git revision | — |
+| T56 | Module updater: validate staged modules with their sibling files | — |
+| T57 | `/api/about`: upstream ref and sha, and load failures | — |
+| T58 | Readable inbox item bodies | — |
+| T59 | Download observability: task lifecycle logs and the first progress frame | — |
+| T60 | Decide how the series page shows chapters marked when added to the library (owner: maintainer) | — |
+| T61 | `fmd2r module pages` reports a failed `GetPageNumber` | — |
+
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:
   - Lua binding core: T03
