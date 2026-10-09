@@ -14,8 +14,7 @@ services:
     build:
       context: .
       args:
-        # The commit GET /api/about reports (the build context has no .git), e.g.
-        # FMD2R_GIT_REVISION=$(git rev-parse --short=12 HEAD) docker compose up --build
+        # The commit GET /api/about reports (the build context has no .git; see README).
         FMD2R_GIT_REVISION: ${FMD2R_GIT_REVISION:-}
     environment:
       # At startup `serve` writes this into lua/websitebypass/websitebypass_config.json

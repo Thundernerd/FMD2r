@@ -31,8 +31,9 @@ docker compose up -d    # in a source checkout, `--build` builds the image local
 Then open <http://localhost:8080>. While the repository is private its GHCR package is too: run
 `docker login ghcr.io` first, or build locally with `--build`.
 
-A local build works with or without BuildKit (the classic builder builds a linux/amd64 image). The
-build context has no `.git`, so `FMD2R_GIT_REVISION` supplies the commit that `GET /api/about` and
+On an amd64 host a local build works with or without BuildKit (the classic builder, used when the
+buildx plugin is missing, builds a linux/amd64 image); other hosts need buildx. The build context
+has no `.git`, so `FMD2R_GIT_REVISION` supplies the commit that `GET /api/about` and
 the System page report:
 
 ```sh
