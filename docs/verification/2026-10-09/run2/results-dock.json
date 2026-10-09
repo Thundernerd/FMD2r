@@ -1,0 +1,162 @@
+{
+  "task": 2,
+  "deleteStatus": 204,
+  "distinctPhone": [
+    "Nothing downloading. 0 B/s Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s Open queue"
+  ],
+  "distinctDesk": [
+    "Nothing downloading. 0 B/s 0 active · 0 waiting Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s 1 active · 0 waiting Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s 1 active · 0 waiting Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s 1 active · 0 waiting Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s 1 active · 0 waiting Open queue",
+    "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s 1 active · 0 waiting Open queue"
+  ],
+  "samples": [
+    [
+      33,
+      "Nothing downloading. 0 B/s Open queue",
+      "Nothing downloading. 0 B/s 0 active · 0 waiting Open queue"
+    ],
+    [
+      735,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      1437,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      2141,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      2844,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      3546,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      4249,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 0/38 0 B/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      4952,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      5654,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      6356,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      7230,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 1/38 188 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      7932,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      8635,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      9338,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      10041,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      10743,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 2/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      11446,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      12149,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      12851,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      13554,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      14256,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      14958,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      15660,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 3/38 180 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      16529,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      17232,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      17934,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      18636,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s 1 active · 0 waiting Open queue"
+    ],
+    [
+      19339,
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s Open queue",
+      "Yume to Koi de wa Tsuriawanai Vol. 01 Ch. 003 - Please Forgive Me 4/38 173 kB/s 1 active · 0 waiting Open queue"
+    ]
+  ]
+}

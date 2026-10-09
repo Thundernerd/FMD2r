@@ -1,0 +1,53 @@
+{
+  "1-health-spa": {
+    "ok": true,
+    "health": "{\"status\":\"ok\"}"
+  },
+  "2a-add-by-url": {
+    "ok": false,
+    "error": "page.waitForURL: Timeout 60000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:57:11\n    at async step (/tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:17:35)\n    at async /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:52:2"
+  },
+  "2b-add-to-library": {
+    "ok": false,
+    "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /Add to library/ })\u001b[22m\n\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:85:59\n    at step (/tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:17:41)\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:84:8"
+  },
+  "2c0-set-format-cbz": {
+    "ok": true,
+    "format": "cbz"
+  },
+  "2c-queue-two-chapters": {
+    "ok": false,
+    "error": "page.goto: url: expected string, got undefined\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:118:11\n    at step (/tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:17:41)\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:117:8"
+  },
+  "2d-restart-resume": {
+    "ok": false,
+    "error": "TypeError: Cannot read properties of undefined (reading 'id')\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:158:63\n    at step (/tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:17:41)\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e.js:157:8\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+  },
+  "2f-check-new-chapters": {
+    "ok": true,
+    "alert": [
+      "The new-chapter check is not running on this server."
+    ],
+    "badge": "Inbox\n1",
+    "popText": "module OrckuMangas.lua uses unknown Host API names\n10/9/26, 9:48 AM\n{\"file\":\"modules/OrckuMangas.lua\",\"names\":[\"MANGAINFO.Artist\"]}\nMark read",
+    "closedByEsc": true,
+    "closedByOutside": true,
+    "inbox": [
+      {
+        "id": "1",
+        "kind": "warn",
+        "title": "module OrckuMangas.lua uses unknown Host API names",
+        "body": "{\"file\":\"modules/OrckuMangas.lua\",\"names\":[\"MANGAINFO.Artist\"]}",
+        "created_at": "2026-10-09T07:48:59.445Z",
+        "read": false
+      }
+    ],
+    "favs": []
+  },
+  "consoleErrors": [
+    "phone: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "phone: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+  ],
+  "dockSamples": [],
+  "queueSamples": []
+}

@@ -1,0 +1,10 @@
+{
+  "2a-add-by-url": {
+    "ok": false,
+    "error": "Error: {\"phone\":{\"status\":404,\"body\":\"{\\\"type\\\":\\\"about:blank\\\",\\\"title\\\":\\\"Not Found\\\",\\\"status\\\":404,\\\"detail\\\":\\\"no module handles https://mangadex.org/title/30c8bf1c-9063-4a22-a845-e2cead50adea\\\"}\",\"alert\":\"No module handles this URL.\",\"url\":\"http://127.0.0.1:18080/\"},\"desktop\":{\"status\":404,\"body\":\"{\\\"type\\\":\\\"about:blank\\\",\\\"title\\\":\\\"Not Found\\\",\\\"status\\\":404,\\\"detail\\\":\\\"no module handles https://mangadex.org/title/30c8bf1c-9063-4a22-a845-e2cead50adea\\\"}\",\"alert\":\"No module handles this URL.\",\"url\":\"http://127.0.0.1:18080/\"}}\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e2.js:57:9\n    at async step (/tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e2.js:21:35)\n    at async /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e2.js:43:2"
+  },
+  "2c-queue-two-chapters": {
+    "ok": false,
+    "error": "page.screenshot: Target page, context or browser has been closed\n    at shot (/tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e2.js:39:11)\n    at /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e2.js:96:55\n    at async step (/tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e2.js:21:35)\n    at async /tmp/claude-1000/-home-christiaan-orca-workspaces-FMD2r-fmd2r-e2e-verification/7d210cbf-c689-4633-a3c0-fdd569f81d3f/scratchpad/pw/e2e2.js:63:2"
+  }
+}
