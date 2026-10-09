@@ -12,6 +12,10 @@ fmd-http = { path = "../fmd-http" }
 fmd-lua = { path = "../fmd-lua", default-features = false }
 fmd-pack = { path = "../fmd-pack" }
 fmd-store = { path = "../fmd-store" }
+# Matching list titles against MangaBaka's database (T73).
+regex = "1"
+# Streams MangaBaka's dump (`series.jsonl.zst`) to disk instead of holding it in memory.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "socks"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_path_to_error = "0.1"
@@ -21,7 +25,9 @@ tempfile.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 tracing.workspace = true
+unicode-normalization = "0.1"
 utoipa = "5"
+zstd = "0.13"
 
 [dev-dependencies]
 fmd-lua = { path = "../fmd-lua", default-features = false }

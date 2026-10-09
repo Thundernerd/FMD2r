@@ -102,6 +102,7 @@ where
 }
 
 type EventSink = dyn Fn(ListEvent) + Send + Sync;
+type ChangeHook = dyn Fn(&str, &TerminateToken) + Send + Sync;
 
 /// How a list job that did not fail ended.
 struct JobOutcome {
@@ -176,6 +177,8 @@ struct Inner {
     /// Where the `lists` job announces its changes, once registered.
     registry: OnceLock<JobRegistry>,
     on_event: Box<EventSink>,
+    /// Runs on the job's thread after a list changed, before the job's last event.
+    on_list_changed: OnceLock<Box<ChangeHook>>,
 }
 
 impl ListJobs {
@@ -209,8 +212,16 @@ impl ListJobs {
                 }),
                 registry: OnceLock::new(),
                 on_event: Box::new(on_event),
+                on_list_changed: OnceLock::new(),
             }),
         }
+    }
+
+    /// Calls `hook` with the module ID on the job's thread whenever a list update or FMD2-DB
+    /// import changed a list (before the job's last event), as matching the new titles against
+    /// MangaBaka's database does. Set once; later hooks are ignored.
+    pub fn on_list_changed(&self, hook: impl Fn(&str, &TerminateToken) + Send + Sync + 'static) {
+        let _ = self.inner.on_list_changed.set(Box::new(hook));
     }
 
     /// Starts updating `module_id`'s list on a thread of its own.
@@ -329,6 +340,11 @@ impl ListJobs {
                 };
                 events.send(ListEventKind::Started, "Preparing...".into());
                 let result = work(&inner, &terminate, &events);
+                if let (Ok(outcome), Some(hook)) = (&result, inner.on_list_changed.get())
+                    && !outcome.cancelled
+                {
+                    hook(&id, &terminate);
+                }
                 // Out of `running` before the last event, so a client may start the next job
                 // as soon as it hears this one ended.
                 let error = result.as_ref().err().map(|e| {

@@ -9,6 +9,7 @@ use fmd_core::accounts::AccountService;
 use fmd_core::favorites::CheckerEvent;
 use fmd_core::jobs::JobRegistry;
 use fmd_core::lists::ListJobs;
+use fmd_core::metadata::{MetadataEvent, MetadataJobs};
 use fmd_core::settings::{SettingsError, SettingsService};
 use fmd_store::{AppDb, ListsDb, NewEvent};
 use tokio::sync::watch;
@@ -51,6 +52,7 @@ pub struct AppState {
     pub(crate) lists: Option<ListsDb>,
     pub(crate) list_jobs: Option<ListJobs>,
     pub(crate) favorites: Option<Arc<dyn FavoritesJobs>>,
+    pub(crate) metadata: Option<MetadataJobs>,
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) import_limits: ImportLimits,
     pub(crate) import_job: ImportJob,
@@ -80,6 +82,7 @@ impl AppState {
             lists: None,
             list_jobs: None,
             favorites: None,
+            metadata: None,
             data_dir: None,
             import_limits: ImportLimits::default(),
             import_job: ImportJob::default(),
@@ -232,6 +235,26 @@ impl AppState {
             CheckerEvent::Job(e) => events.publish(ServerEvent::Favorites(e)),
             CheckerEvent::Inbox(e) => events.publish(ServerEvent::InboxNew(InboxItem::from(e))),
         }
+    }
+
+    /// Serves `/api/metadata/mangabaka` (the MangaBaka database's download, status and removal)
+    /// with `jobs`, and the list titles' MangaBaka metadata on the series page. Without it those
+    /// answer as if no database was downloaded. `jobs` should send its events to
+    /// [`AppState::metadata_events`].
+    pub fn with_metadata(mut self, jobs: MetadataJobs) -> Self {
+        self.metadata = Some(jobs);
+        self
+    }
+
+    /// Where [`MetadataJobs`] send their events: out as `job.metadata.<kind>`.
+    pub fn metadata_events(&self) -> impl Fn(MetadataEvent) + Send + Sync + 'static + use<> {
+        let events = self.events.clone();
+        move |event| events.publish(ServerEvent::Metadata(event))
+    }
+
+    /// The settings the handlers read and change.
+    pub fn settings(&self) -> &Arc<SettingsService> {
+        &self.settings
     }
 
     /// The `lists.db` behind the Discover endpoints, or a 503.

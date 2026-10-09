@@ -499,7 +499,7 @@ async fn with_auto_download_a_favorites_check_queues_the_new_chapter() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn the_jobs_are_the_module_updater_the_favorites_check_and_the_list_updates() {
+async fn the_jobs_are_the_module_updater_the_favorites_check_the_list_updates_and_mangabaka() {
     let server = Server::start_with(json!({ "module_updater": { "auto_update": false } })).await;
     let res = server
         .client
@@ -525,7 +525,7 @@ async fn the_jobs_are_the_module_updater_the_favorites_check_and_the_list_update
         .map(|job| job["id"].as_str().unwrap())
         .collect();
     ids.sort_unstable();
-    assert_eq!(ids, ["favorites", "lists", "modules"]);
+    assert_eq!(ids, ["favorites", "lists", "mangabaka", "modules"]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

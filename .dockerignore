@@ -10,3 +10,8 @@ web/build
 web/.svelte-kit
 crates/xpath-fpc/build
 crates/xpath-fpc/target
+# MangaBaka's data: each install downloads its own (T73); none goes into an image.
+**/metadata.db
+**/metadata.db-*
+**/*.jsonl.zst
+crates/fmd-core/tests/fixtures/mangabaka

@@ -58,6 +58,14 @@
 		cancelled: 'Cancelled',
 		unknown: 'Status unknown'
 	};
+	/** MangaBaka's formats. */
+	const FORMAT: Record<string, string> = {
+		manga: 'Manga',
+		manhwa: 'Manhwa',
+		manhua: 'Manhua',
+		oel: 'OEL',
+		other: 'Other'
+	};
 
 	let coverFailed = $state(false);
 	let expanded = $state(false);
@@ -94,6 +102,18 @@
 					<dd>{series.artists}</dd>
 				</div>
 			{/if}
+			{#if series.format}
+				<div>
+					<dt class="label">Format</dt>
+					<dd>{FORMAT[series.format] ?? series.format}</dd>
+				</div>
+			{/if}
+			{#if series.year != null}
+				<div>
+					<dt class="label">Year</dt>
+					<dd class="num">{series.year}</dd>
+				</div>
+			{/if}
 			<div>
 				<dt class="label">Chapters</dt>
 				<dd class="num">{series.chapters.length} · {seen} seen</dd>
@@ -109,6 +129,9 @@
 		{#if series.summary}
 			<div class="summary">
 				<p class:clamped={long && !expanded}>{series.summary}</p>
+				{#if series.summary_from_mangabaka}
+					<p class="small muted source">from MangaBaka</p>
+				{/if}
 				{#if long}
 					<button class="btn sm ghost" type="button" onclick={() => (expanded = !expanded)}>
 						{expanded ? 'Show less' : 'Show more'}
@@ -246,6 +269,9 @@
 	.summary p {
 		margin: 0;
 		white-space: pre-line;
+	}
+	.summary p.source {
+		margin-top: var(--sp-1);
 	}
 	.summary p.clamped {
 		display: -webkit-box;

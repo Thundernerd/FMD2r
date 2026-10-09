@@ -15,6 +15,12 @@ pub enum StoreError {
         found: u32,
         supported: u32,
     },
+    #[error("{db} has schema version {found}; this build reads version {supported}")]
+    SchemaMismatch {
+        db: &'static str,
+        found: u32,
+        supported: u32,
+    },
     #[error("invalid value {value:?} in column {column}")]
     InvalidColumn { column: &'static str, value: String },
     #[error("crypto: {0}")]

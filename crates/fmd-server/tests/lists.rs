@@ -147,6 +147,8 @@ async fn search_includes_and_excludes_genres() {
             "status": "1",
             "numchapter": 3,
             "added_jdn": 2_460_000,
+            "format": "unknown",
+            "publication": "unknown",
         })
     );
 }
@@ -189,7 +191,10 @@ async fn search_without_a_module_finds_nothing_when_no_website_is_selected() {
     assert_eq!(titles(&body), Vec::<&str>::new());
     assert_eq!(body["total"], 0);
     let body = json_of(get(&state, "/api/lists/facets").await).await;
-    assert_eq!(body, json!({ "genres": [], "statuses": [] }));
+    assert_eq!(
+        body,
+        json!({ "genres": [], "statuses": [], "formats": [], "publications": [] })
+    );
 }
 
 #[tokio::test]
@@ -223,6 +228,8 @@ async fn facets_count_genres_and_statuses_of_the_matching_titles() {
                 { "value": "0", "count": 2 },
                 { "value": "1", "count": 2 },
             ],
+            "formats": [{ "value": "unknown", "count": 4 }],
+            "publications": [{ "value": "unknown", "count": 4 }],
         })
     );
 

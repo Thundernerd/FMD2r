@@ -15,6 +15,7 @@ mod lists;
 mod log_files;
 mod logs;
 mod lua_catalog;
+mod metadata;
 mod module_settings;
 mod module_updates;
 mod series;
@@ -54,6 +55,7 @@ pub use inbox::{InboxItem, InboxKind};
 pub use lists::{FacetValue, ListFacets, ListItem, ListJobStarted, SearchPage};
 pub use log_files::{LogRotation, LogWriter};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
+pub use metadata::MangaBakaStatus;
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
 pub use series::{ChapterInfo, ResolveRequest, SeriesInfo, SeriesRef, SeriesStatus};
 pub use serve::{ServeConfig, ServeError, serve};
@@ -84,6 +86,7 @@ pub use tools::{SystemTools, ToolCheck, ToolProbe};
         LogLine,
         ListEvent,
         fmd_core::favorites::FavoritesEvent,
+        fmd_core::metadata::MetadataEvent,
         AccountStateChange
     ))
 )]
@@ -126,6 +129,9 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(lists::update))
         .routes(routes!(lists::import_db))
         .routes(routes!(lists::cancel))
+        .routes(routes!(metadata::status, metadata::remove))
+        .routes(routes!(metadata::download))
+        .routes(routes!(metadata::cancel))
         .routes(routes!(favorites::list, favorites::add))
         .routes(routes!(favorites::patch, favorites::delete))
         .routes(routes!(favorites::check))

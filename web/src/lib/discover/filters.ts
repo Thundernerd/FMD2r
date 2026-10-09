@@ -20,6 +20,10 @@ export interface Filters {
 	genres: Record<string, Tri>;
 	/** Exact status (`0`–`3`); empty for any. */
 	status: string;
+	/** The MangaBaka format (`manga`, …, `unknown`); empty for any. */
+	format: string;
+	/** The MangaBaka publication status (`ongoing`, …, `unknown`); empty for any. */
+	publication: string;
 	/** 1-based. */
 	page: number;
 }
@@ -29,6 +33,8 @@ export const emptyFilters = (): Filters => ({
 	q: '',
 	genres: {},
 	status: '',
+	format: '',
+	publication: '',
 	page: 1
 });
 
@@ -51,6 +57,8 @@ export function searchQuery(filters: Filters): SearchQuery {
 	if (include) query.genres_include = include;
 	if (exclude) query.genres_exclude = exclude;
 	if (filters.status) query.status = filters.status;
+	if (filters.format) query.format = filters.format;
+	if (filters.publication) query.publication = filters.publication;
 	if (filters.page > 1) query.page = filters.page;
 	return query;
 }

@@ -106,7 +106,7 @@ export interface paths {
 		};
 		/**
 		 * Server-sent event stream.
-		 * @description Named events: `task.progress` (TaskProgress, at most 4 a second per task), `task.status` (TaskStatusChange), `task.removed` (TaskRemoved), `task.reordered` (TasksReordered), `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), `account.state` (AccountStateChange), `job.lists.started|progress|finished|cancelled|failed` (ListEvent), and `job.favorites.started|progress|finished|cancelled|failed` (FavoritesEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox item id as the SSE id; on reconnect, `Last-Event-ID` replays the inbox items stored since. Comment frames are heartbeats.
+		 * @description Named events: `task.progress` (TaskProgress, at most 4 a second per task), `task.status` (TaskStatusChange), `task.removed` (TaskRemoved), `task.reordered` (TasksReordered), `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), `account.state` (AccountStateChange), `job.lists.started|progress|finished|cancelled|failed` (ListEvent), `job.favorites.started|progress|finished|cancelled|failed` (FavoritesEvent), and `job.metadata.started|progress|finished|cancelled|failed` (MetadataEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox item id as the SSE id; on reconnect, `Last-Event-ID` replays the inbox items stored since. Comment frames are heartbeats.
 		 */
 		get: operations['events'];
 		put?: never;
@@ -343,7 +343,7 @@ export interface paths {
 			path?: never;
 			cookie?: never;
 		};
-		/** Genre and status counts of the titles a search matches. */
+		/** Genre, status, format and publication counts of the titles a search matches. */
 		get: operations['listFacets'];
 		put?: never;
 		post?: never;
@@ -486,6 +486,61 @@ export interface paths {
 		get: operations['downloadLogs'];
 		put?: never;
 		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/metadata/mangabaka': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** The MangaBaka database's date, size and download progress. */
+		get: operations['mangabakaStatus'];
+		put?: never;
+		post?: never;
+		/** Delete the MangaBaka database and the list titles' matches in it. */
+		delete: operations['removeMangabaka'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/metadata/mangabaka/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Stop the running download; the database it would have replaced stays. */
+		post: operations['cancelMangabaka'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/metadata/mangabaka/download': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Download the MangaBaka database (about 390 MB), or update it, then match every list
+		 *     against it.
+		 */
+		post: operations['downloadMangabaka'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -1430,7 +1485,11 @@ export interface components {
 		ListEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
 		/** @description The genres and statuses of the titles a search matches, most common first. */
 		ListFacets: {
+			/** @description The formats of their MangaBaka matches, `unknown` for titles without one. */
+			formats: components['schemas']['FacetValue'][];
 			genres: components['schemas']['FacetValue'][];
+			/** @description The publication statuses of their MangaBaka matches, `unknown` for titles without one. */
+			publications: components['schemas']['FacetValue'][];
 			statuses: components['schemas']['FacetValue'][];
 		};
 		/**
@@ -1449,12 +1508,16 @@ export interface components {
 			alttitles: string;
 			artists: string;
 			authors: string;
+			/** @description As in the `format` filter. */
+			format: string;
 			genres: string[];
 			/** @description The title's link without the module's host, as the series page takes it. */
 			link: string;
 			module_id: string;
 			/** Format: int32 */
 			numchapter: number;
+			/** @description As in the `publication` filter. */
+			publication: string;
 			/** @description As in the `status` filter; empty when unknown. */
 			status: string;
 			title: string;
@@ -1520,6 +1583,74 @@ export interface components {
 		};
 		Login: {
 			password: string;
+		};
+		/** @description The local copy of MangaBaka's database (`metadata.db`), downloaded only when asked for. */
+		MangaBakaSettings: {
+			/**
+			 * Format: int32
+			 * @description Days between automatic refreshes of a downloaded database; 0 turns them off. 0 to 365.
+			 * @default 7
+			 */
+			refresh_days: number;
+		};
+		/** @description The MangaBaka database at a glance. */
+		MangaBakaStatus: {
+			/** @description Whether this server can download one (it runs the database job). */
+			available: boolean;
+			/** @description RFC 3339 time it was built. */
+			built_at?: string | null;
+			/**
+			 * Format: int64
+			 * @description Its size on disk.
+			 */
+			bytes?: number | null;
+			/** @description Whether one is downloaded. */
+			downloaded: boolean;
+			/** @description RFC 3339 time of the next automatic refresh (`metadata.mangabaka.refresh_days`). */
+			next_refresh?: string | null;
+			progress?: null | components['schemas']['MetadataEvent'];
+			/** @description Whether a download or refresh is running. */
+			running: boolean;
+		};
+		/** @description One step of the database job, for the Settings page (`job.metadata.<kind>` events). */
+		MetadataEvent: {
+			/**
+			 * Format: int64
+			 * @description Work items of the phase done.
+			 */
+			done: number;
+			/** @description Why it failed. */
+			error?: string | null;
+			kind: components['schemas']['MetadataEventKind'];
+			phase: components['schemas']['MetadataPhase'];
+			status_text: string;
+			/**
+			 * Format: int64
+			 * @description Work items of the phase; 0 when unknown.
+			 */
+			total: number;
+		};
+		/**
+		 * @description What happened to the database job.
+		 * @enum {string}
+		 */
+		MetadataEventKind: 'started' | 'progress' | 'finished' | 'cancelled' | 'failed';
+		/**
+		 * @description The step the database job is at.
+		 * @enum {string}
+		 */
+		MetadataPhase: 'downloading' | 'matching';
+		/**
+		 * @description Metadata for list titles from outside the websites (T73). No FMD2 counterpart: FMD2 uses only
+		 *     the websites' own metadata.
+		 */
+		MetadataSettings: {
+			/**
+			 * @default {
+			 *       "refresh_days": 7
+			 *     }
+			 */
+			mangabaka: components['schemas']['MangaBakaSettings'];
 		};
 		/** @description What a module can do, from the callbacks and flags it declares. */
 		ModuleCapabilities: {
@@ -1947,6 +2078,8 @@ export interface components {
 			chapters: components['schemas']['ChapterInfo'][];
 			/** @description The cover through `/api/covers`; `None` when the module reports none. */
 			cover_url?: string | null;
+			/** @description The format of the series' MangaBaka match (`manga`, `manhwa`, `manhua`, `oel`, `other`). */
+			format?: string | null;
 			/** @description The module's comma-separated genres, split. */
 			genres: string[];
 			/** @description Whether the series is a favorite. */
@@ -1955,8 +2088,19 @@ export interface components {
 			link: string;
 			module_id: string;
 			status: components['schemas']['SeriesStatus'];
+			/**
+			 * @description The website's summary or, when it gives none, MangaBaka's description
+			 *     ([`SeriesInfo::summary_from_mangabaka`]).
+			 */
 			summary: string;
+			/** @description Whether `summary` is MangaBaka's description, for the UI to say so. */
+			summary_from_mangabaka: boolean;
 			title: string;
+			/**
+			 * Format: int64
+			 * @description The year of the series' MangaBaka match.
+			 */
+			year?: number | null;
 		};
 		/** @description A series: its module and its link relative to the module's `RootURL`. */
 		SeriesRef: {
@@ -2077,6 +2221,14 @@ export interface components {
 			 *     }
 			 */
 			logs: components['schemas']['LogSettings'];
+			/**
+			 * @default {
+			 *       "mangabaka": {
+			 *         "refresh_days": 7
+			 *       }
+			 *     }
+			 */
+			metadata: components['schemas']['MetadataSettings'];
 			/**
 			 * @default {
 			 *       "auto_update": true,
@@ -3242,6 +3394,16 @@ export interface operations {
 				 *     (`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).
 				 */
 				status?: string;
+				/**
+				 * @description The format of the title's MangaBaka match: `manga`, `manhwa`, `manhua`, `oel`, `other`,
+				 *     or `unknown` for a title without one.
+				 */
+				format?: string;
+				/**
+				 * @description The publication status of the title's MangaBaka match: `ongoing`, `completed`,
+				 *     `hiatus`, `cancelled`, or `unknown` for a title without one.
+				 */
+				publication?: string;
 				/** @description 1-based page number. */
 				page?: number;
 				/** @description Results per page, 50 by default. */
@@ -3508,6 +3670,133 @@ export interface operations {
 				};
 				content: {
 					'application/x-ndjson': unknown;
+				};
+			};
+		};
+	};
+	mangabakaStatus: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['MangaBakaStatus'];
+				};
+			};
+		};
+	};
+	removeMangabaka: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Removed */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description A download is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description This server cannot download it */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	cancelMangabaka: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Cancelling; a `job.metadata.cancelled` event follows */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Not downloading */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description This server cannot download it */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	downloadMangabaka: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Started; progress follows as `job.metadata.*` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Already downloading */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description This server cannot download it */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
 				};
 			};
 		};

@@ -28,6 +28,7 @@ pub struct Settings {
     pub xpath: XPathSettings,
     pub covers: CoverSettings,
     pub logs: LogSettings,
+    pub metadata: MetadataSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -570,5 +571,28 @@ impl Default for LogSettings {
             max_file_size_mb: 10,
             max_files: 5,
         }
+    }
+}
+
+/// Metadata for list titles from outside the websites (T73). No FMD2 counterpart: FMD2 uses only
+/// the websites' own metadata.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct MetadataSettings {
+    pub mangabaka: MangaBakaSettings,
+}
+
+/// The local copy of MangaBaka's database (`metadata.db`), downloaded only when asked for.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct MangaBakaSettings {
+    /// Days between automatic refreshes of a downloaded database; 0 turns them off. 0 to 365.
+    #[schema(minimum = 0, maximum = 365)]
+    pub refresh_days: u32,
+}
+
+impl Default for MangaBakaSettings {
+    fn default() -> Self {
+        Self { refresh_days: 7 }
     }
 }
