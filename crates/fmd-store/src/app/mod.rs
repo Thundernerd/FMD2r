@@ -21,7 +21,7 @@ use downloaded_chapters::DownloadedChaptersRepo;
 use events::EventRepo;
 use favorites::FavoriteRepo;
 use module_files::ModuleFileRepo;
-use module_settings::ModuleSettingsRepo;
+use module_settings::{ModuleSettings, ModuleSettingsRepo};
 use sessions::SessionRepo;
 use settings::SettingsRepo;
 use tasks::TaskRepo;
@@ -78,6 +78,25 @@ impl AppDb {
     /// Application settings (key → JSON).
     pub fn settings(&self) -> SettingsRepo<'_> {
         SettingsRepo::new(&self.db)
+    }
+
+    /// Stores application settings (key → JSON) and modules' overrides in one transaction:
+    /// either all are written or none. The modules' cookie jars are kept.
+    pub fn save_settings(
+        &self,
+        settings: &[(&str, &serde_json::Value)],
+        modules: &[ModuleSettings],
+    ) -> Result<()> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        for (key, value) in settings {
+            settings::put(&tx, key, &serde_json::to_string(value)?)?;
+        }
+        for module in modules {
+            ModuleSettingsRepo::put_overrides(&tx, module)?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     /// Web UI login sessions.

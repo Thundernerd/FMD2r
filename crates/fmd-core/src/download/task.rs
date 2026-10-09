@@ -2,19 +2,21 @@
 //! (baseunits/uDownloadsManager.pas:975-1374).
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use fmd_http::{HttpSession, TerminateToken};
 use fmd_lua::{Affinity, Caller, HttpModule, JobError, Module, ModuleDef, Reply, create_http};
-use fmd_pack::{MAX_IMAGE_FILE_PATH, MagickOptions, PackOptions, RenameContext, custom_rename};
+use fmd_pack::{
+    MAX_IMAGE_FILE_PATH, MagickOptions, PackFormat, PackOptions, RenameContext, custom_rename,
+};
 use fmd_store::{ChapterStatus, NewPage, PageStatus, TaskId, TaskPage, TaskStatus};
 
 use super::files::{find_image_file, remove_partial_images};
 use super::manager::{Inner, pack_format, rename_options};
 use super::{EngineError, EngineEvent, Progress};
-use crate::settings::{Settings, StoredModuleHttpSettings};
+use crate::settings::{SaveToSettings, Settings, StoredModuleHttpSettings};
 
 /// The page-list markers FMD2 keeps in `PageLinks`: no link yet, downloaded, and a link to get
 /// at download time (baseunits/uDownloadsManager.pas:349-361, :1048-1061).
@@ -213,8 +215,7 @@ impl<'a> TaskRun<'a> {
                 .then(|| task.file_names.get(work_id).cloned())
                 .flatten()
         };
-        let name = fmd_pack::page_file_name(&self.custom_file_name, name.as_deref(), work_id);
-        fmd_pack::fit_file_name(&name, MAX_IMAGE_FILE_PATH)
+        page_file_name(&self.custom_file_name, name.as_deref(), work_id)
     }
 
     /// Marks page `work_id` changed, and writes the changed pages to `app.db` when they were
@@ -368,11 +369,7 @@ impl<'a> TaskRun<'a> {
             self.enter_chapter()?;
 
             let chapter_name = self.chapter_names[self.chapter].clone();
-            self.working_dir = if self.settings.saveto.generate_chapter_folder {
-                self.save_to.join(&chapter_name)
-            } else {
-                self.save_to.clone()
-            };
+            self.working_dir = working_dir(&self.settings.saveto, &self.save_to, &chapter_name);
             if let Err(e) = std::fs::create_dir_all(&self.working_dir) {
                 // `StatusFailedToCreateDir` (baseunits/uDownloadsManager.pas:717-725).
                 let error = format!("failed to create {}: {e}", self.working_dir.display());
@@ -385,21 +382,12 @@ impl<'a> TaskRun<'a> {
                 self.task_callback(|caller, task| caller.task_start(task));
             }
 
-            // `CurrentCustomFileName` (baseunits/uDownloadsManager.pas:1168-1178).
-            let ctx = RenameContext {
-                website: &self.def.name,
-                manga: &self.title,
-                chapter: &chapter_name,
-                // `CR_FILENAME` stays for `GetFileName` to fill in.
-                filename: "%FILENAME%",
-                ..RenameContext::default()
-            };
-            let template = match self.settings.saveto.filename_rename.trim() {
-                "" => crate::settings::DEFAULT_FILENAME_CUSTOMRENAME,
-                template => template,
-            };
-            self.custom_file_name =
-                custom_rename(template, &ctx, &rename_options(&self.settings.saveto));
+            self.custom_file_name = custom_file_name(
+                &self.settings.saveto,
+                &self.def.name,
+                &self.title,
+                &chapter_name,
+            );
 
             self.load_pages()?;
             if self.container().task.page_links.is_empty() {
@@ -636,9 +624,11 @@ impl<'a> TaskRun<'a> {
     /// (baseunits/uDownloadsManager.pas:1027-1041).
     fn archive(&self) -> Option<PathBuf> {
         let format = pack_format(self.settings.output.format)?;
-        let mut path = self.pack_target().into_os_string();
-        path.push(format.extension());
-        Some(path.into())
+        Some(archive_path(
+            &self.save_to,
+            &self.chapter_names[self.chapter],
+            format,
+        ))
     }
 
     /// The folder [`TaskRun::compress`] moves the pages into to pack them.
@@ -786,6 +776,55 @@ impl<'a> TaskRun<'a> {
             }
         }
     }
+}
+
+/// The directory a chapter's pages are saved in: its own folder in the task's directory when
+/// chapter folders are generated, else the task's directory
+/// (baseunits/uDownloadsManager.pas:1143-1152).
+pub(super) fn working_dir(saveto: &SaveToSettings, save_to: &Path, chapter_name: &str) -> PathBuf {
+    if saveto.generate_chapter_folder {
+        save_to.join(chapter_name)
+    } else {
+        save_to.to_path_buf()
+    }
+}
+
+/// `CurrentCustomFileName` (baseunits/uDownloadsManager.pas:1168-1178): the file-name template
+/// renamed for a chapter, with `%FILENAME%` left for [`page_file_name`] to fill in.
+pub(super) fn custom_file_name(
+    saveto: &SaveToSettings,
+    website: &str,
+    title: &str,
+    chapter_name: &str,
+) -> String {
+    let ctx = RenameContext {
+        website,
+        manga: title,
+        chapter: chapter_name,
+        // `CR_FILENAME` stays for `GetFileName` to fill in.
+        filename: "%FILENAME%",
+        ..RenameContext::default()
+    };
+    let template = match saveto.filename_rename.trim() {
+        "" => crate::settings::DEFAULT_FILENAME_CUSTOMRENAME,
+        template => template,
+    };
+    custom_rename(template, &ctx, &rename_options(saveto))
+}
+
+/// `GetFileName` (baseunits/uDownloadsManager.pas:530-552) for page `work_id` (0-based), given
+/// the module's name for it if any, cut to fit the path limit.
+pub(super) fn page_file_name(custom_file_name: &str, name: Option<&str>, work_id: usize) -> String {
+    let name = fmd_pack::page_file_name(custom_file_name, name, work_id);
+    fmd_pack::fit_file_name(&name, MAX_IMAGE_FILE_PATH)
+}
+
+/// The archive a packed chapter becomes: `<save to>/<chapter name>` plus the format's extension
+/// (baseunits/uDownloadsManager.pas:553-611).
+pub(super) fn archive_path(save_to: &Path, chapter_name: &str, format: PackFormat) -> PathBuf {
+    let mut path = save_to.join(chapter_name).into_os_string();
+    path.push(format.extension());
+    PathBuf::from(path)
 }
 
 /// The page count of a page list.

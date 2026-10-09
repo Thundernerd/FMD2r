@@ -17,8 +17,11 @@ import type {
 	ModuleSummary,
 	NewTask,
 	Problem,
+	FieldProblem,
 	RenamePreview,
-	SaveToSettings,
+	RenamePreviewRequest,
+	SavedSettings,
+	SettingsSave,
 	SearchPage,
 	SeriesInfo,
 	SeriesRef,
@@ -39,14 +42,19 @@ export class ApiError extends Error {
 	}
 }
 
-/** An update the server rejected as invalid (422); `field` names the offending setting. */
+/**
+ * An update the server rejected as invalid (422). `fields` names every offending setting, each
+ * with why; `field` is the first of them.
+ */
 export class ValidationError extends ApiError {
+	readonly field: string | null;
 	constructor(
-		readonly field: string | null,
+		readonly fields: FieldProblem[],
 		readonly detail: string,
 		what: string
 	) {
 		super(422, what, detail);
+		this.field = fields[0]?.field ?? null;
 	}
 }
 
@@ -101,8 +109,13 @@ export interface Api {
 	getSettings(): Promise<Settings>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
 	patchSettings(patch: MergePatch): Promise<Settings>;
-	/** The names a draft's rename templates produce for a sample series. */
-	previewRename(saveto: SaveToSettings): Promise<RenamePreview>;
+	/**
+	 * Applies the settings patch and each module's patch together, all or nothing; rejects with a
+	 * {@link ValidationError} naming every invalid field, prefixed `settings.` or `modules.<id>.`.
+	 */
+	patchAllSettings(patch: SettingsSave): Promise<SavedSettings>;
+	/** The names and path a draft's naming settings give a sample chapter. */
+	previewRename(draft: RenamePreviewRequest): Promise<RenamePreview>;
 	listModules(): Promise<ModuleSummary[]>;
 	getModuleSettings(id: string): Promise<ModuleSettingsView>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
@@ -191,7 +204,10 @@ export function createApi({
 		if (res.response.status === 422) {
 			// The problem body is typed per operation; every 422 here is a `Problem`.
 			const problem = res.error as Partial<Problem> | undefined;
-			throw new ValidationError(problem?.field ?? null, problem?.detail ?? 'Invalid value.', what);
+			const fields =
+				problem?.fields ??
+				(problem?.field ? [{ field: problem.field, detail: problem.detail ?? '' }] : []);
+			throw new ValidationError(fields, problem?.detail ?? 'Invalid value.', what);
 		}
 		return unwrap(what, res);
 	};
@@ -322,8 +338,14 @@ export function createApi({
 		async patchSettings(patch) {
 			return validated('patchSettings', await client.PATCH('/api/settings', { body: patch }));
 		},
-		async previewRename(saveto) {
-			return unwrap('previewRename', await client.POST('/api/preview-rename', { body: saveto }));
+		async patchAllSettings(patch) {
+			return validated(
+				'patchAllSettings',
+				await client.PATCH('/api/settings/all', { body: patch })
+			);
+		},
+		async previewRename(draft) {
+			return unwrap('previewRename', await client.POST('/api/preview-rename', { body: draft }));
 		},
 		async listModules() {
 			return unwrap('listModules', await client.GET('/api/modules'));

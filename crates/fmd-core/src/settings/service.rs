@@ -9,7 +9,9 @@ use thiserror::Error;
 use tokio::sync::watch;
 
 use super::model::Settings;
-use super::validate::{invalid, normalize, validate};
+use super::module_overrides::ModuleOverrides;
+use super::validate::{normalize, validate};
+use crate::modules::OptionDef;
 
 #[derive(Debug, Error)]
 pub enum SettingsError {
@@ -17,12 +19,57 @@ pub enum SettingsError {
     Store(#[from] StoreError),
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
-    /// A value has the wrong type, is not one of an enum's values, or is out of range.
-    #[error("invalid value for {field}: {reason}")]
-    Invalid { field: String, reason: String },
-    /// The patch names a setting that does not exist.
-    #[error("unknown setting {0}")]
-    UnknownKey(String),
+    /// Every value of an update that has the wrong type, is not one of an enum's values, is
+    /// out of range, or names a setting that does not exist. Never empty.
+    #[error("{}", display_fields(.0))]
+    Invalid(Vec<FieldError>),
+}
+
+/// One rejected value of an update.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldError {
+    /// The setting, as a dotted path such as `connections.timeout_secs`.
+    pub field: String,
+    pub reason: String,
+}
+
+impl FieldError {
+    pub fn new(field: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            field: field.into(),
+            reason: reason.into(),
+        }
+    }
+
+    /// The error for a setting that does not exist.
+    pub fn unknown(field: impl Into<String>) -> Self {
+        Self::new(field, "unknown setting")
+    }
+}
+
+impl std::fmt::Display for FieldError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid value for {}: {}", self.field, self.reason)
+    }
+}
+
+fn display_fields(errors: &[FieldError]) -> String {
+    errors
+        .iter()
+        .map(FieldError::to_string)
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+impl SettingsError {
+    /// `errors` as an error, or `Ok` when there are none.
+    pub(super) fn check(errors: Vec<FieldError>) -> Result<(), Self> {
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(Self::Invalid(errors))
+        }
+    }
 }
 
 /// The one source of truth for application settings.
@@ -77,19 +124,14 @@ impl SettingsService {
     /// Applies `patch`, a JSON merge patch (RFC 7386) over the serialised [`Settings`]: objects
     /// merge key by key, other values replace, and `null` resets a setting to its default.
     ///
-    /// The result is validated before anything is stored; on error nothing changes. Only the
-    /// groups the patch changed are written, in one transaction, and subscribers are notified
-    /// once. Blocking: call it from `spawn_blocking` in async code.
+    /// The result is validated before anything is stored; on error nothing changes and the
+    /// error lists every rejected value. Only the groups the patch changed are written, in one
+    /// transaction, and subscribers are notified once. Blocking: call it from `spawn_blocking`
+    /// in async code.
     pub fn update(&self, patch: Value) -> Result<Arc<Settings>, SettingsError> {
         let _guard = self.write.lock().unwrap_or_else(|e| e.into_inner());
         let current = self.get();
-        let mut tree = serde_json::to_value(&*current)?;
-        check_known_keys(&tree, &patch, "")?;
-        apply_merge_patch(&mut tree, patch);
-        let mut next: Settings = serde_path_to_error::deserialize(tree)
-            .map_err(|e| invalid(&e.path().to_string(), &e.inner().to_string()))?;
-        normalize(&mut next);
-        validate(&next)?;
+        let next = Self::patched(&current, patch)?;
         if next == *current {
             return Ok(current);
         }
@@ -99,13 +141,83 @@ impl SettingsService {
         Ok(next)
     }
 
-    /// Writes the groups that differ between `old` and `new`. Each group is merged over what is
-    /// stored, so keys this build does not know (written by a newer one) survive.
+    /// `current` with `patch` applied, normalised and validated.
+    fn patched(current: &Settings, patch: Value) -> Result<Settings, SettingsError> {
+        let mut errors = Vec::new();
+        let next = merge_patch_reporting(serde_json::to_value(current)?, patch, &mut errors);
+        let Some(mut next) = next else {
+            return Err(SettingsError::Invalid(errors));
+        };
+        normalize(&mut next);
+        errors.extend(validate(&next));
+        SettingsError::check(errors)?;
+        Ok(next)
+    }
+
+    /// Applies `patch` like [`Self::update`] and each module's patch like
+    /// [`ModuleOverrides::apply_patch`], all or nothing: everything is validated before anything
+    /// is stored, and everything is stored in one transaction. The error lists every rejected
+    /// value, the settings' prefixed `settings.` and a module's `modules.<id>.`.
+    pub fn update_with_modules(
+        &self,
+        patch: Value,
+        modules: Vec<ModulePatch>,
+    ) -> Result<(Arc<Settings>, Vec<ModuleOverrides>), SettingsError> {
+        let _guard = self.write.lock().unwrap_or_else(|e| e.into_inner());
+        let current = self.get();
+        let mut errors = Vec::new();
+        let next = prefixed(Self::patched(&current, patch), "settings.", &mut errors)?;
+        let repo = self.db.module_settings();
+        let mut overrides = Vec::new();
+        for module in &modules {
+            let loaded = ModuleOverrides::load(&repo, &module.module_id)?;
+            let patched = loaded.patched(&module.options, module.patch.clone());
+            let prefix = format!("modules.{}.", module.module_id);
+            if let Some(next) = prefixed(patched, &prefix, &mut errors)? {
+                overrides.push(next);
+            }
+        }
+        // Without errors every part parsed.
+        let Some(next) = next.filter(|_| errors.is_empty()) else {
+            return Err(SettingsError::Invalid(errors));
+        };
+        let groups = self.changed_groups(&current, &next)?;
+        let stored = modules
+            .iter()
+            .zip(&overrides)
+            .map(|(m, o)| o.merged_over_stored(&repo, &m.module_id))
+            .collect::<Result<Vec<_>, _>>()?;
+        let groups: Vec<(&str, &Value)> = groups.iter().map(|(k, v)| (k.as_str(), v)).collect();
+        self.db.save_settings(&groups, &stored)?;
+        let next = if next == *current {
+            current
+        } else {
+            let next = Arc::new(next);
+            self.tx.send_replace(next.clone());
+            next
+        };
+        Ok((next, overrides))
+    }
+
+    /// Writes the groups that differ between `old` and `new`.
     fn persist(&self, old: &Settings, new: &Settings) -> Result<(), SettingsError> {
+        let changed = self.changed_groups(old, new)?;
+        let entries: Vec<(&str, &Value)> = changed.iter().map(|(k, v)| (k.as_str(), v)).collect();
+        self.db.settings().set_many(&entries)?;
+        Ok(())
+    }
+
+    /// The groups that differ between `old` and `new`, each merged over what is stored so keys
+    /// this build does not know (written by a newer one) survive.
+    fn changed_groups(
+        &self,
+        old: &Settings,
+        new: &Settings,
+    ) -> Result<Vec<(String, Value)>, SettingsError> {
         let (Value::Object(old), Value::Object(new)) =
             (serde_json::to_value(old)?, serde_json::to_value(new)?)
         else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let repo = self.db.settings();
         let mut changed = Vec::new();
@@ -117,9 +229,37 @@ impl SettingsService {
             merge(&mut stored, group);
             changed.push((key, stored));
         }
-        let entries: Vec<(&str, &Value)> = changed.iter().map(|(k, v)| (k.as_str(), v)).collect();
-        repo.set_many(&entries)?;
-        Ok(())
+        Ok(changed)
+    }
+}
+
+/// One module's part of [`SettingsService::update_with_modules`].
+#[derive(Debug, Clone)]
+pub struct ModulePatch {
+    pub module_id: String,
+    /// The options the module declares, which its option values are checked against.
+    pub options: Vec<OptionDef>,
+    /// A JSON merge patch over the module's [`ModuleOverrides`].
+    pub patch: Value,
+}
+
+/// The value of `result`; its validation errors go to `errors` with their fields prefixed by
+/// `prefix` (giving `None`), any other error is returned.
+fn prefixed<T>(
+    result: Result<T, SettingsError>,
+    prefix: &str,
+    errors: &mut Vec<FieldError>,
+) -> Result<Option<T>, SettingsError> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(SettingsError::Invalid(found)) => {
+            errors.extend(found.into_iter().map(|e| FieldError {
+                field: format!("{prefix}{}", e.field),
+                reason: e.reason,
+            }));
+            Ok(None)
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -167,27 +307,105 @@ fn merge_maps(dst: &mut Map<String, Value>, src: Map<String, Value>) {
     }
 }
 
-/// Rejects patch keys that are not settings, so a typo is an error rather than a silent no-op.
-pub(super) fn check_known_keys(
-    tree: &Value,
-    patch: &Value,
-    path: &str,
-) -> Result<(), SettingsError> {
+/// Reports patch keys that are not settings, so a typo is an error rather than a silent no-op,
+/// and drops them from `patch` so the rest of it can still be checked.
+fn check_known_keys(tree: &Value, patch: &mut Value, path: &str, errors: &mut Vec<FieldError>) {
     let (Value::Object(tree), Value::Object(patch)) = (tree, patch) else {
-        return Ok(());
+        return;
     };
-    for (key, value) in patch {
-        let field = if path.is_empty() {
-            key.clone()
-        } else {
-            format!("{path}.{key}")
-        };
+    patch.retain(|key, value| {
+        let field = join_path(path, key);
         match tree.get(key) {
-            Some(known) => check_known_keys(known, value, &field)?,
-            None => return Err(SettingsError::UnknownKey(field)),
+            Some(known) => {
+                check_known_keys(known, value, &field, errors);
+                true
+            }
+            None => {
+                errors.push(FieldError::unknown(field));
+                false
+            }
+        }
+    });
+}
+
+fn join_path(path: &str, key: &str) -> String {
+    if path.is_empty() {
+        key.to_owned()
+    } else {
+        format!("{path}.{key}")
+    }
+}
+
+/// `base` with the merge patch `patch` applied and deserialised, reporting every unknown key and
+/// every value that does not parse; `None` when the result cannot be made to parse.
+pub(super) fn merge_patch_reporting<T: serde::de::DeserializeOwned>(
+    base: Value,
+    mut patch: Value,
+    errors: &mut Vec<FieldError>,
+) -> Option<T> {
+    check_known_keys(&base, &mut patch, "", errors);
+    let mut tree = base.clone();
+    apply_merge_patch(&mut tree, patch);
+    deserialize_reporting(tree, &base, errors)
+}
+
+/// Deserialises `tree`, reporting every value that does not parse rather than only the first:
+/// each one is reported and put back to its value in `base` (which parses), then the rest is
+/// tried again. `None` when a value cannot be put back.
+fn deserialize_reporting<T: serde::de::DeserializeOwned>(
+    mut tree: Value,
+    base: &Value,
+    errors: &mut Vec<FieldError>,
+) -> Option<T> {
+    loop {
+        let err = match serde_path_to_error::deserialize::<_, T>(tree.clone()) {
+            Ok(value) => return Some(value),
+            Err(err) => err,
+        };
+        let keys: Vec<String> = err
+            .path()
+            .iter()
+            .filter_map(|segment| match segment {
+                serde_path_to_error::Segment::Map { key } => Some(key.clone()),
+                _ => None,
+            })
+            .collect();
+        errors.push(FieldError::new(
+            err.path().to_string(),
+            err.inner().to_string(),
+        ));
+        if !restore(&mut tree, base, &keys) {
+            return None;
         }
     }
-    Ok(())
+}
+
+/// Puts the value at `keys` in `tree` back to the one in `base` (removing it when `base` has
+/// none); `false` when that changes nothing.
+fn restore(tree: &mut Value, base: &Value, keys: &[String]) -> bool {
+    let Some((last, parents)) = keys.split_last() else {
+        return false;
+    };
+    let mut node = tree;
+    let mut original = Some(base);
+    for key in parents {
+        let Some(next) = node.get_mut(key) else {
+            return false;
+        };
+        node = next;
+        original = original.and_then(|o| o.get(key));
+    }
+    let Value::Object(map) = node else {
+        return false;
+    };
+    match original.and_then(|o| o.get(last)) {
+        Some(value) if map.get(last) != Some(value) => {
+            map.insert(last.clone(), value.clone());
+            true
+        }
+        Some(_) => false,
+        None => map.remove(last).is_some(),
+    }
 }
 
 /// RFC 7386 `MergePatch`.

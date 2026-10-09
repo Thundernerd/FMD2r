@@ -1,7 +1,7 @@
 //! Application settings: a key → JSON value table. What the keys mean is up to the settings model
 //! (T18).
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -34,12 +34,7 @@ impl<'a> SettingsRepo<'a> {
     pub fn set<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
         let json = serde_json::to_string(value)?;
         let conn = self.db.lock();
-        conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?1, ?2)
-             ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-            params![key, json],
-        )?;
-        Ok(())
+        put(&conn, key, &json)
     }
 
     /// Stores every `(key, value)` pair in one transaction: either all are written or none.
@@ -51,11 +46,7 @@ impl<'a> SettingsRepo<'a> {
         let mut conn = self.db.lock();
         let tx = conn.transaction()?;
         for (key, json) in entries {
-            tx.execute(
-                "INSERT INTO settings (key, value) VALUES (?1, ?2)
-                 ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-                params![key, json],
-            )?;
+            put(&tx, key, &json)?;
         }
         tx.commit()?;
         Ok(())
@@ -66,4 +57,14 @@ impl<'a> SettingsRepo<'a> {
         conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
         Ok(())
     }
+}
+
+/// Stores the JSON `json` under `key`, replacing any previous value.
+pub(crate) fn put(conn: &Connection, key: &str, json: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        params![key, json],
+    )?;
+    Ok(())
 }

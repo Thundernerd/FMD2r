@@ -39,7 +39,7 @@ pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange
 pub use covers::{
     CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
 };
-pub use error::{ApiError, Problem};
+pub use error::{ApiError, FieldProblem, Problem};
 pub use events::{
     EventBus, JobState, ServerEvent, TaskProgress, TaskRemoved, TaskState, TaskStatusChange,
     TasksReordered,
@@ -56,7 +56,7 @@ pub use serve::{ServeConfig, ServeError, serve};
 pub use services::{
     DownloadEngine, FavoritesJobs, Idle, LoadFailure, ModuleCatalog, ModulesReport,
 };
-pub use settings::RenamePreview;
+pub use settings::{RenamePreview, SavedSettings, SettingsSave};
 pub use spa::{Assets, EmbeddedAssets};
 pub use state::AppState;
 pub use tasks::{
@@ -109,6 +109,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(about::about))
         .routes(routes!(covers::get))
         .routes(routes!(settings::get, settings::patch))
+        .routes(routes!(settings::patch_all))
         .routes(routes!(settings::preview_rename))
         .routes(routes!(module_settings::list))
         .routes(routes!(module_settings::get, module_settings::patch))

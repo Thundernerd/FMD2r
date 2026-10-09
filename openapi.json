@@ -1498,13 +1498,13 @@
         "tags": [
           "settings"
         ],
-        "summary": "Preview the rename templates of a (possibly unsaved) `saveto` group on a sample series, the\nway downloads will name their folders and files.",
+        "summary": "Preview the naming settings of a (possibly unsaved) draft on a sample chapter: the names\nand path the download engine gives it.",
         "operationId": "previewRename",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveToSettings"
+                "$ref": "#/components/schemas/RenamePreviewRequest"
               }
             }
           },
@@ -1722,6 +1722,67 @@
           },
           "422": {
             "description": "A value is invalid or a setting unknown; `field` names it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/all": {
+      "patch": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Update the settings and any modules' settings together, all or nothing. Nothing is stored\nunless every patch is valid, and everything is stored in one transaction.",
+        "operationId": "patchAllSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The updated settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No module with a given ID is loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Values are invalid or settings unknown; `fields` names each, prefixed `settings.` or `modules.<id>.`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2920,6 +2981,23 @@
           "failed"
         ]
       },
+      "FieldProblem": {
+        "type": "object",
+        "description": "One rejected value of a 422.",
+        "required": [
+          "field",
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string",
+            "description": "The setting as a dotted path, like [`Problem::field`]."
+          }
+        }
+      },
       "GeneralSettings": {
         "type": "object",
         "properties": {
@@ -3931,7 +4009,14 @@
               "string",
               "null"
             ],
-            "description": "The setting a validation error (422) is about, as a dotted path such as\n`connections.timeout_secs` or `options.server`."
+            "description": "The setting a validation error (422) is about, as a dotted path such as\n`connections.timeout_secs` or `options.server`.\nKept for clients that read one field: the first of `fields`."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldProblem"
+            },
+            "description": "Every setting a validation error (422) is about, each with why it was rejected."
           },
           "status": {
             "type": "integer",
@@ -4042,11 +4127,13 @@
       },
       "RenamePreview": {
         "type": "object",
-        "description": "The names the rename templates of a draft produce for a sample series.",
+        "description": "The names a download of a sample chapter gets with a draft's settings.",
         "required": [
           "manga",
           "chapter",
-          "filename"
+          "filename",
+          "page",
+          "path"
         ],
         "properties": {
           "chapter": {
@@ -4059,7 +4146,74 @@
           },
           "manga": {
             "type": "string",
-            "description": "The manga folder name (`manga_rename`)."
+            "description": "The manga folder name (`manga_rename`), whether or not the folder is generated."
+          },
+          "page": {
+            "type": "string",
+            "description": "The first page's file name with the extension it ends up with."
+          },
+          "path": {
+            "type": "string",
+            "description": "Where the first page ends up: its file, or the chapter's archive when chapters are\npacked."
+          }
+        }
+      },
+      "RenamePreviewRequest": {
+        "type": "object",
+        "description": "The settings a rename preview reads, possibly unsaved; a missing group takes its defaults.",
+        "properties": {
+          "images": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ImageSettings"
+              }
+            ],
+            "default": {
+              "imagemagick": {
+                "compression": "None",
+                "enabled": false,
+                "quality": 75,
+                "save_as": "JPEG"
+              },
+              "jpeg_quality": 80,
+              "png_compression": "fastest",
+              "png_to_jpeg": false,
+              "webp_save_as": "png"
+            }
+          },
+          "output": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OutputSettings"
+              }
+            ],
+            "default": {
+              "format": "folder",
+              "pdf_quality": 100
+            }
+          },
+          "saveto": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SaveToSettings"
+              }
+            ],
+            "default": {
+              "chapter_rename": "%CHAPTER%",
+              "convert_digit_chapter": true,
+              "convert_digit_volume": true,
+              "default_dir": "downloads",
+              "digit_chapter_length": 3,
+              "digit_volume_length": 2,
+              "filename_rename": "%FILENAME%",
+              "generate_chapter_folder": true,
+              "generate_manga_folder": true,
+              "illegal_chars": "posix",
+              "manga_rename": "%MANGA%",
+              "remove_manga_name_from_chapter": false,
+              "replace_unicode": false,
+              "replace_unicode_with": "_"
+            }
           }
         }
       },
@@ -4158,6 +4312,29 @@
             "type": "string",
             "description": "Replacement for non-ASCII characters (`saveto/ChangeUnicodeCharacterStr`,\n`OptionChangeUnicodeCharacterStr` = `_`, baseunits/FMDOptions.pas:109).",
             "default": "_"
+          }
+        }
+      },
+      "SavedSettings": {
+        "type": "object",
+        "description": "What [`patch_all`] saved.",
+        "required": [
+          "settings",
+          "modules"
+        ],
+        "properties": {
+          "modules": {
+            "type": "object",
+            "description": "The settings of each patched module, by module ID.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ModuleSettingsView"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
           }
         }
       },
@@ -4506,6 +4683,41 @@
             }
           }
         }
+      },
+      "SettingsSave": {
+        "type": "object",
+        "description": "The body of [`patch_all`]; either part may be left out.",
+        "properties": {
+          "modules": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "A merge patch as for `PATCH /api/settings`.",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "SymbolMode": {
         "type": "string",

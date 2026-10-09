@@ -70,29 +70,12 @@ pub(super) fn save_image(
     }
     let mut ext = image_ext(data)?;
     let mut converted = None;
-    if !images.imagemagick.enabled {
-        let target = match ext {
-            "png" if images.png_to_jpeg => Some(ConvertTarget::Jpeg {
-                quality: jpeg_quality(images),
-            }),
-            "webp" => match images.webp_save_as {
-                WebpSaveAs::Webp => None,
-                WebpSaveAs::Png => Some(ConvertTarget::Png {
-                    compression: png_compression(images.png_compression),
-                }),
-                WebpSaveAs::Jpeg => Some(ConvertTarget::Jpeg {
-                    quality: jpeg_quality(images),
-                }),
-            },
-            _ => None,
-        };
-        // A failed conversion keeps the original image (baseunits/uBaseUnit.pas:2416-2437).
-        if let Some(target) = target
-            && let Ok(Some(data)) = fmd_pack::convert_bytes(data, target)
-        {
-            ext = target.extension();
-            converted = Some(data);
-        }
+    // A failed conversion keeps the original image (baseunits/uBaseUnit.pas:2416-2437).
+    if let Some(target) = convert_target(images, ext)
+        && let Ok(Some(data)) = fmd_pack::convert_bytes(data, target)
+    {
+        ext = target.extension();
+        converted = Some(data);
     }
     let path = dir.join(format!("{name}.{ext}"));
     if path.exists() {
@@ -106,6 +89,42 @@ pub(super) fn save_image(
             tracing::warn!(target: "fmd_core", "saving {}: {e}", path.display());
             None
         }
+    }
+}
+
+/// The format a saved `ext` image is converted to as it is saved: PNG to JPEG and WebP to PNG or
+/// JPEG as the image settings say, nothing when ImageMagick converts later
+/// (baseunits/uBaseUnit.pas:2411-2437).
+fn convert_target(images: &ImageSettings, ext: &str) -> Option<ConvertTarget> {
+    if images.imagemagick.enabled {
+        return None;
+    }
+    match ext {
+        "png" if images.png_to_jpeg => Some(ConvertTarget::Jpeg {
+            quality: jpeg_quality(images),
+        }),
+        "webp" => match images.webp_save_as {
+            WebpSaveAs::Webp => None,
+            WebpSaveAs::Png => Some(ConvertTarget::Png {
+                compression: png_compression(images.png_compression),
+            }),
+            WebpSaveAs::Jpeg => Some(ConvertTarget::Jpeg {
+                quality: jpeg_quality(images),
+            }),
+        },
+        _ => None,
+    }
+}
+
+/// The extension a page whose content shows `ext` ends up with once the chapter is done: the
+/// one it is saved under, or ImageMagick's format when that converts the chapter
+/// (baseunits/uDownloadsManager.pas:613-711).
+pub(super) fn final_page_ext(images: &ImageSettings, ext: &str) -> String {
+    let magick = &images.imagemagick;
+    if magick.enabled {
+        magick.save_as.to_ascii_lowercase()
+    } else {
+        convert_target(images, ext).map_or_else(|| ext.to_owned(), |t| t.extension().to_owned())
     }
 }
 
