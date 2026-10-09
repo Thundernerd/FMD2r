@@ -8,11 +8,18 @@
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 
+use std::sync::Arc;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
+use fmd_core::jobs::JobRegistry;
+use fmd_core::lists::{DbImporter, ListJobs, ListUpdater};
 use fmd_core::modules::ModuleInfo;
-use fmd_server::{AppState, ModuleCatalog, ModulesReport, build_router};
+use fmd_core::settings::SettingsService;
+use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
+use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
+use fmd_server::{AppState, ModuleCatalog, ModulesReport, ServerEvent, build_router};
 use fmd_store::{AppDb, ListsDb, MangaListing};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -248,4 +255,113 @@ async fn list_jobs_are_unavailable_without_a_runner() {
     let res = build_router(state).oneshot(req).await.unwrap();
 
     assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+/// Answers every request with a 404, as FMD2-DB does for a module it has no dump of.
+struct NoDumps;
+
+impl Transport for NoDumps {
+    fn send(&self, _: WireRequest) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
+        Box::pin(async {
+            Ok(WireResponse {
+                status: 404,
+                reason: String::new(),
+                headers: Vec::new(),
+                body: b"404: Not Found".to_vec(),
+            })
+        })
+    }
+}
+
+/// `state()` with list jobs for one module, `site` ("Site", which can update its list), whose
+/// HTTP goes to `NoDumps`.
+fn state_with_list_jobs() -> (TempDir, AppState) {
+    let (dir, state) = state();
+    std::fs::create_dir_all(dir.path().join("lua/modules")).unwrap();
+    std::fs::write(
+        dir.path().join("lua/modules/Site.lua"),
+        "function Init()\n  local m = NewWebsiteModule()\n  m.ID = 'site'; m.Name = 'Site'; \
+         m.RootURL = 'https://site.test'; m.OnGetNameAndLink = 'GetNameAndLink'\nend\n",
+    )
+    .unwrap();
+    let report = ModuleRegistry::load_dir(&dir.path().join("lua"));
+    let module = report.registry.get("site").unwrap().clone();
+    let http = HttpClient::with_transport(Arc::new(NoDumps)).unwrap();
+    let mut config = PoolConfig::new(http.clone());
+    config.threads = 1;
+    let pool = Arc::new(WorkerPool::new(config).unwrap());
+    let lists = ListsDb::open(dir.path().join("lists.db")).unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let events = state.events().clone();
+    let jobs = ListJobs::new(
+        ListUpdater::new(pool, lists.clone()),
+        DbImporter::new(http, lists),
+        Arc::new(SettingsService::load(db).unwrap()),
+        move |id: &str| (id == "site").then(|| module.clone()),
+        move |event| events.publish(ServerEvent::Lists(event)),
+    );
+    let registry = JobRegistry::new();
+    jobs.register(&registry);
+    (dir, state.with_jobs(registry).with_list_jobs(jobs))
+}
+
+/// Reads SSE body chunks until `needle` shows up (or times out), returning everything read.
+async fn read_sse_until(res: Response, needle: &str) -> String {
+    let mut body = res.into_body();
+    let mut seen = String::new();
+    let read = async {
+        while !seen.contains(needle) {
+            let Some(frame) = body.frame().await else {
+                break;
+            };
+            if let Ok(data) = frame.unwrap().into_data() {
+                seen.push_str(std::str::from_utf8(&data).unwrap());
+            }
+        }
+    };
+    let timeout = tokio::time::timeout(std::time::Duration::from_secs(10), read).await;
+    assert!(
+        timeout.is_ok(),
+        "timed out waiting for {needle:?}; got {seen:?}"
+    );
+    seen
+}
+
+#[tokio::test]
+async fn a_failed_import_event_carries_why_it_failed() {
+    let (_dir, state) = state_with_list_jobs();
+    let stream = get(&state, "/api/events").await;
+    let req = Request::post("/api/lists/site/import-db")
+        .body(Body::empty())
+        .unwrap();
+    let res = build_router(state.clone()).oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+
+    let seen = read_sse_until(stream, "event: job.lists.failed\n").await;
+    let frame = seen
+        .split("\n\n")
+        .find(|f| f.contains("job.lists.failed"))
+        .unwrap();
+    let data = frame
+        .lines()
+        .find_map(|l| l.strip_prefix("data: "))
+        .unwrap();
+    let data: Value = serde_json::from_str(data).unwrap();
+
+    assert_eq!(data["module_id"], "site");
+    assert_eq!(data["job"], "import_db");
+    assert_eq!(data["reason"], "no_dump");
+    // The technical details stay available.
+    assert!(data["error"].as_str().unwrap().contains("404"), "{data}");
+
+    // System → Jobs reads the same, naming the website, with the details after it.
+    let job = json_of(get(&state, "/api/jobs/lists").await).await;
+    let last_error = job["last_error"].as_str().unwrap();
+    assert!(
+        last_error.starts_with(
+            "FMD2-DB has no ready-made list for Site. Use Update list to build it from the website."
+        ),
+        "{last_error}"
+    );
+    assert!(last_error.contains("HTTP status 404"), "{last_error}");
 }

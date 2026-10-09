@@ -7,7 +7,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use fmd_core::lists::{DbImporter, ImportError, db_url};
+use fmd_core::lists::{DbImporter, ImportError, ListFailureReason, db_url};
 use fmd_http::{
     BoxFuture, HttpClient, TerminateToken, Transport, TransportError, WireRequest, WireResponse,
 };
@@ -184,36 +184,87 @@ fn the_dump_is_downloaded_from_the_url_template_with_the_module_id() {
     assert_eq!(*f.server.urls.lock().unwrap(), [db_url(template, GOURMET)]);
 }
 
-#[test]
-fn a_failed_download_leaves_the_list_as_it_was() {
-    let f = fixture(404, b"Not Found".to_vec());
+/// Keeps one row in `GOURMET`'s list and imports from `f`, returning the error.
+fn failed_import(f: &Fixture) -> ImportError {
     let kept = MangaListing {
         link: "/kept".into(),
         ..MangaListing::default()
     };
     f.lists.masterlist().upsert(GOURMET, &kept).unwrap();
+    f.importer
+        .import(
+            GOURMET,
+            "https://db.test/<website>.7z",
+            &TerminateToken::new(),
+            &mut |_| {},
+        )
+        .unwrap_err()
+}
 
-    let error = f.importer.import(
-        GOURMET,
-        "https://db.test/<website>.7z",
-        &TerminateToken::new(),
-        &mut |_| {},
-    );
+#[test]
+fn a_404_means_fmd2_db_has_no_dump_and_leaves_the_list_as_it_was() {
+    let f = fixture(404, b"Not Found".to_vec());
 
+    let error = failed_import(&f);
+
+    // `HTTP.ResultCode < 300` fails (baseunits/DBUpdater.pas:125); a 404 is a missing dump.
     assert!(
-        matches!(error, Err(ImportError::Download { status: 404, .. })),
+        matches!(error, ImportError::Download { status: 404, .. }),
         "{error:?}"
     );
+    assert_eq!(error.reason(), ListFailureReason::NoDump);
     assert_eq!(rows(&f.lists, GOURMET).len(), 1);
 }
 
 #[test]
-fn a_body_that_is_not_a_7z_archive_is_an_error() {
+fn a_server_error_means_fmd2_db_could_not_be_reached() {
+    let f = fixture(500, b"Internal Server Error".to_vec());
+
+    let error = failed_import(&f);
+
+    assert_eq!(error.reason(), ListFailureReason::Unreachable, "{error:?}");
+    assert_eq!(rows(&f.lists, GOURMET).len(), 1);
+}
+
+/// Fails every exchange, as a refused connection does.
+struct Offline;
+
+impl Transport for Offline {
+    fn send(&self, _: WireRequest) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
+        Box::pin(async { Err(TransportError("connection refused".into())) })
+    }
+}
+
+#[test]
+fn a_connection_error_means_fmd2_db_could_not_be_reached() {
+    let mut f = fixture(200, Vec::new());
+    let http = HttpClient::with_transport(Arc::new(Offline)).unwrap();
+    f.importer = DbImporter::new(http, f.lists.clone());
+
+    let error = failed_import(&f);
+
+    assert_eq!(error.reason(), ListFailureReason::Unreachable, "{error:?}");
+    assert_eq!(rows(&f.lists, GOURMET).len(), 1);
+}
+
+#[test]
+fn a_body_that_is_not_a_7z_archive_is_a_bad_archive() {
+    let f = fixture(200, b"<html>rate limited</html>".to_vec());
+
+    let error = failed_import(&f);
+
+    assert!(matches!(error, ImportError::Archive(_)), "{error:?}");
+    assert_eq!(error.reason(), ListFailureReason::BadArchive);
+    assert_eq!(rows(&f.lists, GOURMET).len(), 1);
+}
+
+#[test]
+fn an_empty_download_is_a_bad_archive() {
+    // `HTTP.GET` is false on an empty body (baseunits/DBUpdater.pas:125).
     let f = fixture(200, Vec::new());
 
-    let error = f
-        .importer
-        .import_archive(GOURMET, b"<html>rate limited</html>");
+    let error = failed_import(&f);
 
-    assert!(matches!(error, Err(ImportError::Archive(_))), "{error:?}");
+    assert_eq!(error.reason(), ListFailureReason::BadArchive, "{error:?}");
+    assert_eq!(rows(&f.lists, GOURMET).len(), 1);
 }
