@@ -7,7 +7,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use fmd_core::lists::{ListJobKind, ListJobs};
-use fmd_store::{FacetCount, MasterListEntry, PageRequest, SearchFilters};
+use fmd_store::{FacetCount, MasterListEntry, PageRequest, SearchFilters, UNKNOWN};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -35,6 +35,12 @@ pub(crate) struct SearchQuery {
     /// Exact status: `0` completed, `1` ongoing, `2` hiatus, `3` cancelled
     /// (`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).
     status: Option<String>,
+    /// The format of the title's MangaBaka match: `manga`, `manhwa`, `manhua`, `oel`, `other`,
+    /// or `unknown` for a title without one.
+    format: Option<String>,
+    /// The publication status of the title's MangaBaka match: `ongoing`, `completed`,
+    /// `hiatus`, `cancelled`, or `unknown` for a title without one.
+    publication: Option<String>,
     /// 1-based page number.
     #[param(minimum = 1)]
     page: Option<u32>,
@@ -70,11 +76,16 @@ pub struct ListItem {
     pub numchapter: u32,
     /// Julian day number of the day the title was first listed.
     pub added_jdn: i64,
+    /// As in the `format` filter.
+    pub format: String,
+    /// As in the `publication` filter.
+    pub publication: String,
 }
 
 impl From<MasterListEntry> for ListItem {
     fn from(entry: MasterListEntry) -> Self {
         let l = entry.listing;
+        let or_unknown = |v: Option<String>| v.unwrap_or_else(|| UNKNOWN.to_owned());
         ListItem {
             module_id: entry.module_id,
             link: l.link,
@@ -86,6 +97,8 @@ impl From<MasterListEntry> for ListItem {
             status: l.status,
             numchapter: l.numchapter,
             added_jdn: l.added_jdn,
+            format: or_unknown(entry.format),
+            publication: or_unknown(entry.publication),
         }
     }
 }
@@ -122,6 +135,10 @@ impl From<FacetCount> for FacetValue {
 pub struct ListFacets {
     pub genres: Vec<FacetValue>,
     pub statuses: Vec<FacetValue>,
+    /// The formats of their MangaBaka matches, `unknown` for titles without one.
+    pub formats: Vec<FacetValue>,
+    /// The publication statuses of their MangaBaka matches, `unknown` for titles without one.
+    pub publications: Vec<FacetValue>,
 }
 
 /// A list job that was started.
@@ -198,6 +215,8 @@ pub(crate) async fn search(
             .map(split_genres)
             .unwrap_or_default(),
         status: query.status.filter(|s| !s.is_empty()),
+        format: query.format.filter(|s| !s.is_empty()),
+        publication: query.publication.filter(|s| !s.is_empty()),
         ..filters
     };
     let request = PageRequest {
@@ -214,7 +233,7 @@ pub(crate) async fn search(
     }))
 }
 
-/// Genre and status counts of the titles a search matches.
+/// Genre, status, format and publication counts of the titles a search matches.
 #[utoipa::path(get, path = "/api/lists/facets", tag = "lists", operation_id = "listFacets",
     params(FacetsQuery),
     responses(
@@ -230,6 +249,8 @@ pub(crate) async fn facets(
         return Ok(Json(ListFacets {
             genres: Vec::new(),
             statuses: Vec::new(),
+            formats: Vec::new(),
+            publications: Vec::new(),
         }));
     };
     let q = query.q.unwrap_or_default();
@@ -237,6 +258,12 @@ pub(crate) async fn facets(
     Ok(Json(ListFacets {
         genres: facets.genres.into_iter().map(FacetValue::from).collect(),
         statuses: facets.statuses.into_iter().map(FacetValue::from).collect(),
+        formats: facets.formats.into_iter().map(FacetValue::from).collect(),
+        publications: facets
+            .publications
+            .into_iter()
+            .map(FacetValue::from)
+            .collect(),
     }))
 }
 

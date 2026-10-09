@@ -299,7 +299,7 @@
           "events"
         ],
         "summary": "Server-sent event stream.",
-        "description": "Named events: `task.progress` (TaskProgress, at most 4 a second per task), `task.status` (TaskStatusChange), `task.removed` (TaskRemoved), `task.reordered` (TasksReordered), `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), `account.state` (AccountStateChange), `job.lists.started|progress|finished|cancelled|failed` (ListEvent), and `job.favorites.started|progress|finished|cancelled|failed` (FavoritesEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox item id as the SSE id; on reconnect, `Last-Event-ID` replays the inbox items stored since. Comment frames are heartbeats.",
+        "description": "Named events: `task.progress` (TaskProgress, at most 4 a second per task), `task.status` (TaskStatusChange), `task.removed` (TaskRemoved), `task.reordered` (TasksReordered), `job.state` (JobState), `inbox.new` (InboxItem), `log` (LogLine), `account.state` (AccountStateChange), `job.lists.started|progress|finished|cancelled|failed` (ListEvent), `job.favorites.started|progress|finished|cancelled|failed` (FavoritesEvent), and `job.metadata.started|progress|finished|cancelled|failed` (MetadataEvent). Each frame's data is the JSON payload. `inbox.new` frames carry the inbox item id as the SSE id; on reconnect, `Last-Event-ID` replays the inbox items stored since. Comment frames are heartbeats.",
         "operationId": "events",
         "parameters": [
           {
@@ -1006,7 +1006,7 @@
         "tags": [
           "lists"
         ],
-        "summary": "Genre and status counts of the titles a search matches.",
+        "summary": "Genre, status, format and publication counts of the titles a search matches.",
         "operationId": "listFacets",
         "parameters": [
           {
@@ -1100,6 +1100,24 @@
             "name": "status",
             "in": "query",
             "description": "Exact status: `0` completed, `1` ongoing, `2` hiatus, `3` cancelled\n(`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "The format of the title's MangaBaka match: `manga`, `manhwa`, `manhua`, `oel`, `other`,\nor `unknown` for a title without one.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "publication",
+            "in": "query",
+            "description": "The publication status of the title's MangaBaka match: `ongoing`, `completed`,\n`hiatus`, `cancelled`, or `unknown` for a title without one.",
             "required": false,
             "schema": {
               "type": "string"
@@ -1448,6 +1466,127 @@
             "description": "One JSON log line per line",
             "content": {
               "application/x-ndjson": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/mangabaka": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "The MangaBaka database's date, size and download progress.",
+        "operationId": "mangabakaStatus",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MangaBakaStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Delete the MangaBaka database and the list titles' matches in it.",
+        "operationId": "removeMangabaka",
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "409": {
+            "description": "A download is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "This server cannot download it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/mangabaka/cancel": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Stop the running download; the database it would have replaced stays.",
+        "operationId": "cancelMangabaka",
+        "responses": {
+          "202": {
+            "description": "Cancelling; a `job.metadata.cancelled` event follows"
+          },
+          "409": {
+            "description": "Not downloading",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "This server cannot download it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/mangabaka/download": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Download the MangaBaka database (about 390 MB), or update it, then match every list\nagainst it.",
+        "operationId": "downloadMangabaka",
+        "responses": {
+          "202": {
+            "description": "Started; progress follows as `job.metadata.*` events"
+          },
+          "409": {
+            "description": "Already downloading",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "This server cannot download it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
             }
           }
         }
@@ -3572,14 +3711,30 @@
         "description": "The genres and statuses of the titles a search matches, most common first.",
         "required": [
           "genres",
-          "statuses"
+          "statuses",
+          "formats",
+          "publications"
         ],
         "properties": {
+          "formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacetValue"
+            },
+            "description": "The formats of their MangaBaka matches, `unknown` for titles without one."
+          },
           "genres": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FacetValue"
             }
+          },
+          "publications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacetValue"
+            },
+            "description": "The publication statuses of their MangaBaka matches, `unknown` for titles without one."
           },
           "statuses": {
             "type": "array",
@@ -3612,7 +3767,9 @@
           "genres",
           "status",
           "numchapter",
-          "added_jdn"
+          "added_jdn",
+          "format",
+          "publication"
         ],
         "properties": {
           "added_jdn": {
@@ -3628,6 +3785,10 @@
           },
           "authors": {
             "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "description": "As in the `format` filter."
           },
           "genres": {
             "type": "array",
@@ -3646,6 +3807,10 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          },
+          "publication": {
+            "type": "string",
+            "description": "As in the `publication` filter."
           },
           "status": {
             "type": "string",
@@ -3783,6 +3948,153 @@
         "properties": {
           "password": {
             "type": "string"
+          }
+        }
+      },
+      "MangaBakaSettings": {
+        "type": "object",
+        "description": "The local copy of MangaBaka's database (`metadata.db`), downloaded only when asked for.",
+        "properties": {
+          "refresh_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days between automatic refreshes of a downloaded database; 0 turns them off. 0 to 365.",
+            "default": 7,
+            "maximum": 365,
+            "minimum": 0
+          }
+        }
+      },
+      "MangaBakaStatus": {
+        "type": "object",
+        "description": "The MangaBaka database at a glance.",
+        "required": [
+          "available",
+          "downloaded",
+          "running"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "Whether this server can download one (it runs the database job)."
+          },
+          "built_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time it was built."
+          },
+          "bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Its size on disk.",
+            "minimum": 0
+          },
+          "downloaded": {
+            "type": "boolean",
+            "description": "Whether one is downloaded."
+          },
+          "next_refresh": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time of the next automatic refresh (`metadata.mangabaka.refresh_days`)."
+          },
+          "progress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MetadataEvent",
+                "description": "The running download's last step."
+              }
+            ]
+          },
+          "running": {
+            "type": "boolean",
+            "description": "Whether a download or refresh is running."
+          }
+        }
+      },
+      "MetadataEvent": {
+        "type": "object",
+        "description": "One step of the database job, for the Settings page (`job.metadata.<kind>` events).",
+        "required": [
+          "kind",
+          "phase",
+          "status_text",
+          "done",
+          "total"
+        ],
+        "properties": {
+          "done": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Work items of the phase done.",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why it failed."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MetadataEventKind"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/MetadataPhase"
+          },
+          "status_text": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Work items of the phase; 0 when unknown.",
+            "minimum": 0
+          }
+        }
+      },
+      "MetadataEventKind": {
+        "type": "string",
+        "description": "What happened to the database job.",
+        "enum": [
+          "started",
+          "progress",
+          "finished",
+          "cancelled",
+          "failed"
+        ]
+      },
+      "MetadataPhase": {
+        "type": "string",
+        "description": "The step the database job is at.",
+        "enum": [
+          "downloading",
+          "matching"
+        ]
+      },
+      "MetadataSettings": {
+        "type": "object",
+        "description": "Metadata for list titles from outside the websites (T73). No FMD2 counterpart: FMD2 uses only\nthe websites' own metadata.",
+        "properties": {
+          "mangabaka": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MangaBakaSettings"
+              }
+            ],
+            "default": {
+              "refresh_days": 7
+            }
           }
         }
       },
@@ -4641,6 +4953,7 @@
           "genres",
           "status",
           "summary",
+          "summary_from_mangabaka",
           "chapters",
           "in_library"
         ],
@@ -4668,6 +4981,13 @@
             ],
             "description": "The cover through `/api/covers`; `None` when the module reports none."
           },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The format of the series' MangaBaka match (`manga`, `manhwa`, `manhua`, `oel`, `other`)."
+          },
           "genres": {
             "type": "array",
             "items": {
@@ -4690,10 +5010,23 @@
             "$ref": "#/components/schemas/SeriesStatus"
           },
           "summary": {
-            "type": "string"
+            "type": "string",
+            "description": "The website's summary or, when it gives none, MangaBaka's description\n([`SeriesInfo::summary_from_mangabaka`])."
+          },
+          "summary_from_mangabaka": {
+            "type": "boolean",
+            "description": "Whether `summary` is MangaBaka's description, for the UI to say so."
           },
           "title": {
             "type": "string"
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The year of the series' MangaBaka match."
           }
         }
       },
@@ -4892,6 +5225,18 @@
             "default": {
               "max_file_size_mb": 10,
               "max_files": 5
+            }
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MetadataSettings"
+              }
+            ],
+            "default": {
+              "mangabaka": {
+                "refresh_days": 7
+              }
             }
           },
           "module_updater": {

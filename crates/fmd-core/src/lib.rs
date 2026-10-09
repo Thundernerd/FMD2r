@@ -6,6 +6,7 @@ pub mod favorites;
 pub mod info;
 pub mod jobs;
 pub mod lists;
+pub mod metadata;
 pub mod module_updater;
 pub mod modules;
 pub mod settings;

@@ -23,4 +23,14 @@ describe('Discover', () => {
 		expect(link.getAttribute('href')).toBe('/settings#section-websites');
 		expect(screen.queryByRole('combobox', { name: 'Website' })).toBeNull();
 	});
+
+	it('works as before without the MangaBaka database, pointing to it once', async () => {
+		await api.patchSettings({ general: { selected_websites: ['webtoons'] } });
+		render(Discover);
+
+		await screen.findByRole('combobox', { name: 'Status' });
+		expect(await screen.findByRole('note')).toBeTruthy();
+		expect(screen.queryByRole('combobox', { name: 'Format' })).toBeNull();
+		expect(screen.queryByRole('combobox', { name: 'Publication' })).toBeNull();
+	});
 });

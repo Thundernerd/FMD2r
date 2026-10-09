@@ -1,8 +1,9 @@
 <script lang="ts">
-	import type { ListFacets, ListItem, ModuleSummary } from '#lib/api/types.ts';
+	import type { ListFacets, ListItem, MangaBakaStatus, ModuleSummary } from '#lib/api/types.ts';
 	import { api, events } from '#lib/app.ts';
 	import GenreChips from '#lib/components/discover/GenreChips.svelte';
 	import ListActions from '#lib/components/discover/ListActions.svelte';
+	import MangaBakaHint from '#lib/components/discover/MangaBakaHint.svelte';
 	import WebsitePicker from '#lib/components/discover/WebsitePicker.svelte';
 	import { seriesHref } from '#lib/series/href.ts';
 	import {
@@ -22,6 +23,23 @@
 		'2': 'Hiatus',
 		'3': 'Cancelled'
 	};
+	/** MangaBaka's formats, as the `format` filter names them. */
+	const FORMAT: Record<string, string> = {
+		manga: 'Manga',
+		manhwa: 'Manhwa',
+		manhua: 'Manhua',
+		oel: 'OEL',
+		other: 'Other'
+	};
+	/** MangaBaka's publication statuses, as the `publication` filter names them. */
+	const PUBLICATION: Record<string, string> = {
+		ongoing: 'Ongoing',
+		completed: 'Completed',
+		hiatus: 'Hiatus',
+		cancelled: 'Cancelled'
+	};
+	const UNKNOWN = 'unknown';
+	const NO_FACETS: ListFacets = { genres: [], statuses: [], formats: [], publications: [] };
 
 	let modules = $state<ModuleSummary[] | null>(null);
 	/** `general.selected_websites`, once loaded. */
@@ -31,6 +49,9 @@
 	let q = $state('');
 	let genres = $state<Record<string, Tri>>({});
 	let status = $state('');
+	let format = $state('');
+	let publication = $state('');
+	let mangabaka = $state<MangaBakaStatus | null>(null);
 	let filtersOpen = $state(false);
 
 	let items = $state<ListItem[]>([]);
@@ -38,7 +59,7 @@
 	let page = $state(1);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
-	let facets = $state<ListFacets>({ genres: [], statuses: [] });
+	let facets = $state<ListFacets>(NO_FACETS);
 
 	const selected = $derived(modules?.find((m) => m.id === module));
 	const names = $derived(new Map(modules?.map((m) => [m.id, m.name])));
@@ -46,7 +67,7 @@
 	const noWebsites = $derived(
 		modules !== null && websites !== null && !modules.some((m) => websites?.includes(m.id))
 	);
-	const filters = $derived<Filters>({ module, q, genres, status, page: 1 });
+	const filters = $derived<Filters>({ module, q, genres, status, format, publication, page: 1 });
 	const more = $derived(items.length < total);
 
 	function loadModules() {
@@ -61,6 +82,13 @@
 			.getSettings()
 			.then((settings) => (websites = settings.general.selected_websites))
 			.catch(() => (error = 'Could not load the selected websites.'));
+	});
+
+	$effect(() => {
+		api
+			.mangabakaStatus()
+			.then((s) => (mangabaka = s))
+			.catch(() => (mangabaka = null));
 	});
 
 	$effect(() => {
@@ -94,7 +122,7 @@
 		api
 			.listFacets(facetQuery({ ...emptyFilters(), module, q }))
 			.then((f) => (facets = f))
-			.catch(() => (facets = { genres: [], statuses: [] }));
+			.catch(() => (facets = NO_FACETS));
 	}
 
 	function reload() {
@@ -122,11 +150,21 @@
 		return { destroy: () => observer.disconnect() };
 	}
 
-	/** The website and status under a title. */
+	/** The website, format and status under a title: MangaBaka's status when it knows one,
+	 * else the list's. */
 	function subtitle(item: ListItem): string {
 		const site = names.get(item.module_id) ?? item.module_id;
-		const status = STATUS[item.status];
-		return status ? `${site} · ${status}` : site;
+		const status = PUBLICATION[item.publication] ?? STATUS[item.status];
+		return [site, FORMAT[item.format], status].filter(Boolean).join(' · ');
+	}
+
+	/** The options of a MangaBaka facet: every known value, then the titles without one. */
+	function options(labels: Record<string, string>, counts: ListFacets['formats']) {
+		const count = (value: string) => counts.find((c) => c.value === value)?.count ?? 0;
+		return [
+			...Object.entries(labels).map(([value, label]) => ({ value, label, count: count(value) })),
+			{ value: UNKNOWN, label: 'Unknown', count: count(UNKNOWN) }
+		];
 	}
 
 	/** A stable hue per title for its placeholder cover. */
@@ -146,6 +184,7 @@
 
 <div class="page">
 	<h1>Discover</h1>
+	<MangaBakaHint status={mangabaka} />
 
 	{#if noWebsites}
 		<p class="muted empty">
@@ -187,6 +226,26 @@
 						{/each}
 					</select>
 				</div>
+				{#if mangabaka?.downloaded}
+					<div class="status">
+						<label class="label" for="format">Format</label>
+						<select id="format" class="input" bind:value={format}>
+							<option value="">Any</option>
+							{#each options(FORMAT, facets.formats) as option (option.value)}
+								<option value={option.value}>{option.label} ({option.count})</option>
+							{/each}
+						</select>
+					</div>
+					<div class="status">
+						<label class="label" for="publication">Publication</label>
+						<select id="publication" class="input" bind:value={publication}>
+							<option value="">Any</option>
+							{#each options(PUBLICATION, facets.publications) as option (option.value)}
+								<option value={option.value}>{option.label} ({option.count})</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
 				<GenreChips genres={facets.genres} bind:states={genres} />
 			</aside>
 

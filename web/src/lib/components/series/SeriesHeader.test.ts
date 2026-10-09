@@ -26,6 +26,7 @@ describe('SeriesHeader', () => {
 			artists: '',
 			genres: [],
 			summary: '',
+			summary_from_mangabaka: false,
 			status: 'ongoing',
 			in_library: true,
 			chapters: [
@@ -46,5 +47,39 @@ describe('SeriesHeader', () => {
 			d.querySelector('dd')?.textContent
 		]);
 		expect(facts).toContainEqual(['Chapters', '3 · 2 seen']);
+	});
+
+	it("marks MangaBaka's description and shows its format and year", () => {
+		const series: SeriesInfo = {
+			module_id: 'm',
+			link: '/s',
+			title: 'Series',
+			alt_titles: '',
+			authors: '',
+			artists: '',
+			genres: [],
+			summary: 'A description from MangaBaka.',
+			summary_from_mangabaka: true,
+			format: 'manhwa',
+			year: 2022,
+			status: 'ongoing',
+			in_library: false,
+			chapters: []
+		};
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api: {} as Api, series, website: 'Example' }
+		});
+		flushSync();
+
+		const summary = document.querySelector('.summary');
+		expect(summary?.textContent).toContain('A description from MangaBaka.');
+		expect(summary?.textContent).toContain('from MangaBaka');
+		const facts = [...document.querySelectorAll('.facts > div')].map((d) => [
+			d.querySelector('dt')?.textContent,
+			d.querySelector('dd')?.textContent
+		]);
+		expect(facts).toContainEqual(['Format', 'Manhwa']);
+		expect(facts).toContainEqual(['Year', '2022']);
 	});
 });

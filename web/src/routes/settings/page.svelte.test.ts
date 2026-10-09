@@ -12,8 +12,10 @@ vi.mock('#lib/app.ts', async () => {
 	const { createApi } = await import('#lib/api/client.ts');
 	const { createMockBackend } = await import('#lib/api/mock.ts');
 	const { SessionStore } = await import('#lib/session.svelte.ts');
+	const { EventStore } = await import('#lib/events.svelte.ts');
 	const api = createApi({ baseUrl: 'http://fmd2r.test', fetch: createMockBackend().fetch });
-	return { api, session: new SessionStore() };
+	const events = new EventStore({ url: '/api/events', connect: () => ({}) as never });
+	return { api, events, session: new SessionStore() };
 });
 
 /** The titles of the sections on show. */

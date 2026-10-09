@@ -214,6 +214,19 @@ export const SETTINGS_SECTIONS: Section[] = [
 		]
 	},
 	{
+		id: 'metadata',
+		title: 'MangaBaka database',
+		fields: [
+			number(
+				'metadata.mangabaka.refresh_days',
+				'Update every (days)',
+				0,
+				365,
+				'Once downloaded. 0 turns automatic updates off.'
+			)
+		]
+	},
+	{
 		id: 'covers',
 		title: 'Covers',
 		fields: [

@@ -9,8 +9,8 @@ use utoipa::ToSchema;
 
 use super::model::{
     ConnectionSettings, CoverSettings, FavoriteSettings, GeneralSettings, ImageSettings,
-    LogSettings, ModuleUpdaterSettings, OutputSettings, ProxySettings, ProxyType, SaveToSettings,
-    ServerSettings, Settings, UpdateListSettings, XPathSettings,
+    LogSettings, MetadataSettings, ModuleUpdaterSettings, OutputSettings, ProxySettings, ProxyType,
+    SaveToSettings, ServerSettings, Settings, UpdateListSettings, XPathSettings,
 };
 use super::module_overrides::{HttpOverrides, ProxyOverride, ProxyOverrideType};
 
@@ -31,6 +31,7 @@ pub struct SettingsView {
     pub xpath: XPathSettings,
     pub covers: CoverSettings,
     pub logs: LogSettings,
+    pub metadata: MetadataSettings,
 }
 
 impl Default for SettingsView {
@@ -54,6 +55,7 @@ impl From<&Settings> for SettingsView {
             xpath,
             covers,
             logs,
+            metadata,
         } = s.clone();
         Self {
             general,
@@ -68,6 +70,7 @@ impl From<&Settings> for SettingsView {
             xpath,
             covers,
             logs,
+            metadata,
         }
     }
 }

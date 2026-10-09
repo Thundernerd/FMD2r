@@ -71,7 +71,15 @@ pub struct SeriesInfo {
     /// The module's comma-separated genres, split.
     pub genres: Vec<String>,
     pub status: SeriesStatus,
+    /// The website's summary or, when it gives none, MangaBaka's description
+    /// ([`SeriesInfo::summary_from_mangabaka`]).
     pub summary: String,
+    /// Whether `summary` is MangaBaka's description, for the UI to say so.
+    pub summary_from_mangabaka: bool,
+    /// The format of the series' MangaBaka match (`manga`, `manhwa`, `manhua`, `oel`, `other`).
+    pub format: Option<String>,
+    /// The year of the series' MangaBaka match.
+    pub year: Option<i64>,
     /// The cover through `/api/covers`; `None` when the module reports none.
     pub cover_url: Option<String>,
     /// In module order.
@@ -128,6 +136,7 @@ pub(crate) async fn get(
     let info = fetch_info(&state, &query.module, &query.link).await?;
     // FMD2 looks up the downloaded chapters by the link the module reports
     // (mangadownloader/forms/frmMain.pas:2207).
+    let mangabaka = mangabaka_metadata(&state, &query.module, [&query.link, &info.link]).await;
     let (module, link) = (query.module.clone(), info.link.clone());
     let (downloaded, favorite) = state
         .blocking(move |db| -> Result<_, ApiError> {
@@ -136,7 +145,62 @@ pub(crate) async fn get(
             Ok((downloaded, favorite.is_some()))
         })
         .await?;
-    Ok(Json(view(&query.module, info, &downloaded, favorite)))
+    let mut series = view(&query.module, info, &downloaded, favorite);
+    if let Some(m) = mangabaka {
+        if series.summary.trim().is_empty() && !m.description.trim().is_empty() {
+            series.summary = m.description;
+            series.summary_from_mangabaka = true;
+        }
+        series.format = m.format;
+        series.year = m.year;
+    }
+    Ok(Json(series))
+}
+
+/// What MangaBaka's database says about a series.
+struct MangaBakaMetadata {
+    description: String,
+    format: Option<String>,
+    year: Option<i64>,
+}
+
+/// The MangaBaka metadata of `module`'s series at the first of `links` with an accepted match;
+/// `None` without the database or a match. A failed lookup only leaves the metadata out.
+async fn mangabaka_metadata(
+    state: &AppState,
+    module: &str,
+    links: [&String; 2],
+) -> Option<MangaBakaMetadata> {
+    let meta = state.metadata.as_ref()?.current()?;
+    let lists = state.lists.clone()?;
+    let module = module.to_owned();
+    let links = links.map(String::clone);
+    let found = crate::state::off_thread(move || -> Result<_, fmd_store::StoreError> {
+        for link in &links {
+            let Some(m) = lists.matches().get(&module, link)? else {
+                continue;
+            };
+            let Some(id) = m.series_id.filter(|_| m.confidence.is_accepted()) else {
+                continue;
+            };
+            let description = meta.series(id)?.map(|s| s.description).unwrap_or_default();
+            return Ok(Some(MangaBakaMetadata {
+                description,
+                format: m.format,
+                year: m.year,
+            }));
+        }
+        Ok(None)
+    })
+    .await;
+    match found {
+        Ok(Ok(found)) => found,
+        Ok(Err(e)) => {
+            tracing::warn!(target: "fmd_server", "MangaBaka metadata of a series: {e}");
+            None
+        }
+        Err(_) => None,
+    }
 }
 
 /// The info of the series at `link` from module `module`, from the cache when it is recent.
@@ -227,6 +291,9 @@ fn view(module: &str, info: MangaInfo, downloaded: &[String], in_library: bool) 
             .collect(),
         status: SeriesStatus::from_fmd(&info.status),
         summary: info.summary,
+        summary_from_mangabaka: false,
+        format: None,
+        year: None,
         chapters: info
             .chapters
             .into_iter()

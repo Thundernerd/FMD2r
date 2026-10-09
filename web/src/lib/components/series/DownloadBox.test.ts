@@ -14,6 +14,7 @@ const series: SeriesInfo = {
 	artists: '',
 	genres: [],
 	summary: '',
+	summary_from_mangabaka: false,
 	status: 'ongoing',
 	in_library: true,
 	chapters: [

@@ -119,6 +119,10 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         out_of(s.logs.max_file_size_mb, 1..=1024),
     );
     check("logs.max_files", out_of(s.logs.max_files, 1..=100));
+    check(
+        "metadata.mangabaka.refresh_days",
+        out_of(s.metadata.mangabaka.refresh_days, 0..=365),
+    );
     let bad_flaresolverr = !c.flaresolverr_url.trim().is_empty()
         && super::websitebypass::flaresolverr_address(&c.flaresolverr_url).is_none();
     check(

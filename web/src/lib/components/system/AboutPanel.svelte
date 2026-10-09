@@ -148,6 +148,16 @@
 	{:else if loading}
 		<p class="muted">Running checks…</p>
 	{/if}
+
+	<h2>Credits</h2>
+	<p class="small credits">
+		List titles’ formats, publication statuses and descriptions come from
+		<a href="https://mangabaka.org" target="_blank" rel="noreferrer">MangaBaka</a>, under its
+		<a href="https://mangabaka.org/about/data-license" target="_blank" rel="noreferrer"
+			>data licence (CC BY-NC-SA 4.0)</a
+		>. Fields MangaBaka takes from AniList, MyAnimeList, MangaUpdates and other providers keep those
+		providers’ terms. Each install downloads its own copy; none is shipped with FMD2r.
+	</p>
 </div>
 
 <style>
@@ -167,6 +177,10 @@
 	}
 	h2 {
 		font-size: var(--fs-lg);
+	}
+	.credits {
+		margin: 0;
+		max-width: 65ch;
 	}
 	.table {
 		width: 100%;

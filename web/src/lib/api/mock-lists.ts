@@ -44,6 +44,11 @@ const DB_SIZE = 60;
 const UPDATE_PAGES = 8;
 const PAGE_SIZE = 50;
 
+/** The formats and publication statuses titles get once the MangaBaka database is downloaded;
+ * `unknown` stands for a title without a match. */
+const FORMATS = ['manga', 'manga', 'manhwa', 'manhua', 'oel', 'other', 'unknown'];
+const PUBLICATIONS = ['ongoing', 'completed', 'completed', 'hiatus', 'cancelled', 'unknown'];
+
 /** Julian day number of 2026-10-08 (`DateToJDN`). */
 const TODAY_JDN = 2_461_322;
 
@@ -61,7 +66,9 @@ function title(module: string, i: number): ListItem {
 		genres: [...new Set(genres)],
 		status: String(seed % 4),
 		numchapter: 1 + (seed % 200),
-		added_jdn: TODAY_JDN - (i % 40)
+		added_jdn: TODAY_JDN - (i % 40),
+		format: pick(FORMATS, i),
+		publication: pick(PUBLICATIONS, i * 5 + 1)
 	};
 }
 
@@ -89,8 +96,10 @@ export interface MockLists {
 }
 
 /** @param selected The selected websites (`general.selected_websites`), which a search without
- * a module covers. */
-export function createMockLists(selected: () => string[]): MockLists {
+ * a module covers.
+ * @param matched Whether the MangaBaka database is downloaded; without it every title's format
+ * and publication status are `unknown`. */
+export function createMockLists(selected: () => string[], matched: () => boolean): MockLists {
 	const lists = new Map<string, ListItem[]>(
 		Object.entries(LIST_SIZES).map(([module, size]) => [module, list(module, size)])
 	);
@@ -107,8 +116,12 @@ export function createMockLists(selected: () => string[]): MockLists {
 		const include = withFilters ? split('genres_include') : [];
 		const exclude = withFilters ? split('genres_exclude') : [];
 		const status = withFilters ? params.get('status') : null;
+		const format = withFilters ? params.get('format') : null;
+		const publication = withFilters ? params.get('publication') : null;
 		const modules = module ? [module] : selected();
-		const items = modules.flatMap((m) => lists.get(m) ?? []);
+		const items = modules
+			.flatMap((m) => lists.get(m) ?? [])
+			.map((item) => (matched() ? item : { ...item, format: 'unknown', publication: 'unknown' }));
 		return items
 			.filter((item) => {
 				const titleWords = `${item.title} ${item.alttitles}`.toLowerCase().split(/\s+/);
@@ -117,7 +130,9 @@ export function createMockLists(selected: () => string[]): MockLists {
 					words.every((w) => titleWords.some((t) => t.startsWith(w))) &&
 					include.every((g) => genres.includes(g)) &&
 					!exclude.some((g) => genres.includes(g)) &&
-					(!status || item.status === status)
+					(!status || item.status === status) &&
+					(!format || item.format === format) &&
+					(!publication || item.publication === publication)
 				);
 			})
 			.sort((a, b) => a.title.localeCompare(b.title, 'en', { sensitivity: 'base' }));
@@ -171,7 +186,9 @@ export function createMockLists(selected: () => string[]): MockLists {
 			const items = matching(params, false);
 			return {
 				genres: counts(items.flatMap((i) => i.genres)),
-				statuses: counts(items.map((i) => i.status))
+				statuses: counts(items.map((i) => i.status)),
+				formats: counts(items.map((i) => i.format)),
+				publications: counts(items.map((i) => i.publication))
 			};
 		},
 

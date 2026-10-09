@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use rusqlite::types::Value;
-use rusqlite::{Row, Statement, params, params_from_iter};
+use rusqlite::{OptionalExtension, Row, Statement, params, params_from_iter};
 
 use crate::db::Db;
 use crate::error::Result;
@@ -13,6 +13,7 @@ use crate::error::Result;
 const MIGRATIONS: &[&str] = &[
     include_str!("migrations/lists_v1.sql"),
     include_str!("migrations/lists_v2.sql"),
+    include_str!("migrations/lists_v3.sql"),
 ];
 
 /// Records that `module_id`'s list changed now, inside the transaction that changed it.
@@ -43,6 +44,11 @@ impl ListsDb {
     pub fn masterlist(&self) -> MasterListRepo<'_> {
         MasterListRepo { db: &self.db }
     }
+
+    /// The list titles' matches in MangaBaka's database.
+    pub fn matches(&self) -> MatchRepo<'_> {
+        MatchRepo { db: &self.db }
+    }
 }
 
 /// One manga in a module's list: the columns of FMD2's per-site list table
@@ -67,6 +73,11 @@ pub struct MangaListing {
 pub struct MasterListEntry {
     pub module_id: String,
     pub listing: MangaListing,
+    /// The format of its accepted MangaBaka match; `None` without one, or when it does not say.
+    pub format: Option<String>,
+    /// The publication status of its accepted MangaBaka match; `None` without one, or when it
+    /// does not say.
+    pub publication: Option<String>,
 }
 
 /// Filters applied on top of the text query by [`MasterListRepo::search`].
@@ -80,7 +91,17 @@ pub struct SearchFilters {
     pub exclude_genres: Vec<String>,
     /// Exact `status` value.
     pub status: Option<String>,
+    /// The format of the title's accepted MangaBaka match (`manga`, `manhwa`, `manhua`, `oel`,
+    /// `other`), or [`UNKNOWN`] for a title without one.
+    pub format: Option<String>,
+    /// The publication status of the title's accepted MangaBaka match (`ongoing`, `completed`,
+    /// `hiatus`, `cancelled`), or [`UNKNOWN`] for a title without one.
+    pub publication: Option<String>,
 }
+
+/// The format or publication status of a title with no accepted MangaBaka match, or whose match
+/// does not say.
+pub const UNKNOWN: &str = "unknown";
 
 /// Which slice of the ordered results to return.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,6 +129,11 @@ pub struct FacetCount {
 pub struct Facets {
     pub genres: Vec<FacetCount>,
     pub statuses: Vec<FacetCount>,
+    /// The formats of the listings' accepted MangaBaka matches, [`UNKNOWN`] for the rest.
+    pub formats: Vec<FacetCount>,
+    /// The publication statuses of the listings' accepted MangaBaka matches, [`UNKNOWN`] for the
+    /// rest.
+    pub publications: Vec<FacetCount>,
 }
 
 /// A module's list at a glance, from [`MasterListRepo::summaries`].
@@ -165,6 +191,8 @@ fn entry_from_row(row: &Row<'_>) -> rusqlite::Result<MasterListEntry> {
             numchapter: row.get(9)?,
             added_jdn: row.get(10)?,
         },
+        format: row.get(11)?,
+        publication: row.get(12)?,
     })
 }
 
@@ -295,7 +323,7 @@ impl MasterListRepo<'_> {
 
         let conn = self.db.lock();
         let total = conn.query_row(
-            &format!("SELECT COUNT(*) FROM masterlist m {where_clause}"),
+            &format!("SELECT COUNT(*) FROM masterlist m {MATCH_JOIN} {where_clause}"),
             params_from_iter(&args),
             |r| r.get(0),
         )?;
@@ -303,8 +331,10 @@ impl MasterListRepo<'_> {
         args.push(page.offset.into());
         let mut stmt = conn.prepare(&format!(
             "SELECT m.module_id, m.link, m.title, m.alttitles, m.authors, m.artists, m.genres,
-                    m.status, m.summary, m.numchapter, m.added_jdn
-             FROM masterlist m {where_clause}
+                    m.status, m.summary, m.numchapter, m.added_jdn,
+                    IIF(mm.series_id IS NULL, NULL, mm.format),
+                    IIF(mm.series_id IS NULL, NULL, mm.status)
+             FROM masterlist m {MATCH_JOIN} {where_clause}
              ORDER BY m.title COLLATE NOCASE, m.module_id, m.link
              LIMIT ? OFFSET ?"
         ))?;
@@ -323,11 +353,14 @@ impl MasterListRepo<'_> {
         let (where_clause, args) = where_clause(query, filters);
         let conn = self.db.lock();
         let mut stmt = conn.prepare(&format!(
-            "SELECT m.genres, m.status FROM masterlist m {where_clause}"
+            "SELECT m.genres, m.status, {FORMAT_VALUE}, {PUBLICATION_VALUE}
+             FROM masterlist m {MATCH_JOIN} {where_clause}"
         ))?;
         let mut rows = stmt.query(params_from_iter(&args))?;
         let mut genres: HashMap<String, u64> = HashMap::new();
         let mut statuses: HashMap<String, u64> = HashMap::new();
+        let mut formats: HashMap<String, u64> = HashMap::new();
+        let mut publications: HashMap<String, u64> = HashMap::new();
         while let Some(row) = rows.next()? {
             let row_genres: &str = row.get_ref(0)?.as_str().unwrap_or_default();
             let mut seen: HashSet<&str> = HashSet::new();
@@ -342,10 +375,14 @@ impl MasterListRepo<'_> {
             }
             let status: String = row.get(1)?;
             *statuses.entry(status).or_default() += 1;
+            *formats.entry(row.get(2)?).or_default() += 1;
+            *publications.entry(row.get(3)?).or_default() += 1;
         }
         Ok(Facets {
             genres: sorted_counts(genres),
             statuses: sorted_counts(statuses),
+            formats: sorted_counts(formats),
+            publications: sorted_counts(publications),
         })
     }
 
@@ -383,8 +420,16 @@ fn sorted_counts(counts: HashMap<String, u64>) -> Vec<FacetCount> {
     counts
 }
 
+/// Each listing's MangaBaka match, as `mm`.
+const MATCH_JOIN: &str = "LEFT JOIN metadata_matches mm
+    ON mm.module_id = m.module_id AND mm.link = m.link";
+/// A listing's format facet value: its accepted match's, else [`UNKNOWN`].
+const FORMAT_VALUE: &str = "CASE WHEN mm.series_id IS NOT NULL AND mm.format IS NOT NULL THEN mm.format ELSE 'unknown' END";
+/// A listing's publication facet value: its accepted match's, else [`UNKNOWN`].
+const PUBLICATION_VALUE: &str = "CASE WHEN mm.series_id IS NOT NULL AND mm.status IS NOT NULL THEN mm.status ELSE 'unknown' END";
+
 /// The `WHERE` clause (empty when nothing filters) and its arguments for
-/// [`MasterListRepo::search`] and [`MasterListRepo::facets`], over `masterlist m`.
+/// [`MasterListRepo::search`] and [`MasterListRepo::facets`], over `masterlist m` [`MATCH_JOIN`]ed.
 fn where_clause(query: &str, filters: &SearchFilters) -> (String, Vec<Value>) {
     let mut conds: Vec<String> = Vec::new();
     let mut args: Vec<Value> = Vec::new();
@@ -411,6 +456,15 @@ fn where_clause(query: &str, filters: &SearchFilters) -> (String, Vec<Value>) {
     if let Some(status) = &filters.status {
         conds.push("m.status = ?".into());
         args.push(status.clone().into());
+    }
+    for (value, expr) in [
+        (&filters.format, FORMAT_VALUE),
+        (&filters.publication, PUBLICATION_VALUE),
+    ] {
+        if let Some(value) = value {
+            conds.push(format!("{expr} = ?"));
+            args.push(value.clone().into());
+        }
     }
     if conds.is_empty() {
         (String::new(), args)
@@ -483,4 +537,218 @@ fn lossy_text(row: &Row<'_>, i: usize) -> rusqlite::Result<String> {
             String::from_utf8_lossy(bytes).into_owned()
         }
     })
+}
+
+/// How a list title's match in MangaBaka's database was decided (T71's tiers,
+/// docs/research/metadata-sources.md, "Confidence threshold").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MatchConfidence {
+    /// The title's link is one of the series' links (WebToons `title_no`).
+    Link,
+    /// An ID the website gives for the title on another site is one of the series'.
+    CrossId,
+    /// The title matches, and so does a person the list names.
+    TitleAuthor,
+    /// The title matches exactly one series, and the list names no people.
+    TitleUnique,
+    /// Rejected: the title matches, but none of the people the list names do.
+    AuthorConflict,
+    /// Rejected: the title matches several series.
+    Ambiguous,
+    /// Rejected: no series matches.
+    None,
+}
+
+impl MatchConfidence {
+    pub const ALL: [Self; 7] = [
+        Self::Link,
+        Self::CrossId,
+        Self::TitleAuthor,
+        Self::TitleUnique,
+        Self::AuthorConflict,
+        Self::Ambiguous,
+        Self::None,
+    ];
+
+    /// The name stored in `lists.db`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Link => "link",
+            Self::CrossId => "cross-id",
+            Self::TitleAuthor => "title+author",
+            Self::TitleUnique => "title-unique",
+            Self::AuthorConflict => "author-conflict",
+            Self::Ambiguous => "ambiguous",
+            Self::None => "none",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.as_str() == s)
+    }
+
+    /// Whether the match is used anywhere.
+    pub fn is_accepted(self) -> bool {
+        matches!(
+            self,
+            Self::Link | Self::CrossId | Self::TitleAuthor | Self::TitleUnique
+        )
+    }
+}
+
+/// A list title to match: what matching reads of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchInput {
+    pub link: String,
+    pub title: String,
+    pub alttitles: String,
+    pub authors: String,
+    pub artists: String,
+    /// What the title is matched on, as stored with its match.
+    pub fingerprint: String,
+}
+
+/// A list title's match, as stored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredMatch {
+    /// The matched series; only for an accepted confidence.
+    pub series_id: Option<i64>,
+    pub confidence: MatchConfidence,
+    /// The series' format facet value (`manga`, `manhwa`, `manhua`, `oel`, `other`).
+    pub format: Option<String>,
+    /// The series' publication facet value (`ongoing`, `completed`, `hiatus`, `cancelled`).
+    pub status: Option<String>,
+    pub year: Option<i64>,
+}
+
+/// The fingerprint of a `masterlist m` row: the columns matching reads.
+const FINGERPRINT: &str =
+    "m.title || char(31) || m.alttitles || char(31) || m.authors || char(31) || m.artists";
+
+/// Repository for the list titles' MangaBaka matches. Obtain it with [`ListsDb::matches`].
+pub struct MatchRepo<'a> {
+    db: &'a Db,
+}
+
+impl MatchRepo<'_> {
+    /// The titles of `module_id` that have no match yet, or changed since they were matched.
+    pub fn pending(&self, module_id: &str) -> Result<Vec<MatchInput>> {
+        self.inputs(
+            module_id,
+            &format!("AND (mm.link IS NULL OR mm.fingerprint <> {FINGERPRINT})"),
+        )
+    }
+
+    /// Every title of `module_id`.
+    pub fn all(&self, module_id: &str) -> Result<Vec<MatchInput>> {
+        self.inputs(module_id, "")
+    }
+
+    fn inputs(&self, module_id: &str, condition: &str) -> Result<Vec<MatchInput>> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT m.link, m.title, m.alttitles, m.authors, m.artists, {FINGERPRINT}
+             FROM masterlist m {MATCH_JOIN}
+             WHERE m.module_id = ?1 {condition}
+             ORDER BY m.id"
+        ))?;
+        let inputs = stmt
+            .query_map([module_id], |r| {
+                Ok(MatchInput {
+                    link: r.get(0)?,
+                    title: r.get(1)?,
+                    alttitles: r.get(2)?,
+                    authors: r.get(3)?,
+                    artists: r.get(4)?,
+                    fingerprint: r.get(5)?,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(inputs)
+    }
+
+    /// Stores the matches of `module_id`'s titles, each with the fingerprint of the input it was
+    /// decided on, in one transaction.
+    pub fn store<'m, I>(&self, module_id: &str, matches: I) -> Result<()>
+    where
+        I: IntoIterator<Item = (&'m MatchInput, &'m StoredMatch)>,
+    {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare_cached(
+                "INSERT OR REPLACE INTO metadata_matches
+                     (module_id, link, series_id, confidence, format, status, year, fingerprint)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )?;
+            for (input, m) in matches {
+                stmt.execute(params![
+                    module_id,
+                    input.link,
+                    m.series_id,
+                    m.confidence.as_str(),
+                    m.format,
+                    m.status,
+                    m.year,
+                    input.fingerprint,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Drops the matches of titles `module_id` no longer lists.
+    pub fn prune(&self, module_id: &str) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute(
+            "DELETE FROM metadata_matches WHERE module_id = ?1
+             AND link NOT IN (SELECT link FROM masterlist WHERE module_id = ?1)",
+            [module_id],
+        )?;
+        Ok(())
+    }
+
+    /// Drops every match, as when the database they point into is removed.
+    pub fn clear(&self) -> Result<()> {
+        self.db.lock().execute("DELETE FROM metadata_matches", [])?;
+        Ok(())
+    }
+
+    /// The stored match of `module_id`'s title at `link`.
+    pub fn get(&self, module_id: &str, link: &str) -> Result<Option<StoredMatch>> {
+        let conn = self.db.lock();
+        let row = conn
+            .query_row(
+                "SELECT series_id, confidence, format, status, year FROM metadata_matches
+                 WHERE module_id = ?1 AND link = ?2",
+                [module_id, link],
+                |r| {
+                    let confidence: String = r.get(1)?;
+                    Ok((
+                        confidence,
+                        StoredMatch {
+                            series_id: r.get(0)?,
+                            confidence: MatchConfidence::None,
+                            format: r.get(2)?,
+                            status: r.get(3)?,
+                            year: r.get(4)?,
+                        },
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((confidence, stored)) = row else {
+            return Ok(None);
+        };
+        let confidence =
+            MatchConfidence::parse(&confidence).ok_or(crate::StoreError::InvalidColumn {
+                column: "metadata_matches.confidence",
+                value: confidence,
+            })?;
+        Ok(Some(StoredMatch {
+            confidence,
+            ..stored
+        }))
+    }
 }
