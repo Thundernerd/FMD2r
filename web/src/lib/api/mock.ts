@@ -2,6 +2,7 @@ import type { EventSourceLike } from '#lib/events.svelte.ts';
 import { createMockFavorites } from './mock-favorites';
 import { mockImportReport } from './mock-import';
 import { createMockLists } from './mock-lists';
+import { createMockMetadata } from './mock-metadata';
 import { Invalid, createMockSettings } from './mock-settings';
 import type { paths } from './schema';
 import type {
@@ -270,6 +271,9 @@ const SERIES: Record<
 		status: 'ongoing',
 		summary:
 			'The demon king is dead and the hero party has gone home. Frieren, the elf mage who outlives them all, sets out to understand the people she travelled with.\r\nDecades later, she retraces their journey with a new apprentice, visiting the places they saved and the graves of the friends she barely got to know.\r\nAlong the way she learns what a short human life is worth, and why her companions bothered to spend theirs with her.',
+		summary_from_mangabaka: false,
+		format: 'manga',
+		year: 2020,
 		cover_url: null,
 		in_library: true,
 		count: 142,
@@ -283,6 +287,9 @@ const SERIES: Record<
 		genres: ['Action', 'Adventure', 'Comedy', 'Shounen'],
 		status: 'ongoing',
 		summary: 'Gol D. Roger was the King of the Pirates. His treasure is still out there.',
+		summary_from_mangabaka: true,
+		format: 'manga',
+		year: 1997,
 		cover_url: null,
 		in_library: false,
 		count: 2000,
@@ -314,6 +321,8 @@ export interface MockOptions {
 	 * Defaults to `sessionStorage['fmd2r.mock.series-delay-ms']`, or no delay.
 	 */
 	seriesDelayMs?: number;
+	/** Start with a MangaBaka database downloaded, so list titles carry formats and statuses. */
+	mangabaka?: boolean;
 }
 
 const PASSWORD_KEY = 'fmd2r.mock.password';
@@ -341,7 +350,8 @@ const store = (key: string, value: string | null) => {
 
 export function createMockBackend({
 	password = stored(PASSWORD_KEY),
-	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0)
+	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0),
+	mangabaka = false
 }: MockOptions = {}): MockBackend {
 	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
 	let loggedIn = stored(SESSION_KEY) !== null;
@@ -502,7 +512,11 @@ export function createMockBackend({
 	};
 
 	const settings = createMockSettings();
-	const lists = createMockLists(() => settings.getSettings().general.selected_websites);
+	const metadata = createMockMetadata(mangabaka);
+	const lists = createMockLists(
+		() => settings.getSettings().general.selected_websites,
+		metadata.downloaded
+	);
 	const modules = (): ModuleSummary[] =>
 		settings.listModules().map((m) => ({
 			...m,
@@ -751,6 +765,22 @@ export function createMockBackend({
 		if (route === 'GET /api/modules') return json(modules());
 		if (route === 'GET /api/lists/search') return json(lists.search(searchParams));
 		if (route === 'GET /api/lists/facets') return json(lists.facets(searchParams));
+		if (route === 'GET /api/metadata/mangabaka') return json(metadata.status());
+		if (route === 'POST /api/metadata/mangabaka/download') {
+			return metadata.start()
+				? new Response(null, { status: 202 })
+				: json({ status: 409, detail: 'already downloading' }, 409);
+		}
+		if (route === 'POST /api/metadata/mangabaka/cancel') {
+			return metadata.cancel()
+				? new Response(null, { status: 202 })
+				: json({ status: 409, detail: 'not downloading' }, 409);
+		}
+		if (route === 'DELETE /api/metadata/mangabaka') {
+			return metadata.remove()
+				? new Response(null, { status: 204 })
+				: json({ status: 409, detail: 'a download is running' }, 409);
+		}
 		const listJob = /^POST \/api\/lists\/([^/]+)\/(update|import-db|cancel)$/.exec(route);
 		if (listJob?.[1]) {
 			const module = decodeURIComponent(listJob[1]);
@@ -920,6 +950,7 @@ export function createMockBackend({
 				emit('job.state', job);
 			}
 			lists.tick((event) => emit(`job.lists.${event.kind}`, event));
+			metadata.tick((event) => emit(`job.metadata.${event.kind}`, event));
 			// Late enough not to disturb the smoke tests, early enough to see in `npm run dev:mock`.
 			if (ticks === 30) {
 				const item: InboxItem = {

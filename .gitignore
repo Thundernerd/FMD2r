@@ -33,3 +33,6 @@ rustc-ice-*.txt
 /data
 # xpath-fpc: default output of crates/xpath-fpc/build.sh
 /crates/xpath-fpc/build
+# MangaBaka's database and dump: each install downloads its own (T73)
+metadata.db
+*.jsonl.zst

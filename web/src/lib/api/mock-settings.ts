@@ -92,6 +92,7 @@ export const defaultSettings = (): Settings => ({
 	},
 	covers: { revalidate_after_hours: 168, cache_size_mb: 256 },
 	logs: { max_file_size_mb: 10, max_files: 5 },
+	metadata: { mangabaka: { refresh_days: 7 } },
 	server: {
 		bind: '127.0.0.1:8080',
 		has_auth_token: false,

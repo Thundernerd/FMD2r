@@ -131,3 +131,26 @@ test('with no website selected Discover links to the selection', async ({ page }
 	await expect(page).toHaveURL(/\/settings#section-websites$/);
 	await expect(websites).toBeInViewport();
 });
+
+test('the MangaBaka database is downloaded on request and adds format facets', async ({
+	page
+}, info) => {
+	test.skip(info.project.name === 'phone', 'the filters are a drawer on a phone');
+	await page.goto('/discover');
+	const filters = page.getByRole('complementary', { name: 'Filters' });
+	await expect(filters.getByRole('combobox', { name: 'Status' })).toBeVisible();
+	await expect(filters.getByRole('combobox', { name: 'Format' })).toHaveCount(0);
+
+	await page.getByRole('note').getByRole('link', { name: 'Set up the MangaBaka database' }).click();
+	await expect(page.getByRole('heading', { name: 'MangaBaka database' })).toBeVisible();
+	await expect(page.getByText('Not downloaded.')).toBeVisible();
+	await page.getByRole('button', { name: 'Download' }).click();
+	await expect(page.getByRole('progressbar')).toBeVisible();
+	await expect(page.getByText(/^Built /)).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole('button', { name: 'Remove' })).toBeVisible();
+
+	await page.getByRole('link', { name: 'Discover' }).first().click();
+	await expect(filters.getByRole('combobox', { name: 'Format' })).toBeVisible();
+	await expect(filters.getByRole('combobox', { name: 'Publication' })).toBeVisible();
+	await expect(page.getByRole('note')).toHaveCount(0);
+});

@@ -15,6 +15,7 @@ import type {
 	JobState,
 	ListFacets,
 	ListJobStarted,
+	MangaBakaStatus,
 	LogLine,
 	ModuleSettingsView,
 	ModuleSummary,
@@ -143,6 +144,17 @@ export interface Api {
 	importListDb(module: string): Promise<ListJobStarted>;
 	/** Stops a module's list job; rejects with status 409 when none runs. */
 	cancelListJob(module: string): Promise<void>;
+	/** The MangaBaka database's date, size and download progress. */
+	mangabakaStatus(): Promise<MangaBakaStatus>;
+	/**
+	 * Starts downloading (or updating) the MangaBaka database; progress follows as
+	 * `job.metadata.*` events. Rejects with status 409 while a download runs.
+	 */
+	downloadMangabaka(): Promise<void>;
+	/** Stops the running download; rejects with status 409 when none runs. */
+	cancelMangabaka(): Promise<void>;
+	/** Deletes the MangaBaka database; rejects with status 409 while a download runs. */
+	removeMangabaka(): Promise<void>;
 	/** The library, in library order. */
 	listFavorites(): Promise<FavoriteView[]>;
 	/**
@@ -418,6 +430,21 @@ export function createApi({
 				params: { path: { module } }
 			});
 			if (!response.ok) throw new ApiError(response.status, 'cancelListJob');
+		},
+		async mangabakaStatus() {
+			return unwrap('mangabakaStatus', await client.GET('/api/metadata/mangabaka'));
+		},
+		async downloadMangabaka() {
+			const { response } = await client.POST('/api/metadata/mangabaka/download');
+			if (!response.ok) throw new ApiError(response.status, 'downloadMangabaka');
+		},
+		async cancelMangabaka() {
+			const { response } = await client.POST('/api/metadata/mangabaka/cancel');
+			if (!response.ok) throw new ApiError(response.status, 'cancelMangabaka');
+		},
+		async removeMangabaka() {
+			const { response } = await client.DELETE('/api/metadata/mangabaka');
+			if (!response.ok) throw new ApiError(response.status, 'removeMangabaka');
 		},
 		async listFavorites() {
 			return unwrap('listFavorites', await client.GET('/api/favorites'));

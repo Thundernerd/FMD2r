@@ -45,6 +45,7 @@ const frieren: SeriesInfo = {
 	artists: '',
 	genres: [],
 	summary: '',
+	summary_from_mangabaka: false,
 	status: 'ongoing',
 	in_library: false,
 	chapters: [{ name: 'Chapter 1', link: '/c/1', downloaded: false }]

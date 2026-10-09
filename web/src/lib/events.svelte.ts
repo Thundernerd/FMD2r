@@ -6,6 +6,8 @@ import type {
 	ListEvent,
 	ListEventKind,
 	LogLine,
+	MetadataEvent,
+	MetadataEventKind,
 	TaskProgress,
 	TaskRemoved,
 	TaskStatusChange
@@ -53,6 +55,15 @@ const FAVORITES_EVENT_KINDS: FavoritesEventKind[] = [
 	'failed'
 ];
 
+/** The `job.metadata.<kind>` events the server sends. */
+const METADATA_EVENT_KINDS: MetadataEventKind[] = [
+	'started',
+	'progress',
+	'finished',
+	'cancelled',
+	'failed'
+];
+
 /** First reconnect delay; it doubles on every failed attempt up to the cap. */
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
@@ -69,6 +80,8 @@ export class EventStore {
 	lists = $state<Record<string, ListEvent>>({});
 	/** The latest favorites check event, or `null` before the first. */
 	favorites = $state<FavoritesEvent | null>(null);
+	/** The latest MangaBaka database download event, or `null` before the first. */
+	metadata = $state<MetadataEvent | null>(null);
 	/** Recent log lines, oldest first. */
 	logs: LogFeed;
 	connected = $state(false);
@@ -182,6 +195,11 @@ export class EventStore {
 		for (const kind of FAVORITES_EVENT_KINDS) {
 			es.addEventListener(`job.favorites.${kind}`, (ev) => {
 				this.favorites = JSON.parse(ev.data) as FavoritesEvent;
+			});
+		}
+		for (const kind of METADATA_EVENT_KINDS) {
+			es.addEventListener(`job.metadata.${kind}`, (ev) => {
+				this.metadata = JSON.parse(ev.data) as MetadataEvent;
 			});
 		}
 		es.addEventListener('log', (ev) => {

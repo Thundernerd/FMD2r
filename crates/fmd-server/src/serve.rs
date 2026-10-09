@@ -8,6 +8,7 @@ use fmd_core::accounts::AccountService;
 use fmd_core::download::{DownloadManager, EngineConfig, ModuleLookup};
 use fmd_core::favorites::{CheckerConfig, FavoritesChecker, TaskQueue};
 use fmd_core::lists::{DbImporter, ListJobs, ListUpdater};
+use fmd_core::metadata::{HttpDumpSource, MangaBakaDb, MangaDexLinks, Matcher, MetadataJobs};
 use fmd_core::module_updater::RepoConfig;
 use fmd_core::settings::{
     ConnectionSettings, ProxyType, SettingsService, write_websitebypass_config,
@@ -27,7 +28,7 @@ pub struct ServeConfig {
     /// The address to listen on (`--bind` / `FMD2R_BIND`); `None` takes the `server.bind`
     /// setting.
     pub bind: Option<SocketAddr>,
-    /// Holds `app.db`, `lists.db`, the Lua tree (`lua/`), the cover cache (`covers/`) and the log
+    /// Holds `app.db`, `lists.db`, `metadata.db` (once downloaded), the Lua tree (`lua/`), the cover cache (`covers/`) and the log
     /// files (`logs/`); created when missing.
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
@@ -173,6 +174,16 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                 jobs.register(&state.jobs);
                 state = state.with_list_jobs(jobs);
             }
+            if let Some(jobs) = metadata_jobs(&state, &runtime, &data_dir, modules.clone()) {
+                jobs.register(&state.jobs);
+                tokio::spawn(jobs.clone().schedule());
+                if let Some(lists) = &state.list_jobs {
+                    let matching = jobs.clone();
+                    lists
+                        .on_list_changed(move |id, terminate| matching.list_changed(id, terminate));
+                }
+                state = state.with_metadata(jobs);
+            }
             let engine = DownloadManager::open(EngineConfig {
                 db: state.db.clone(),
                 pool: runtime.pool.clone(),
@@ -281,6 +292,30 @@ fn list_jobs(
         state.settings.clone(),
         move |id: &str| modules(id),
         move |event| events.publish(ServerEvent::Lists(event)),
+    ))
+}
+
+/// The MangaBaka database in `data_dir` (downloaded only when asked for), matched against
+/// `state`'s `lists.db` with MangaDex's cross-site IDs read through `runtime`'s HTTP client, for
+/// the modules `modules` finds; its events go out as `job.metadata.*`. `None` without a
+/// `lists.db`.
+fn metadata_jobs(
+    state: &AppState,
+    runtime: &LuaRuntime,
+    data_dir: &std::path::Path,
+    modules: Arc<ModuleLookup>,
+) -> Option<MetadataJobs> {
+    let lists = state.lists.clone()?;
+    let source = HttpDumpSource::new(state.settings.clone());
+    let db = Arc::new(MangaBakaDb::open(data_dir, Arc::new(source)));
+    let matcher = Matcher::new(lists.clone(), MangaDexLinks::new(runtime.http.clone()));
+    Some(MetadataJobs::new(
+        db,
+        matcher,
+        lists,
+        move |id: &str| modules(id).map(|m| m.def().root_url),
+        state.settings.clone(),
+        state.metadata_events(),
     ))
 }
 

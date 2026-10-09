@@ -13,7 +13,7 @@ use crate::tools::ToolCheck;
 use crate::{ApiError, AppState};
 
 /// The databases [`About::databases`] reports, by file name in the data dir.
-const DATABASES: [&str; 2] = ["app.db", "lists.db"];
+const DATABASES: [&str; 3] = ["app.db", "lists.db", "metadata.db"];
 
 /// Diagnostics about the running server.
 #[derive(Serialize, ToSchema)]

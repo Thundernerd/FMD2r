@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, session } from '#lib/app.ts';
+	import { api, events, session } from '#lib/app.ts';
 	import { ValidationError } from '#lib/api/client.ts';
 	import type {
 		ModuleSettingsView,
@@ -13,6 +13,7 @@
 	} from '#lib/api/types.ts';
 	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
 	import DestinationsEditor from '#lib/components/settings/DestinationsEditor.svelte';
+	import MangaBakaPanel from '#lib/components/settings/MangaBakaPanel.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
@@ -317,6 +318,9 @@
 						{#each section.fields as field (field.path)}
 							<SettingField {field} {draft} overridden={session.overridden(field.path)} />
 						{/each}
+						{#if section.id === 'metadata'}
+							<MangaBakaPanel {api} store={events} />
+						{/if}
 						{#if section.id === 'saveto'}
 							<p class="preview small" aria-live="polite">
 								<span class="label">Preview</span>

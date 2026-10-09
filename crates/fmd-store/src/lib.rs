@@ -13,6 +13,7 @@ mod crypto;
 mod db;
 mod error;
 mod lists;
+mod metadata;
 mod sql;
 
 pub use app::AppDb;
@@ -32,5 +33,7 @@ pub use crypto::{ACCOUNTS_KEY_FILE, Cipher, KeyFileCipher};
 pub use error::{Result, StoreError};
 pub use lists::{
     FacetCount, Facets, ListSummary, ListsDb, MangaListing, MasterListEntry, MasterListRepo,
-    PageRequest, SearchFilters, SearchResults, read_fmd2_list,
+    MatchConfidence, MatchInput, MatchRepo, PageRequest, SearchFilters, SearchResults, StoredMatch,
+    UNKNOWN, read_fmd2_list,
 };
+pub use metadata::{MetadataBuilder, MetadataDb, MetadataSeries};

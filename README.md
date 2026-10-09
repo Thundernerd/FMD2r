@@ -16,6 +16,18 @@ docker compose -f compose.dev.yaml up -d
 cargo run -p fmd2r -- serve --flaresolverr-url http://localhost:8191
 ```
 
+## List metadata from MangaBaka
+
+Settings → "MangaBaka database" downloads a local copy of
+[MangaBaka](https://mangabaka.org)'s database (about 390 MB, refreshed every
+`metadata.mangabaka.refresh_days` days). List titles are matched against it offline, which gives
+Discover its format and publication facets and the series page a description when the website
+has none. Nothing is downloaded until you ask, and no title leaves the server.
+
+MangaBaka's data is under its [data licence](https://mangabaka.org/about/data-license)
+(CC BY-NC-SA 4.0); fields it takes from AniList, MyAnimeList, MangaUpdates and other providers
+keep those providers' terms. FMD2r ships none of it: each install downloads its own.
+
 ## Run with Docker
 
 The image (`ghcr.io/thundernerd/fmd2r`, built from `Dockerfile`) holds the `fmd2r` binary with the
