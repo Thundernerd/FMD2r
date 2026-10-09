@@ -10,6 +10,16 @@ globalThis.ResizeObserver ??= class {
 	disconnect() {}
 };
 
+/** The "Hide seen" checkbox. */
+function hideSeen(): HTMLInputElement {
+	const label = [...document.querySelectorAll('label')].find(
+		(l) => l.textContent?.trim() === 'Hide seen'
+	);
+	const input = label?.querySelector('input');
+	if (!input) throw new Error('no Hide seen toggle');
+	return input;
+}
+
 describe('ChapterList', () => {
 	let component: ReturnType<typeof mount> | null = null;
 
@@ -38,11 +48,7 @@ describe('ChapterList', () => {
 			expect.not.stringContaining('✓')
 		]);
 
-		const hide = [...document.querySelectorAll('label')].find(
-			(l) => l.textContent?.trim() === 'Hide seen'
-		);
-		expect(hide).toBeDefined();
-		hide?.querySelector('input')?.click();
+		hideSeen().click();
 		flushSync();
 
 		expect(rows()).toEqual([expect.stringContaining('Chapter 2')]);
@@ -54,10 +60,8 @@ describe('ChapterList', () => {
 			target: document.body,
 			props: { chapters, selected: new Set<number>() }
 		});
-		const hide = [...document.querySelectorAll('label')].find(
-			(l) => l.textContent?.trim() === 'Hide seen'
-		);
-		hide?.querySelector('input')?.click();
+		flushSync();
+		hideSeen().click();
 		flushSync();
 
 		expect(document.querySelector('.empty')?.textContent?.trim()).toBe('Every chapter is seen.');

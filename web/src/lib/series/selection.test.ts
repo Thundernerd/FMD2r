@@ -19,7 +19,7 @@ const chapters = [
 const sorted = (s: Set<number>) => [...s].sort((a, b) => a - b);
 
 describe('chapter selection', () => {
-	it('selects all, or only the chapters not downloaded yet', () => {
+	it('selects all, or only the chapters not seen yet', () => {
 		expect(sorted(selectAll(5))).toEqual([0, 1, 2, 3, 4]);
 		expect(sorted(selectNew(chapters))).toEqual([1, 3, 4]);
 	});
