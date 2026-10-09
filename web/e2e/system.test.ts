@@ -33,8 +33,8 @@ test('pausing the log holds new lines back until resumed', async ({ page }) => {
 test('running a job shows its progress', async ({ page }) => {
 	await page.goto('/system');
 	await page.getByRole('tab', { name: 'Jobs' }).click();
-	const card = page.getByRole('article', { name: 'Update lists' });
-	await expect(card).toContainText('Idle');
+	const card = page.getByRole('article', { name: 'Update modules' });
+	await expect(card).toContainText('Failed');
 
 	await card.getByRole('button', { name: 'Run' }).click();
 	await expect(card).toContainText('Running');
@@ -45,6 +45,18 @@ test('running a job shows its progress', async ({ page }) => {
 
 	await card.getByRole('button', { name: 'Cancel' }).click();
 	await expect(card).toContainText('Idle');
+});
+
+test('the list updates start from the Discover page', async ({ page }) => {
+	await page.goto('/system');
+	await page.getByRole('tab', { name: 'Jobs' }).click();
+	const card = page.getByRole('article', { name: 'Update lists' });
+
+	await expect(card.getByRole('button', { name: 'Run' })).toHaveCount(0);
+	await expect(card.getByRole('link', { name: /Discover page/ })).toHaveAttribute(
+		'href',
+		'/discover'
+	);
 });
 
 test('a failed job shows its last error on request', async ({ page }) => {

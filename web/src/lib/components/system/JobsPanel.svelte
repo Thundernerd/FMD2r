@@ -34,6 +34,8 @@
 
 	/** The FMD2 import, which only runs with an upload (`POST /api/import`). */
 	const UPLOAD_JOB = 'import';
+	/** The list updates, which start per module from the Discover page; they can be cancelled here. */
+	const LISTS_JOB = 'lists';
 
 	const PHASE: Record<JobPhase, string> = {
 		idle: 'Idle',
@@ -118,12 +120,16 @@
 				<a class="small" href="/">Import from the Library page</a>
 			{:else}
 				<div class="actions">
-					<button
-						class="btn sm primary"
-						type="button"
-						disabled={running || busy[job.id]}
-						onclick={() => control(job, 'run')}>Run</button
-					>
+					{#if job.id === LISTS_JOB}
+						<a class="small" href="/discover">Update a list from the Discover page</a>
+					{:else}
+						<button
+							class="btn sm primary"
+							type="button"
+							disabled={running || busy[job.id]}
+							onclick={() => control(job, 'run')}>Run</button
+						>
+					{/if}
 					<button
 						class="btn sm"
 						type="button"

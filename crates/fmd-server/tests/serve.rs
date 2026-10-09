@@ -1,10 +1,11 @@
 //! The composed server: `serve(ServeConfig)` on a temp data dir whose Lua tree holds a fixture
-//! module for a stub site on a local socket (docs/tickets/T37-serve-wire-catalog-covers-xpath.md,
-//! "Seams under test").
+//! module for a stub site on a local socket (docs/tickets/T37-serve-wire-catalog-covers-xpath.md
+//! and docs/tickets/T38-serve-wire-accounts-lists-favorites.md, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
 use std::net::{SocketAddr, TcpListener};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -14,7 +15,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use fmd_core::settings::SettingsService;
 use fmd_server::{EventBus, LogBuffer, ServeConfig, serve};
-use fmd_store::AppDb;
+use fmd_store::{AppDb, NewFavorite};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -46,6 +47,29 @@ function Init()
   local m = NewWebsiteModule()
   m.ID = 'stub'; m.Name = 'Stub'; m.RootURL = '{root}'; m.Category = 'English'
   m.OnGetInfo = 'GetInfo'
+  m.AccountSupport = true
+  m.OnLogin = 'Login'
+  m.OnGetDirectoryPageNumber = 'GetDirectoryPageNumber'
+  m.OnGetNameAndLink = 'GetNameAndLink'
+end
+function GetDirectoryPageNumber()
+  PAGENUMBER = 1
+  return no_error
+end
+function GetNameAndLink()
+  if not HTTP.GET(MODULE.RootURL .. '/list/' .. URL) then return net_problem end
+  for line in HTTP.Document.ToString():gmatch('[^\n]+') do
+    local link, name = line:match('^(%S+) (.+)$')
+    LINKS.Add(link)
+    NAMES.Add(name)
+  end
+  return no_error
+end
+function Login()
+  if MODULE.Account.Username == 'reader' and MODULE.Account.Password == 'secret' then
+    MODULE.Account.Status = asValid; return true
+  end
+  MODULE.Account.Status = asInvalid; return false
 end
 function GetInfo()
   if URL:find('^/probe') then
@@ -61,9 +85,14 @@ function GetInfo()
 end
 "#;
 
+/// The stub site's directory: one `link name` line per title.
+const DIRECTORY: &str = "/saga The Stub Saga\n/tale A Stub Tale\n";
+
 /// Requests the stub site received.
 #[derive(Clone, Default)]
 struct Site {
+    /// Lists a third chapter on the series page once set.
+    chapter_3: Arc<AtomicBool>,
     page_requests: Arc<Mutex<Vec<HeaderMap>>>,
     cover_requests: Arc<Mutex<Vec<HeaderMap>>>,
 }
@@ -75,13 +104,23 @@ async fn cover(State(site): State<Site>, headers: HeaderMap) -> impl IntoRespons
 
 async fn series_page(State(site): State<Site>, headers: HeaderMap) -> impl IntoResponse {
     site.page_requests.lock().unwrap().push(headers);
-    ([(header::CONTENT_TYPE, "text/html")], SERIES_PAGE)
+    let page = if site.chapter_3.load(Ordering::SeqCst) {
+        SERIES_PAGE.replace(
+            "<ul class=\"chapters\">",
+            "<ul class=\"chapters\">\n  <li><a href=\"/saga/3\">Chapter 3</a></li>",
+        )
+    } else {
+        SERIES_PAGE.to_owned()
+    };
+    ([(header::CONTENT_TYPE, "text/html")], page)
 }
 
 /// Starts the stub site; returns its root URL (`http://127.0.0.1:<port>`).
 async fn start_site(site: Site) -> String {
     let app = axum::Router::new()
         .route("/saga", get(series_page))
+        .route("/tale", get(series_page))
+        .route("/list/0", get(|| async { DIRECTORY }))
         .route("/covers/{name}", get(cover))
         .with_state(site);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -106,7 +145,11 @@ impl Server {
 
     /// [`Server::start`] with `settings` (a merge patch) stored in `app.db` beforehand.
     async fn start_with(settings: Value) -> Server {
-        let site = Site::default();
+        Server::start_seeded(Site::default(), settings, |_| {}).await
+    }
+
+    /// [`Server::start_with`] on `site`, with `seed` run on `app.db` beforehand.
+    async fn start_seeded(site: Site, settings: Value, seed: impl FnOnce(&AppDb)) -> Server {
         let root = start_site(site.clone()).await;
         let dir = tempfile::tempdir().unwrap();
         let data_dir = dir.path().join("data");
@@ -117,16 +160,22 @@ impl Server {
         )
         .unwrap();
         let db = AppDb::open(data_dir.join("app.db")).unwrap();
-        SettingsService::load(db).unwrap().update(settings).unwrap();
+        seed(&db);
+        SettingsService::load(db)
+            .unwrap()
+            .update(settings.clone())
+            .unwrap();
         let bind = free_port();
+        // Tests never reach the network: the module updater runs only on request, and none is
+        // made.
+        let module_updates = settings["module_updater"]["auto_update"] == false;
         tokio::spawn(serve(ServeConfig {
             bind,
             data_dir,
             auth: None,
             flaresolverr_url: None,
             logs: LogBuffer::new(100, EventBus::new()),
-            // Tests never reach the network: no module sync with GitHub.
-            module_updates: false,
+            module_updates,
         }));
         let server = Server {
             _dir: dir,
@@ -318,4 +367,189 @@ async fn changing_the_xpath_backend_applies_without_a_restart() {
 
     switch_to("fpc", "DIV").await;
     switch_to("native", "div").await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_fixture_account_logs_in_with_its_credentials() {
+    let server = Server::start().await;
+
+    let credentials = json!({ "username": "reader", "password": "secret", "enabled": true });
+    server
+        .send_json(reqwest::Method::PUT, "/api/accounts/stub", credentials)
+        .await;
+    // `TAccountCheckThread` (mangadownloader/forms/frmAccountManager.pas:125-136).
+    let account = server
+        .send_json(reqwest::Method::POST, "/api/accounts/stub/login", json!({}))
+        .await;
+
+    assert_eq!(account["status"], "valid", "{account}");
+}
+
+impl Server {
+    /// Polls `GET {path}` until `done` holds for its JSON body; returns that body.
+    async fn wait_for(&self, path: &str, done: impl Fn(&Value) -> bool) -> Value {
+        for _ in 0..200 {
+            let body = self.get_json(path).await;
+            if done(&body) {
+                return body;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        panic!("GET {path} never got there");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn updating_the_list_makes_the_site_titles_searchable() {
+    let server = Server::start().await;
+
+    let res = server
+        .client
+        .post(server.url("/api/lists/stub/update"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 202);
+
+    // `TUpdateListManagerThread` (baseunits/uUpdateThread.pas) adds every title the directory
+    // lists.
+    let found = server
+        .wait_for("/api/lists/search?module=stub&q=stub", |page| {
+            page["total"] == 2
+        })
+        .await;
+    let mut links: Vec<&str> = found["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["link"].as_str().unwrap())
+        .collect();
+    links.sort_unstable();
+    assert_eq!(links, ["/saga", "/tale"]);
+}
+
+impl Server {
+    /// Adds the stub's `/saga` to the library, with its chapters so far counted as downloaded.
+    async fn add_saga_to_the_library(&self) {
+        let res = self
+            .client
+            .post(self.url("/api/favorites"))
+            .header("content-type", "application/json")
+            .body(json!({ "module_id": "stub", "link": "/saga" }).to_string())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 201);
+    }
+
+    /// Runs the new-chapter check and waits for it to end.
+    async fn check_favorites(&self) {
+        let res = self
+            .client
+            .post(self.url("/api/favorites/check"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 202);
+        self.wait_for("/api/jobs/favorites", |job| job["state"] == "done")
+            .await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_favorites_check_reports_the_new_chapter_in_the_inbox() {
+    let server = Server::start_with(json!({ "favorites": { "check_at_startup": false } })).await;
+    server.add_saga_to_the_library().await;
+    server.site.chapter_3.store(true, Ordering::SeqCst);
+
+    server.check_favorites().await;
+
+    // `ShowResult` (baseunits/uFavoritesManager.pas:1047-1073) lists the new chapter.
+    let inbox = server.get_json("/api/inbox").await;
+    let items = inbox.as_array().unwrap();
+    assert_eq!(items.len(), 1, "{inbox}");
+    assert_eq!(items[0]["title"], "Found new chapter(s)");
+    assert!(
+        items[0]["body"].as_str().unwrap().contains("The Stub Saga"),
+        "{inbox}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn with_auto_download_a_favorites_check_queues_the_new_chapter() {
+    let server = Server::start_with(json!({
+        "favorites": { "check_at_startup": false, "auto_download": true }
+    }))
+    .await;
+    server.add_saga_to_the_library().await;
+    server.site.chapter_3.store(true, Ordering::SeqCst);
+
+    server.check_favorites().await;
+
+    // `ShowResult` queues the new chapters instead (baseunits/uFavoritesManager.pas:1047-1073).
+    let tasks = server.get_json("/api/tasks").await;
+    let items = tasks["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "{tasks}");
+    assert_eq!(items[0]["module_id"], "stub");
+    assert_eq!(items[0]["link"], "/saga");
+    assert_eq!(items[0]["chapter_count"], 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_jobs_are_the_module_updater_the_favorites_check_and_the_list_updates() {
+    let server = Server::start_with(json!({ "module_updater": { "auto_update": false } })).await;
+    let res = server
+        .client
+        .post(server.url("/api/lists/stub/update"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 202);
+
+    let jobs = server
+        .wait_for("/api/jobs", |jobs| {
+            jobs.as_array()
+                .unwrap()
+                .iter()
+                .any(|job| job["id"] == "lists" && job["state"] == "done")
+        })
+        .await;
+
+    let mut ids: Vec<&str> = jobs
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|job| job["id"].as_str().unwrap())
+        .collect();
+    ids.sort_unstable();
+    assert_eq!(ids, ["favorites", "lists", "modules"]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_favorites_are_checked_at_startup() {
+    let site = Site::default();
+    site.chapter_3.store(true, Ordering::SeqCst);
+    // The library holds `/saga` with its first two chapters downloaded.
+    let seed = |db: &AppDb| {
+        db.favorites()
+            .create(&NewFavorite {
+                module_id: "stub".into(),
+                link: "/saga".into(),
+                title: "The Stub Saga".into(),
+                save_to: String::new(),
+                cover_url: None,
+            })
+            .unwrap();
+        db.downloaded_chapters()
+            .mark("stub", "/saga", &["/saga/1", "/saga/2"])
+            .unwrap();
+    };
+
+    // `check_at_startup` is on by default (`tmStartupTimer`, mangadownloader/forms/frmMain.pas:2078-2082).
+    let server = Server::start_seeded(site, json!({}), seed).await;
+
+    let inbox = server
+        .wait_for("/api/inbox", |inbox| !inbox.as_array().unwrap().is_empty())
+        .await;
+    assert_eq!(inbox[0]["title"], "Found new chapter(s)", "{inbox}");
 }

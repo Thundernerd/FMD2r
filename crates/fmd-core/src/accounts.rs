@@ -118,17 +118,31 @@ pub enum AccountError {
 /// Every method blocks (on the store, and for [`login`](Self::login) on the module's callbacks):
 /// call them from a blocking thread, never from inside a tokio runtime.
 pub struct AccountService {
-    registry: Arc<ModuleRegistry>,
+    /// The loaded modules, read anew for every request so a hot reload is followed.
+    current_modules: Box<CurrentModules>,
     pool: Arc<WorkerPool>,
     /// Modules whose login is running.
     checking: Mutex<HashSet<String>>,
     changes: broadcast::Sender<AccountChange>,
 }
 
+/// Returns the registry of the modules loaded now.
+type CurrentModules = dyn Fn() -> Arc<ModuleRegistry> + Send + Sync;
+
 impl AccountService {
+    /// The accounts of the modules in `registry`.
     pub fn new(registry: Arc<ModuleRegistry>, pool: Arc<WorkerPool>) -> Self {
+        Self::following(move || registry.clone(), pool)
+    }
+
+    /// The accounts of the modules `current` returns at the time of each request, e.g. the
+    /// registry the module updater last reloaded.
+    pub fn following(
+        current: impl Fn() -> Arc<ModuleRegistry> + Send + Sync + 'static,
+        pool: Arc<WorkerPool>,
+    ) -> Self {
         Self {
-            registry,
+            current_modules: Box::new(current),
             pool,
             checking: Mutex::default(),
             changes: broadcast::channel(CHANGES_CAPACITY).0,
@@ -143,8 +157,7 @@ impl AccountService {
     /// The accounts of every module with account support, by module ID
     /// (mangadownloader/forms/frmAccountManager.pas:168-182).
     pub fn list(&self) -> Vec<AccountView> {
-        let mut accounts: Vec<AccountView> = self
-            .registry
+        let mut accounts: Vec<AccountView> = (self.current_modules)()
             .modules()
             .iter()
             .filter_map(|m| view(m))
@@ -300,7 +313,7 @@ impl AccountService {
     }
 
     fn module(&self, module_id: &str) -> Result<Arc<Module>, AccountError> {
-        self.registry
+        (self.current_modules)()
             .get(module_id)
             .cloned()
             .ok_or_else(|| AccountError::UnknownModule(module_id.to_owned()))

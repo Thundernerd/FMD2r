@@ -4,12 +4,16 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use fmd_core::download::{DownloadManager, EngineConfig};
+use fmd_core::accounts::AccountService;
+use fmd_core::download::{DownloadManager, EngineConfig, ModuleLookup};
+use fmd_core::favorites::{CheckerConfig, FavoritesChecker, TaskQueue};
+use fmd_core::lists::{DbImporter, ListJobs, ListUpdater};
 use fmd_core::settings::{SettingsService, write_websitebypass_config};
 use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, ListsDb};
 use thiserror::Error;
 use tokio::net::TcpListener;
 
+use crate::events::ServerEvent;
 use crate::lua_catalog::LuaCatalog;
 use crate::module_updates::{self, LuaRuntime};
 use crate::{AppState, CoverConfig, Idle, LogBuffer, LogRotation, SystemTools, build_router};
@@ -117,22 +121,41 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         Ok(runtime) => {
             module_updates::follow_xpath_backend(state.settings.clone(), &runtime);
             let catalog = LuaCatalog::new(&runtime, state.db.clone());
+            // The accounts are the modules' `MODULE.Account`, stored encrypted under the key
+            // file the runtime loaded them with.
+            let live = runtime.modules.clone();
+            let accounts = AccountService::following(move || live.current(), runtime.pool.clone());
             state = state
                 .with_modules(catalog.clone())
-                .with_covers(covers, catalog);
+                .with_covers(covers, catalog)
+                .with_accounts(Arc::new(accounts));
             let live = runtime.modules.clone();
+            let modules: Arc<ModuleLookup> =
+                Arc::new(move |id: &str| live.current().get(id).cloned());
+            if let Some(jobs) = list_jobs(&state, &runtime, modules.clone()) {
+                jobs.register(&state.jobs);
+                state = state.with_list_jobs(jobs);
+            }
             let engine = DownloadManager::open(EngineConfig {
                 db: state.db.clone(),
                 pool: runtime.pool.clone(),
-                modules: Arc::new(move |id: &str| live.current().get(id).cloned()),
+                modules: modules.clone(),
                 settings: state.settings.clone(),
                 http: runtime.http.clone(),
             })
             .await;
-            match engine {
-                Ok(engine) => state = state.with_engine(engine),
-                Err(e) => tracing::error!(target: "fmd_server", "download engine: {e}"),
-            }
+            let queue = match engine {
+                Ok(engine) => {
+                    let engine = Arc::new(engine);
+                    state = state.with_shared_engine(engine.clone());
+                    Some(engine as Arc<dyn TaskQueue>)
+                }
+                Err(e) => {
+                    tracing::error!(target: "fmd_server", "download engine: {e}");
+                    None
+                }
+            };
+            state = start_favorites(state, &runtime, modules, queue);
             if config.module_updates {
                 module_updates::start(
                     state.clone(),
@@ -172,6 +195,53 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         })
         .await?;
     Ok(())
+}
+
+/// Registers the `favorites` job, checking the library on `runtime`'s pool with the modules
+/// `modules` finds, and starts its schedule: a check at startup and on the interval, as the
+/// `favorites` settings say (`tmStartupTimer`/`tmCheckFavorites`,
+/// mangadownloader/forms/frmMain.pas:1871-1878, :2078-2082). Found chapters go to `queue` when
+/// `favorites.auto_download` is on and there is one, else to the inbox.
+fn start_favorites(
+    state: AppState,
+    runtime: &LuaRuntime,
+    modules: Arc<ModuleLookup>,
+    queue: Option<Arc<dyn TaskQueue>>,
+) -> AppState {
+    let checker = FavoritesChecker::new(
+        CheckerConfig {
+            db: state.db.clone(),
+            pool: runtime.pool.clone(),
+            modules,
+            settings: state.settings.clone(),
+            queue,
+            jobs: state.jobs.clone(),
+        },
+        state.favorites_events(),
+    );
+    state.jobs.register(checker.clone());
+    state.jobs.changed(FavoritesChecker::ID);
+    tokio::spawn(checker.clone().schedule());
+    state.with_favorites(checker)
+}
+
+/// List updates on `runtime`'s pool and FMD2-DB imports (from the `update_lists.db_url`
+/// setting) into `state`'s `lists.db`, for the module `modules` finds when each starts; their
+/// events go out as `job.lists.*`. `None` without a `lists.db`.
+fn list_jobs(
+    state: &AppState,
+    runtime: &LuaRuntime,
+    modules: Arc<ModuleLookup>,
+) -> Option<ListJobs> {
+    let lists = state.lists.clone()?;
+    let events = state.events().clone();
+    Some(ListJobs::new(
+        ListUpdater::new(runtime.pool.clone(), lists.clone()),
+        DbImporter::new(runtime.http.clone(), lists),
+        state.settings.clone(),
+        move |id: &str| modules(id),
+        move |event| events.publish(ServerEvent::Lists(event)),
+    ))
 }
 
 /// Installs the SIGINT/SIGTERM handlers now (so no signal sent after this returns is missed) and
