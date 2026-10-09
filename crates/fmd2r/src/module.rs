@@ -8,6 +8,7 @@ use clap::{Args, Subcommand};
 use fmd_http::{
     HttpClient, RecordingTransport, ReplayOptions, ReplayTransport, ReqwestTransport, Transport,
 };
+use fmd_lua::subprocess::{RecordingSpawner, ReplaySpawner, Spawner, SystemSpawner};
 use fmd_lua::{
     Callback, InfoReply, JobError, LoadReport, MangaInfo, Module, ModuleDef, ModuleOption,
     ModuleRegistry, OptionKind, PoolConfig, Task, WorkerPool, XPathCorpusWriter,
@@ -79,7 +80,7 @@ pub struct RunArgs {
     #[command(flatten)]
     load: LoadArgs,
     #[command(flatten)]
-    http: HttpArgs,
+    http: IoArgs,
     /// Record every XPath evaluation into this differential corpus directory (see
     /// fixtures/xpath-corpus), adding to what is there.
     #[arg(long, value_name = "DIR")]
@@ -95,14 +96,17 @@ pub struct DownloadArgs {
     out: PathBuf,
 }
 
-/// Where HTTP requests go: the network, the network with recording, or recorded fixtures.
+/// Where HTTP requests and `fmd.subprocess` processes go: the network and the system, the same
+/// with recording, or recorded fixtures.
 #[derive(Args)]
-pub struct HttpArgs {
-    /// Write every HTTP exchange into this fixture directory (see docs/fixtures.md).
+pub struct IoArgs {
+    /// Write every HTTP exchange, and every process `fmd.subprocess` runs, into this fixture
+    /// directory (see docs/fixtures.md).
     #[arg(long, value_name = "DIR", conflicts_with = "replay")]
     record: Option<PathBuf>,
-    /// Serve HTTP from the fixtures recorded in this directory instead of the network; a request
-    /// with no recorded exchange fails the command.
+    /// Serve HTTP and `fmd.subprocess` processes from the fixtures recorded in this directory
+    /// instead of the network and the system; a request or process with no recording fails the
+    /// command.
     #[arg(long, value_name = "DIR")]
     replay: Option<PathBuf>,
     /// With --replay, a request header whose value must match the recorded one too (method, URL
@@ -111,20 +115,29 @@ pub struct HttpArgs {
     match_header: Vec<String>,
 }
 
-/// The HTTP client of a command, and the replay transport behind it, if any.
-struct CommandHttp {
+/// The HTTP client and process spawner of a command, and the replays behind them, if any.
+struct CommandIo {
     client: HttpClient,
     replay: Option<Arc<ReplayTransport>>,
+    spawner: Option<Arc<dyn Spawner + Send + Sync>>,
+    replay_spawner: Option<Arc<ReplaySpawner>>,
 }
 
-impl HttpArgs {
-    fn client(&self) -> anyhow::Result<CommandHttp> {
+impl IoArgs {
+    fn open(&self) -> anyhow::Result<CommandIo> {
         let mut replay = None;
+        let mut spawner: Option<Arc<dyn Spawner + Send + Sync>> = None;
+        let mut replay_spawner = None;
         let transport: Arc<dyn Transport> = match (&self.record, &self.replay) {
-            (Some(dir), _) => Arc::new(
-                RecordingTransport::new(dir, Arc::new(ReqwestTransport::new()))
-                    .context("starting the recording")?,
-            ),
+            (Some(dir), _) => {
+                let transport = RecordingTransport::new(dir, Arc::new(ReqwestTransport::new()))
+                    .context("starting the recording")?;
+                spawner = Some(Arc::new(
+                    RecordingSpawner::new(dir, Arc::new(SystemSpawner))
+                        .context("starting the recording")?,
+                ));
+                Arc::new(transport)
+            }
             (None, Some(dir)) => {
                 let options = ReplayOptions {
                     match_headers: self.match_header.clone(),
@@ -132,29 +145,47 @@ impl HttpArgs {
                 let transport =
                     Arc::new(ReplayTransport::open(dir, options).context("loading the fixtures")?);
                 replay = Some(transport.clone());
+                let processes = Arc::new(ReplaySpawner::open(dir).context("loading the fixtures")?);
+                spawner = Some(processes.clone());
+                replay_spawner = Some(processes);
                 transport
             }
             (None, None) => Arc::new(ReqwestTransport::new()),
         };
         let client = HttpClient::with_transport(transport).context("starting the HTTP client")?;
-        Ok(CommandHttp { client, replay })
+        Ok(CommandIo {
+            client,
+            replay,
+            spawner,
+            replay_spawner,
+        })
     }
 }
 
-impl CommandHttp {
-    /// Fails, naming each request, when a replay met requests it had no exchange for.
+impl CommandIo {
+    /// Fails, naming each request and process, when a replay met requests it had no exchange
+    /// for or processes it had no recorded call for.
     fn check_replay(&self) -> anyhow::Result<()> {
-        let Some(replay) = &self.replay else {
-            return Ok(());
-        };
-        let misses = replay.misses();
-        if misses.is_empty() {
+        let requests = self.replay.as_ref().map(|r| r.misses()).unwrap_or_default();
+        let processes = self
+            .replay_spawner
+            .as_ref()
+            .map(|r| r.misses())
+            .unwrap_or_default();
+        if requests.is_empty() && processes.is_empty() {
             return Ok(());
         }
-        for miss in &misses {
+        for miss in &requests {
             eprintln!("replay: no recorded exchange for {miss}");
         }
-        bail!("replay: {} unrecorded request(s)", misses.len())
+        for miss in &processes {
+            eprintln!("replay: no recorded call for {miss}");
+        }
+        bail!(
+            "replay: {} unrecorded request(s), {} unrecorded process(es)",
+            requests.len(),
+            processes.len()
+        )
     }
 }
 
@@ -195,7 +226,7 @@ fn init(args: InitArgs) -> anyhow::Result<()> {
 /// One module run: the module and link a URL resolves to, and the worker running it.
 struct ModuleRun {
     target: Target,
-    http: CommandHttp,
+    http: CommandIo,
     pool: WorkerPool,
     xpath_corpus: Option<XPathCorpusWriter>,
 }
@@ -203,7 +234,7 @@ struct ModuleRun {
 impl ModuleRun {
     fn start(args: &RunArgs) -> anyhow::Result<ModuleRun> {
         let target = Target::resolve(&args.load, &args.url)?;
-        let http = args.http.client()?;
+        let http = args.http.open()?;
         let xpath_corpus = args
             .xpath_corpus
             .as_ref()
@@ -397,13 +428,14 @@ impl Target {
 /// XPath into `xpath_corpus`, if given.
 fn pool(
     load: &LoadArgs,
-    http: &CommandHttp,
+    http: &CommandIo,
     xpath_corpus: Option<XPathCorpusWriter>,
 ) -> anyhow::Result<WorkerPool> {
     let mut config = PoolConfig::new(http.client.clone());
     config.threads = 1;
     config.lua_dir = load.lua_dir.clone();
     config.xpath_corpus = xpath_corpus;
+    config.spawner = http.spawner.clone();
     WorkerPool::new(config).context("starting the Lua worker")
 }
 

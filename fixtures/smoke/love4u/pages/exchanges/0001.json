@@ -1,0 +1,109 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://love4u.net/wlmr-moeko-to-hatake-to-otera-gohan-chapter-1.html",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 301,
+    "reason": "Moved Permanently",
+    "headers": [
+      [
+        "date",
+        "Fri, 09 Oct 2026 08:31:30 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "set-cookie",
+        "PHPSESSID=mkrtfve09rebtrjrgsibfosnuu; path=/"
+      ],
+      [
+        "expires",
+        "Thu, 19 Nov 1981 08:52:00 GMT"
+      ],
+      [
+        "cache-control",
+        "no-store, no-cache, must-revalidate"
+      ],
+      [
+        "pragma",
+        "no-cache"
+      ],
+      [
+        "location",
+        "/manga-6433/moeko-to-hatake-to-otera-gohan-chapter-1.225122.html"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=4s01eB9KkWZhu9vYKEPXySDnngmy0BmCmEumbRrDb%2BfayrXm%2FAiPRjv3f4IotEy%2FbgUq%2B8%2BZfGxZ9adRBz8yqiHdegzWZdAgE9P%2Br%2By9ZJWQb9TM4F5q7z9T3Xn7\"}]}"
+      ],
+      [
+        "cf-ray",
+        "a47c0783cfdb9ff7-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0001.response",
+    "decoded_from": null
+  }
+}
