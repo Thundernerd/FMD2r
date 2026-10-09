@@ -118,9 +118,11 @@ pub fn import_into(
     step(2);
     favorites::import(&favorites_db, db, opts, &mut report)?;
     step(3);
-    modules::import(modules.as_deref(), db, cipher, opts, &mut report)?;
+    let folders = modules::import(modules.as_deref(), db, cipher, opts, &mut report)?;
     step(4);
     settings::import(&userdata.join("settings.json"), settings, opts, &mut report)?;
+    // After the settings, so a website folder that is the download folder is the default.
+    modules::add_destinations(settings, &folders, opts)?;
     step(SOURCES);
     Ok(report)
 }

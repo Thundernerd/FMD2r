@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 
 use super::model::{
     DEFAULT_CHAPTER_CUSTOMRENAME, DEFAULT_FILENAME_CUSTOMRENAME, DEFAULT_MANGA_CUSTOMRENAME,
-    DEFAULT_PATH, DEFAULT_USER_AGENT, Settings,
+    DEFAULT_PATH, DEFAULT_USER_AGENT, SaveToSettings, Settings,
 };
 use super::service::FieldError;
 
@@ -32,6 +32,71 @@ pub(crate) fn normalize(s: &mut Settings) {
     reset_blank(&mut saveto.manga_rename, DEFAULT_MANGA_CUSTOMRENAME);
     reset_blank(&mut saveto.chapter_rename, DEFAULT_CHAPTER_CUSTOMRENAME);
     reset_blank(&mut saveto.filename_rename, DEFAULT_FILENAME_CUSTOMRENAME);
+    for destination in &mut saveto.destinations {
+        destination.name = destination.name.trim().to_string();
+        destination.path = destination.path.trim().to_string();
+    }
+}
+
+/// Keeps `saveto.default_dir` and the default destination in step after an update from
+/// `current` to `next`: a patch that changed `default_dir` but not the destinations moves the
+/// default destination there (so API clients and the FMD2 import that only know
+/// `default_dir` keep working); otherwise `default_dir` takes the default destination's path.
+pub(crate) fn sync_default_dir(current: &SaveToSettings, next: &mut SaveToSettings) {
+    if next.default_dir != current.default_dir && next.destinations == current.destinations {
+        let dir = next.default_dir.clone();
+        if let Some(default) = next.destinations.iter_mut().find(|d| d.default) {
+            default.path = dir;
+        }
+    }
+    next.default_dir = next.default_path().to_string();
+}
+
+/// The destination problems of an update from `current` to `next`: names that are empty or
+/// repeat an earlier one (ignoring case), empty paths, and not exactly one default, which is
+/// reported as removing it when `current`'s default is gone.
+pub(super) fn validate_destinations(
+    current: &SaveToSettings,
+    next: &SaveToSettings,
+) -> Vec<FieldError> {
+    let mut errors = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for (i, destination) in next.destinations.iter().enumerate() {
+        let name = destination.name.to_lowercase();
+        if name.is_empty() {
+            errors.push(FieldError::new(
+                format!("saveto.destinations.{i}.name"),
+                "a destination needs a name",
+            ));
+        } else if seen.contains(&name) {
+            errors.push(FieldError::new(
+                format!("saveto.destinations.{i}.name"),
+                format!("another destination is named {}", destination.name),
+            ));
+        }
+        seen.push(name);
+        if destination.path.is_empty() {
+            errors.push(FieldError::new(
+                format!("saveto.destinations.{i}.path"),
+                "a destination needs a folder",
+            ));
+        }
+    }
+    let defaults = next.destinations.iter().filter(|d| d.default).count();
+    if defaults != 1 {
+        let removed = current
+            .destinations
+            .iter()
+            .find(|d| d.default)
+            .is_some_and(|old| !next.destinations.iter().any(|d| d.name == old.name));
+        let reason = if removed && defaults == 0 {
+            "the default destination cannot be removed"
+        } else {
+            "exactly one destination must be the default"
+        };
+        errors.push(FieldError::new("saveto.destinations", reason));
+    }
+    errors
 }
 
 /// Checks every numeric setting against the range FMD2's spin edit allows (cited on each field

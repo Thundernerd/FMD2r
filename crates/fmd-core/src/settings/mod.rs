@@ -17,7 +17,7 @@ pub use module_overrides::{
 };
 pub use password::verify_password;
 pub use service::{FieldError, ModulePatch, SettingsError, SettingsService};
-pub(crate) use validate::normalize;
+pub(crate) use validate::{normalize, sync_default_dir};
 pub use view::{
     ConnectionSettingsView, HttpOverridesView, ModuleUpdaterSettingsView, ProxyOverrideView,
     ProxySettingsView, ServerSettingsView, SettingsView,

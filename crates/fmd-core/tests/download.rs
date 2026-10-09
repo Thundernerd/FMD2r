@@ -906,3 +906,40 @@ async fn a_stopped_task_logs_that_it_stopped() {
     assert_eq!(holding(&lines, "stopped"), 1, "{lines:#?}");
     assert_eq!(lines.len(), 2, "{lines:#?}");
 }
+
+/// The folder a task saves to (T74): the one the user picked, else the website's destination
+/// (`OverrideSaveTo`, mangadownloader/forms/frmMain.pas:5631-5643, applied when the "Save to"
+/// box is empty, :2686-2690), else the default destination; plus the manga folder.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_save_folder_is_the_pick_else_the_websites_destination_else_the_default() {
+    let f = Fixture::new(
+        &[("T.lua", T), ("D.lua", D)],
+        json!({"general": {"add_as_stopped": true}, "saveto": {"destinations": [
+            {"name": "Manga", "path": "/data/manga", "default": true},
+            {"name": "Manhwa", "path": "/data/manhwa"},
+        ]}}),
+    );
+    fmd_core::settings::ModuleOverrides {
+        save_to: "/data/manhwa".into(),
+        ..Default::default()
+    }
+    .save(&f.db.module_settings(), "t")
+    .unwrap();
+    let manager = f.manager().await;
+    let saved_to = |id: TaskId| f.db.tasks().get(id).unwrap().unwrap().save_to;
+
+    let mut picked = f.download("t", &[("/c/2", "One")]);
+    picked.save_to = "/data/picked".into();
+    let id = manager.add_task(picked).await.unwrap();
+    assert_eq!(saved_to(id), "/data/picked/Manga");
+
+    let mut website = f.download("t", &[("/c/2", "One")]);
+    website.save_to = String::new();
+    let id = manager.add_task(website).await.unwrap();
+    assert_eq!(saved_to(id), "/data/manhwa/Manga");
+
+    let mut default = f.download("d", &[("/c", "One")]);
+    default.save_to = " ".into();
+    let id = manager.add_task(default).await.unwrap();
+    assert_eq!(saved_to(id), "/data/manga/Manga");
+}

@@ -48,6 +48,20 @@ const RENAME_TOKENS =
 export const OWN_SECTION_PATHS = ['general.selected_websites'];
 
 /**
+ * Settings a section edits with a control of its own besides its fields, by section id. Their
+ * errors are keyed by paths under these, e.g. `saveto.destinations.1.name`.
+ */
+export const SECTION_EXTRA_PATHS: Record<string, string[]> = {
+	saveto: ['saveto.destinations']
+};
+
+/** Settings with no control of their own: the server keeps them in step with others. */
+export const DERIVED_PATHS = [
+	// The default destination's folder, for API clients that predate destinations.
+	'saveto.default_dir'
+];
+
+/**
  * Every application setting (the T18 model), one section per settings group. Ranges are the
  * server's: FMD2's spin edit bounds, or FMD2r's own for settings FMD2 does not have.
  */
@@ -111,7 +125,6 @@ export const SETTINGS_SECTIONS: Section[] = [
 		id: 'saveto',
 		title: 'Save to',
 		fields: [
-			text('saveto.default_dir', 'Download folder'),
 			checkbox('saveto.generate_manga_folder', 'Create a folder per manga'),
 			text('saveto.manga_rename', 'Manga folder name', RENAME_TOKENS),
 			checkbox('saveto.generate_chapter_folder', 'Create a folder per chapter'),

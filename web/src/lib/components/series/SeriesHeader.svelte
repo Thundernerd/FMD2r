@@ -5,8 +5,15 @@
 	let {
 		api,
 		series = $bindable(),
-		website
-	}: { api: Api; series: SeriesInfo; website: string } = $props();
+		website,
+		saveTo = ''
+	}: {
+		api: Api;
+		series: SeriesInfo;
+		website: string;
+		/** The folder picked in the download box, which the series keeps in the library. */
+		saveTo?: string;
+	} = $props();
 
 	let adding = $state(false);
 	let addError = $state<string | null>(null);
@@ -41,7 +48,7 @@
 		adding = true;
 		addError = null;
 		try {
-			await api.addFavorite(series.module_id, series.link);
+			await api.addFavorite(series.module_id, series.link, saveTo);
 			series.in_library = true;
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 409) series.in_library = true;

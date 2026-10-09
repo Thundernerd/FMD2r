@@ -36,14 +36,15 @@ describe('DownloadBox', () => {
 	// Adding a series to the library marks its chapters too (frmMain.pas:2797-2846), so a marked
 	// chapter was seen, not necessarily downloaded.
 	it('counts the picked marked chapters as seen before', () => {
-		// The box only reads `api` when queuing, which this test doesn't do.
+		// The box only shows the folder and queues through `api`; this test does neither.
 		component = mount(DownloadBox, {
 			target: document.body,
 			props: {
-				api: {} as Api,
+				api: { saveFolder: () => new Promise(() => {}) } as unknown as Api,
 				series,
 				selected: new Set([0, 1, 2]),
 				saveTo: '',
+				destinations: [],
 				format: 'cbz',
 				onqueued: () => {}
 			}

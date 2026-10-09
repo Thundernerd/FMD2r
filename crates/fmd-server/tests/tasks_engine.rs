@@ -216,3 +216,35 @@ async fn stopping_a_downloading_task_leaves_it_stopped() {
     let res = send(&h.state, get("/api/tasks?status=stopped")).await;
     assert_eq!(body_json(res).await["items"][0]["id"], id);
 }
+
+/// A task queued with a destination's folder saves there, under the manga folder, and the
+/// queue shows that folder (T74).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_task_queued_to_a_destination_saves_there() {
+    let h = harness().await;
+    let manhwa = h.dir.path().join("manhwa");
+    let manhwa = manhwa.to_string_lossy();
+    let patch = json!({"saveto": {"destinations": [
+        {"name": "Downloads", "path": h.dir.path().join("out").to_string_lossy(), "default": true},
+        {"name": "Manhwa", "path": manhwa},
+    ]}});
+    let req = Request::patch("/api/settings")
+        .header("content-type", "application/json")
+        .body(Body::from(patch.to_string()))
+        .unwrap();
+    assert_eq!(send(&h.state, req).await.status(), StatusCode::OK);
+    let body = json!({
+        "module_id": "t", "link": "/manga", "title": "Manga",
+        "chapters": [{"name": "Ch 2", "link": "/c/2"}],
+        "save_to": manhwa,
+    });
+    let res = send(&h.state, post("/api/tasks", Some(body))).await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let id = body_json(res).await["id"].as_i64().unwrap();
+
+    let detail = wait_for(&h.state, id, "finished").await;
+    let folder = h.dir.path().join("manhwa").join("Manga");
+    assert_eq!(detail["task"]["save_to"], folder.to_string_lossy().as_ref());
+    assert!(folder.join("Ch 002.cbz").is_file());
+    assert!(!h.dir.path().join("out").exists());
+}

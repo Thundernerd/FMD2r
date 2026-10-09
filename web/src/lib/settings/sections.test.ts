@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { createMockBackend } from '#lib/api/mock.ts';
 import { createApi } from '#lib/api/client.ts';
 import { secretFlag } from '#lib/settings/fields.ts';
-import { OWN_SECTION_PATHS, SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
+import {
+	DERIVED_PATHS,
+	OWN_SECTION_PATHS,
+	SECTION_EXTRA_PATHS,
+	SETTINGS_SECTIONS
+} from '#lib/settings/sections.ts';
 
 // The server's OpenAPI document carries the T18 defaults of every settings group.
 const openapi = JSON.parse(
@@ -28,7 +33,9 @@ describe('settings sections', () => {
 			...SETTINGS_SECTIONS.flatMap((s) =>
 				s.fields.map((f) => (f.control.kind === 'secret' ? secretFlag(f.path) : f.path))
 			),
-			...OWN_SECTION_PATHS
+			...OWN_SECTION_PATHS,
+			...Object.values(SECTION_EXTRA_PATHS).flat(),
+			...DERIVED_PATHS
 		];
 		expect([...paths].sort()).toEqual(leaves(DEFAULTS).sort());
 	});

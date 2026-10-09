@@ -89,7 +89,7 @@ interface Check {
 export interface MockFavorites {
 	list(): FavoriteView[];
 	has(module: string, link: string): boolean;
-	add(series: SeriesInfo, website: string): Result;
+	add(series: SeriesInfo, website: string, saveTo: string): Result;
 	patch(id: number, patch: FavoritePatch): Result;
 	remove(id: number): Result;
 	/** Starts a check of `ids` (every enabled favorite when `null`); false when one runs. */
@@ -119,7 +119,7 @@ export function createMockFavorites(job: JobState): MockFavorites {
 	return {
 		list: () => favorites,
 		has: (module, link) => favorites.some((f) => f.module_id === module && f.link === link),
-		add(series, website) {
+		add(series, website, saveTo) {
 			if (favorites.some((f) => f.module_id === series.module_id && f.link === series.link)) {
 				return { status: 409, body: { status: 409, detail: `${series.title} is in the library` } };
 			}
@@ -131,7 +131,7 @@ export function createMockFavorites(job: JobState): MockFavorites {
 				title: series.title,
 				status: series.status,
 				enabled: true,
-				save_to: `/data/downloads/${series.title}`,
+				save_to: saveTo,
 				cover_url: series.cover_url ?? null,
 				current_chapter: series.chapters.length,
 				new_chapters: 0,

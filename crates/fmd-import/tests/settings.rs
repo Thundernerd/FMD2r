@@ -4,7 +4,9 @@
 mod common;
 
 use common::{App, Fmd2};
-use fmd_core::settings::{OutputFormat, PngCompression, ProxyType, SettingsService, WebpSaveAs};
+use fmd_core::settings::{
+    Destination, OutputFormat, PngCompression, ProxyType, SettingsService, WebpSaveAs,
+};
 use fmd_import::SkipReason;
 use serde_json::json;
 
@@ -117,6 +119,15 @@ fn known_settings_map_to_the_settings_model() {
 
     let t = &s.saveto;
     assert_eq!(t.default_dir, "/data/manga");
+    // `saveto/SaveTo` is the default destination (T74).
+    assert_eq!(
+        t.destinations,
+        [Destination {
+            name: "Downloads".into(),
+            path: "/data/manga".into(),
+            default: true
+        }]
+    );
     assert!(t.replace_unicode);
     assert_eq!(t.replace_unicode_with, "-");
     assert!(t.remove_manga_name_from_chapter);

@@ -65,12 +65,14 @@ impl TaskQueue for DownloadManager {
     }
 }
 
-/// The directory a series added to the library from `info` downloads to: `dir`, or the default
-/// download directory when empty, plus the manga folder when one is generated and not already
-/// part of it (`btAddToFavoritesClick`, mangadownloader/forms/frmMain.pas:2804-2827).
+/// The directory a series added to the library from `info` downloads to: `dir`, or the
+/// website's directory `website_dir` (`OverrideSaveTo`) or the default destination's when empty,
+/// plus the manga folder when one is generated and not already part of it
+/// (`btAddToFavoritesClick`, mangadownloader/forms/frmMain.pas:2804-2827).
 pub fn favorite_save_to(
     saveto: &SaveToSettings,
     website: &str,
+    website_dir: &str,
     info: &MangaInfo,
     dir: &str,
 ) -> String {
@@ -81,7 +83,7 @@ pub fn favorite_save_to(
         save_to: dir.to_owned(),
         ..NewDownload::default()
     };
-    save_to(saveto, website, &download)
+    save_to(saveto, website, website_dir, &download)
 }
 
 /// Which favorites a run checks.

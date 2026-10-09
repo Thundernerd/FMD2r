@@ -7,6 +7,7 @@ import type {
 	AccountRequest,
 	FavoritePatch,
 	FavoriteView,
+	FolderCheck,
 	Health,
 	ImportOptions,
 	ImportReport,
@@ -23,6 +24,7 @@ import type {
 	FieldProblem,
 	RenamePreview,
 	RenamePreviewRequest,
+	SaveFolderRequest,
 	SavedSettings,
 	SettingsSave,
 	SearchPage,
@@ -121,6 +123,10 @@ export interface Api {
 	patchAllSettings(patch: SettingsSave): Promise<SavedSettings>;
 	/** The names and path a draft's naming settings give a sample chapter. */
 	previewRename(draft: RenamePreviewRequest): Promise<RenamePreview>;
+	/** Whether downloads can be saved in each folder now, in order. */
+	checkFolders(paths: string[]): Promise<FolderCheck[]>;
+	/** The folder a download of a series goes to, the manga folder included. */
+	saveFolder(request: SaveFolderRequest): Promise<string>;
 	listModules(): Promise<ModuleSummary[]>;
 	getModuleSettings(id: string): Promise<ModuleSettingsView>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
@@ -153,9 +159,10 @@ export interface Api {
 	listFavorites(): Promise<FavoriteView[]>;
 	/**
 	 * Adds a series to the library; its current chapters count as seen. Rejects with an
-	 * {@link ApiError}: 409 when it is in the library already, 404/502 as {@link getSeries}.
+	 * {@link ApiError}: 409 when it is in the library already, 404/502 as {@link getSeries}. It
+	 * downloads to `saveTo` (the website's or the default destination when empty), in its manga folder.
 	 */
-	addFavorite(module: string, link: string): Promise<FavoriteView>;
+	addFavorite(module: string, link: string, saveTo?: string): Promise<FavoriteView>;
 	/** Changes the given fields of a favorite. */
 	updateFavorite(id: number, patch: FavoritePatch): Promise<FavoriteView>;
 	deleteFavorite(id: number): Promise<void>;
@@ -376,6 +383,12 @@ export function createApi({
 		async previewRename(draft) {
 			return unwrap('previewRename', await client.POST('/api/preview-rename', { body: draft }));
 		},
+		async checkFolders(paths) {
+			return unwrap('checkFolders', await client.POST('/api/check-folders', { body: { paths } }));
+		},
+		async saveFolder(request) {
+			return unwrap('saveFolder', await client.POST('/api/save-folder', { body: request })).folder;
+		},
 		async listModules() {
 			return unwrap('listModules', await client.GET('/api/modules'));
 		},
@@ -436,8 +449,10 @@ export function createApi({
 		async listFavorites() {
 			return unwrap('listFavorites', await client.GET('/api/favorites'));
 		},
-		async addFavorite(module, link) {
-			const res = await client.POST('/api/favorites', { body: { module_id: module, link } });
+		async addFavorite(module, link, saveTo) {
+			const res = await client.POST('/api/favorites', {
+				body: { module_id: module, link, save_to: saveTo || null }
+			});
 			if (!res.response.ok || res.data === undefined) {
 				// Every error here is a `Problem`.
 				const problem = res.error as Partial<Problem> | undefined;

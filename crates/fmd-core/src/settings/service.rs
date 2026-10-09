@@ -8,11 +8,11 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 use tokio::sync::watch;
 
-use super::model::Settings;
+use super::model::{DEFAULT_DESTINATION_NAME, DEFAULT_PATH, Destination, Settings};
 use super::module_overrides::{ModuleOverrides, encrypt_plain_module_secrets};
 use super::password::{hash_patched, hash_stored};
 use super::secrets::{Found, seal_group, unseal_group};
-use super::validate::{normalize, validate};
+use super::validate::{normalize, sync_default_dir, validate, validate_destinations};
 use crate::modules::OptionDef;
 
 #[derive(Debug, Error)]
@@ -110,6 +110,9 @@ impl SettingsService {
                 if key == "server" && hash_stored(db.cipher(), &mut stored)? {
                     repo.set(&key, &stored)?;
                 }
+                if key == "saveto" && migrate_destinations(&mut stored) {
+                    repo.set(&key, &stored)?;
+                }
                 if unseal_group(db.cipher(), &key, &mut stored) == Found::Plain {
                     let mut sealed = stored.clone();
                     seal_group(db.cipher(), &key, &mut sealed)?;
@@ -119,7 +122,8 @@ impl SettingsService {
             }
         }
         encrypt_plain_module_secrets(&db.module_settings())?;
-        let settings = Settings::deserialize(&tree)?;
+        let mut settings = Settings::deserialize(&tree)?;
+        settings.saveto.default_dir = settings.saveto.default_path().to_string();
         let (tx, _) = watch::channel(Arc::new(settings));
         Ok(Self {
             db,
@@ -201,6 +205,8 @@ impl SettingsService {
             return Err(SettingsError::Invalid(errors));
         };
         normalize(&mut next);
+        errors.extend(validate_destinations(&current.saveto, &next.saveto));
+        sync_default_dir(&current.saveto, &mut next.saveto);
         errors.extend(validate(&next));
         SettingsError::check(errors)?;
         Ok(next)
@@ -293,6 +299,32 @@ impl SettingsService {
         }
         Ok(changed)
     }
+}
+
+/// Turns the download folder a build before destinations stored (`default_dir`) into the
+/// default destination, named [`DEFAULT_DESTINATION_NAME`]; `false` when `saveto` has
+/// destinations already.
+fn migrate_destinations(saveto: &mut Value) -> bool {
+    let Value::Object(fields) = saveto else {
+        return false;
+    };
+    if fields.contains_key("destinations") {
+        return false;
+    }
+    let path = fields
+        .get("default_dir")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|dir| !dir.is_empty())
+        .unwrap_or(DEFAULT_PATH)
+        .to_string();
+    let destination = Destination {
+        name: DEFAULT_DESTINATION_NAME.into(),
+        path,
+        default: true,
+    };
+    fields.insert("destinations".into(), serde_json::json!([destination]));
+    true
 }
 
 /// One module's part of [`SettingsService::update_with_modules`].

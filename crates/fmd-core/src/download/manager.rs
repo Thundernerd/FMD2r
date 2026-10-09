@@ -191,12 +191,19 @@ impl Inner {
         } else {
             TaskStatus::Waiting
         };
+        let website_dir = self
+            .config
+            .db
+            .module_settings()
+            .get(&download.module_id)?
+            .map(|stored| stored.save_to)
+            .unwrap_or_default();
         let repo = self.config.db.tasks();
         let task = repo.create(&NewTask {
             module_id: download.module_id.clone(),
             link: download.manga_link.clone(),
             title: download.title.clone(),
-            save_to: save_to(saveto, &website, download),
+            save_to: save_to(saveto, &website, &website_dir, download),
             status,
             enabled: true,
         })?;
@@ -693,14 +700,21 @@ pub(super) fn manga_folder(
     custom_rename(&saveto.manga_rename, &ctx, &rename_options(saveto))
 }
 
-/// The task's directory: the given or default download directory, plus the manga folder when
-/// generated and not already part of it, without trailing dots
-/// (mangadownloader/forms/frmMain.pas:2685-2710).
-pub(crate) fn save_to(saveto: &SaveToSettings, website: &str, download: &NewDownload) -> String {
-    let mut dir = match download.save_to.trim() {
-        "" => saveto.default_dir.clone(),
-        dir => dir.to_owned(),
-    };
+/// The task's directory: the given download directory, else the website's (`website_dir`,
+/// `OverrideSaveTo`, mangadownloader/forms/frmMain.pas:5631-5643), else the default
+/// destination's (`FillSaveTo`), plus the manga folder when generated and not already part of
+/// it, without trailing dots (mangadownloader/forms/frmMain.pas:2685-2710).
+pub fn save_to(
+    saveto: &SaveToSettings,
+    website: &str,
+    website_dir: &str,
+    download: &NewDownload,
+) -> String {
+    let mut dir = [download.save_to.trim(), website_dir.trim()]
+        .into_iter()
+        .find(|dir| !dir.is_empty())
+        .unwrap_or(saveto.default_path())
+        .to_owned();
     if saveto.generate_manga_folder {
         let folder = manga_folder(saveto, website, download);
         if !dir.contains(&folder) {

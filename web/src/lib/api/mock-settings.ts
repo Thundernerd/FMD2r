@@ -42,6 +42,7 @@ export const defaultSettings = (): Settings => ({
 	},
 	saveto: {
 		default_dir: 'downloads',
+		destinations: [{ name: 'Downloads', path: 'downloads', default: true }],
 		generate_manga_folder: true,
 		manga_rename: '%MANGA%',
 		generate_chapter_folder: true,
@@ -233,7 +234,7 @@ export type ModuleBasics = Pick<
 	'id' | 'name' | 'root_url' | 'category' | 'option_count' | 'customized'
 >;
 
-type Overrides = Pick<ModuleSettingsView, 'enabled' | 'limits' | 'http'> & {
+type Overrides = Pick<ModuleSettingsView, 'enabled' | 'limits' | 'http' | 'save_to'> & {
 	options: Record<string, unknown>;
 };
 
@@ -245,6 +246,7 @@ const defaultOverrides = (): Overrides => ({
 		cookies: '',
 		proxy: { type: 'default', host: '', port: '', username: '', has_password: false }
 	},
+	save_to: '',
 	options: {}
 });
 
@@ -295,6 +297,55 @@ function mergePatch(
 			mergePatch(current, value, fallback, problems, field);
 		else target[key] = value;
 	}
+}
+
+/**
+ * The server's destination checks (fmd_core's `validate_destinations`) and its `default_dir`
+ * mirror: a patch of `default_dir` alone moves the default destination.
+ */
+function checkDestinations(current: Settings, next: Settings, problems: FieldProblem[]) {
+	const list = next.saveto.destinations;
+	const seen: string[] = [];
+	list.forEach((d, i) => {
+		d.name = d.name.trim();
+		d.path = d.path.trim();
+		const name = d.name.toLowerCase();
+		if (!name) {
+			problems.push({
+				field: `saveto.destinations.${i}.name`,
+				detail: 'a destination needs a name'
+			});
+		} else if (seen.includes(name)) {
+			problems.push({
+				field: `saveto.destinations.${i}.name`,
+				detail: `another destination is named ${d.name}`
+			});
+		}
+		seen.push(name);
+		if (!d.path) {
+			problems.push({
+				field: `saveto.destinations.${i}.path`,
+				detail: 'a destination needs a folder'
+			});
+		}
+	});
+	const defaults = list.filter((d) => d.default).length;
+	if (defaults !== 1) {
+		const old = current.saveto.destinations.find((d) => d.default);
+		const removed = defaults === 0 && !!old && !list.some((d) => d.name === old.name);
+		problems.push({
+			field: 'saveto.destinations',
+			detail: removed
+				? 'the default destination cannot be removed'
+				: 'exactly one destination must be the default'
+		});
+	}
+	const sameList = JSON.stringify(list) === JSON.stringify(current.saveto.destinations);
+	const fallback = list.find((d) => d.default);
+	if (next.saveto.default_dir !== current.saveto.default_dir && sameList && fallback) {
+		fallback.path = next.saveto.default_dir || 'downloads';
+	}
+	next.saveto.default_dir = fallback?.path ?? next.saveto.default_dir;
 }
 
 /** The server's range checks, as the settings page's own field definitions state them. */
@@ -377,7 +428,8 @@ function previewRename(draft: RenamePreviewRequest): RenamePreview {
 	);
 	const ext = images.imagemagick.enabled ? images.imagemagick.save_as.toLowerCase() : 'jpg';
 	const page = `${filename}.${ext}`;
-	const dir = [saveto.default_dir || 'downloads', saveto.generate_manga_folder ? manga : null];
+	const home = saveto.destinations?.find((d) => d.default)?.path || saveto.default_dir;
+	const dir = [home || 'downloads', saveto.generate_manga_folder ? manga : null];
 	const path =
 		format === 'folder'
 			? [...dir, saveto.generate_chapter_folder ? chapter : null, page]
@@ -404,6 +456,7 @@ export function createMockSettings() {
 			limits: overrides.limits,
 			module_limits: module.limits,
 			http: overrides.http,
+			save_to: overrides.save_to ?? '',
 			options: module.options.map((o) => {
 				const stored = overrides.options[o.key];
 				return (stored === undefined ? o : { ...o, value: stored }) as ModuleOptionSetting;
@@ -416,6 +469,7 @@ export function createMockSettings() {
 	const nextSettings = (patch: JsonObject, problems: FieldProblem[]): Settings => {
 		const next = structuredClone(state.settings);
 		mergePatch(next, patch, defaultSettings(), problems);
+		checkDestinations(state.settings, next, problems);
 		validateSettings(next, problems);
 		return next;
 	};
@@ -467,6 +521,28 @@ export function createMockSettings() {
 		},
 
 		previewRename,
+
+		/** Like `fmd_core::download::save_to`, with a rough manga folder name. */
+		saveFolder(moduleId: string, title: string, saveTo: string): string {
+			const saveto = state.settings.saveto;
+			const home = saveto.destinations.find((d) => d.default)?.path ?? saveto.default_dir;
+			const website = find(moduleId)?.summary.name ?? moduleId;
+			const dir =
+				saveTo.trim() || (state.modules[moduleId]?.save_to ?? '').trim() || home || 'downloads';
+			if (!saveto.generate_manga_folder) return dir;
+			const manga = (saveto.manga_rename || '%MANGA%')
+				.replaceAll('%MANGA%', title)
+				.replaceAll('%WEBSITE%', website)
+				.trim();
+			return dir.includes(manga) ? dir : `${dir.replace(/\/+$/, '')}/${manga}`;
+		},
+
+		/** Every folder is usable except those under `/mnt/`, as if their disk were unmounted. */
+		checkFolders: (paths: string[]) =>
+			paths.map((path) => ({
+				path,
+				problem: path.startsWith('/mnt/') ? 'the folder does not exist' : null
+			})),
 
 		listModules: (): ModuleBasics[] =>
 			MODULES.map((m) => {

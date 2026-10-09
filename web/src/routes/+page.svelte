@@ -12,6 +12,7 @@
 		type LibraryFilters
 	} from '#lib/library/filters.ts';
 	import { seriesHref } from '#lib/series/href.ts';
+	import FolderDialog from '#lib/components/library/FolderDialog.svelte';
 	import ImportDialog from '#lib/components/library/ImportDialog.svelte';
 
 	/** The background job behind "Check now" (`GET /api/jobs/favorites`). */
@@ -34,6 +35,8 @@
 	let starting = $state(false);
 	let checkError = $state<string | null>(null);
 	let importing = $state(false);
+	/** The series whose download folder the dialog changes. */
+	let folderOf = $state<FavoriteView | null>(null);
 
 	const shown = $derived(filterFavorites(favorites, filters));
 	const counts = $derived(chipCounts(favorites));
@@ -134,6 +137,16 @@
 	</div>
 	{#if checkError}
 		<p class="bad" role="alert">{checkError}</p>
+	{/if}
+	{#if folderOf}
+		<FolderDialog
+			{api}
+			favorite={folderOf}
+			onsaved={(updated) => {
+				favorites = favorites.map((f) => (f.id === updated.id ? updated : f));
+			}}
+			onclose={() => (folderOf = null)}
+		/>
 	{/if}
 	{#if importing}
 		<ImportDialog
@@ -236,6 +249,13 @@
 								: 'Not checked'}</span
 						>
 					</a>
+					<button
+						class="btn ghost sm folder"
+						type="button"
+						aria-label="Download folder of {favorite.title}"
+						title={favorite.save_to}
+						onclick={() => (folderOf = favorite)}>Folder…</button
+					>
 				</li>
 			{/each}
 		</ul>
@@ -314,6 +334,9 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 		gap: 20px 16px;
+	}
+	.folder {
+		margin-top: 2px;
 	}
 	.card {
 		display: flex;

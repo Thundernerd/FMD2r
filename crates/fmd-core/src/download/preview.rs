@@ -47,6 +47,8 @@ pub struct PagePlacement {
 pub fn first_page(settings: &Settings, sample: &SampleChapter<'_>) -> PagePlacement {
     let mut settings = settings.clone();
     crate::settings::normalize(&mut settings);
+    // A draft from a client that only knows `default_dir` sets the default destination's path.
+    crate::settings::sync_default_dir(&Default::default(), &mut settings.saveto);
     let saveto = &settings.saveto;
     let listed = if saveto.remove_manga_name_from_chapter {
         remove_manga_name(sample.chapter, sample.title)
@@ -60,7 +62,7 @@ pub fn first_page(settings: &Settings, sample: &SampleChapter<'_>) -> PagePlacem
         ..NewDownload::default()
     };
     let chapter = chapter_name(saveto, sample.website, &download, &listed, sample.number);
-    let dir = PathBuf::from(save_to(saveto, sample.website, &download));
+    let dir = PathBuf::from(save_to(saveto, sample.website, "", &download));
     let template = custom_file_name(saveto, sample.website, sample.title, &chapter);
     let filename = page_file_name(&template, None, 0);
     let page = format!(

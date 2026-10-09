@@ -22,6 +22,11 @@ pub struct ModuleOverrides {
     pub enabled: bool,
     pub limits: LimitOverrides,
     pub http: HttpOverrides,
+    /// The folder the module's downloads go to when the user picks none; empty for the default
+    /// destination (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50).
+    /// Like FMD2's `OverrideSaveTo` (mangadownloader/forms/frmMain.pas:5631-5643), it applies
+    /// whether or not `enabled` is set.
+    pub save_to: String,
     /// Values of the options the module declares with `AddOption*`, keyed by option name.
     /// These apply whether or not `enabled` is set.
     #[schema(value_type = Object)]
@@ -41,6 +46,7 @@ impl ModuleOverrides {
             enabled: stored.enabled,
             limits: serde_json::from_value(stored.limits)?,
             http: serde_json::from_value(stored.http)?,
+            save_to: stored.save_to,
             options: match stored.options {
                 Value::Object(map) => map,
                 _ => Map::new(),
@@ -75,6 +81,7 @@ impl ModuleOverrides {
         merge(&mut stored.http, serde_json::to_value(&self.http)?);
         seal(repo.cipher(), &mut stored.http, MODULE_HTTP_SECRET)?;
         stored.options = Value::Object(self.options.clone());
+        stored.save_to = self.save_to.trim().to_owned();
         Ok(stored)
     }
 }

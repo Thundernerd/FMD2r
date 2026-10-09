@@ -306,3 +306,58 @@ fn view(module: &str, info: MangaInfo, downloaded: &[String], in_library: bool) 
         in_library,
     }
 }
+
+/// A download whose folder to show before it is queued.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SaveFolderRequest {
+    pub module_id: String,
+    pub title: String,
+    #[serde(default)]
+    pub authors: String,
+    #[serde(default)]
+    pub artists: String,
+    /// The folder the user picked; the website's or the default destination when empty.
+    #[serde(default)]
+    pub save_to: String,
+}
+
+/// The folder a download is saved in.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SaveFolder {
+    pub folder: String,
+}
+
+/// The folder a download of the series would be saved in with the saved settings, the manga
+/// folder included: what `POST /api/tasks` stores as the task's `save_to`
+/// (mangadownloader/forms/frmMain.pas:2685-2710).
+#[utoipa::path(post, path = "/api/save-folder", tag = "series", operation_id = "saveFolder",
+    request_body = SaveFolderRequest,
+    responses(
+        (status = 200, body = SaveFolder),
+        (status = 400, description = "Malformed body", body = Problem),
+    ))]
+pub(crate) async fn save_folder(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<SaveFolderRequest>,
+) -> Result<Json<SaveFolder>, ApiError> {
+    let website = state
+        .modules
+        .module(&req.module_id)
+        .map_or_else(|| req.module_id.clone(), |m| m.name);
+    let website_dir = state.website_dir(&req.module_id).await?;
+    let download = fmd_core::download::NewDownload {
+        module_id: req.module_id,
+        title: req.title,
+        authors: req.authors,
+        artists: req.artists,
+        save_to: req.save_to,
+        ..Default::default()
+    };
+    let folder = fmd_core::download::save_to(
+        &state.settings.get().saveto,
+        &website,
+        &website_dir,
+        &download,
+    );
+    Ok(Json(SaveFolder { folder }))
+}
