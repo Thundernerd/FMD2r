@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use super::{CoverModules, CoverResolver, CoverSession};
+use super::{CoverModules, CoverResolver, CoverSession, Origin};
 
 /// Redirects followed before giving up, like `THTTPSendThread.MaxRedirect`
 /// (baseunits/httpsendthread.pas:516).
@@ -43,27 +43,36 @@ pub(crate) enum FetchError {
     Http(#[from] HttpError),
 }
 
-/// GETs `url` with a session prepared for `module` like FMD2 fetches a cover: the module's
-/// cookies, user agent and connection queue (`TModuleContainer.PrepareHTTP`,
-/// baseunits/WebsiteModules.pas:353-387; `TGetMangaInfosThread`, baseunits/uGetMangaInfosThread.pas:143-147),
-/// plus `Referer: <RootURL>/` since sites often refuse hotlinked images.
+/// GETs `url` for `origin`. A module's cover is fetched with a session prepared for the module
+/// like FMD2 fetches a cover: the module's cookies, user agent and connection queue
+/// (`TModuleContainer.PrepareHTTP`, baseunits/WebsiteModules.pas:353-387;
+/// `TGetMangaInfosThread`, baseunits/uGetMangaInfosThread.pas:143-147), plus
+/// `Referer: <RootURL>/` since sites often refuse hotlinked images. Any other cover is fetched
+/// with a plain session and no referer.
 ///
 /// Blocks: run it on a thread outside the tokio runtime (see `fmd_http`'s threading contract).
 pub(crate) fn fetch(
     modules: &dyn CoverModules,
     resolver: &dyn CoverResolver,
-    module: &str,
+    origin: &Origin,
     url: &Url,
     cached: Option<&Validators>,
 ) -> Result<Fetched, FetchError> {
-    let CoverSession {
-        root_url,
-        mut session,
-    } = modules
-        .cover_session(module)
-        .ok_or_else(|| FetchError::UnknownModule(module.to_owned()))?;
-    let referer = format!("{}/", root_url.trim_end_matches('/'));
-    let root = Url::parse(&root_url).ok();
+    let (mut session, referer, root) = match origin {
+        Origin::Module(module) => {
+            let CoverSession { root_url, session } = modules
+                .cover_session(module)
+                .ok_or_else(|| FetchError::UnknownModule(module.to_owned()))?;
+            let referer = format!("{}/", root_url.trim_end_matches('/'));
+            (session, Some(referer), Url::parse(&root_url).ok())
+        }
+        Origin::Plain => {
+            let session = modules.plain_session().ok_or_else(|| {
+                FetchError::Upstream("no HTTP client for covers outside a module".into())
+            })?;
+            (session, None, None)
+        }
+    };
     // Redirects are followed here, not by the session, so every hop passes the SSRF guard.
     session.set_follow_redirection(false);
     let mut url = url.clone();
@@ -72,7 +81,9 @@ pub(crate) fn fetch(
         session.set_connect_to(pin);
         session.reset();
         let headers = session.headers_mut();
-        headers.set_value("Referer", &referer);
+        if let Some(referer) = &referer {
+            headers.set_value("Referer", referer);
+        }
         headers.set_value(
             "Accept",
             "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",

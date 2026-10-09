@@ -3,6 +3,7 @@
 
 mod cache;
 mod fetch;
+pub(crate) mod series;
 mod thumbnail;
 
 use std::collections::HashMap;
@@ -100,6 +101,33 @@ pub trait CoverModules: Send + Sync + 'static {
     /// A session for module `id`, or `None` when there is no such module. Called on a thread
     /// outside the tokio runtime, so it may block.
     fn cover_session(&self, id: &str) -> Option<CoverSession>;
+
+    /// A session with the global HTTP settings and no module's cookies, for covers that are not
+    /// a website's (MangaBaka's CDN); `None` when there is none. Called like
+    /// [`CoverModules::cover_session`].
+    fn plain_session(&self) -> Option<HttpSession> {
+        None
+    }
+}
+
+/// Whose session fetches a cover.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Origin {
+    /// The website module with this ID.
+    Module(String),
+    /// No module ([`CoverModules::plain_session`]).
+    Plain,
+}
+
+impl Origin {
+    /// The module the cache files the cover under; empty for no module (a module always has an
+    /// ID).
+    fn cache_name(&self) -> &str {
+        match self {
+            Self::Module(id) => id,
+            Self::Plain => "",
+        }
+    }
 }
 
 /// The proxy URL serving `url`, a cover of module `module`; what other endpoints hand the browser
@@ -120,6 +148,8 @@ pub(crate) struct Covers {
     revalidate_after: Duration,
     /// One lock per cover being resolved, so concurrent requests make one upstream fetch.
     inflight: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// The queues of the `GetInfo` lookups for list titles' covers.
+    lookups: series::Lookups,
 }
 
 impl Covers {
@@ -130,15 +160,16 @@ impl Covers {
             resolver: config.resolver,
             revalidate_after: config.revalidate_after,
             inflight: Mutex::default(),
+            lookups: series::Lookups::default(),
         }
     }
 
     /// The cover at `url` of `module`, from the cache while fresh, else from upstream. Concurrent
     /// calls for one cover wait for the first, then find its result in the cache.
-    async fn get(&self, module: &str, url: &Url, width: Option<u32>) -> Result<Entry, ApiError> {
-        let key = cache_key(module, url);
+    async fn get(&self, origin: &Origin, url: &Url, width: Option<u32>) -> Result<Entry, ApiError> {
+        let key = cache_key(origin.cache_name(), url);
         let _inflight = self.inflight(&key).await;
-        let cover = self.resolve(key.clone(), module, url).await?;
+        let cover = self.resolve(key.clone(), origin, url).await?;
         match width {
             Some(width) => self.thumbnail(key, cover, width).await,
             None => Ok(cover),
@@ -173,7 +204,8 @@ impl Covers {
         .await?
     }
 
-    /// Waits for the lock of cover `key`, created on first use.
+    /// Waits for the lock of `key` (a cover, or a title whose cover is being looked up), created
+    /// on first use.
     async fn inflight(&self, key: &str) -> Inflight<'_> {
         let lock = {
             let mut map = self.inflight.lock().unwrap_or_else(|e| e.into_inner());
@@ -190,7 +222,7 @@ impl Covers {
         inflight
     }
 
-    async fn resolve(&self, key: String, module: &str, url: &Url) -> Result<Entry, ApiError> {
+    async fn resolve(&self, key: String, origin: &Origin, url: &Url) -> Result<Entry, ApiError> {
         let cache = self.cache.clone();
         let cached = {
             let key = key.clone();
@@ -203,12 +235,12 @@ impl Covers {
         }
         let validators = cached.as_ref().map(|e| e.meta.upstream.clone());
         let (modules, resolver) = (self.modules.clone(), self.resolver.clone());
-        let (module, target) = (module.to_owned(), url.clone());
+        let (origin, target) = (origin.clone(), url.clone());
         let fetched = on_fetch_thread(move || {
             fetch::fetch(
                 modules.as_ref(),
                 resolver.as_ref(),
-                &module,
+                &origin,
                 &target,
                 validators.as_ref(),
             )
@@ -354,13 +386,21 @@ pub(crate) async fn get(
     // The scheme is checked with the rest of the SSRF guard, before anything is fetched.
     let url = Url::parse(&query.url)
         .map_err(|e| ApiError::BadRequest(format!("bad URL {:?}: {e}", query.url)))?;
-    if query.w.is_some_and(|w| w == 0 || w > MAX_WIDTH) {
+    check_width(query.w)?;
+    let entry = covers
+        .get(&Origin::Module(query.module), &url, query.w)
+        .await?;
+    Ok(respond(entry, &headers, covers.revalidate_after))
+}
+
+/// A 400 unless `w` is absent or between 1 and [`MAX_WIDTH`].
+fn check_width(w: Option<u32>) -> Result<(), ApiError> {
+    if w.is_some_and(|w| w == 0 || w > MAX_WIDTH) {
         return Err(ApiError::BadRequest(format!(
             "w must be between 1 and {MAX_WIDTH}"
         )));
     }
-    let entry = covers.get(&query.module, &url, query.w).await?;
-    Ok(respond(entry, &headers, covers.revalidate_after))
+    Ok(())
 }
 
 /// 304 when the browser already has `entry` (RFC 9110 `If-None-Match`), else the image; either
