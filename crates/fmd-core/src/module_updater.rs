@@ -406,11 +406,12 @@ impl ModuleUpdater {
         }
         let to_stage = self.to_stage(&plan.download);
         let results = self.download_all(&commit, &plan.download, &to_stage);
-        let rejected = self.validate(
-            results
-                .iter()
-                .filter_map(|r| r.as_ref().ok()?.staged.clone()),
-        );
+        let staged: Vec<PathBuf> = results
+            .iter()
+            .filter_map(|r| r.as_ref().ok()?.staged.clone())
+            .collect();
+        self.stage_siblings(&staged);
+        let rejected = self.validate(staged.into_iter());
         let mut kept_out = BTreeMap::new();
         for (file, result) in plan.download.iter().zip(results) {
             let committed = result.and_then(|downloaded| match &downloaded.staged {
@@ -833,6 +834,40 @@ impl ModuleUpdater {
             })
             .map(|f| f.path.clone())
             .collect()
+    }
+
+    /// Copies the files next to each `staged` module in the Lua dir that are not module files
+    /// into the staging dir beside it, so a module reading one of them when it loads (MangaPlus.lua
+    /// reads `MangaPlus.proto` from its own directory, lua/modules/MangaPlus.lua:98-110) finds it
+    /// there, as `DoInit` would in the Lua dir (baseunits/lua/LuaWebsiteModules.pas:473-500).
+    /// The other files of this sync are already in the Lua dir, so each copy is the version the
+    /// module will run with. A sibling that fails to copy is logged; validation then reports the
+    /// module that needed it.
+    fn stage_siblings(&self, staged: &[PathBuf]) {
+        let lua_dir = &self.config.lua_dir;
+        let staging = lua_dir.join(STAGING_DIR);
+        let dirs: BTreeSet<&Path> = staged.iter().filter_map(|f| f.parent()).collect();
+        for dir in dirs {
+            let live_dir = lua_dir.join(relative(&staging, dir));
+            let entries = match std::fs::read_dir(&live_dir) {
+                Ok(entries) => entries,
+                Err(e) => {
+                    tracing::warn!(target: "fmd_core", "module updater: {}: {e}", live_dir.display());
+                    continue;
+                }
+            };
+            for entry in entries.flatten() {
+                let live = entry.path();
+                let sibling = relative(lua_dir, &live);
+                let copy = dir.join(entry.file_name());
+                if is_module_file(&sibling) || !live.is_file() || copy.exists() {
+                    continue;
+                }
+                if let Err(e) = std::fs::copy(&live, &copy) {
+                    tracing::warn!(target: "fmd_core", "module updater: {sibling}: {e}");
+                }
+            }
+        }
     }
 
     /// Loads each staged module file as the scan would from the Lua dir (`DoInit`,

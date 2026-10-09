@@ -715,3 +715,134 @@ fn a_broken_module_from_a_sync_is_never_loaded_by_a_concurrent_job() {
     assert_eq!(title.unwrap(), "A1");
     assert_eq!(f.read("modules/A.lua"), Some(module("a", "A1")));
 }
+
+/// A module file declaring module `id` that reads the title from `Data.txt` next to it when its
+/// chunk runs, the way MangaPlus.lua reads `MangaPlus.proto` (lua/modules/MangaPlus.lua:98-110).
+fn module_reading_sibling(id: &str, version: &str) -> String {
+    format!(
+        "local path = debug.getinfo(1, 'S').source:gsub('^@', ''):gsub('[^\\\\/]*$', 'Data.txt')\n\
+         local f = assert(io.open(path, 'rb'))\n\
+         local title = f:read('*all') .. ' {version}'\n\
+         f:close()\n\
+         function Init() local m = NewWebsiteModule(); m.ID='{id}'; m.Name='{id}'; \
+         m.RootURL='https://{id}'; m.OnGetInfo='GetInfo' end\n\
+         function GetInfo() MANGAINFO.Title = title; return no_error end\n"
+    )
+}
+
+#[test]
+fn a_module_reading_an_unchanged_sibling_file_is_updated_without_a_failed_init() {
+    let f = Fixture::new();
+    f.github.publish(
+        "c1",
+        "\"e1\"",
+        &[
+            ("modules/S.lua", "ss1", &module_reading_sibling("s", "v1")),
+            ("modules/Data.txt", "sd1", "data1"),
+        ],
+    );
+    f.updater.sync().unwrap();
+    assert!(f.modules.current().get("s").is_some());
+    let s2 = module_reading_sibling("s", "v2");
+    f.github.publish(
+        "c2",
+        "\"e2\"",
+        &[
+            ("modules/S.lua", "ss2", &s2),
+            ("modules/Data.txt", "sd1", "data1"),
+        ],
+    );
+
+    let report = f.updater.sync().unwrap();
+
+    let events = f.db.events().list(&EventQuery::default()).unwrap();
+    assert!(events.is_empty(), "{events:?}");
+    assert!(report.broken.is_empty(), "{:?}", report.broken);
+    assert_eq!(f.read("modules/S.lua"), Some(s2));
+    assert!(
+        f.rows()
+            .contains(&("modules/S.lua".to_owned(), "ss2".to_owned()))
+    );
+}
+
+#[test]
+fn a_module_and_its_sibling_file_changed_together_are_both_applied() {
+    let f = Fixture::new();
+    f.github.publish(
+        "c1",
+        "\"e1\"",
+        &[
+            ("modules/S.lua", "ss1", &module_reading_sibling("s", "v1")),
+            ("modules/Data.txt", "sd1", "data1"),
+        ],
+    );
+    f.updater.sync().unwrap();
+    // The new version only loads with the new data file next to it.
+    let s2 = module_reading_sibling("s", "v2").replace(
+        "f:close()",
+        "f:close()\nassert(title == 'data2 v2', 'stale ' .. title)",
+    );
+    f.github.publish(
+        "c2",
+        "\"e2\"",
+        &[
+            ("modules/S.lua", "ss2", &s2),
+            ("modules/Data.txt", "sd2", "data2"),
+        ],
+    );
+
+    let report = f.updater.sync().unwrap();
+
+    let events = f.db.events().list(&EventQuery::default()).unwrap();
+    assert!(events.is_empty(), "{events:?}");
+    assert!(report.broken.is_empty(), "{:?}", report.broken);
+    assert_eq!(f.read("modules/S.lua"), Some(s2));
+    assert_eq!(f.read("modules/Data.txt").as_deref(), Some("data2"));
+    assert_eq!(
+        f.rows(),
+        [
+            ("modules/Data.txt".to_owned(), "sd2".to_owned()),
+            ("modules/S.lua".to_owned(), "ss2".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn a_module_reading_a_sibling_file_that_really_fails_init_is_kept_back_with_an_error() {
+    let f = Fixture::new();
+    let s1 = module_reading_sibling("s", "v1");
+    f.github.publish(
+        "c1",
+        "\"e1\"",
+        &[
+            ("modules/S.lua", "ss1", &s1),
+            ("modules/Data.txt", "sd1", "data1"),
+        ],
+    );
+    f.updater.sync().unwrap();
+    let before = f.modules.current().get("s").unwrap().clone();
+    let s2 = module_reading_sibling("s", "v2")
+        .replace("function Init()", "function Init() error('boom');");
+    f.github.publish(
+        "c2",
+        "\"e2\"",
+        &[
+            ("modules/S.lua", "ss2", &s2),
+            ("modules/Data.txt", "sd1", "data1"),
+        ],
+    );
+
+    let report = f.updater.sync().unwrap();
+
+    let events = f.db.events().list(&EventQuery::default()).unwrap();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].title, "module S.lua failed Init");
+    let error = events[0].body["error"].as_str().unwrap();
+    assert!(error.contains("boom"), "{error}");
+    let live = f.lua_dir().join("modules/S.lua").display().to_string();
+    assert!(error.contains(&live), "{error}");
+    assert!(!error.contains(".fmd2r-staging"), "{error}");
+    assert_eq!(report.broken, ["modules/S.lua"]);
+    assert!(Arc::ptr_eq(f.modules.current().get("s").unwrap(), &before));
+    assert_eq!(f.read("modules/S.lua"), Some(s1));
+}
