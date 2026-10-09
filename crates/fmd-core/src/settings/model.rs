@@ -133,8 +133,8 @@ impl Default for ConnectionSettings {
     }
 }
 
-/// Global proxy. Unlike FMD2 (which encrypts `User`/`Pass` with `EncryptString`), the
-/// credentials are stored as plain JSON in `app.db`.
+/// Global proxy. The password is stored encrypted in `app.db` and the API never returns it
+/// (see `secrets.rs` and [`ProxySettingsView`](super::ProxySettingsView)).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(default)]
 pub struct ProxySettings {
@@ -446,7 +446,8 @@ pub struct ModuleUpdaterSettings {
     pub repo_name: String,
     pub repo_ref: String,
     pub repo_path: String,
-    /// Optional GitHub token to raise the API rate limit. No FMD2 counterpart.
+    /// Optional GitHub token to raise the API rate limit. No FMD2 counterpart. Stored encrypted;
+    /// the API only shows whether it is set.
     pub github_token: Option<String>,
     /// Keep the previous version of a module that fails to load after an update. No FMD2
     /// counterpart.
@@ -474,7 +475,8 @@ impl Default for ModuleUpdaterSettings {
 pub struct ServerSettings {
     /// Socket address to listen on.
     pub bind: String,
-    /// Password/bearer token clients must present; `None` disables auth. Stored as plain JSON.
+    /// Password/bearer token clients must present; `None` disables auth. Stored encrypted; the
+    /// API only shows whether it is set.
     pub auth_token: Option<String>,
     /// Days a login session may go unused before it ends; every authorized request restarts
     /// the count.

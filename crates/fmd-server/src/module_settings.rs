@@ -7,7 +7,7 @@ use axum::extract::{Path, State};
 use std::collections::HashMap;
 
 use fmd_core::modules::{ModuleCapabilities, ModuleInfo, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
-use fmd_core::settings::{HttpOverrides, LimitOverrides, ModuleLimits, ModuleOverrides};
+use fmd_core::settings::{HttpOverridesView, LimitOverrides, ModuleLimits, ModuleOverrides};
 use serde::Serialize;
 use serde_json::Value;
 use utoipa::ToSchema;
@@ -55,7 +55,7 @@ pub struct ModuleSettingsView {
     pub limits: LimitOverrides,
     /// The limits the module itself declares; 0 means unlimited.
     pub module_limits: ModuleLimits,
-    pub http: HttpOverrides,
+    pub http: HttpOverridesView,
 }
 
 /// One declared option, its default and the value `MODULE.GetOption` returns for it.
@@ -148,7 +148,7 @@ impl ModuleSettingsView {
             options,
             limits: overrides.limits,
             module_limits: module.limits,
-            http: overrides.http,
+            http: overrides.http.into(),
         }
     }
 }

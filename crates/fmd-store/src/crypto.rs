@@ -49,6 +49,14 @@ impl KeyFileCipher {
             aead: XChaCha20Poly1305::new(Key::from_slice(&key)),
         })
     }
+
+    /// A cipher with a fresh random key that is never written anywhere, for an in-memory
+    /// database whose secrets die with it.
+    pub(crate) fn random() -> Self {
+        Self {
+            aead: XChaCha20Poly1305::new(&XChaCha20Poly1305::generate_key(&mut OsRng)),
+        }
+    }
 }
 
 /// Writes a fresh key to a temporary file next to `path` and publishes it with `hard_link`, which

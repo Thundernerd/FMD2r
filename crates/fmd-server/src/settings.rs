@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use fmd_core::download::{SampleChapter, first_page};
 use fmd_core::settings::{
     ImageSettings, ModulePatch, OutputSettings, SaveToSettings, Settings, SettingsError,
+    SettingsView,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -35,9 +36,9 @@ impl From<SettingsError> for ApiError {
 
 /// All settings.
 #[utoipa::path(get, path = "/api/settings", tag = "settings", operation_id = "getSettings",
-    responses((status = 200, body = Settings, description = "Every setting")))]
-pub(crate) async fn get(State(state): State<AppState>) -> Json<Settings> {
-    Json(state.settings.get().as_ref().clone())
+    responses((status = 200, body = SettingsView, description = "Every setting")))]
+pub(crate) async fn get(State(state): State<AppState>) -> Json<SettingsView> {
+    Json(state.settings.get().as_ref().into())
 }
 
 /// Update settings with a JSON merge patch (RFC 7396) over [`Settings`]; `null` resets a setting
@@ -45,7 +46,7 @@ pub(crate) async fn get(State(state): State<AppState>) -> Json<Settings> {
 #[utoipa::path(patch, path = "/api/settings", tag = "settings", operation_id = "patchSettings",
     request_body(content = HashMap<String, Value>, content_type = "application/json"),
     responses(
-        (status = 200, body = Settings, description = "The updated settings"),
+        (status = 200, body = SettingsView, description = "The updated settings"),
         (status = 400, description = "The patch is not a JSON object", body = Problem),
         (status = 422, description = "A value is invalid or a setting unknown; `field` names it",
             body = Problem),
@@ -53,19 +54,19 @@ pub(crate) async fn get(State(state): State<AppState>) -> Json<Settings> {
 pub(crate) async fn patch(
     State(state): State<AppState>,
     ApiJson(patch): ApiJson<Value>,
-) -> Result<Json<Settings>, ApiError> {
+) -> Result<Json<SettingsView>, ApiError> {
     if !patch.is_object() {
         return Err(ApiError::BadRequest("expected a JSON object".into()));
     }
     let settings = state.settings.clone();
     let updated = crate::state::off_thread(move || settings.update(patch)).await??;
-    Ok(Json(updated.as_ref().clone()))
+    Ok(Json(updated.as_ref().into()))
 }
 
 /// What [`patch_all`] saved.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SavedSettings {
-    pub settings: Settings,
+    pub settings: SettingsView,
     /// The settings of each patched module, by module ID.
     pub modules: HashMap<String, ModuleSettingsView>,
 }
@@ -116,7 +117,7 @@ pub(crate) async fn patch_all(
     let (updated, overrides) =
         crate::state::off_thread(move || settings.update_with_modules(patch, modules)).await??;
     Ok(Json(SavedSettings {
-        settings: updated.as_ref().clone(),
+        settings: updated.as_ref().into(),
         modules: infos
             .into_iter()
             .zip(overrides)

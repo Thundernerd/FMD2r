@@ -10,6 +10,7 @@ use fmd_lua::{ModuleHttpOverrides, ModuleHttpSettings, SettingsStoreError};
 use fmd_store::{AppDb, ModuleSettings, ModuleSettingsRepo};
 
 use super::model::ConnectionSettings;
+use super::secrets::{Found, MODULE_HTTP_SECRET, seal, unseal};
 use super::service::{FieldError, SettingsError, merge, merge_patch_reporting};
 use crate::modules::{OptionDef, OptionDefKind, SPIN_EDIT_RANGE, as_i32};
 
@@ -29,11 +30,13 @@ pub struct ModuleOverrides {
 
 impl ModuleOverrides {
     /// The stored overrides for `module_id`, or the defaults (disabled, nothing overridden) when
-    /// none are stored. Missing fields take their defaults; unknown ones are ignored.
+    /// none are stored. Missing fields take their defaults; unknown ones are ignored. The proxy
+    /// password is decrypted.
     pub fn load(repo: &ModuleSettingsRepo<'_>, module_id: &str) -> Result<Self, SettingsError> {
-        let Some(stored) = repo.get(module_id)? else {
+        let Some(mut stored) = repo.get(module_id)? else {
             return Ok(Self::default());
         };
+        unseal(repo.cipher(), &mut stored.http, MODULE_HTTP_SECRET);
         Ok(Self {
             enabled: stored.enabled,
             limits: serde_json::from_value(stored.limits)?,
@@ -57,7 +60,8 @@ impl ModuleOverrides {
         Ok(())
     }
 
-    /// What [`Self::save`] stores: these overrides merged over the stored ones.
+    /// What [`Self::save`] stores: these overrides merged over the stored ones, with the proxy
+    /// password encrypted.
     pub(super) fn merged_over_stored(
         &self,
         repo: &ModuleSettingsRepo<'_>,
@@ -69,9 +73,26 @@ impl ModuleOverrides {
         stored.enabled = self.enabled;
         merge(&mut stored.limits, serde_json::to_value(self.limits)?);
         merge(&mut stored.http, serde_json::to_value(&self.http)?);
+        seal(repo.cipher(), &mut stored.http, MODULE_HTTP_SECRET)?;
         stored.options = Value::Object(self.options.clone());
         Ok(stored)
     }
+}
+
+/// Encrypts every module proxy password an older build stored in plain text.
+pub(super) fn encrypt_plain_module_secrets(
+    repo: &ModuleSettingsRepo<'_>,
+) -> Result<(), SettingsError> {
+    for module_id in repo.module_ids()? {
+        let Some(mut stored) = repo.get(&module_id)? else {
+            continue;
+        };
+        if unseal(repo.cipher(), &mut stored.http, MODULE_HTTP_SECRET) == Found::Plain {
+            seal(repo.cipher(), &mut stored.http, MODULE_HTTP_SECRET)?;
+            repo.upsert(&stored)?;
+        }
+    }
+    Ok(())
 }
 
 impl ModuleOverrides {
@@ -253,6 +274,8 @@ pub struct ProxyOverride {
     pub host: String,
     pub port: String,
     pub username: String,
+    /// Stored encrypted; the API only shows whether it is set
+    /// ([`ProxyOverrideView`](super::ProxyOverrideView)).
     pub password: String,
 }
 

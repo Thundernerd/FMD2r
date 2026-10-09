@@ -2,16 +2,17 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createMockBackend } from '#lib/api/mock.ts';
 import { createApi } from '#lib/api/client.ts';
+import { secretFlag } from '#lib/settings/fields.ts';
 import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 
 // The server's OpenAPI document carries the T18 defaults of every settings group.
 const openapi = JSON.parse(
 	readFileSync(new URL('../../../../openapi.json', import.meta.url), 'utf8')
 ) as {
-	components: { schemas: { Settings: { properties: Record<string, { default: unknown }> } } };
+	components: { schemas: { SettingsView: { properties: Record<string, { default: unknown }> } } };
 };
 const DEFAULTS = Object.fromEntries(
-	Object.entries(openapi.components.schemas.Settings.properties).map(([k, v]) => [k, v.default])
+	Object.entries(openapi.components.schemas.SettingsView.properties).map(([k, v]) => [k, v.default])
 );
 
 /** Dotted paths of every leaf setting under `value`. */
@@ -21,8 +22,11 @@ function leaves(value: unknown, prefix = ''): string[] {
 }
 
 describe('settings sections', () => {
+	// The server sends a secret only as its `has_` flag; its control edits the secret itself.
 	it('have a control for every setting of the T18 model, once', () => {
-		const paths = SETTINGS_SECTIONS.flatMap((s) => s.fields.map((f) => f.path));
+		const paths = SETTINGS_SECTIONS.flatMap((s) =>
+			s.fields.map((f) => (f.control.kind === 'secret' ? secretFlag(f.path) : f.path))
+		);
 		expect([...paths].sort()).toEqual(leaves(DEFAULTS).sort());
 	});
 
@@ -65,7 +69,10 @@ describe('settings sections', () => {
 		const property = (path: string) =>
 			path
 				.split('.')
-				.reduce<Schema | undefined>((s, key) => resolve(s)?.properties?.[key], schemas['Settings']);
+				.reduce<Schema | undefined>(
+					(s, key) => resolve(s)?.properties?.[key],
+					schemas['SettingsView']
+				);
 		const numbers = SETTINGS_SECTIONS.flatMap((s) => s.fields).flatMap((f) =>
 			f.control.kind === 'number' ? [{ path: f.path, min: f.control.min, max: f.control.max }] : []
 		);

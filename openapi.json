@@ -1813,7 +1813,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Settings"
+                  "$ref": "#/components/schemas/SettingsView"
                 }
               }
             }
@@ -1846,7 +1846,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Settings"
+                  "$ref": "#/components/schemas/SettingsView"
                 }
               }
             }
@@ -2764,32 +2764,42 @@
           }
         }
       },
-      "ConnectionSettings": {
+      "ConnectionSettingsView": {
         "type": "object",
+        "description": "[`ConnectionSettings`] with the proxy password left out.",
+        "required": [
+          "max_parallel_tasks",
+          "threads_per_task",
+          "retry_count",
+          "auto_retry_failed_tasks",
+          "always_start_from_failed_chapters",
+          "max_favorite_threads",
+          "max_update_list_threads",
+          "timeout_secs",
+          "user_agent",
+          "proxy",
+          "flaresolverr_url"
+        ],
         "properties": {
           "always_start_from_failed_chapters": {
             "type": "boolean",
-            "description": "Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,\nbaseunits/FMDOptions.pas:137).",
-            "default": true
+            "description": "Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,\nbaseunits/FMDOptions.pas:137)."
           },
           "auto_retry_failed_tasks": {
             "type": "integer",
             "format": "int32",
             "description": "Times a failed task is restarted automatically (`connections/NumberOfAutoRetryFailedTask`,\n`OptionRetryFailedTask` = 1, baseunits/FMDOptions.pas:136). Range 0..=100, the TSpinEdit default (no bounds\nset, mangadownloader/forms/frmMain.lfm:3669-3681).",
-            "default": 1,
             "maximum": 100,
             "minimum": 0
           },
           "flaresolverr_url": {
             "type": "string",
-            "description": "FlareSolverr's URL, e.g. `http://flaresolverr:8191`, for Cloudflare challenges; empty\nfor none. No FMD2 setting: FMD2r writes it into upstream's\n`lua/websitebypass/websitebypass_config.json` at startup\n([`write_websitebypass_config`](super::write_websitebypass_config)).",
-            "default": ""
+            "description": "FlareSolverr's URL, e.g. `http://flaresolverr:8191`, for Cloudflare challenges; empty\nfor none. No FMD2 setting: FMD2r writes it into upstream's\n`lua/websitebypass/websitebypass_config.json` at startup\n([`write_websitebypass_config`](super::write_websitebypass_config))."
           },
           "max_favorite_threads": {
             "type": "integer",
             "format": "int32",
             "description": "Threads checking favorites (`connections/MaxFavoriteThreads`,\nbaseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).",
-            "default": 1,
             "maximum": 32,
             "minimum": 1
           },
@@ -2797,7 +2807,6 @@
             "type": "integer",
             "format": "int32",
             "description": "Tasks downloading at once, over all modules (`connections/NumberOfTasks`,\n`OptionMaxParallel` = 1, baseunits/FMDOptions.pas:133). Range 1..=64: the Win64\n`MAX_TASKLIMIT` (baseunits/FMDOptions.pas:42), so any FMD2 value imports.",
-            "default": 1,
             "maximum": 64,
             "minimum": 1
           },
@@ -2805,31 +2814,17 @@
             "type": "integer",
             "format": "int32",
             "description": "Threads updating manga lists (`connections/MaxUpdateListThreads`,\nbaseunits/FMDOptions.pas:131). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3827-3828).",
-            "default": 1,
             "maximum": 32,
             "minimum": 1
           },
           "proxy": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ProxySettings",
-                "description": "Global proxy (mangadownloader/forms/frmMain.pas:5874-5879)."
-              }
-            ],
-            "default": {
-              "enabled": false,
-              "host": "",
-              "password": "",
-              "port": null,
-              "type": "http",
-              "username": ""
-            }
+            "$ref": "#/components/schemas/ProxySettingsView",
+            "description": "Global proxy (mangadownloader/forms/frmMain.pas:5874-5879)."
           },
           "retry_count": {
             "type": "integer",
             "format": "int32",
             "description": "HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,\nbaseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;\nmeaning in baseunits/httpsendthread.pas:626).",
-            "default": 5,
             "maximum": 5,
             "minimum": -1
           },
@@ -2837,7 +2832,6 @@
             "type": "integer",
             "format": "int32",
             "description": "Page download threads per task (`connections/NumberOfThreadsPerTask`, `OptionMaxThreads`\n= 1, baseunits/FMDOptions.pas:134). Range 1..=256: the Win64 `MAX_CONNECTIONPERHOSTLIMIT`\n(baseunits/FMDOptions.pas:43).",
-            "default": 1,
             "maximum": 256,
             "minimum": 1
           },
@@ -2845,14 +2839,12 @@
             "type": "integer",
             "format": "int32",
             "description": "Connection timeout in seconds (`connections/ConnectionTimeout`, `OptionConnectionTimeout`\n= 30, baseunits/FMDOptions.pas:129). Range 1..=300\n(mangadownloader/forms/frmMain.lfm:3387-3388).",
-            "default": 30,
             "maximum": 300,
             "minimum": 1
           },
           "user_agent": {
             "type": "string",
-            "description": "Default user agent; an empty value resets to [`DEFAULT_USER_AGENT`]\n(`connections/DefaultUserAgent`, mangadownloader/forms/frmMain.pas:5867-5871).",
-            "default": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+            "description": "Default user agent; an empty value resets to\n[`DEFAULT_USER_AGENT`](super::DEFAULT_USER_AGENT) (`connections/DefaultUserAgent`,\nmangadownloader/forms/frmMain.pas:5867-5871)."
           }
         }
       },
@@ -3186,33 +3178,25 @@
           }
         }
       },
-      "HttpOverrides": {
+      "HttpOverridesView": {
         "type": "object",
-        "description": "HTTP overrides applied in `PrepareHTTP` (baseunits/WebsiteModules.pas:353-379).",
+        "description": "[`HttpOverrides`] with the proxy password left out.",
+        "required": [
+          "user_agent",
+          "cookies",
+          "proxy"
+        ],
         "properties": {
           "cookies": {
             "type": "string",
-            "description": "Cookies merged into every request (`HTTP.Cookies`,\nbaseunits/WebsiteModulesSettings.pas:41).",
-            "default": ""
+            "description": "Cookies merged into every request (`HTTP.Cookies`,\nbaseunits/WebsiteModulesSettings.pas:41)."
           },
           "proxy": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ProxyOverride"
-              }
-            ],
-            "default": {
-              "host": "",
-              "password": "",
-              "port": "",
-              "type": "default",
-              "username": ""
-            }
+            "$ref": "#/components/schemas/ProxyOverrideView"
           },
           "user_agent": {
             "type": "string",
-            "description": "Replaces the default user agent when non-empty.",
-            "default": ""
+            "description": "Replaces the default user agent when non-empty."
           }
         }
       },
@@ -3982,7 +3966,7 @@
             "description": "Whether `limits` and `http` apply (`Settings.Enabled`); options always do."
           },
           "http": {
-            "$ref": "#/components/schemas/HttpOverrides"
+            "$ref": "#/components/schemas/HttpOverridesView"
           },
           "id": {
             "type": "string"
@@ -4061,50 +4045,49 @@
           }
         }
       },
-      "ModuleUpdaterSettings": {
+      "ModuleUpdaterSettingsView": {
         "type": "object",
-        "description": "Lua module sync from GitHub. The repo defaults are FMD2's `GitHub` section\n(dist/config.json:8-15).",
+        "description": "[`ModuleUpdaterSettings`] with the GitHub token left out.",
+        "required": [
+          "auto_update",
+          "interval_minutes",
+          "repo_owner",
+          "repo_name",
+          "repo_ref",
+          "repo_path",
+          "has_github_token",
+          "keep_last_good"
+        ],
         "properties": {
           "auto_update": {
             "type": "boolean",
-            "description": "Sync at startup and on the interval. No FMD2 counterpart: FMD2 checks when the user\nclicks \"Check update\" (`btCheckUpdateClick`, mangadownloader/forms/frmLuaModulesUpdater.pas:70).",
-            "default": true
+            "description": "Sync at startup and on the interval. No FMD2 counterpart: FMD2 checks when the user\nclicks \"Check update\" (`btCheckUpdateClick`, mangadownloader/forms/frmLuaModulesUpdater.pas:70)."
           },
-          "github_token": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Optional GitHub token to raise the API rate limit. No FMD2 counterpart.",
-            "default": null
+          "has_github_token": {
+            "type": "boolean",
+            "description": "Whether a GitHub token is set. Patch `github_token` to set it; an empty one clears it."
           },
           "interval_minutes": {
             "type": "integer",
             "format": "int32",
             "description": "Minutes between syncs. No FMD2 counterpart. Minimum 1.",
-            "default": 60,
             "minimum": 1
           },
           "keep_last_good": {
             "type": "boolean",
-            "description": "Keep the previous version of a module that fails to load after an update. No FMD2\ncounterpart.",
-            "default": true
+            "description": "Keep the previous version of a module that fails to load after an update. No FMD2\ncounterpart."
           },
           "repo_name": {
-            "type": "string",
-            "default": "FMD2"
+            "type": "string"
           },
           "repo_owner": {
-            "type": "string",
-            "default": "dazedcat19"
+            "type": "string"
           },
           "repo_path": {
-            "type": "string",
-            "default": "lua"
+            "type": "string"
           },
           "repo_ref": {
-            "type": "string",
-            "default": "master"
+            "type": "string"
           }
         }
       },
@@ -4260,35 +4243,6 @@
           }
         }
       },
-      "ProxyOverride": {
-        "type": "object",
-        "properties": {
-          "host": {
-            "type": "string",
-            "default": ""
-          },
-          "password": {
-            "type": "string",
-            "default": ""
-          },
-          "port": {
-            "type": "string",
-            "default": ""
-          },
-          "type": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ProxyOverrideType"
-              }
-            ],
-            "default": "default"
-          },
-          "username": {
-            "type": "string",
-            "default": ""
-          }
-        }
-      },
       "ProxyOverrideType": {
         "type": "string",
         "description": "`TProxyType` (baseunits/WebsiteModulesSettings.pas:11).",
@@ -4300,22 +4254,56 @@
           "socks5"
         ]
       },
-      "ProxySettings": {
+      "ProxyOverrideView": {
         "type": "object",
-        "description": "Global proxy. Unlike FMD2 (which encrypts `User`/`Pass` with `EncryptString`), the\ncredentials are stored as plain JSON in `app.db`.",
+        "description": "[`ProxyOverride`] with the password left out.",
+        "required": [
+          "type",
+          "host",
+          "port",
+          "username",
+          "has_password"
+        ],
+        "properties": {
+          "has_password": {
+            "type": "boolean",
+            "description": "Whether a password is set. Patch `password` to set it; an empty one clears it."
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ProxyOverrideType"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "ProxySettingsView": {
+        "type": "object",
+        "description": "[`ProxySettings`] with the password left out.",
+        "required": [
+          "enabled",
+          "type",
+          "host",
+          "username",
+          "has_password"
+        ],
         "properties": {
           "enabled": {
             "type": "boolean",
-            "description": "`connections/UseProxy`, default false.",
-            "default": false
+            "description": "`connections/UseProxy`, default false."
+          },
+          "has_password": {
+            "type": "boolean",
+            "description": "Whether a password is set. Patch `password` to set it; an empty one clears it."
           },
           "host": {
-            "type": "string",
-            "default": ""
-          },
-          "password": {
-            "type": "string",
-            "default": ""
+            "type": "string"
           },
           "port": {
             "type": [
@@ -4324,22 +4312,15 @@
             ],
             "format": "int32",
             "description": "`connections/Port`, default empty.",
-            "default": null,
             "maximum": 65535,
             "minimum": 1
           },
           "type": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ProxyType",
-                "description": "`connections/ProxyType`, default `HTTP`."
-              }
-            ],
-            "default": "http"
+            "$ref": "#/components/schemas/ProxyType",
+            "description": "`connections/ProxyType`, default `HTTP`."
           },
           "username": {
-            "type": "string",
-            "default": ""
+            "type": "string"
           }
         }
       },
@@ -4561,7 +4542,7 @@
             }
           },
           "settings": {
-            "$ref": "#/components/schemas/Settings"
+            "$ref": "#/components/schemas/SettingsView"
           }
         }
       },
@@ -4696,28 +4677,28 @@
           "unknown"
         ]
       },
-      "ServerSettings": {
+      "ServerSettingsView": {
         "type": "object",
-        "description": "The HTTP server. No FMD2 counterpart.",
+        "description": "[`ServerSettings`] with the password left out.",
+        "required": [
+          "bind",
+          "has_auth_token",
+          "session_idle_days",
+          "session_lifetime_days"
+        ],
         "properties": {
-          "auth_token": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Password/bearer token clients must present; `None` disables auth. Stored as plain JSON.",
-            "default": null
-          },
           "bind": {
             "type": "string",
-            "description": "Socket address to listen on.",
-            "default": "0.0.0.0:8080"
+            "description": "Socket address to listen on."
+          },
+          "has_auth_token": {
+            "type": "boolean",
+            "description": "Whether a password is set. Patch `auth_token` to set it; an empty one clears it."
           },
           "session_idle_days": {
             "type": "integer",
             "format": "int32",
             "description": "Days a login session may go unused before it ends; every authorized request restarts\nthe count.",
-            "default": 7,
             "maximum": 365,
             "minimum": 1
           },
@@ -4725,20 +4706,54 @@
             "type": "integer",
             "format": "int32",
             "description": "Days a login session lasts at most, however often it is used.",
-            "default": 30,
             "maximum": 3650,
             "minimum": 1
           }
         }
       },
-      "Settings": {
+      "SettingsSave": {
         "type": "object",
-        "description": "Every application setting. Stored one group per key in `app.db`'s `settings` table.",
+        "description": "The body of [`patch_all`]; either part may be left out.",
+        "properties": {
+          "modules": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "A merge patch as for `PATCH /api/settings`.",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SettingsView": {
+        "type": "object",
+        "description": "Every application setting, with the secrets left out: [`Settings`] as the API shows it.\nEach group's schema carries its defaults.",
         "properties": {
           "connections": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/ConnectionSettings"
+                "$ref": "#/components/schemas/ConnectionSettingsView"
               }
             ],
             "default": {
@@ -4750,8 +4765,8 @@
               "max_update_list_threads": 1,
               "proxy": {
                 "enabled": false,
+                "has_password": false,
                 "host": "",
-                "password": "",
                 "port": null,
                 "type": "http",
                 "username": ""
@@ -4834,12 +4849,12 @@
           "module_updater": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/ModuleUpdaterSettings"
+                "$ref": "#/components/schemas/ModuleUpdaterSettingsView"
               }
             ],
             "default": {
               "auto_update": true,
-              "github_token": null,
+              "has_github_token": false,
               "interval_minutes": 60,
               "keep_last_good": true,
               "repo_name": "FMD2",
@@ -4885,12 +4900,12 @@
           "server": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/ServerSettings"
+                "$ref": "#/components/schemas/ServerSettingsView"
               }
             ],
             "default": {
-              "auth_token": null,
               "bind": "0.0.0.0:8080",
+              "has_auth_token": false,
               "session_idle_days": 7,
               "session_lifetime_days": 30
             }
@@ -4921,41 +4936,6 @@
             }
           }
         }
-      },
-      "SettingsSave": {
-        "type": "object",
-        "description": "The body of [`patch_all`]; either part may be left out.",
-        "properties": {
-          "modules": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "description": "A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID.",
-            "additionalProperties": {
-              "type": "object",
-              "additionalProperties": {},
-              "propertyNames": {
-                "type": "string"
-              }
-            },
-            "propertyNames": {
-              "type": "string"
-            }
-          },
-          "settings": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "description": "A merge patch as for `PATCH /api/settings`.",
-            "additionalProperties": {},
-            "propertyNames": {
-              "type": "string"
-            }
-          }
-        },
-        "additionalProperties": false
       },
       "SkipReason": {
         "oneOf": [

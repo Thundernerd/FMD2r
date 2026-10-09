@@ -9,7 +9,8 @@ use thiserror::Error;
 use tokio::sync::watch;
 
 use super::model::Settings;
-use super::module_overrides::ModuleOverrides;
+use super::module_overrides::{ModuleOverrides, encrypt_plain_module_secrets};
+use super::secrets::{Found, seal_group, unseal_group};
 use super::validate::{normalize, validate};
 use crate::modules::OptionDef;
 
@@ -89,6 +90,9 @@ impl SettingsService {
     /// A stored value this build cannot read (an enum value from a newer build, a wrong type)
     /// falls back to its default instead of failing the load; the group's other fields are kept.
     /// The unreadable value stays in the table until that group is next updated.
+    ///
+    /// Secrets are stored encrypted (see `secrets.rs`); plain ones an older build stored, in
+    /// these groups or in a module's HTTP overrides, are encrypted here.
     pub fn load(db: AppDb) -> Result<Self, SettingsError> {
         let mut tree = serde_json::to_value(Settings::default())?;
         let keys: Vec<String> = tree
@@ -97,10 +101,16 @@ impl SettingsService {
             .unwrap_or_default();
         let repo = db.settings();
         for key in keys {
-            if let Some(stored) = repo.get::<Value>(&key)? {
+            if let Some(mut stored) = repo.get::<Value>(&key)? {
+                if unseal_group(db.cipher(), &key, &mut stored) == Found::Plain {
+                    let mut sealed = stored.clone();
+                    seal_group(db.cipher(), &key, &mut sealed)?;
+                    repo.set(&key, &sealed)?;
+                }
                 overlay_group(&mut tree, &key, stored);
             }
         }
+        encrypt_plain_module_secrets(&db.module_settings())?;
         let settings = Settings::deserialize(&tree)?;
         let (tx, _) = watch::channel(Arc::new(settings));
         Ok(Self {
@@ -227,6 +237,7 @@ impl SettingsService {
             }
             let mut stored = repo.get::<Value>(&key)?.unwrap_or(Value::Null);
             merge(&mut stored, group);
+            seal_group(self.db.cipher(), &key, &mut stored)?;
             changed.push((key, stored));
         }
         Ok(changed)
