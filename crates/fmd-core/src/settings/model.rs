@@ -27,6 +27,7 @@ pub struct Settings {
     pub server: ServerSettings,
     pub xpath: XPathSettings,
     pub covers: CoverSettings,
+    pub logs: LogSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -535,6 +536,28 @@ impl Default for CoverSettings {
         Self {
             revalidate_after_hours: 7 * 24,
             cache_size_mb: 256,
+        }
+    }
+}
+
+/// The log files in `<data dir>/logs/`. No FMD2 counterpart: FMD2 appends to one unbounded log
+/// file through MultiLog (baseunits/uBaseUnit.pas).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct LogSettings {
+    /// Size in MiB a log file grows to before the next one is started. 1 to 1024.
+    #[schema(minimum = 1, maximum = 1024)]
+    pub max_file_size_mb: u32,
+    /// Log files kept, the one being written included; the oldest is deleted past it. 1 to 100.
+    #[schema(minimum = 1, maximum = 100)]
+    pub max_files: u32,
+}
+
+impl Default for LogSettings {
+    fn default() -> Self {
+        Self {
+            max_file_size_mb: 10,
+            max_files: 5,
         }
     }
 }

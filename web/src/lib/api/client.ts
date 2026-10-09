@@ -90,6 +90,8 @@ export interface Api {
 	reorderTasks(ids: number[]): Promise<void>;
 	/** Where a task's files download from (the archive, or a zip of them all). */
 	taskFilesUrl(id: number): string;
+	/** Where the persisted log files download from, as one JSON-lines file. */
+	logsDownloadUrl(): string;
 	/** The series a manga URL points at, or `null` when no module handles the URL. */
 	resolveUrl(url: string): Promise<SeriesRef | null>;
 	/**
@@ -181,6 +183,8 @@ export interface ApiOptions {
 	fetch?: (input: Request) => Promise<Response>;
 	/** Overrides where task files download from (mock mode has no server to link to). */
 	taskFilesUrl?: (id: number) => string;
+	/** Overrides where the logs download from (mock mode has no server to link to). */
+	logsDownloadUrl?: () => string;
 	/** Called whenever the server answers 401 to anything but a login attempt. */
 	onUnauthorized?: () => void;
 }
@@ -189,6 +193,7 @@ export function createApi({
 	baseUrl = '',
 	fetch = (input) => globalThis.fetch(input),
 	taskFilesUrl,
+	logsDownloadUrl,
 	onUnauthorized
 }: ApiOptions = {}): Api {
 	const client = createClient<paths>({
@@ -302,6 +307,9 @@ export function createApi({
 		},
 		taskFilesUrl(id) {
 			return taskFilesUrl ? taskFilesUrl(id) : `${baseUrl}/api/tasks/${id}/files`;
+		},
+		logsDownloadUrl() {
+			return logsDownloadUrl ? logsDownloadUrl() : `${baseUrl}/api/logs/download`;
 		},
 		async resolveUrl(url) {
 			const res = await client.POST('/api/resolve', { body: { url } });

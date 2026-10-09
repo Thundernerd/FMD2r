@@ -108,6 +108,11 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         "covers.cache_size_mb",
         out_of(s.covers.cache_size_mb, 1..=u32::MAX),
     );
+    check(
+        "logs.max_file_size_mb",
+        out_of(s.logs.max_file_size_mb, 1..=1024),
+    );
+    check("logs.max_files", out_of(s.logs.max_files, 1..=100));
     let bad_flaresolverr = !c.flaresolverr_url.trim().is_empty()
         && super::websitebypass::flaresolverr_address(&c.flaresolverr_url).is_none();
     check(

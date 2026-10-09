@@ -89,6 +89,7 @@ export const defaultSettings = (): Settings => ({
 		keep_last_good: true
 	},
 	covers: { revalidate_after_hours: 168, cache_size_mb: 256 },
+	logs: { max_file_size_mb: 10, max_files: 5 },
 	server: {
 		bind: '0.0.0.0:8080',
 		auth_token: null,

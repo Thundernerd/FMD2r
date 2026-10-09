@@ -10,7 +10,13 @@ const mock = import.meta.env.VITE_API_MOCK === 'true' ? createMockBackend() : nu
 export const session = new SessionStore();
 
 export const api = createApi({
-	...(mock ? { fetch: mock.fetch, taskFilesUrl: mock.taskFilesUrl } : {}),
+	...(mock
+		? {
+				fetch: mock.fetch,
+				taskFilesUrl: mock.taskFilesUrl,
+				logsDownloadUrl: mock.logsDownloadUrl
+			}
+		: {}),
 	onUnauthorized: () => session.unauthorized()
 });
 
