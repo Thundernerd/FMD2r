@@ -375,6 +375,7 @@ impl<'a> TaskRun<'a> {
                 let error = format!("failed to create {}: {e}", self.working_dir.display());
                 self.inner
                     .set_status(self.id, TaskStatus::Failed, Some(&error))?;
+                self.log_failed(&error);
                 return Ok(());
             }
 
@@ -487,10 +488,27 @@ impl<'a> TaskRun<'a> {
         if self.first_failed_chapter().is_some() {
             self.chapter = 0;
             self.save_chapter_pointer()?;
-            self.set_status(TaskStatus::Failed)
+            self.set_status(TaskStatus::Failed)?;
+            let failed: Vec<String> = {
+                let c = self.container();
+                c.chapters_status
+                    .iter()
+                    .zip(&self.chapter_names)
+                    .filter(|(status, _)| **status == ChapterStatus::Failed)
+                    .map(|(_, name)| format!("{name:?}"))
+                    .collect()
+            };
+            self.log_failed(&format!("chapters failed: {}", failed.join(", ")));
+            Ok(())
         } else {
-            self.set_status(TaskStatus::Finished)
+            self.set_status(TaskStatus::Finished)?;
+            tracing::info!(target: "fmd_core", "task {} {:?}: finished", self.id.0, self.title);
+            Ok(())
         }
+    }
+
+    fn log_failed(&self, reason: &str) {
+        tracing::info!(target: "fmd_core", "task {} {:?}: failed: {reason}", self.id.0, self.title);
     }
 
     /// Records the chapter the task is at.
@@ -526,6 +544,9 @@ impl<'a> TaskRun<'a> {
             c.task.page_links.clear();
             c.task.page_container_links.clear();
             c.task.file_names.clear();
+            // The next chapter's first progress frame comes before `DoGetPageNumber` zeroes
+            // this (baseunits/uDownloadsManager.pas:835), so it must not show this chapter's.
+            c.task.page_number = 0;
         }
         let db = &self.inner.config.db;
         let chapter = u32::try_from(self.chapter).unwrap_or(u32::MAX);
@@ -537,6 +558,13 @@ impl<'a> TaskRun<'a> {
                 &self.manga_link,
                 &[self.chapter_link.as_str()],
             )?;
+            tracing::info!(
+                target: "fmd_core",
+                "task {} {:?}: chapter {:?} downloaded",
+                self.id.0,
+                self.title,
+                self.chapter_names[self.chapter]
+            );
         }
         self.inner.emit(EngineEvent::Chapter {
             task: self.id,

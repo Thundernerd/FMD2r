@@ -238,6 +238,7 @@ impl Inner {
             };
             if self.can_create_task(&module) {
                 self.start_task(&mut state, task.id, module)?;
+                tracing::info!(target: "fmd_core", "task {} {:?}: started", task.id.0, task.title);
                 count += 1;
             }
         }
@@ -322,6 +323,7 @@ impl Inner {
                     TaskStatus::Disabled
                 };
                 self.set_status(id, status, task.error.as_deref())?;
+                tracing::info!(target: "fmd_core", "task {} {:?}: stopped", id.0, task.title);
             }
             self.check_and_active_task()
         };
@@ -351,10 +353,26 @@ impl Inner {
                     continue;
                 }
                 match self.module(&task.module_id) {
-                    None => self.set_status(task.id, TaskStatus::Stopped, None)?,
+                    None => {
+                        self.set_status(task.id, TaskStatus::Stopped, None)?;
+                        tracing::info!(
+                            target: "fmd_core",
+                            "task {} {:?}: stopped: module {} is not installed",
+                            task.id.0,
+                            task.title,
+                            task.module_id
+                        );
+                    }
                     Some(module) if started < max && self.can_create_task(&module) => {
                         self.start_task(&mut state, task.id, module)?;
                         started += 1;
+                        tracing::info!(
+                            target: "fmd_core",
+                            "task {} {:?}: resumed after a restart ({:?})",
+                            task.id.0,
+                            task.title,
+                            task.status
+                        );
                     }
                     Some(_) => self.set_status(task.id, TaskStatus::Waiting, None)?,
                 }
@@ -402,6 +420,7 @@ impl Inner {
             running.terminate.terminate();
         } else if task.status == TaskStatus::Waiting {
             self.set_status(id, TaskStatus::Stopped, None)?;
+            tracing::info!(target: "fmd_core", "task {} {:?}: stopped", id.0, task.title);
         }
         Ok(())
     }
