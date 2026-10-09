@@ -20,7 +20,8 @@ use serde_json::{Map, Value};
 use crate::ImportOptions;
 use crate::error::ImportError;
 use crate::fmd2::{
-    json_bool, json_int, json_text, local, parse_datetime_text, read_json, tdatetime_to_ms,
+    json_bool, json_int, json_text, parse_datetime_text, read_json, tdatetime_to_ms,
+    wall_clock_to_utc,
 };
 use crate::report::{ImportReport, SkipReason, Unmapped};
 
@@ -177,7 +178,7 @@ fn cookie(c: &Map<String, Value>, opts: &ImportOptions) -> Cookie {
         Some(Value::Number(n)) => n.as_f64().and_then(tdatetime_to_ms),
         _ => None,
     };
-    let expires = local(expires, opts);
+    let expires = wall_clock_to_utc(expires, opts);
     Cookie {
         name: string(get(c, "Name")),
         value: string(get(c, "Value")),

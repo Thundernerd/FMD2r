@@ -494,3 +494,68 @@ async fn an_unreadable_fmd2_file_says_which_and_why() {
     let detail = problem["detail"].as_str().unwrap();
     assert!(detail.starts_with("modules.json: "), "{detail}");
 }
+
+#[tokio::test]
+async fn an_import_the_client_stops_waiting_for_still_finishes() {
+    let engine = CountingEngine::default();
+    let server = Server::with(|state| state.with_engine(engine.clone()));
+    let userdata = fmd2::every_source();
+    let zip = zip_dir(userdata.dir(), "");
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Vec<u8>, std::io::Error>>(1);
+    let request = tokio::spawn(
+        build_router(server.state.clone()).oneshot(
+            Request::post("/api/import")
+                .body(Body::from_stream(
+                    tokio_stream::wrappers::ReceiverStream::new(rx),
+                ))
+                .unwrap(),
+        ),
+    );
+    // The whole upload arrives, then the client goes away while the import runs.
+    tx.send(Ok(zip)).await.unwrap();
+    drop(tx);
+    server.wait_for_import_job().await;
+    loop {
+        let job = server.get("/api/jobs/import").await;
+        if job["total"] != 0 || job["state"] != "running" {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    request.abort();
+    let _ = request.await;
+
+    loop {
+        let job = server.get("/api/jobs/import").await;
+        if job["state"] != "running" {
+            assert_eq!(job["state"], "done", "{job}");
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(server.db.tasks().list().unwrap().len(), 2);
+    assert_eq!(engine.0.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn an_upload_declared_over_the_size_limit_is_refused_before_it_is_read() {
+    let server = Server::with(|state| {
+        state.with_import_limits(ImportLimits {
+            upload_bytes: 1024,
+            ..ImportLimits::default()
+        })
+    });
+
+    let response = build_router(server.state.clone())
+        .oneshot(
+            Request::post("/api/import")
+                .header("content-length", "1025")
+                .body(Body::from("PK"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(server.leftovers(), Vec::<String>::new());
+}

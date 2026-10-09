@@ -32,10 +32,16 @@
 	const zones = Intl.supportedValuesOf('timeZone');
 	const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-	/** A dry run of exactly these options and file came back clean enough to import. */
-	let checked = $state<string | null>(null);
-	const key = $derived(JSON.stringify([file?.name, file?.size, maps, timezone, resume]));
-	const canImport = $derived(busy === null && report !== null && report.dry_run && checked === key);
+	/** The file and options of the last dry run; importing needs a dry run of exactly these. */
+	let checked = $state<{ file: File; options: string } | null>(null);
+	const options = $derived(JSON.stringify([maps, timezone, resume]));
+	const canImport = $derived(
+		busy === null &&
+			report !== null &&
+			report.dry_run &&
+			checked?.file === file &&
+			checked.options === options
+	);
 	const skipped = $derived.by(() => {
 		const r = report;
 		return r ? SOURCES.flatMap(({ key: k }) => invalid(r[k])) : [];
@@ -55,7 +61,7 @@
 		if (!file) return;
 		busy = dryRun ? 'check' : 'import';
 		error = null;
-		const ran = key;
+		const ran = { file, options };
 		try {
 			report = await api.importFmd2(file, {
 				dry_run: dryRun,

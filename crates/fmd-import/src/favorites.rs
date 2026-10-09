@@ -11,7 +11,9 @@ use rusqlite::Row;
 
 use crate::ImportOptions;
 use crate::error::ImportError;
-use crate::fmd2::{chapter_links, datetime, local, open_db, sql_bool, sql_text, sqlite_error};
+use crate::fmd2::{
+    chapter_links, datetime, open_db, sql_bool, sql_text, sqlite_error, wall_clock_to_utc,
+};
 use crate::paths::translate;
 use crate::report::{ImportReport, SkipReason};
 
@@ -112,9 +114,9 @@ pub(crate) fn import(
             // (baseunits/uFavoritesManager.pas:352, :425).
             current_chapter: f.currentchapter.trim().parse().unwrap_or(0),
             enabled: f.enabled,
-            date_added: local(f.dateadded, opts).unwrap_or(0),
-            date_last_checked: local(f.datelastchecked, opts),
-            date_last_updated: local(f.datelastupdated, opts),
+            date_added: wall_clock_to_utc(f.dateadded, opts).unwrap_or(0),
+            date_last_checked: wall_clock_to_utc(f.datelastchecked, opts),
+            date_last_updated: wall_clock_to_utc(f.datelastupdated, opts),
         };
         if !opts.dry_run {
             db.favorites().import(&favorite)?;

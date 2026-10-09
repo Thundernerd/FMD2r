@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use axum::Json;
 use axum::body::Body;
 use axum::extract::{RawQuery, State};
+use axum::http::{HeaderMap, header};
 use fmd_core::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
 use fmd_import::{ImportError, ImportOptions, ImportReport, TimeZone};
 use fmd_store::{ACCOUNTS_KEY_FILE, KeyFileCipher};
@@ -144,6 +145,7 @@ impl ToSchema for ZipFile {}
 pub(crate) async fn import(
     State(state): State<AppState>,
     RawQuery(query): RawQuery,
+    headers: HeaderMap,
     body: Body,
 ) -> Result<Json<ImportReport>, ApiError> {
     let opts = ImportQuery::parse(query.as_deref())?.options()?;
@@ -151,33 +153,47 @@ pub(crate) async fn import(
         .data_dir
         .clone()
         .ok_or_else(|| ApiError::Unavailable("the server has no data directory".into()))?;
+    let limit = state.import_limits.upload_bytes;
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    if declared.is_some_and(|len| len > limit) {
+        return Err(too_large("the upload", limit));
+    }
     let run = ImportRun::start(&state)?;
-    let outcome = upload_and_import(&state, data_dir, opts, body, &run).await;
-    run.finish(outcome.as_ref().err());
-    outcome.map(Json)
+    let scratch = match receive(body, &data_dir, limit).await {
+        Ok(scratch) => scratch,
+        Err(e) => {
+            run.finish(Some(&e));
+            return Err(e);
+        }
+    };
+    // From here on the import finishes, and its job ends, whether or not the client still waits.
+    tokio::spawn(async move {
+        let outcome = import_upload(&state, scratch, data_dir, opts, &run).await;
+        run.finish(outcome.as_ref().err());
+        outcome
+    })
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?
+    .map(Json)
 }
 
-async fn upload_and_import(
+/// Extracts and imports the upload in `scratch`.
+async fn import_upload(
     state: &AppState,
+    scratch: TempDir,
     data_dir: PathBuf,
     opts: ImportOptions,
-    body: Body,
     run: &ImportRun,
 ) -> Result<ImportReport, ApiError> {
-    let scratch = tempfile::Builder::new()
-        .prefix(".import-")
-        .tempdir_in(&data_dir)
-        .map_err(|e| ApiError::Internal(format!("creating the upload folder: {e}")))?;
-    let upload = scratch.path().join("upload.zip");
     let limits = state.import_limits;
-    receive(body, &upload, limits.upload_bytes).await?;
     let db = state.db.clone();
     let settings = state.settings.clone();
-    // The run is held by the blocking work, so a client that goes away cannot start a second
-    // import over this one.
     let run = run.clone();
     let report = off_thread(move || -> Result<ImportReport, ApiError> {
-        let userdata = extract(&upload, &scratch, limits.extracted_bytes)?;
+        let userdata = extract(&scratch, limits.extracted_bytes)?;
         let cipher = KeyFileCipher::open_or_create(data_dir.join(ACCOUNTS_KEY_FILE))?;
         fmd_import::import_into(&userdata, &db, &cipher, &settings, &opts, |p| {
             run.progress(p.done, p.total)
@@ -215,10 +231,17 @@ fn import_error(e: ImportError) -> ApiError {
     }
 }
 
-/// Writes the request body to `path`, refusing more than `limit` bytes.
-async fn receive(body: Body, path: &Path, limit: u64) -> Result<(), ApiError> {
+/// Saves the request body as [`UPLOAD`] in a new upload folder in `data_dir`, refusing more than
+/// `limit` bytes.
+async fn receive(body: Body, data_dir: &Path, limit: u64) -> Result<TempDir, ApiError> {
     let saving = |e: io::Error| ApiError::Internal(format!("saving the upload: {e}"));
-    let mut file = tokio::fs::File::create(path).await.map_err(saving)?;
+    let scratch = tempfile::Builder::new()
+        .prefix(".import-")
+        .tempdir_in(data_dir)
+        .map_err(saving)?;
+    let mut file = tokio::fs::File::create(scratch.path().join(UPLOAD))
+        .await
+        .map_err(saving)?;
     let mut stream = body.into_data_stream();
     let mut size = 0u64;
     while let Some(chunk) = stream.next().await {
@@ -229,8 +252,15 @@ async fn receive(body: Body, path: &Path, limit: u64) -> Result<(), ApiError> {
         }
         file.write_all(&chunk).await.map_err(saving)?;
     }
-    file.flush().await.map_err(saving)
+    file.flush().await.map_err(saving)?;
+    Ok(scratch)
 }
+
+/// The uploaded zip's name in the upload folder.
+const UPLOAD: &str = "upload.zip";
+
+/// Zip entries an upload may have: a userdata folder has a handful of files.
+const MAX_ENTRIES: usize = 10_000;
 
 fn too_large(what: &str, limit: u64) -> ApiError {
     let limit = if limit >= 1 << 20 {
@@ -241,11 +271,17 @@ fn too_large(what: &str, limit: u64) -> ApiError {
     ApiError::PayloadTooLarge(format!("{what} is larger than {limit}"))
 }
 
-/// Extracts the zip at `upload` into `scratch` and returns the `userdata` folder in it, refusing
-/// to unpack more than `limit` bytes.
-fn extract(upload: &Path, scratch: &TempDir, limit: u64) -> Result<PathBuf, ApiError> {
+/// Extracts the uploaded zip in `scratch` and returns the `userdata` folder in it, refusing to
+/// unpack more than `limit` bytes or [`MAX_ENTRIES`] entries.
+fn extract(scratch: &TempDir, limit: u64) -> Result<PathBuf, ApiError> {
     let bad = |e: zip::result::ZipError| ApiError::BadRequest(format!("not a zip file: {e}"));
-    let mut archive = zip::ZipArchive::new(File::open(upload).map_err(io_error)?).map_err(bad)?;
+    let upload = File::open(scratch.path().join(UPLOAD)).map_err(io_error)?;
+    let mut archive = zip::ZipArchive::new(upload).map_err(bad)?;
+    if archive.len() > MAX_ENTRIES {
+        return Err(ApiError::PayloadTooLarge(format!(
+            "the upload has more than {MAX_ENTRIES} entries"
+        )));
+    }
     let root = scratch.path().join("userdata");
     let mut left = limit;
     for i in 0..archive.len() {
@@ -319,26 +355,39 @@ fn userdata_folder(mut dir: PathBuf) -> PathBuf {
 #[derive(Clone)]
 pub(crate) struct ImportJob(Arc<Mutex<JobStatus>>);
 
-impl ImportJob {
-    pub(crate) const ID: &str = "import";
-}
-
 impl Default for ImportJob {
     fn default() -> Self {
-        Self(Arc::new(Mutex::new(JobStatus {
-            phase: JobPhase::Idle,
-            done: 0,
-            total: 0,
-            last_run: None,
-            next_run: None,
-            last_error: None,
-        })))
+        Self(Arc::new(Mutex::new(fresh_status(JobPhase::Idle, None))))
     }
 }
 
 impl ImportJob {
+    pub(crate) const ID: &str = "import";
+
     fn update(&self, f: impl FnOnce(&mut JobStatus)) {
         f(&mut self.0.lock().unwrap_or_else(PoisonError::into_inner));
+    }
+
+    /// Starts a run, unless one is running.
+    fn try_begin(&self) -> Result<(), JobError> {
+        let mut current = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if current.phase == JobPhase::Running {
+            return Err(JobError::AlreadyRunning);
+        }
+        *current = fresh_status(JobPhase::Running, Some(now_ms()));
+        Ok(())
+    }
+}
+
+/// A run's status before any progress.
+fn fresh_status(phase: JobPhase, last_run: Option<i64>) -> JobStatus {
+    JobStatus {
+        phase,
+        done: 0,
+        total: 0,
+        last_run,
+        next_run: None,
+        last_error: None,
     }
 }
 
@@ -389,20 +438,7 @@ impl ImportRun {
     /// already running.
     fn start(state: &AppState) -> Result<Self, ApiError> {
         let job = state.import_job.clone();
-        {
-            let mut status = job.0.lock().unwrap_or_else(PoisonError::into_inner);
-            if status.phase == JobPhase::Running {
-                return Err(JobError::AlreadyRunning.into());
-            }
-            *status = JobStatus {
-                phase: JobPhase::Running,
-                done: 0,
-                total: 0,
-                last_run: Some(now_ms()),
-                next_run: None,
-                last_error: None,
-            };
-        }
+        job.try_begin()?;
         if state.jobs.get(ImportJob::ID).is_none() {
             state.jobs.register(job.clone());
         }

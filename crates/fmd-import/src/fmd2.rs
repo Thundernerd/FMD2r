@@ -89,7 +89,7 @@ pub(crate) fn sql_bool(value: ValueRef<'_>) -> bool {
     }
 }
 
-/// Milliseconds since 1970-01-01 on FMD2's local clock (see [`local`]) of a DATETIME column, or `None` when it is empty, unreadable or FMD2's zero
+/// Milliseconds since 1970-01-01 on FMD2's local clock (see [`wall_clock_to_utc`]) of a DATETIME column, or `None` when it is empty, unreadable or FMD2's zero
 /// date (`TDateTime` 0, 1899-12-30).
 ///
 /// FMD2 writes `'YYYY-MM-DD hh:nn:ss.zzz'` (`PrepSQLValue`, baseunits/SQLiteData.pas:159-167);
@@ -105,7 +105,7 @@ pub(crate) fn datetime(value: ValueRef<'_>) -> Option<i64> {
 
 /// Unix milliseconds of a wall-clock time read by [`datetime`] or [`parse_datetime_text`], in
 /// the zone FMD2 ran in.
-pub(crate) fn local(wall_clock: Option<i64>, opts: &ImportOptions) -> Option<i64> {
+pub(crate) fn wall_clock_to_utc(wall_clock: Option<i64>, opts: &ImportOptions) -> Option<i64> {
     opts.timezone.to_utc(wall_clock?)
 }
 
