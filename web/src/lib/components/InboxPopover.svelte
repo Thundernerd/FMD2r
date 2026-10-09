@@ -77,7 +77,11 @@
 								<b class="title">{item.title}</b>
 								<span class="small muted">{formatTime(item.created_at)}</span>
 							</div>
-							<div class="small">{item.body}</div>
+							<div class="body small">
+								{#each item.body.split('\n') as line, i (i)}
+									<div class="line">{line}</div>
+								{/each}
+							</div>
 							{#if !item.read}
 								<div>
 									<button class="btn sm" type="button" onclick={() => markRead(item)}>
@@ -175,6 +179,12 @@
 	.title {
 		flex: 1;
 		min-width: 0;
+	}
+	/* Keep a stack trace's indentation, and wrap long lines instead of overflowing. */
+	.line {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+		min-height: 1lh;
 	}
 	.empty,
 	.error {

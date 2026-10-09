@@ -5,6 +5,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use fmd_store::{Event, EventId, EventQuery, EventSeverity};
 use serde::Serialize;
+use serde_json::Value;
 use utoipa::ToSchema;
 
 use crate::{ApiError, AppState, Problem};
@@ -27,7 +28,7 @@ pub struct InboxItem {
     pub id: String,
     pub kind: InboxKind,
     pub title: String,
-    /// The event body: a string as-is, anything else as JSON text.
+    /// The event body as plain text, never JSON; it may span several lines.
     pub body: String,
     /// RFC 3339 timestamp.
     pub created_at: String,
@@ -41,11 +42,7 @@ impl From<Event> for InboxItem {
             EventSeverity::Warning => InboxKind::Warn,
             EventSeverity::Error => InboxKind::Error,
         };
-        let body = match event.body {
-            serde_json::Value::String(s) => s,
-            serde_json::Value::Null => String::new(),
-            other => other.to_string(),
-        };
+        let body = readable_body(&event.kind, &event.body);
         Self {
             id: event.id.0.to_string(),
             kind,
@@ -54,6 +51,39 @@ impl From<Event> for InboxItem {
             created_at: crate::time::rfc3339_from_unix_ms(event.ts),
             read: event.read,
         }
+    }
+}
+
+/// The `events.kind` of the module updater's reports (fmd-core `module_updater`).
+const MODULE_UPDATE_KIND: &str = "module_update";
+
+/// Renders an event body as text a person can read: a string as-is, the module
+/// updater's `{file, names}` and `{file, error}` reports as a sentence and the
+/// raw error (line breaks intact), anything else as `key: value` lines.
+fn readable_body(kind: &str, body: &Value) -> String {
+    if kind == MODULE_UPDATE_KIND {
+        if let Some(Value::String(error)) = body.get("error") {
+            return error.clone();
+        }
+        if let Some(names) = body.get("names") {
+            return format!("Unknown Host API names: {}", plain_text(names));
+        }
+    }
+    plain_text(body)
+}
+
+/// A JSON value as plain text, without JSON syntax.
+fn plain_text(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::String(s) => s.clone(),
+        Value::Bool(_) | Value::Number(_) => value.to_string(),
+        Value::Array(items) => items.iter().map(plain_text).collect::<Vec<_>>().join(", "),
+        Value::Object(fields) => fields
+            .iter()
+            .map(|(key, value)| format!("{key}: {}", plain_text(value)))
+            .collect::<Vec<_>>()
+            .join("\n"),
     }
 }
 

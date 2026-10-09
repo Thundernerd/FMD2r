@@ -16,6 +16,8 @@ export default defineConfig({
 		// When running against a real backend (`VITE_API_MOCK` unset), forward API calls to `fmd2r serve`.
 		proxy: { '/api': process.env.FMD2R_URL ?? 'http://127.0.0.1:8080' }
 	},
+	// Component tests mount Svelte in jsdom, which needs Svelte's browser build, not its server one.
+	resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
 	test: {
 		include: ['src/**/*.test.ts'],
 		environment: 'node'

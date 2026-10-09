@@ -3367,7 +3367,7 @@
         "properties": {
           "body": {
             "type": "string",
-            "description": "The event body: a string as-is, anything else as JSON text."
+            "description": "The event body as plain text, never JSON; it may span several lines."
           },
           "created_at": {
             "type": "string",
