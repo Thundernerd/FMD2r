@@ -21,48 +21,32 @@
 	};
 
 	let accounts = $state<AccountInfo[] | null>(null);
-
-	/**
-	 * Each account's module summary, so the accounts are listed like the website modules. An
-	 * account whose module isn't among `modules` (e.g. still loading) is listed under "Other".
-	 */
-	const summaries = $derived.by(() => {
-		const byId = new Map(modules.map((m) => [m.id, m] as const));
-		return new Map(
-			(accounts ?? []).map((a): [ModuleSummary, AccountInfo] => [
-				byId.get(a.module) ?? {
-					id: a.module,
-					name: a.name,
-					root_url: '',
-					category: '',
-					option_count: 0,
-					capabilities: { update_list: false, info: false, download: false, account: true },
-					list_size: 0,
-					list_updated: null,
-					list_job_running: false,
-					customized: false
-				},
-				a
-			])
-		);
-	});
-	const repeated = $derived(repeatedNames([...summaries.keys()]));
-	/** The accounts grouped by category, each with the label its module is listed by. */
-	const groups = $derived(
-		groupModules([...summaries.keys()]).map((g) => ({
-			category: g.category,
-			accounts: g.modules.flatMap((m) => {
-				const account = summaries.get(m);
-				return account ? [{ account, label: moduleLabel(m, repeated) }] : [];
-			})
-		}))
-	);
 	let error = $state<string | null>(null);
 	/** The module whose credentials are being edited. */
 	let editing = $state<string | null>(null);
 	let username = $state('');
 	let password = $state('');
 	let busy = $state<string | null>(null);
+
+	/**
+	 * The accounts with their modules' names, categories and root URLs, so they are listed like the
+	 * website modules. An account whose module isn't among `modules` (e.g. still loading) is listed
+	 * under "Other".
+	 */
+	const joined = $derived.by(() => {
+		const byId = new Map(modules.map((m) => [m.id, m] as const));
+		return (accounts ?? []).map((account) => {
+			const m = byId.get(account.module);
+			return {
+				account,
+				name: m?.name ?? account.name,
+				root_url: m?.root_url ?? '',
+				category: m?.category ?? ''
+			};
+		});
+	});
+	const repeated = $derived(repeatedNames(joined));
+	const groups = $derived(groupModules(joined));
 
 	$effect(() => {
 		api
@@ -148,7 +132,8 @@
 		{#each groups as group (group.category)}
 			<h3 class="category small muted">{group.category}</h3>
 			<ul class="list" aria-label={group.category}>
-				{#each group.accounts as { account, label } (account.module)}
+				{#each group.modules as entry (entry.account.module)}
+					{@const account = entry.account}
 					<li class="row">
 						<div class="head">
 							<label class="enabled">
@@ -158,7 +143,7 @@
 									disabled={busy === account.module}
 									onchange={(e) => toggle(account, e.currentTarget.checked)}
 								/>
-								<span class="name">{label}</span>
+								<span class="name">{moduleLabel(entry, repeated)}</span>
 							</label>
 							<span class="user small muted">{account.username || 'No username'}</span>
 							<span class="chip small status-{account.status}">{STATUS_TEXT[account.status]}</span>

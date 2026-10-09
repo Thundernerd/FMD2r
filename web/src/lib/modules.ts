@@ -7,8 +7,11 @@ import type { ModuleSummary } from '#lib/api/types.ts';
  */
 export const moduleKey = (m: ModuleSummary): string => `${m.id}\n${m.root_url}`;
 
+/** What the list helpers read of a module, so lists of other things joined with a module can use them. */
+export type Listed = Pick<ModuleSummary, 'name' | 'root_url' | 'category'>;
+
 /** The host of a module's root URL, or the root URL itself when it doesn't parse. */
-export function moduleHost(m: ModuleSummary): string {
+export function moduleHost(m: Listed): string {
 	try {
 		return new URL(m.root_url).host || m.root_url;
 	} catch {
@@ -17,7 +20,7 @@ export function moduleHost(m: ModuleSummary): string {
 }
 
 /** The names more than one of `modules` share, whose entries the pickers tell apart by host. */
-export function repeatedNames(modules: ModuleSummary[]): Set<string> {
+export function repeatedNames(modules: Listed[]): Set<string> {
 	const seen = new Set<string>();
 	const repeated = new Set<string>();
 	for (const m of modules) (seen.has(m.name) ? repeated : seen).add(m.name);
@@ -25,17 +28,17 @@ export function repeatedNames(modules: ModuleSummary[]): Set<string> {
 }
 
 /** How `m` is listed among `repeated` names: by name, with its host when another module has that name too. */
-export const moduleLabel = (m: ModuleSummary, repeated: Set<string>): string =>
+export const moduleLabel = (m: Listed, repeated: Set<string>): string =>
 	repeated.has(m.name) ? `${m.name} (${moduleHost(m)})` : m.name;
 
 /** A category of modules, as the pickers list them. */
-export interface ModuleGroup {
+export interface ModuleGroup<T extends Listed = ModuleSummary> {
 	category: string;
-	modules: ModuleSummary[];
+	modules: T[];
 }
 
 /** The category a module is listed under; modules without one are listed under "Other". */
-export const moduleCategory = (m: ModuleSummary): string => m.category || 'Other';
+export const moduleCategory = (m: Listed): string => m.category || 'Other';
 
 const compareIgnoringCase = (a: string, b: string) =>
 	a.localeCompare(b, undefined, { sensitivity: 'base' });
@@ -44,7 +47,7 @@ const compareIgnoringCase = (a: string, b: string) =>
  * `modules` grouped by category, the groups sorted by category and each group's modules by name,
  * ignoring case; modules sharing a name are sorted by host.
  */
-export function groupModules(modules: ModuleSummary[]): ModuleGroup[] {
+export function groupModules<T extends Listed>(modules: T[]): ModuleGroup<T>[] {
 	return Object.entries(Object.groupBy(modules, moduleCategory))
 		.sort(([a], [b]) => compareIgnoringCase(a, b))
 		.map(([category, list = []]) => ({
