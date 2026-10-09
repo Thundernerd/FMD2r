@@ -332,12 +332,12 @@ fn apply_connections(http: &HttpClient, connections: &ConnectionSettings) {
     http.set_default_user_agent(connections.user_agent.clone());
     http.set_default_retry_count(connections.retry_count);
     http.set_default_timeout(connections.timeout_secs.saturating_mul(1000));
-    http.set_default_proxy(proxy(connections));
+    http.set_default_proxy(global_proxy(connections));
 }
 
 /// The global proxy; `None` when it is off (`SetDefaultProxyAndApply('', …)`,
-/// mangadownloader/forms/frmMain.pas:6293).
-fn proxy(connections: &ConnectionSettings) -> Option<Proxy> {
+/// mangadownloader/forms/frmMain.pas:6295).
+fn global_proxy(connections: &ConnectionSettings) -> Option<Proxy> {
     let proxy = &connections.proxy;
     if !proxy.enabled {
         return None;

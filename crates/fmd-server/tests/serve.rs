@@ -623,29 +623,37 @@ async fn with_the_proxy_on_at_startup_module_requests_go_through_it() {
 }
 
 impl Server {
-    /// PATCHes `settings`, then fetches fresh series (`/series/<n>`, never cached) until one goes
-    /// through `proxy` or around it as `through` says: the server applies the change soon after
-    /// the PATCH answers.
-    async fn patch_settings_until_proxied(
-        &self,
-        settings: Value,
-        proxy: &StubProxy,
-        through: bool,
-    ) {
+    /// PATCHes `settings`, then fetches fresh series (`/series/<n>`, never cached) until
+    /// `applied` holds after one: the server applies the change soon after the PATCH answers.
+    async fn patch_settings_until(&self, settings: Value, mut applied: impl FnMut() -> bool) {
         static SERIES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         self.send_json(reqwest::Method::PATCH, "/api/settings", settings)
             .await;
         for _ in 0..100 {
-            let before = proxy.seen().len();
             let n = SERIES.fetch_add(1, Ordering::SeqCst);
             self.get_json(&format!("/api/series?module=stub&link=%2Fseries%2F{n}"))
                 .await;
-            if (proxy.seen().len() > before) == through {
+            if applied() {
                 return;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         panic!("the settings change never applied");
+    }
+}
+
+impl StubProxy {
+    /// A check for [`Server::patch_settings_until`]: whether the request made since the previous
+    /// check went through this proxy (`through`) or around it.
+    fn last_request(&self, through: bool) -> impl FnMut() -> bool {
+        let proxy = self.clone();
+        let mut seen = proxy.seen().len();
+        move || {
+            let now = proxy.seen().len();
+            let proxied = now > seen;
+            seen = now;
+            proxied == through
+        }
     }
 }
 
@@ -662,11 +670,11 @@ async fn turning_the_proxy_on_and_off_applies_without_a_restart() {
     // `ApplyOptions` on save calls `SetDefaultProxyAndApply`
     // (mangadownloader/forms/frmMain.pas:6287-6295).
     server
-        .patch_settings_until_proxied(proxy_on(port), &proxy, true)
+        .patch_settings_until(proxy_on(port), proxy.last_request(true))
         .await;
     let off = json!({ "connections": { "proxy": { "enabled": false } } });
     server
-        .patch_settings_until_proxied(off, &proxy, false)
+        .patch_settings_until(off, proxy.last_request(false))
         .await;
 }
 
@@ -686,16 +694,6 @@ async fn a_changed_user_agent_is_sent_by_new_sessions() {
     // (mangadownloader/forms/frmMain.pas:6279-6285); each module call gets a new one.
     let patch = json!({ "connections": { "user_agent": "After/2.0" } });
     server
-        .send_json(reqwest::Method::PATCH, "/api/settings", patch)
+        .patch_settings_until(patch, || last_user_agent() == "After/2.0")
         .await;
-    for n in 0..100 {
-        server
-            .get_json(&format!("/api/series?module=stub&link=%2Fseries%2Fua{n}"))
-            .await;
-        if last_user_agent() == "After/2.0" {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    panic!("the user agent never changed");
 }
