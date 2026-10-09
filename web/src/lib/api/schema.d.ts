@@ -217,6 +217,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/import': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Import an FMD2 `userdata` folder, zipped, into this server. */
+		post: operations['importFmd2'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/inbox': {
 		parameters: {
 			query?: never;
@@ -1218,6 +1235,30 @@ export interface components {
 			/** @default png */
 			webp_save_as: components['schemas']['WebpSaveAs'];
 		};
+		/** @description The outcome of [`crate::import`], per source. */
+		ImportReport: {
+			/** @description `modules.json` → accounts. */
+			accounts: components['schemas']['SourceReport'];
+			/** @description `downloadedchapters.db` → downloaded chapters, counted per manga. */
+			downloaded_chapters: components['schemas']['SourceReport'];
+			/** @description Nothing was written; the counts say what would have been imported. */
+			dry_run: boolean;
+			/** @description `favorites.db` → favorites. */
+			favorites: components['schemas']['SourceReport'];
+			/** @description `modules.json` → per-module settings, options and cookies. */
+			module_settings: components['schemas']['SourceReport'];
+			/** @description `settings.json` → application settings, counted per key. */
+			settings: components['schemas']['SourceReport'];
+			/** @description `downloads.db` → tasks. */
+			tasks: components['schemas']['SourceReport'];
+			/** @description FMD2 data FMD2r has no place for. */
+			unmapped: components['schemas']['Unmapped'][];
+			/**
+			 * @description Things that were imported but may need attention, such as Windows paths no path map
+			 *     rewrote.
+			 */
+			warnings: string[];
+		};
 		/** @description One inbox item (a row of the `events` table). */
 		InboxItem: {
 			/** @description The event body: a string as-is, anything else as JSON text. */
@@ -1922,6 +1963,30 @@ export interface components {
 			 */
 			xpath: components['schemas']['XPathSettings'];
 		};
+		SkipReason:
+			| {
+					/** @enum {string} */
+					kind: 'already_exists';
+			  }
+			| {
+					/** @description The FMD2 data could not be read or is not a valid FMD2r value. */
+					detail: string;
+					/** @enum {string} */
+					kind: 'invalid';
+			  };
+		/** @description An item that was not imported. */
+		Skipped: {
+			/** @description Identifies the item, e.g. `<module id> <link>` or a settings key. */
+			item: string;
+			reason: components['schemas']['SkipReason'];
+		};
+		/** @description What one source contributed. */
+		SourceReport: {
+			/** @description The source file exists in the userdata directory. */
+			found: boolean;
+			imported: number;
+			skipped: components['schemas']['Skipped'][];
+		};
 		/**
 		 * @description How characters that are illegal in file names are handled (mirrors `fmd_pack::SymbolMode`).
 		 * @enum {string}
@@ -2117,6 +2182,15 @@ export interface components {
 			name: string;
 			/** @description Whether the tool is usable. */
 			ok: boolean;
+		};
+		/** @description FMD2 data with no FMD2r counterpart. */
+		Unmapped: {
+			/** @description The key or column, e.g. `general/OneInstanceOnly`. */
+			key: string;
+			/** @description The FMD2 file. */
+			source: string;
+			/** @description The value, as text. */
+			value: string;
 		};
 		UpdateListSettings: {
 			/**
@@ -2662,6 +2736,91 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['Health'];
+				};
+			};
+		};
+	};
+	importFmd2: {
+		parameters: {
+			query?: {
+				/** @description Report what would be imported without writing anything. */
+				dry_run?: boolean;
+				/** @description Queue tasks FMD2 was running as waiting, so they resume, instead of stopped. */
+				resume?: boolean;
+				/**
+				 * @description `FROM=TO`: rewrite save-to paths under FROM to TO, e.g. `C:\Manga=/data/manga`.
+				 *     Repeatable; the longest matching FROM wins.
+				 */
+				map_path?: string[];
+				/**
+				 * @description The IANA time zone FMD2 ran in, e.g. `Europe/Amsterdam`: FMD2 stores local times without
+				 *     a zone. The server's zone by default.
+				 */
+				timezone?: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** @description The FMD2 `userdata` folder (or its contents) as a zip */
+		requestBody: {
+			content: {
+				'application/zip': string;
+			};
+		};
+		responses: {
+			/** @description What was imported, or with `dry_run` what would be */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ImportReport'];
+				};
+			};
+			/** @description Not a zip, an entry outside the folder, or an unreadable FMD2 file */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description An import is already running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The zip, or what it unpacks to, is over the size limit */
+			413: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description A bad `map_path` or `timezone` */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The server has no data directory */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
 				};
 			};
 		};

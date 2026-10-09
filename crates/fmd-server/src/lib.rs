@@ -8,6 +8,7 @@ mod error;
 mod events;
 mod favorites;
 mod health;
+mod import;
 mod inbox;
 mod jobs;
 mod lists;
@@ -44,6 +45,7 @@ pub use events::{
 pub use favorites::{AddFavorite, CheckRequest, FavoriteFilter, FavoritePatch, FavoriteView};
 pub use fmd_core::jobs::JobPhase;
 pub use fmd_core::lists::{ListEvent, ListEventKind};
+pub use import::ImportLimits;
 pub use inbox::{InboxItem, InboxKind};
 pub use lists::{FacetValue, ListFacets, ListItem, ListJobStarted, SearchPage};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
@@ -102,6 +104,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(jobs::run))
         .routes(routes!(jobs::cancel))
         .routes(routes!(about::about))
+        .routes(routes!(import::import))
         .routes(routes!(covers::get))
         .routes(routes!(settings::get, settings::patch))
         .routes(routes!(settings::preview_rename))

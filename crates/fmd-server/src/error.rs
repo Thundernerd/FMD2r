@@ -34,6 +34,9 @@ pub enum ApiError {
     /// The resource is in a state that does not allow the request (e.g. a job already running).
     #[error("{0}")]
     Conflict(String),
+    /// An upload over the server's size limit.
+    #[error("{0}")]
+    PayloadTooLarge(String),
     /// A request an extractor could not parse (bad JSON body, bad query string, ...).
     #[error("{1}")]
     Rejected(StatusCode, String),
@@ -74,6 +77,7 @@ impl ApiError {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Invalid { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Conflict(_) => StatusCode::CONFLICT,
+            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Rejected(status, _) => *status,
             Self::BadGateway(_) => StatusCode::BAD_GATEWAY,
             Self::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
@@ -126,6 +130,7 @@ impl From<fmd_core::jobs::JobError> for ApiError {
         use fmd_core::jobs::JobError as E;
         match err {
             E::AlreadyRunning | E::NotRunning => Self::Conflict(err.to_string()),
+            E::Unsupported(msg) => Self::BadRequest(msg),
             E::Failed(msg) => Self::Internal(msg),
         }
     }

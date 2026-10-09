@@ -9,6 +9,7 @@ publish = false
 axum = { version = "0.8", features = ["macros"] }
 fmd-core = { path = "../fmd-core" }
 fmd-http = { path = "../fmd-http" }
+fmd-import = { path = "../fmd-import" }
 fmd-lua = { path = "../fmd-lua" }
 fmd-pack = { path = "../fmd-pack" }
 fmd-store = { path = "../fmd-store" }
@@ -32,9 +33,10 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 url = "2"
 utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.2"
-zip = { version = "8.6.0", default-features = false }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
 http-body-util = "0.1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 tower = { version = "0.5", features = ["util"] }

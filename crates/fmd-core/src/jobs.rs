@@ -50,6 +50,9 @@ pub enum JobError {
     AlreadyRunning,
     #[error("job is not running")]
     NotRunning,
+    /// The job does not support the request, e.g. it cannot be started on its own.
+    #[error("{0}")]
+    Unsupported(String),
     #[error("{0}")]
     Failed(String),
 }

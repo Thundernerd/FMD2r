@@ -18,7 +18,7 @@ use rusqlite::Row;
 
 use crate::ImportOptions;
 use crate::error::ImportError;
-use crate::fmd2::{datetime, lines, open_db, sql_bool, sql_int, sql_text, sqlite_error};
+use crate::fmd2::{datetime, lines, local, open_db, sql_bool, sql_int, sql_text, sqlite_error};
 use crate::paths::translate;
 use crate::report::{ImportReport, SkipReason};
 
@@ -180,8 +180,8 @@ fn to_task(d: &Download, opts: &ImportOptions, report: &mut ImportReport) -> Imp
             status: task_status(d.taskstatus, opts.resume_in_progress),
             enabled: d.enabled,
         },
-        date_added: d.dateadded.unwrap_or(0),
-        date_last_downloaded: d.datelastdownloaded,
+        date_added: local(d.dateadded, opts).unwrap_or(0),
+        date_last_downloaded: local(d.datelastdownloaded, opts),
         current_chapter: u32::try_from(d.chapterptr).unwrap_or(0),
         chapters,
     }
