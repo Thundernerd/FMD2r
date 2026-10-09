@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { ModuleSummary } from '#lib/api/types.ts';
 import { createMockSettings } from '#lib/api/mock-settings.ts';
 import { Draft } from '#lib/settings/draft.svelte.ts';
+import { editable } from '#lib/settings/module.ts';
 import { HACHIRAW, HACHIRAW_ID, summary } from '../modules.fixture.ts';
 import ModuleSettings from './ModuleSettings.svelte';
 
@@ -100,14 +101,7 @@ describe('ModuleSettings while another module loads', () => {
 	const settingsOf = (id: string) => {
 		const view = mock.getModule(id);
 		if (!view) throw new Error(`no mock module ${id}`);
-		const draft = new Draft<object>({
-			enabled: view.enabled,
-			limits: view.limits,
-			http: view.http,
-			save_to: view.save_to,
-			options: Object.fromEntries(view.options.map((o) => [o.key, o.value]))
-		});
-		return { view, draft };
+		return { view, draft: new Draft<object>(editable(view)) };
 	};
 	const modules = [
 		summary('comick', 'ComicK', 'https://comick.io', 'English'),

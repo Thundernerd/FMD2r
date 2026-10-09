@@ -18,6 +18,7 @@
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
+	import { editable } from '#lib/settings/module.ts';
 	import { showFieldErrors } from '#lib/settings/save.ts';
 	import {
 		OWN_SECTION_PATHS,
@@ -95,15 +96,6 @@
 			.catch(() => (modules = []));
 	});
 
-	/** The editable part of a module's settings, shaped like its PATCH body. */
-	const editable = (view: ModuleSettingsView) => ({
-		enabled: view.enabled,
-		limits: view.limits,
-		http: view.http,
-		save_to: view.save_to,
-		options: Object.fromEntries(view.options.map((o) => [o.key, o.value]))
-	});
-
 	// The previous module stays on show until the next one is loaded, so the panel doesn't collapse
 	// to "Loading…" and back, changing the page's height under the reader.
 	$effect(() => {
@@ -116,22 +108,22 @@
 		}
 		moduleLoading = true;
 		/** Whether `id` is still the one to show, not overtaken by a later pick. */
-		const current = () => page.url.searchParams.get('module') === id;
+		const stillSelected = () => page.url.searchParams.get('module') === id;
 		api
 			.getModuleSettings(id)
 			.then((view) => {
-				if (!current()) return;
+				if (!stillSelected()) return;
 				moduleView = view;
 				moduleDraft = new Draft(editable(view));
 			})
 			.catch(() => {
-				if (!current()) return;
+				if (!stillSelected()) return;
 				moduleView = null;
 				moduleDraft = null;
 				saveError = `Could not load the settings of module ${id}.`;
 			})
 			.finally(() => {
-				if (current()) moduleLoading = false;
+				if (stillSelected()) moduleLoading = false;
 			});
 	});
 

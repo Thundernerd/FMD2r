@@ -189,7 +189,11 @@
 									type="button"
 									class="pick"
 									aria-pressed={m.id === selected}
-									onclick={() => onselect(m.id)}
+									onclick={() => {
+										// Already in view where it was clicked; scrolling to it could move the page.
+										shownSelected = m.id;
+										onselect(m.id);
+									}}
 								>
 									<span>
 										{m.name}
