@@ -1,6 +1,7 @@
 //! The wire-level seam: one HTTP exchange, no redirects, retries or decoding.
 
 use std::future::Future;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -18,6 +19,31 @@ pub struct WireRequest {
     /// Socket timeout (connect and per read), like Synapse's `Sock.SetTimeout`.
     pub timeout: Duration,
     pub proxy: Option<Proxy>,
+    /// Connect a request for this host to this address instead of resolving it (unused with a
+    /// proxy).
+    pub connect_to: Option<ConnectTo>,
+}
+
+/// A host pinned to an address: requests for the host connect there, while the host still names
+/// the server for TLS (SNI and certificate checks) and the `Host` header. Requests for any other
+/// host resolve as usual.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectTo {
+    pub host: String,
+    pub addr: SocketAddr,
+}
+
+impl ConnectTo {
+    /// Whether this pin applies to a request for `url`.
+    pub fn applies_to(&self, url: &str) -> bool {
+        reqwest::Url::parse(url)
+            .ok()
+            .and_then(|url| {
+                url.host_str()
+                    .map(|host| host.eq_ignore_ascii_case(&self.host))
+            })
+            .unwrap_or(false)
+    }
 }
 
 /// One response as it came off the wire. The body is still content-encoded.
