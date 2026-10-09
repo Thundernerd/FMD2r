@@ -33,7 +33,8 @@ export interface ModuleGroup {
 /** The category a module is listed under; modules without one are listed under "Other". */
 export const moduleCategory = (m: ModuleSummary): string => m.category || 'Other';
 
-const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+const compareIgnoringCase = (a: string, b: string) =>
+	a.localeCompare(b, undefined, { sensitivity: 'base' });
 
 /**
  * `modules` grouped by category, the groups sorted by category and each group's modules by name,
@@ -41,11 +42,22 @@ const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensiti
  */
 export function groupModules(modules: ModuleSummary[]): ModuleGroup[] {
 	return Object.entries(Object.groupBy(modules, moduleCategory))
-		.sort(([a], [b]) => byText(a, b))
+		.sort(([a], [b]) => compareIgnoringCase(a, b))
 		.map(([category, list = []]) => ({
 			category,
 			modules: list.toSorted(
-				(a, b) => byText(a.name, b.name) || byText(moduleHost(a), moduleHost(b))
+				(a, b) =>
+					compareIgnoringCase(a.name, b.name) || compareIgnoringCase(moduleHost(a), moduleHost(b))
 			)
 		}));
+}
+
+/** Whether `text` contains every word of the search `query`, ignoring case. */
+export function matchesSearch(text: string, query: string): boolean {
+	const lower = text.toLowerCase();
+	return query
+		.toLowerCase()
+		.split(/\s+/)
+		.filter(Boolean)
+		.every((w) => lower.includes(w));
 }

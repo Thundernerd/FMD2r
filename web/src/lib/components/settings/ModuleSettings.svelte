@@ -1,7 +1,13 @@
 <script lang="ts">
 	import type { ModuleSettingsView, ModuleSummary } from '#lib/api/types.ts';
 	import type { Draft } from '#lib/settings/draft.svelte.ts';
-	import { groupModules, moduleHost, moduleKey, repeatedNames } from '#lib/modules.ts';
+	import {
+		groupModules,
+		matchesSearch,
+		moduleHost,
+		moduleKey,
+		repeatedNames
+	} from '#lib/modules.ts';
 	import { optionFields, type Field } from '#lib/settings/fields.ts';
 	import SettingField from './SettingField.svelte';
 
@@ -23,15 +29,12 @@
 		onselect: (id: string) => void;
 	} = $props();
 
+	const uid = $props.id();
 	let query = $state('');
 	/** The modules whose name, category, host or ID contains every word of the search. */
-	const matches = $derived.by(() => {
-		const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-		return modules.filter((m) => {
-			const text = `${m.name} ${m.category} ${moduleHost(m)} ${m.id}`.toLowerCase();
-			return words.every((w) => text.includes(w));
-		});
-	});
+	const matches = $derived(
+		modules.filter((m) => matchesSearch(`${m.name} ${m.category} ${moduleHost(m)} ${m.id}`, query))
+	);
 	const groups = $derived(groupModules(matches));
 	const count = $derived(
 		matches.length === modules.length
@@ -48,6 +51,7 @@
 	function navigate(event: KeyboardEvent) {
 		if (!list) return;
 		const picks = [...list.querySelectorAll<HTMLButtonElement>('.pick')];
+		// The focused module's index; -1 in the search box.
 		const at = picks.indexOf(event.target as HTMLButtonElement);
 		const next = {
 			ArrowDown: at + 1,
@@ -68,7 +72,7 @@
 	// Bring the selected module into view once it is listed, e.g. when the page opens with
 	// `?module=` before the modules have loaded.
 	$effect(() => {
-		void groups;
+		void groups; // Re-run when the list changes, e.g. once the modules have loaded.
 		if (!selected || !list || selected === shownSelected) return;
 		const pick = list.querySelector<HTMLElement>('.pick[aria-pressed="true"]');
 		if (!pick) return;
@@ -140,10 +144,12 @@
 </script>
 
 <div class="modules">
+	<!-- The keys move the focus between the buttons inside, which take them; the div only
+	     listens so one handler serves the search box and every module. -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="picker" onkeydown={navigate}>
 		<div class="heading">
-			<span class="label" id="module-pick">Pick a website to edit its settings</span>
+			<span class="label">Pick a website to edit its settings</span>
 			<span class="small muted" aria-live="polite">{count}</span>
 		</div>
 		<input
@@ -156,10 +162,10 @@
 		<ul class="list" aria-label="Modules" bind:this={list}>
 			{#each groups as group, i (group.category)}
 				<li class="group">
-					<h4 class="category small muted" id="module-group-{i}">
+					<h4 class="category small muted" id="{uid}-group-{i}">
 						{group.category}
 					</h4>
-					<ul aria-labelledby="module-group-{i}">
+					<ul aria-labelledby="{uid}-group-{i}">
 						{#each group.modules as m (moduleKey(m))}
 							<li>
 								<button

@@ -464,11 +464,18 @@ export function createMockSettings() {
 
 		listModules: (): ModuleBasics[] =>
 			MODULES.map((m) => {
-				const { enabled, options } = view(m);
+				const { enabled, limits, http, options } = view(m);
+				const defaults = defaultOverrides();
+				// As the server decides it: overrides that are on lift a declared connection limit.
+				const overridden =
+					enabled &&
+					(JSON.stringify(limits) !== JSON.stringify(defaults.limits) ||
+						JSON.stringify(http) !== JSON.stringify(defaults.http) ||
+						m.limits.max_connection_limit !== 0);
 				return {
 					...m.summary,
 					option_count: m.options.length,
-					customized: enabled || options.some((o) => o.value !== o.default)
+					customized: overridden || options.some((o) => o.value !== o.default)
 				};
 			}),
 

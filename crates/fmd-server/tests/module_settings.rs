@@ -470,3 +470,42 @@ async fn a_module_is_customized_while_its_settings_differ_from_the_defaults() {
     );
     assert_eq!(customized(&h).await, json!(false));
 }
+
+/// A module declaring no limits: turning its overrides on changes nothing until one is set.
+const NO_LIMITS: &str = r#"
+function Init()
+  local m = NewWebsiteModule()
+  m.ID = 'fixture'
+  m.Name = 'Fixture'
+  m.RootURL = 'https://fixture.example'
+end
+"#;
+
+#[tokio::test]
+async fn overrides_turned_on_at_their_defaults_are_not_customized() {
+    let h = harness_with(NO_LIMITS);
+    let uri = "/api/modules/fixture/settings";
+    let on = json!({ "enabled": true });
+    assert_eq!(
+        send(&h.state, patch_json(uri, on)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(false));
+    let cookies = json!({ "http": { "cookies": "a=b" } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, cookies)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(true));
+}
+
+#[tokio::test]
+async fn overrides_turned_on_lift_a_declared_connection_limit() {
+    // While overrides are on, their connection limit of 0 (unlimited) replaces the module's 4
+    // (baseunits/WebsiteModulesSettings.pas:126-155).
+    let h = harness();
+    let on = json!({ "enabled": true });
+    let res = send(&h.state, patch_json("/api/modules/fixture/settings", on)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(customized(&h).await, json!(true));
+}

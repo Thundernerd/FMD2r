@@ -132,6 +132,7 @@
 				api
 					.listModules()
 					.then((list) => (modules = list))
+					// The settings are saved; only the markers may stay stale until a reload.
 					.catch(() => {});
 			}
 		} catch (e) {

@@ -1,6 +1,12 @@
 <script lang="ts">
 	import type { ModuleSummary } from '#lib/api/types.ts';
-	import { groupModules, moduleHost, moduleKey, repeatedNames } from '#lib/modules.ts';
+	import {
+		groupModules,
+		matchesSearch,
+		moduleHost,
+		moduleKey,
+		repeatedNames
+	} from '#lib/modules.ts';
 
 	let {
 		modules,
@@ -20,13 +26,9 @@
 
 	/** The modules matching the search, grouped by category, groups and modules by name. */
 	const groups = $derived.by(() => {
-		const words = search.toLowerCase().split(/\s+/).filter(Boolean);
 		// The selected module stays listed so the select keeps showing it.
 		return groupModules(
-			modules.filter((m) => {
-				const text = `${m.name} ${m.category}`.toLowerCase();
-				return m.id === selected || words.every((w) => text.includes(w));
-			})
+			modules.filter((m) => m.id === selected || matchesSearch(`${m.name} ${m.category}`, search))
 		);
 	});
 	const shown = $derived(groups.reduce((n, g) => n + g.modules.length, 0));
