@@ -1,0 +1,181 @@
+{
+ "requests": {
+  "mangadex": {
+   "total": 50,
+   "cached": 0,
+   "429": 0
+  },
+  "mangabaka": {
+   "total": 200,
+   "cached": 0,
+   "429": 0
+  },
+  "anilist": {
+   "total": 201,
+   "cached": 0,
+   "429": 1
+  }
+ },
+ "routes": {
+  "dump": {
+   "MangaDex": {
+    "n": 50,
+    "accepted": 42,
+    "by_confidence": {
+     "cross-id": 38,
+     "none": 6,
+     "ambiguous": 1,
+     "title+author": 3,
+     "author-conflict": 1,
+     "title-unique": 1
+    }
+   },
+   "MangaFire": {
+    "n": 50,
+    "accepted": 46,
+    "by_confidence": {
+     "title+author": 42,
+     "author-conflict": 2,
+     "ambiguous": 2,
+     "title-unique": 4
+    }
+   },
+   "AsuraScans": {
+    "n": 50,
+    "accepted": 45,
+    "by_confidence": {
+     "title+author": 40,
+     "title-unique": 5,
+     "author-conflict": 4,
+     "ambiguous": 1
+    }
+   },
+   "WebToons": {
+    "n": 50,
+    "accepted": 46,
+    "by_confidence": {
+     "link": 29,
+     "none": 3,
+     "title-unique": 17,
+     "ambiguous": 1
+    }
+   },
+   "all": {
+    "n": 200,
+    "accepted": 179,
+    "by_confidence": {
+     "cross-id": 38,
+     "none": 9,
+     "ambiguous": 5,
+     "title+author": 85,
+     "author-conflict": 7,
+     "title-unique": 27,
+     "link": 29
+    }
+   }
+  },
+  "mb_api": {
+   "MangaDex": {
+    "n": 50,
+    "accepted": 34,
+    "by_confidence": {
+     "title+author": 33,
+     "none": 11,
+     "author-conflict": 4,
+     "ambiguous": 1,
+     "title-unique": 1
+    }
+   },
+   "MangaFire": {
+    "n": 50,
+    "accepted": 46,
+    "by_confidence": {
+     "title+author": 42,
+     "author-conflict": 4,
+     "title-unique": 4
+    }
+   },
+   "AsuraScans": {
+    "n": 50,
+    "accepted": 43,
+    "by_confidence": {
+     "title+author": 38,
+     "title-unique": 5,
+     "author-conflict": 7
+    }
+   },
+   "WebToons": {
+    "n": 50,
+    "accepted": 41,
+    "by_confidence": {
+     "ambiguous": 6,
+     "title-unique": 41,
+     "none": 3
+    }
+   },
+   "all": {
+    "n": 200,
+    "accepted": 164,
+    "by_confidence": {
+     "title+author": 113,
+     "none": 14,
+     "author-conflict": 15,
+     "ambiguous": 7,
+     "title-unique": 51
+    }
+   }
+  },
+  "anilist": {
+   "MangaDex": {
+    "n": 50,
+    "accepted": 12,
+    "by_confidence": {
+     "none": 35,
+     "title+author": 12,
+     "ambiguous": 1,
+     "author-conflict": 2
+    }
+   },
+   "MangaFire": {
+    "n": 50,
+    "accepted": 37,
+    "by_confidence": {
+     "title+author": 35,
+     "author-conflict": 5,
+     "title-unique": 2,
+     "none": 8
+    }
+   },
+   "AsuraScans": {
+    "n": 50,
+    "accepted": 32,
+    "by_confidence": {
+     "title+author": 32,
+     "author-conflict": 15,
+     "none": 2,
+     "ambiguous": 1
+    }
+   },
+   "WebToons": {
+    "n": 50,
+    "accepted": 26,
+    "by_confidence": {
+     "title-unique": 26,
+     "none": 21,
+     "ambiguous": 3
+    }
+   },
+   "all": {
+    "n": 200,
+    "accepted": 107,
+    "by_confidence": {
+     "none": 66,
+     "title+author": 79,
+     "ambiguous": 5,
+     "author-conflict": 22,
+     "title-unique": 28
+    }
+   }
+  }
+ }
+}
