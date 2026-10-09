@@ -35,9 +35,9 @@ pub struct FavoriteView {
     pub cover_url: Option<String>,
     /// Chapters on the site at the last check (FMD2's `currentchapter`).
     pub current_chapter: u32,
-    /// Chapters on the site at the last check that are not downloaded: the chapter count less
-    /// the downloaded ones, as only the count of the site's list is stored. Downloaded chapters
-    /// the site no longer lists make it an undercount; a check finds the real ones by link.
+    /// Chapters on the site at the last check that are not downloaded, compared by link. A
+    /// favorite not checked since its links were kept (or imported from FMD2) has only the
+    /// count, so until its next check this is the chapter count less the downloaded ones.
     pub new_chapters: u32,
     /// RFC 3339.
     pub date_added: String,
@@ -315,10 +315,8 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
             let favorites = db.favorites().list()?;
             let mut rows = Vec::with_capacity(favorites.len());
             for favorite in favorites {
-                let downloaded = db
-                    .downloaded_chapters()
-                    .count_for(&favorite.module_id, &favorite.link)?;
-                rows.push((favorite, downloaded));
+                let new_chapters = db.favorites().new_chapter_count(&favorite)?;
+                rows.push((favorite, new_chapters));
             }
             Ok(rows)
         })
@@ -331,26 +329,26 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
         .collect();
     Ok(rows
         .into_iter()
-        .map(|(favorite, downloaded)| {
+        .map(|(favorite, new_chapters)| {
             let website = names
                 .get(&favorite.module_id)
                 .cloned()
                 .unwrap_or_else(|| favorite.module_id.clone());
-            to_view(favorite, website, downloaded)
+            to_view(favorite, website, new_chapters)
         })
         .collect())
 }
 
 async fn view(state: &AppState, favorite: Favorite) -> Result<FavoriteView, ApiError> {
-    let (module, link) = (favorite.module_id.clone(), favorite.link.clone());
-    let downloaded = state
-        .blocking(move |db| db.downloaded_chapters().count_for(&module, &link))
+    let stored = favorite.clone();
+    let new_chapters = state
+        .blocking(move |db| db.favorites().new_chapter_count(&stored))
         .await?;
     let website = website(state, &favorite.module_id);
-    Ok(to_view(favorite, website, downloaded))
+    Ok(to_view(favorite, website, new_chapters))
 }
 
-fn to_view(favorite: Favorite, website: String, downloaded: u32) -> FavoriteView {
+fn to_view(favorite: Favorite, website: String, new_chapters: u32) -> FavoriteView {
     FavoriteView {
         id: favorite.id.0,
         cover_url: favorite
@@ -359,7 +357,7 @@ fn to_view(favorite: Favorite, website: String, downloaded: u32) -> FavoriteView
             .filter(|c| !c.is_empty())
             .map(|c| cover_url(&favorite.module_id, c)),
         status: SeriesStatus::from_fmd(&favorite.status),
-        new_chapters: favorite.current_chapter.saturating_sub(downloaded),
+        new_chapters,
         current_chapter: favorite.current_chapter,
         date_added: rfc3339_from_unix_ms(favorite.date_added),
         last_checked: favorite.date_last_checked.map(rfc3339_from_unix_ms),

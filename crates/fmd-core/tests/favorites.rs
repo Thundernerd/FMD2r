@@ -251,6 +251,27 @@ async fn a_check_stores_the_status_chapter_count_and_dates() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_check_stores_the_sites_chapter_links_replacing_the_previous_ones() {
+    let fx = Fixture::new(json!({}));
+    let id = fx.favorite();
+    fx.db
+        .favorites()
+        .set_chapter_links(id, &["/old1", "/old2", "/old3", "/old4"])
+        .unwrap();
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+
+    // Kept so the new-chapter badge compares links (docs/tickets/T65-exact-new-chapter-badge.md).
+    assert_eq!(
+        fx.db.favorites().chapter_links(id).unwrap(),
+        ["/c1", "/c2", "/c3"]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_favorite_without_new_chapters_is_checked_but_not_updated() {
     let fx = Fixture::new(json!({}));
     let id = fx.favorite();

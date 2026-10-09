@@ -670,8 +670,10 @@ impl FavoritesChecker {
 
     /// Stores what a check learned: the chapter count and status at once (`DoCheck`,
     /// baseunits/uFavoritesManager.pas:351-353), the check time, and the update time when it
-    /// found chapters (:373-378). The other fields are left as stored now, so edits made during
-    /// the check stay. Returns the updated favorite, or `None` when it was removed meanwhile.
+    /// found chapters (:373-378). Beyond FMD2, it also replaces the stored chapter links, which
+    /// the new-chapter badge compares with the downloaded ones. The other fields are left as
+    /// stored now, so edits made during the check stay. Returns the updated favorite, or `None`
+    /// when it was removed meanwhile.
     async fn store_checked(
         &self,
         id: FavoriteId,
@@ -681,6 +683,7 @@ impl FavoritesChecker {
         let now = now_ms();
         let chapters = u32::try_from(info.chapters.len()).unwrap_or(u32::MAX);
         let status = info.status.clone();
+        let links: Vec<String> = info.chapters.iter().map(|c| c.link.clone()).collect();
         let db = self.inner.config.db.clone();
         // The repositories lock the connection per statement; this read-modify-write races
         // only with another write to the same favorite in between, which a PATCH would redo.
@@ -695,6 +698,8 @@ impl FavoritesChecker {
                 favorite.date_last_updated = Some(now);
             }
             db.favorites().update(&favorite)?;
+            let links: Vec<&str> = links.iter().map(String::as_str).collect();
+            db.favorites().set_chapter_links(id, &links)?;
             Ok(Some(favorite))
         })
         .await

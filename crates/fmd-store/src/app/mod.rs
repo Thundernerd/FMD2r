@@ -29,6 +29,7 @@ use tasks::TaskRepo;
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/app_v1.sql"),
     include_str!("../migrations/app_v2.sql"),
+    include_str!("../migrations/app_v3.sql"),
 ];
 
 /// Handle to `app.db`. Clone it to share between threads.
