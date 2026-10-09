@@ -128,9 +128,8 @@ impl AppState {
         self
     }
 
-    pub fn with_engine(mut self, engine: impl DownloadEngine) -> Self {
-        self.engine = Arc::new(engine);
-        self
+    pub fn with_engine(self, engine: impl DownloadEngine) -> Self {
+        self.with_shared_engine(Arc::new(engine))
     }
 
     /// [`AppState::with_engine`] for an engine others hold too.

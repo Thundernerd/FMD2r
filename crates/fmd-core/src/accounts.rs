@@ -119,7 +119,7 @@ pub enum AccountError {
 /// call them from a blocking thread, never from inside a tokio runtime.
 pub struct AccountService {
     /// The loaded modules, read anew for every request so a hot reload is followed.
-    registry: Box<CurrentModules>,
+    current_modules: Box<CurrentModules>,
     pool: Arc<WorkerPool>,
     /// Modules whose login is running.
     checking: Mutex<HashSet<String>>,
@@ -142,7 +142,7 @@ impl AccountService {
         pool: Arc<WorkerPool>,
     ) -> Self {
         Self {
-            registry: Box::new(current),
+            current_modules: Box::new(current),
             pool,
             checking: Mutex::default(),
             changes: broadcast::channel(CHANGES_CAPACITY).0,
@@ -157,7 +157,7 @@ impl AccountService {
     /// The accounts of every module with account support, by module ID
     /// (mangadownloader/forms/frmAccountManager.pas:168-182).
     pub fn list(&self) -> Vec<AccountView> {
-        let mut accounts: Vec<AccountView> = (self.registry)()
+        let mut accounts: Vec<AccountView> = (self.current_modules)()
             .modules()
             .iter()
             .filter_map(|m| view(m))
@@ -313,7 +313,7 @@ impl AccountService {
     }
 
     fn module(&self, module_id: &str) -> Result<Arc<Module>, AccountError> {
-        (self.registry)()
+        (self.current_modules)()
             .get(module_id)
             .cloned()
             .ok_or_else(|| AccountError::UnknownModule(module_id.to_owned()))

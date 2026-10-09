@@ -329,7 +329,7 @@ impl ListJobs {
 }
 
 /// The list jobs as one job, like FMD2's single update-list thread working through the chosen
-/// websites (`TUpdateListManagerThread`, baseunits/uUpdateThread.pas): running while any module's
+/// websites (`TUpdateListManagerThread.Execute`, baseunits/uUpdateThread.pas:626-779): running while any module's
 /// list job runs, counting the jobs since none was running.
 impl Job for ListJobs {
     fn id(&self) -> &str {

@@ -129,13 +129,13 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                 .with_modules(catalog.clone())
                 .with_covers(covers, catalog)
                 .with_accounts(Arc::new(accounts));
-            if let Some(jobs) = list_jobs(&state, &runtime) {
-                jobs.register(&state.jobs);
-                state = state.with_list_jobs(jobs);
-            }
             let live = runtime.modules.clone();
             let modules: Arc<ModuleLookup> =
                 Arc::new(move |id: &str| live.current().get(id).cloned());
+            if let Some(jobs) = list_jobs(&state, &runtime, modules.clone()) {
+                jobs.register(&state.jobs);
+                state = state.with_list_jobs(jobs);
+            }
             let engine = DownloadManager::open(EngineConfig {
                 db: state.db.clone(),
                 pool: runtime.pool.clone(),
@@ -226,17 +226,20 @@ fn start_favorites(
 }
 
 /// List updates on `runtime`'s pool and FMD2-DB imports (from the `update_lists.db_url`
-/// setting) into `state`'s `lists.db`, for the modules loaded at the time each starts; their
+/// setting) into `state`'s `lists.db`, for the module `modules` finds when each starts; their
 /// events go out as `job.lists.*`. `None` without a `lists.db`.
-fn list_jobs(state: &AppState, runtime: &LuaRuntime) -> Option<ListJobs> {
+fn list_jobs(
+    state: &AppState,
+    runtime: &LuaRuntime,
+    modules: Arc<ModuleLookup>,
+) -> Option<ListJobs> {
     let lists = state.lists.clone()?;
-    let live = runtime.modules.clone();
     let events = state.events().clone();
     Some(ListJobs::new(
         ListUpdater::new(runtime.pool.clone(), lists.clone()),
         DbImporter::new(runtime.http.clone(), lists),
         state.settings.clone(),
-        move |id: &str| live.current().get(id).cloned(),
+        move |id: &str| modules(id),
         move |event| events.publish(ServerEvent::Lists(event)),
     ))
 }
