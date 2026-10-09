@@ -1458,7 +1458,7 @@
         "tags": [
           "modules"
         ],
-        "summary": "Every loaded module, sorted by ID.",
+        "summary": "Every loaded module, sorted by ID; modules sharing an ID are all listed.",
         "operationId": "listModules",
         "responses": {
           "200": {
@@ -4009,10 +4009,11 @@
       },
       "ModuleSummary": {
         "type": "object",
-        "description": "A loaded module, for the module pickers.",
+        "description": "A loaded module, for the module pickers.\n\nIDs can repeat: FMD2's loader keeps every module a file's `Init` creates without checking\nIDs (baseunits/lua/LuaWebsiteModules.pas:523-589), and upstream `lua/modules/Manga1001.lua:18-19`\nregisters two websites under one ID. `root_url` tells such entries apart; they share the\nID's settings, which FMD2 keys by ID (baseunits/WebsiteModules.pas:545-700).",
         "required": [
           "id",
           "name",
+          "root_url",
           "category",
           "option_count",
           "capabilities",
@@ -4053,6 +4054,10 @@
             "type": "integer",
             "description": "How many options the module declares.",
             "minimum": 0
+          },
+          "root_url": {
+            "type": "string",
+            "description": "The website's root URL, lowercased as the loader leaves it."
           }
         }
       },

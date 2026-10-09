@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ModuleSummary } from '#lib/api/types.ts';
+	import { moduleHost, moduleKey, repeatedNames } from '#lib/modules.ts';
 
 	let {
 		modules,
@@ -12,7 +13,12 @@
 
 	let search = $state('');
 
-	/** The modules matching the search, grouped by category, groups and modules by name. */
+	const repeated = $derived(repeatedNames(modules));
+	/** How a module is listed: by name, with its host when another module has that name too. */
+	const label = (m: ModuleSummary) =>
+		repeated.has(m.name) ? `${m.name} (${moduleHost(m)})` : m.name;
+
+	/** The modules matching the search, grouped by category, groups and modules by label. */
 	const groups = $derived.by(() => {
 		const words = search.toLowerCase().split(/\s+/).filter(Boolean);
 		// The selected module stays listed so the select keeps showing it.
@@ -25,7 +31,7 @@
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([category, list = []]) => ({
 				category,
-				modules: list.toSorted((a, b) => a.name.localeCompare(b.name))
+				modules: list.toSorted((a, b) => label(a).localeCompare(label(b)))
 			}));
 	});
 	const shown = $derived(groups.reduce((n, g) => n + g.modules.length, 0));
@@ -44,8 +50,9 @@
 		<option value="">All websites</option>
 		{#each groups as group (group.category)}
 			<optgroup label={group.category}>
-				{#each group.modules as m (m.id)}
-					<option value={m.id}>{m.name}</option>
+				<!-- Modules sharing an ID share its list, so either option selects it. -->
+				{#each group.modules as m (moduleKey(m))}
+					<option value={m.id}>{label(m)}</option>
 				{/each}
 			</optgroup>
 		{/each}
