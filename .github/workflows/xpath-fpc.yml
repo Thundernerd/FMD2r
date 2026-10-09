@@ -59,7 +59,7 @@ jobs:
       run:
         working-directory: crates/xpath-fpc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install FPC
         run: sudo apt-get update && sudo apt-get install -y fpc
       - run: rustup toolchain install
@@ -91,7 +91,7 @@ jobs:
         run: cargo test -p fmd-server --features xpath-fpc --test serve
       - name: Build libfmdxpath.so
         run: ./build.sh build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: libfmdxpath-linux-x86_64
           path: crates/xpath-fpc/build/libfmdxpath.so

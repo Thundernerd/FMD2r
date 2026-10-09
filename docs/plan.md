@@ -261,6 +261,9 @@ Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53
 | T72 | A clear, sorted list in Settings → Website modules | — |
 | T73 | MangaBaka database for list metadata (offline matching, format and status facets) | T71 |
 | T74 | Named download destinations (several folders, per-website defaults) | — |
+| T75 | Sort Settings → Accounts like the website lists | — |
+| T76 | Picking a website module doesn't jump the page | — |
+| T77 | Fix the Settings → Websites layout (hidden search box, ragged long names) | — |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:

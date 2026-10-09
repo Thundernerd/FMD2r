@@ -30,26 +30,35 @@ env:
 jobs:
   image:
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Cargo.toml's version on main is not bumped per release: the tag sets it.
       - name: Set the version from the tag
         run: scripts/set-version.sh "$VERSION"
-      - uses: docker/setup-qemu-action@v3
+      # Docker Hub's anonymous pull limit is shared per runner IP and often hit (429); skipped
+      # when the secrets aren't available, e.g. on fork PRs.
+      - uses: docker/login-action@v4
+        if: env.DOCKERHUB_TOKEN != ''
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         if: github.ref_type == 'tag'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
           # `latest` (flavor latest=auto) follows non-prerelease tags.
@@ -58,7 +67,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
       # One image per platform, loaded and smoke-tested before anything is pushed.
       - name: Build (amd64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
@@ -70,7 +79,7 @@ jobs:
       - name: Smoke test (amd64)
         run: FMD2R_EXPECT_VERSION="$VERSION" scripts/docker-smoke.sh fmd2r:smoke-amd64
       - name: Build (arm64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/arm64
@@ -84,7 +93,7 @@ jobs:
       # Same inputs as the builds above, so every layer comes from the cache.
       - name: Push
         if: github.ref_type == 'tag'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -112,11 +121,11 @@ jobs:
       CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
       AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Cargo.toml's version on main is not bumped per release: the tag sets it.
       - name: Set the version from the tag
         run: scripts/set-version.sh "$VERSION"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -144,7 +153,7 @@ jobs:
         env:
           FMD2R_RUNNER: ${{ matrix.cross && 'qemu-aarch64 -L /usr/aarch64-linux-gnu' || '' }}
         run: FMD2R_EXPECT_VERSION="$VERSION" scripts/tarball-smoke.sh dist/*.tar.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tarball-${{ matrix.arch }}
           path: dist/*.tar.gz
@@ -157,7 +166,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: tarball-*
           merge-multiple: true

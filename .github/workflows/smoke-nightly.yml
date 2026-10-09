@@ -23,7 +23,7 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install FPC
         run: sudo apt-get update && sudo apt-get install -y fpc
       - run: rustup toolchain install
@@ -58,7 +58,7 @@ jobs:
           target/debug/fmd2r xpath diff --corpus xpath-corpus --out xpath-diff.md || status=$?
           if [ -f xpath-diff.md ]; then head -c 60000 xpath-diff.md >> "$GITHUB_STEP_SUMMARY"; fi
           exit $status
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: smoke-report
