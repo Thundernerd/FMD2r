@@ -151,7 +151,8 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
     let def = module.def();
     let runtime = Runtime::new().map_err(|e| plain(format!("new Lua state: {e}")))?;
     runtime.set_lua_dir(&shared.lua_dir);
-    // FMD2 runs in the parent of `lua/`, which upstream's relative paths assume, e.g.
+    // FMD2 runs in its own directory, the parent of `lua/` (`LUA_REPO_FOLDER`,
+    // baseunits/FMDOptions.pas:297), which upstream's relative paths assume, e.g.
     // `lua\websitebypass\websitebypass_config.json` (lua/websitebypass/cloudflare.lua:272).
     // A bare `lua` has an empty parent: the current directory, the default.
     if let Some(dir) = shared

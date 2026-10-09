@@ -76,9 +76,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let lua_dir = data_dir.join("lua");
     // The flag or environment variable wins for this run without replacing the stored setting.
     let flaresolverr_override = config.flaresolverr_url;
-    let flaresolverr_url = flaresolverr_override
-        .clone()
-        .unwrap_or_else(|| settings.connections.flaresolverr_url.clone());
+    let flaresolverr_url =
+        module_updates::flaresolverr_url(flaresolverr_override.as_deref(), &settings);
     // Where upstream's cloudflare.lua looks for FlareSolverr (lua/websitebypass/cloudflare.lua:271-325).
     if let Err(e) = write_websitebypass_config(&lua_dir, &flaresolverr_url) {
         tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}");
@@ -179,7 +178,7 @@ fn shutdown_signal() -> std::io::Result<impl Future<Output = ()>> {
 }
 
 /// Rewrites `websitebypass_config.json` whenever the `connections.flaresolverr_url` setting
-/// changes from `current`. Upstream's `cloudflare.lua` reads the file at every bypass
+/// differs from `current`, the URL last written. Upstream's `cloudflare.lua` reads the file at every bypass
 /// (lua/websitebypass/cloudflare.lua:271-325, :341), so the next one uses the new URL.
 async fn follow_flaresolverr_url(
     settings: Arc<SettingsService>,
@@ -202,9 +201,12 @@ async fn follow_flaresolverr_url(
             .await
             .map_err(std::io::Error::other)
             .and_then(|written| written);
-        if let Err(e) = written {
-            tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}");
+        match written {
+            Ok(()) => current = url,
+            // Tried again at the next settings change.
+            Err(e) => {
+                tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}")
+            }
         }
-        current = url;
     }
 }

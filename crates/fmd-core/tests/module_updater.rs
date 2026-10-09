@@ -561,6 +561,22 @@ fn a_token_is_sent_to_the_api_only() {
 
 /// Module `a`, whose `GetInfo` makes one request and titles the manga after whether
 /// `websitebypass.lua` ran for it.
+impl Fixture {
+    /// A fixture whose updater invalidates a one-thread pool, and that pool.
+    fn pooled() -> (Fixture, Arc<WorkerPool>) {
+        let mut f = Fixture::new();
+        let pool = Arc::new(WorkerPool::new(pool_config(&f)).unwrap());
+        f.updater = f.updater.with_pool(pool.clone());
+        (f, pool)
+    }
+
+    /// The title `pool` gets from module `a`'s `GetInfo`.
+    fn title_on(&self, pool: &WorkerPool) -> String {
+        let a = self.modules.current().get("a").unwrap().clone();
+        pool.on(&a).get_info("/m").wait().unwrap().value.info.title
+    }
+}
+
 const BYPASS_PROBE: &str = "function Init() local m = NewWebsiteModule(); m.ID='a'; m.Name='a'; \
      m.RootURL='https://a'; m.OnGetInfo='GetInfo' end\n\
      function GetInfo() BYPASSED = false; HTTP.GET('http://site.test/'); \
@@ -577,9 +593,7 @@ fn checkantibot(seen: bool) -> String {
 
 #[test]
 fn a_synced_checkantibot_is_used_by_the_next_request_without_a_restart() {
-    let mut f = Fixture::new();
-    let pool = Arc::new(WorkerPool::new(pool_config(&f)).unwrap());
-    f.updater = f.updater.with_pool(pool.clone());
+    let (f, pool) = Fixture::pooled();
     let publish = |commit: &str, etag: &str, check_sha: &str, seen: bool| {
         f.github.publish(
             commit,
@@ -597,10 +611,7 @@ fn a_synced_checkantibot_is_used_by_the_next_request_without_a_restart() {
     };
     publish("c1", "\"e1\"", "sc1", false);
     f.updater.sync().unwrap();
-    let title = || {
-        let a = f.modules.current().get("a").unwrap().clone();
-        pool.on(&a).get_info("/m").wait().unwrap().value.info.title
-    };
+    let title = || f.title_on(&pool);
     assert_eq!(title(), "plain");
     publish("c2", "\"e2\"", "sc2", true);
 
@@ -629,9 +640,7 @@ end
 
 #[test]
 fn a_flaresolverr_change_is_read_by_the_next_bypass_without_a_restart() {
-    let mut f = Fixture::new();
-    let pool = Arc::new(WorkerPool::new(pool_config(&f)).unwrap());
-    f.updater = f.updater.with_pool(pool.clone());
+    let (f, pool) = Fixture::pooled();
     f.github.publish(
         "c1",
         "\"e1\"",
@@ -646,10 +655,7 @@ fn a_flaresolverr_change_is_read_by_the_next_bypass_without_a_restart() {
         ],
     );
     f.updater.sync().unwrap();
-    let title = || {
-        let a = f.modules.current().get("a").unwrap().clone();
-        pool.on(&a).get_info("/m").wait().unwrap().value.info.title
-    };
+    let title = || f.title_on(&pool);
     write_websitebypass_config(&f.lua_dir(), "http://solver-a:8191").unwrap();
     assert_eq!(title(), "solver-a");
 
@@ -660,9 +666,7 @@ fn a_flaresolverr_change_is_read_by_the_next_bypass_without_a_restart() {
 
 #[test]
 fn a_broken_module_from_a_sync_is_never_loaded_by_a_concurrent_job() {
-    let mut f = Fixture::new();
-    let pool = Arc::new(WorkerPool::new(pool_config(&f)).unwrap());
-    f.updater = f.updater.with_pool(pool.clone());
+    let (f, pool) = Fixture::pooled();
     publish_first(&f.github);
     f.updater.sync().unwrap();
     // Its `Init` signals that the update is being loaded, holds it there until released, then

@@ -360,6 +360,8 @@ impl ModuleUpdater {
         let _running = lock(&self.running);
         let terminate = lock(&self.terminate).clone();
         let result = self.sync_with(&terminate);
+        // Whatever a sync staged is in place or rejected by now, even when it stopped early.
+        remove_staging(&self.config.lua_dir);
         // A cancel reaches the sync it was meant for, even one about to start, and no later one.
         *lock(&self.terminate) = TerminateToken::new();
         result
@@ -402,8 +404,8 @@ impl ModuleUpdater {
             self.delete(path)?;
             report.deleted.push(path.clone());
         }
-        let staged = self.staged(&plan.download);
-        let results = self.download_all(&commit, &plan.download, &staged);
+        let to_stage = self.to_stage(&plan.download);
+        let results = self.download_all(&commit, &plan.download, &to_stage);
         let rejected = self.validate(
             results
                 .iter()
@@ -414,8 +416,13 @@ impl ModuleUpdater {
             let committed = result.and_then(|downloaded| match &downloaded.staged {
                 Some(staged) => match rejected.get(staged) {
                     Some(error) => {
-                        let _ = std::fs::remove_file(staged);
-                        kept_out.insert(file.path.clone(), (file.sha.clone(), error.clone()));
+                        kept_out.insert(
+                            file.path.clone(),
+                            KeptOut {
+                                sha: file.sha.clone(),
+                                error: error.clone(),
+                            },
+                        );
                         Ok(None)
                     }
                     None => {
@@ -445,7 +452,6 @@ impl ModuleUpdater {
                 }
             }
         }
-        remove_staging(&self.config.lua_dir);
         let changed: Vec<String> = report
             .downloaded
             .iter()
@@ -492,14 +498,14 @@ impl ModuleUpdater {
     /// loads again.
     ///
     /// A file that fails to load is reported to the inbox once per version, and so is each of
-    /// `kept_out` (path → blob SHA and error): module files whose update failed to load and never
+    /// `kept_out` (by path): module files whose update failed to load and never
     /// replaced the version that is loaded, which stays, with its `module_files` row, until
     /// upstream next changes it. A module that breaks because a file it `require`s changed has
     /// no earlier version on disk to go back to, so it is dropped.
     fn reload(
         &self,
         changed: &[String],
-        kept_out: &BTreeMap<String, (String, String)>,
+        kept_out: &BTreeMap<String, KeptOut>,
         state: &mut RepoState,
         report: &mut SyncReport,
     ) -> Result<(), UpdateError> {
@@ -542,8 +548,8 @@ impl ModuleUpdater {
             let path = relative(lua_dir, file);
             failures.insert(path.clone(), (self.synced_sha(&path)?, error));
         }
-        for (path, (sha, error)) in kept_out {
-            failures.insert(path.clone(), (sha.clone(), error));
+        for (path, kept) in kept_out {
+            failures.insert(path.clone(), (kept.sha.clone(), &kept.error));
         }
         for (path, (sha, error)) in failures {
             if state.failed_init.get(&path) != Some(&sha) {
@@ -813,7 +819,7 @@ impl ModuleUpdater {
     /// keep-last-good, the module files on disk whose current version is loaded. Their new version
     /// replaces it only once it loads, so no worker building a state from the file in between
     /// ever runs a version that fails to load.
-    fn staged(&self, files: &[Wanted]) -> BTreeSet<String> {
+    fn to_stage(&self, files: &[Wanted]) -> BTreeSet<String> {
         if !self.config.keep_last_good {
             return BTreeSet::new();
         }
@@ -856,13 +862,13 @@ impl ModuleUpdater {
 
     /// Downloads `files` on at most `downloads` threads at once (FMD2's `TDownloadThread`s,
     /// bounded by `OptionMaxThreads`, mangadownloader/forms/frmLuaModulesUpdater.pas:714-737),
-    /// the `staged` ones into the staging dir. Results come back in `files` order: each file's
+    /// the ones in `to_stage` into the staging dir. Results come back in `files` order: each file's
     /// size, or why it failed.
     fn download_all(
         &self,
         commit: &str,
         files: &[Wanted],
-        staged: &BTreeSet<String>,
+        to_stage: &BTreeSet<String>,
     ) -> Vec<Result<Downloaded, UpdateError>> {
         let next = AtomicUsize::new(0);
         let results = Mutex::new(Vec::with_capacity(files.len()));
@@ -873,7 +879,8 @@ impl ModuleUpdater {
                     loop {
                         let i = next.fetch_add(1, Ordering::SeqCst);
                         let Some(file) = files.get(i) else { break };
-                        let result = self.download(commit, &file.path, staged.contains(&file.path));
+                        let result =
+                            self.download(commit, &file.path, to_stage.contains(&file.path));
                         lock(&results).push((i, result));
                     }
                 });
@@ -1025,6 +1032,14 @@ impl Job for ModuleUpdaterJob {
 struct LastCommit {
     sha: String,
     etag: String,
+}
+
+/// A module file whose downloaded update failed to load, so it never replaced the loaded one.
+struct KeptOut {
+    /// The blob SHA of the update.
+    sha: String,
+    /// Why it failed to load.
+    error: String,
 }
 
 /// A file written by a download.
