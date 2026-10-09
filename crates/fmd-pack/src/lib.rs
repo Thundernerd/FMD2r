@@ -9,6 +9,7 @@ mod naming;
 mod natural_sort;
 mod pack;
 mod pdf;
+mod whole;
 
 pub use convert::{ConvertTarget, PngCompression, convert, convert_bytes};
 pub use error::PackError;
@@ -19,3 +20,4 @@ pub use naming::{
 };
 pub use natural_sort::natural_cmp;
 pub use pack::{PackFormat, PackOptions, pack};
+pub use whole::{part_path, write_whole};
