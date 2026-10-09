@@ -1,5 +1,6 @@
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
 // A mock-mode build (used by the Playwright smoke tests) must never land in `build/`, which T21 embeds.
@@ -10,7 +11,9 @@ export default defineConfig({
 		sveltekit({
 			// SPA: every route falls back to index.html; fmd-server (T21) embeds `build/`.
 			adapter: adapter({ pages: out, assets: out, fallback: 'index.html' })
-		})
+		}),
+		// Component tests (`// @vitest-environment jsdom`) mount Svelte's browser build.
+		svelteTesting()
 	],
 	server: {
 		// When running against a real backend (`VITE_API_MOCK` unset), forward API calls to `fmd2r serve`.
