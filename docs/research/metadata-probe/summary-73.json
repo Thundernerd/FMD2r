@@ -1,0 +1,121 @@
+{
+ "requests": {
+  "mangadex": {
+   "total": 50,
+   "cached": 0,
+   "429": 0
+  },
+  "mangabaka": {
+   "total": 200,
+   "cached": 0,
+   "429": 0
+  }
+ },
+ "routes": {
+  "dump": {
+   "MangaDex": {
+    "n": 50,
+    "accepted": 32,
+    "by_confidence": {
+     "author-conflict": 6,
+     "cross-id": 28,
+     "title+author": 4,
+     "none": 12
+    }
+   },
+   "MangaFire": {
+    "n": 50,
+    "accepted": 45,
+    "by_confidence": {
+     "title+author": 41,
+     "author-conflict": 1,
+     "title-unique": 4,
+     "ambiguous": 3,
+     "none": 1
+    }
+   },
+   "AsuraScans": {
+    "n": 50,
+    "accepted": 38,
+    "by_confidence": {
+     "author-conflict": 12,
+     "title+author": 37,
+     "title-unique": 1
+    }
+   },
+   "WebToons": {
+    "n": 50,
+    "accepted": 47,
+    "by_confidence": {
+     "title-unique": 14,
+     "none": 3,
+     "link": 33
+    }
+   },
+   "all": {
+    "n": 200,
+    "accepted": 162,
+    "by_confidence": {
+     "author-conflict": 19,
+     "cross-id": 28,
+     "title+author": 82,
+     "none": 16,
+     "title-unique": 19,
+     "ambiguous": 3,
+     "link": 33
+    }
+   }
+  },
+  "mb_api": {
+   "MangaDex": {
+    "n": 50,
+    "accepted": 30,
+    "by_confidence": {
+     "author-conflict": 6,
+     "title+author": 30,
+     "none": 14
+    }
+   },
+   "MangaFire": {
+    "n": 50,
+    "accepted": 45,
+    "by_confidence": {
+     "title+author": 41,
+     "author-conflict": 1,
+     "title-unique": 4,
+     "ambiguous": 3,
+     "none": 1
+    }
+   },
+   "AsuraScans": {
+    "n": 50,
+    "accepted": 36,
+    "by_confidence": {
+     "author-conflict": 14,
+     "title+author": 35,
+     "title-unique": 1
+    }
+   },
+   "WebToons": {
+    "n": 50,
+    "accepted": 45,
+    "by_confidence": {
+     "title-unique": 45,
+     "none": 3,
+     "ambiguous": 2
+    }
+   },
+   "all": {
+    "n": 200,
+    "accepted": 156,
+    "by_confidence": {
+     "author-conflict": 21,
+     "title+author": 106,
+     "none": 18,
+     "title-unique": 50,
+     "ambiguous": 5
+    }
+   }
+  }
+ }
+}
