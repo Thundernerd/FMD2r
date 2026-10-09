@@ -2,7 +2,7 @@
 //! (baseunits/uDownloadsManager.pas:975-1374).
 
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -415,6 +415,7 @@ impl<'a> TaskRun<'a> {
                 self.save_pages()?;
             }
 
+            self.recover_packing();
             self.check_for_exists(dynamic_page_link);
 
             {
@@ -604,16 +605,7 @@ impl<'a> TaskRun<'a> {
         } else {
             String::new()
         };
-        let archive = pack_format(self.settings.output.format).is_some_and(|format| {
-            let base = if self.settings.saveto.generate_chapter_folder {
-                self.working_dir.clone()
-            } else {
-                self.working_dir.join(&self.chapter_names[self.chapter])
-            };
-            let mut path = base.into_os_string();
-            path.push(format.extension());
-            Path::new(&path).is_file()
-        });
+        let archive = self.archive().is_some_and(|path| path.is_file());
         let mut found = 0;
         for i in 0..pages {
             let base = self.working_dir.join(self.file_name(i));
@@ -632,6 +624,58 @@ impl<'a> TaskRun<'a> {
             }
         }
         found
+    }
+
+    /// The chapter's archive, when the output format packs chapters
+    /// (baseunits/uDownloadsManager.pas:1027-1041).
+    fn archive(&self) -> Option<PathBuf> {
+        let format = pack_format(self.settings.output.format)?;
+        let base = if self.settings.saveto.generate_chapter_folder {
+            self.working_dir.clone()
+        } else {
+            self.working_dir.join(&self.chapter_names[self.chapter])
+        };
+        let mut path = base.into_os_string();
+        path.push(format.extension());
+        Some(path.into())
+    }
+
+    /// The folder [`TaskRun::compress`] moves the pages into to pack them.
+    fn staging_dir(&self) -> PathBuf {
+        self.working_dir.join(&self.chapter_names[self.chapter])
+    }
+
+    /// Puts back the pages a process killed while packing left in the staging folder, so
+    /// `CheckForExists` finds them (docs/tickets/T44-download-hard-crash-resume.md). An
+    /// archive on disk is whole, as `fmd_pack::pack` only renames it into place once written,
+    /// so then the pages are what was left of removing the packed ones: they go instead of
+    /// being packed again over the archive. FMD2 packs in place and has no staging folder.
+    fn recover_packing(&self) {
+        let Some(archive) = self.archive() else {
+            return;
+        };
+        let staging = self.staging_dir();
+        if !staging.is_dir() {
+            return;
+        }
+        let packed = archive.is_file();
+        let pages = self.container().task.page_links.len();
+        for i in 0..pages {
+            let name = self.file_name(i);
+            let Some(file) = find_image_file(&staging.join(&name), "") else {
+                continue;
+            };
+            let result = match file.file_name() {
+                _ if packed => std::fs::remove_file(&file),
+                Some(file_name) => std::fs::rename(&file, self.working_dir.join(file_name)),
+                None => continue,
+            };
+            if let Err(e) = result {
+                tracing::warn!(target: "fmd_core", "task {}: recovering {}: {e}", self.id.0, file.display());
+            }
+        }
+        // Only an empty folder goes.
+        let _ = std::fs::remove_dir(&staging);
     }
 
     /// `CheckForPrepare` (baseunits/uDownloadsManager.pas:980-1001): whether a page still
@@ -710,7 +754,7 @@ impl<'a> TaskRun<'a> {
             pdf_quality: u8::try_from(self.settings.output.pdf_quality.min(100)).unwrap_or(100),
             remove_sources: true,
         };
-        let staging = self.working_dir.join(name);
+        let staging = self.staging_dir();
         let packed = std::fs::create_dir_all(&staging).and_then(|()| {
             for file in self.page_files(&ext) {
                 if let Some(file_name) = file.file_name() {

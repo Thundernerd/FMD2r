@@ -57,7 +57,8 @@ impl Default for PackOptions {
 }
 
 /// Packs the images in `dir` into `out_path` plus the format's extension, and returns the
-/// written path (`TPacker.Execute`, baseunits/uPacker.pas:255-330).
+/// written path (`TPacker.Execute`, baseunits/uPacker.pas:255-330). The archive appears under
+/// that path only once it is whole.
 ///
 /// Images are the files in `dir` (not subfolders) with an image extension, in natural order.
 /// `Folder` moves `dir` to `out_path` unless they are the same.
@@ -91,12 +92,22 @@ pub fn pack(
         fs::remove_file(&saved)?;
     }
 
+    // Written under another name and renamed once whole, so a process killed mid-pack leaves
+    // no partial archive under the output name; FMD2 writes it in place. A leftover is
+    // overwritten by the next pack.
+    let mut part = saved.as_os_str().to_owned();
+    part.push(".part");
+    let part = PathBuf::from(part);
     // The book title is the folder's name (`GetLastDir(Path)`, baseunits/uPacker.pas:186, :225).
-    match format {
-        PackFormat::Zip | PackFormat::Cbz => write_zip(&files, &saved)?,
-        PackFormat::Epub => write_epub(&files, &file_name(dir), &saved)?,
-        PackFormat::Pdf => write_pdf(&files, &file_name(dir), opts.pdf_quality, &saved)?,
-        PackFormat::Folder => {}
+    let written = match format {
+        PackFormat::Zip | PackFormat::Cbz => write_zip(&files, &part),
+        PackFormat::Epub => write_epub(&files, &file_name(dir), &part),
+        PackFormat::Pdf => write_pdf(&files, &file_name(dir), opts.pdf_quality, &part),
+        PackFormat::Folder => Ok(()),
+    };
+    if let Err(e) = written.and_then(|()| Ok(fs::rename(&part, &saved)?)) {
+        let _ = fs::remove_file(&part);
+        return Err(e);
     }
 
     if opts.remove_sources {

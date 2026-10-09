@@ -56,7 +56,7 @@ fn image_ext(data: &[u8]) -> Option<&'static str> {
 /// `SaveImageStreamToFile` (baseunits/uBaseUnit.pas:2391-2480): saves `data` in `dir` as
 /// `name` plus the extension its content shows, converting PNG and WebP as the image settings
 /// say unless ImageMagick converts later. Returns the saved file, or `None` when `data` is
-/// empty, no image, or could not be written. The file keeps the time it was written: FMD2's
+/// empty, no image, or could not be written; the file appears only once it is whole. The file keeps the time it was written: FMD2's
 /// `Last-Modified` file date (:2482-2494) is not reproduced.
 pub(super) fn save_image(
     data: &[u8],
@@ -97,10 +97,17 @@ pub(super) fn save_image(
     if path.exists() {
         let _ = fs::remove_file(&path);
     }
-    match fs::write(&path, converted.as_deref().unwrap_or(data)) {
+    // Written under another name first, so a process killed mid-write leaves no partial page
+    // under a name `find_image_file` finds (docs/tickets/T44-download-hard-crash-resume.md);
+    // FMD2 writes the file in place. A leftover is overwritten when the page is saved again.
+    let part = dir.join(format!("{name}.{ext}.part"));
+    let saved = fs::write(&part, converted.as_deref().unwrap_or(data))
+        .and_then(|()| fs::rename(&part, &path));
+    match saved {
         Ok(()) => Some(path),
         Err(e) => {
             tracing::warn!(target: "fmd_core", "saving {}: {e}", path.display());
+            let _ = fs::remove_file(&part);
             None
         }
     }
