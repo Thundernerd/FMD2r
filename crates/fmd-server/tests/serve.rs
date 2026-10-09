@@ -1,6 +1,7 @@
 //! The composed server: `serve(ServeConfig)` on a temp data dir whose Lua tree holds a fixture
 //! module for a stub site on a local socket (docs/tickets/T37-serve-wire-catalog-covers-xpath.md
-//! and docs/tickets/T38-serve-wire-accounts-lists-favorites.md, "Seams under test").
+//! docs/tickets/T38-serve-wire-accounts-lists-favorites.md and
+//! docs/tickets/T54-apply-connection-settings.md, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
@@ -120,6 +121,7 @@ async fn start_site(site: Site) -> String {
     let app = axum::Router::new()
         .route("/saga", get(series_page))
         .route("/tale", get(series_page))
+        .route("/series/{n}", get(series_page))
         .route("/list/0", get(|| async { DIRECTORY }))
         .route("/covers/{name}", get(cover))
         .with_state(site);
@@ -552,4 +554,148 @@ async fn the_favorites_are_checked_at_startup() {
         .wait_for("/api/inbox", |inbox| !inbox.as_array().unwrap().is_empty())
         .await;
     assert_eq!(inbox[0]["title"], "Found new chapter(s)", "{inbox}");
+}
+
+/// A forward HTTP proxy on a local socket: records the absolute URI of each request it gets and
+/// passes the request on to the site.
+#[derive(Clone, Default)]
+struct StubProxy {
+    seen: Arc<Mutex<Vec<String>>>,
+}
+
+impl StubProxy {
+    /// Starts the proxy; returns its port.
+    async fn start(&self) -> u16 {
+        let proxy = self.clone();
+        let app = axum::Router::new().fallback(
+            move |method: reqwest::Method, uri: axum::http::Uri, headers: HeaderMap| {
+                let proxy = proxy.clone();
+                async move {
+                    proxy.seen.lock().unwrap().push(uri.to_string());
+                    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+                    let mut request = client.request(method, uri.to_string());
+                    for (name, value) in &headers {
+                        if name != header::HOST {
+                            request = request.header(name, value);
+                        }
+                    }
+                    let res = request.send().await.unwrap();
+                    let content_type = res.headers()[header::CONTENT_TYPE].clone();
+                    (
+                        [(header::CONTENT_TYPE, content_type)],
+                        res.bytes().await.unwrap(),
+                    )
+                }
+            },
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        port
+    }
+
+    fn seen(&self) -> Vec<String> {
+        self.seen.lock().unwrap().clone()
+    }
+}
+
+/// The `connections.proxy` setting for an HTTP proxy on `port` of this host.
+fn proxy_on(port: u16) -> Value {
+    json!({ "connections": { "proxy": {
+        "enabled": true, "type": "http", "host": "127.0.0.1", "port": port
+    } } })
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn with_the_proxy_on_at_startup_module_requests_go_through_it() {
+    let proxy = StubProxy::default();
+    let port = proxy.start().await;
+    let server = Server::start_with(proxy_on(port)).await;
+
+    let info = server
+        .get_json("/api/series?module=stub&link=%2Fsaga")
+        .await;
+
+    assert_eq!(info["title"], "The Stub Saga");
+    // `SetDefaultProxyAndApply` from `ApplyOptions` at startup
+    // (mangadownloader/forms/frmMain.pas:6287-6295).
+    assert_eq!(proxy.seen(), [format!("{}/saga", server.root)]);
+}
+
+impl Server {
+    /// PATCHes `settings`, then fetches fresh series (`/series/<n>`, never cached) until one goes
+    /// through `proxy` or around it as `through` says: the server applies the change soon after
+    /// the PATCH answers.
+    async fn patch_settings_until_proxied(
+        &self,
+        settings: Value,
+        proxy: &StubProxy,
+        through: bool,
+    ) {
+        static SERIES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        self.send_json(reqwest::Method::PATCH, "/api/settings", settings)
+            .await;
+        for _ in 0..100 {
+            let before = proxy.seen().len();
+            let n = SERIES.fetch_add(1, Ordering::SeqCst);
+            self.get_json(&format!("/api/series?module=stub&link=%2Fseries%2F{n}"))
+                .await;
+            if (proxy.seen().len() > before) == through {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        panic!("the settings change never applied");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn turning_the_proxy_on_and_off_applies_without_a_restart() {
+    let proxy = StubProxy::default();
+    let port = proxy.start().await;
+    let server = Server::start().await;
+    server
+        .get_json("/api/series?module=stub&link=%2Fsaga")
+        .await;
+    assert_eq!(proxy.seen(), Vec::<String>::new());
+
+    // `ApplyOptions` on save calls `SetDefaultProxyAndApply`
+    // (mangadownloader/forms/frmMain.pas:6287-6295).
+    server
+        .patch_settings_until_proxied(proxy_on(port), &proxy, true)
+        .await;
+    let off = json!({ "connections": { "proxy": { "enabled": false } } });
+    server
+        .patch_settings_until_proxied(off, &proxy, false)
+        .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_changed_user_agent_is_sent_by_new_sessions() {
+    let server = Server::start_with(json!({ "connections": { "user_agent": "Before/1.0" } })).await;
+    server
+        .get_json("/api/series?module=stub&link=%2Fsaga")
+        .await;
+    let last_user_agent = || {
+        let pages = server.site.page_requests.lock().unwrap();
+        pages.last().unwrap()[header::USER_AGENT].clone()
+    };
+    assert_eq!(last_user_agent(), "Before/1.0");
+
+    // `ApplyOptions` sets `DefaultUserAgent` for sessions created afterwards
+    // (mangadownloader/forms/frmMain.pas:6279-6285); each module call gets a new one.
+    let patch = json!({ "connections": { "user_agent": "After/2.0" } });
+    server
+        .send_json(reqwest::Method::PATCH, "/api/settings", patch)
+        .await;
+    for n in 0..100 {
+        server
+            .get_json(&format!("/api/series?module=stub&link=%2Fseries%2Fua{n}"))
+            .await;
+        if last_user_agent() == "After/2.0" {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("the user agent never changed");
 }
