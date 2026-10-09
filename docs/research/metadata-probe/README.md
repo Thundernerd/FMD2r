@@ -9,7 +9,7 @@ Throwaway research code for `docs/research/metadata-sources.md`. It is not part 
 
 Seed 71 is the sample the matching rules were first tuned on. Seeds 72 and 73 are held-out samples; each has no titles in common with the samples drawn before it. Seed 73 was drawn after the rules were final, and only the two MangaBaka routes were run on it.
 
-The checks on seed 72 found wrong matches that led to the final rules: novel entries are dropped, any author conflict is rejected, names may match with syllables swapped, and alt titles are split on the list's own separator. `*-round1.*` are the results under the first rules. The unsuffixed files are the current rules over the same samples. API responses are cached in `work/http-cache/`, so rerunning `match` with changed rules sends no requests. The `requests` counts in a summary cover only what went over the network, so a rerun from the cache shows none. The counts for the first runs are in `docs/research/metadata-sources.md` ("Requests used") and in the `round1` summaries.
+The checks on seed 72 found wrong matches that led to the final rules: novel entries are dropped, any author conflict is rejected, names may match with syllables swapped, and alt titles are split on the list's own separator. `*-round1.*` are the results under the first rules. The unsuffixed files are the current rules over the same samples. API responses are cached in `work/http-cache/`, so rerunning `match` with changed rules sends no requests. A summary's `requests` counts what went over the network. A rerun answered from the cache keeps the counts of the run that sent the requests.
 
 ## Rerunning
 
@@ -34,5 +34,5 @@ The lists and services change over time, so a rerun will not reproduce the numbe
 ## Data and terms
 
 - FMD2-DB dumps: <https://github.com/dazedcat19/FMD2-DB>, GPL-2.0.
-- The MangaBaka dump (<https://mangabaka.org/data/database>) is under MangaBaka's data licence: CC BY-NC-SA 4.0 for MangaBaka's own data, and each provider's own terms for third-party data. The probe keeps it in `work/`. Only titles, IDs and cover URLs for the 400 sampled titles end up in the committed CSVs.
-- About 700 requests per run: 200 to MangaBaka (rate limit 180/min), 200 to AniList (30/min), 50 to MangaDex (5/s). All are spaced to stay under those limits.
+- The MangaBaka dump (<https://mangabaka.org/data/database>) is under MangaBaka's data licence: CC BY-NC-SA 4.0 for MangaBaka's own data, and each provider's own terms for third-party data. The probe keeps it in `work/`. Only titles, IDs and cover URLs for the 600 sampled titles end up in the committed CSVs.
+- About 450 requests per 200-title sample: 200 to MangaBaka (rate limit 180/min), 200 to AniList (30/min), 50 to MangaDex (5/s). All are spaced to stay under those limits.

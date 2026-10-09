@@ -9,7 +9,7 @@ Manga lists hold a link, a title and some text metadata per title, with no cover
 - cover thumbnails;
 - links to official sites, and IDs on AniList, MangaUpdates, MAL, Kitsu and others.
 
-In T71's probe, matching four real lists against the dump offline accepted 491 of 600 titles, with 2 wrong matches, and no title left the install. Add an opt-in local copy of the database, match each list against it, and use the metadata on Discover and the series page. T70 then uses the matches for covers.
+In T71's probe, matching four real lists against the dump offline accepted 491 of 600 titles. Checking by hand found 2 wrong matches, and no title left the install. Add an opt-in local copy of the database, match each list against it, and use the metadata on Discover and the series page. T70 then uses the matches for covers.
 
 ## Scope (in/out)
 In:
@@ -24,7 +24,7 @@ In:
   - Automatic refresh every `metadata.mangabaka.refresh_days` days (default 7; 0 = off).
   - Opt-in: nothing is downloaded until the user asks.
   - Until then, Discover shows one dismissible hint pointing to the setting.
-- **Matching** (T71's "Matching" rules, `docs/research/metadata-sources.md`). It runs for a module's whole list after a list update, an FMD2-DB import or a database refresh, and only touches entries that are new or whose title changed. It tries, in order:
+- **Matching** (T71's "Matching" rules, `docs/research/metadata-sources.md`). It runs after a list update or FMD2-DB import, for the entries that are new or whose title changed, and for every entry after a database refresh, since MangaBaka's titles and IDs change too. It tries, in order:
   1. **Site link:** WebToons `title_no`, compared with the series' links.
   2. **Cross-site IDs:** for the MangaDex module, batch `GET https://api.mangadex.org/manga?ids[]=…` (100 per request, an honest User-Agent, under ~5 requests/s). Look up `links.al/mu/mal/kt/ap` against the database's cross-site IDs.
   3. **Title, then authors:**
@@ -62,7 +62,7 @@ Out:
   - An author conflict rejected.
   - A novel candidate dropped.
   - An ambiguous title rejected.
-  - A list update re-matches only new or retitled entries.
+  - A list update re-matches only new or retitled entries; a database refresh re-matches all of them.
 - `fmd-server`: the Discover search filters by format and status; the database job's start, progress and finish events.
 - Web component tests: the Settings database panel (download, date and size, remove), the Discover hint, and the format and status facets.
 

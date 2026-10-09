@@ -1,5 +1,21 @@
 {
- "requests": {},
+ "requests": {
+  "mangadex": {
+   "total": 50,
+   "cached": 0,
+   "429": 0
+  },
+  "mangabaka": {
+   "total": 200,
+   "cached": 0,
+   "429": 0
+  },
+  "anilist": {
+   "total": 201,
+   "cached": 0,
+   "429": 1
+  }
+ },
  "routes": {
   "dump": {
    "MangaDex": {
@@ -56,10 +72,10 @@
   "mb_api": {
    "MangaDex": {
     "n": 50,
-    "accepted": 34,
+    "accepted": 35,
     "by_confidence": {
-     "title+author": 34,
-     "none": 11,
+     "title+author": 35,
+     "none": 10,
      "author-conflict": 5
     }
    },
@@ -91,10 +107,10 @@
    },
    "all": {
     "n": 200,
-    "accepted": 156,
+    "accepted": 157,
     "by_confidence": {
-     "title+author": 111,
-     "none": 14,
+     "title+author": 112,
+     "none": 13,
      "author-conflict": 24,
      "title-unique": 45,
      "ambiguous": 6

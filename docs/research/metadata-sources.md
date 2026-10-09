@@ -12,8 +12,8 @@ A manga list row holds a link, a title and some text metadata, but no cover (`cr
 
 The maintainer confirmed this direction while T71 was in review: metadata goes through the MangaBaka database.
 
-- **Best match rate in the probe.** Matching offline against MangaBaka's nightly dump accepted **491 of 600** sampled list titles (82%) across four real lists. The wrong matches found by hand were 2. Both came from FMD2-DB entries whose alt titles belong to a different work.
-  - MangaBaka's API, searching by title, accepted 452 (75%).
+- **Best match rate in the probe.** Matching offline against MangaBaka's nightly dump accepted **491 of 600** sampled list titles (82%) across four real lists. Checking by hand found 2 wrong matches. Both came from FMD2-DB entries whose alt titles belong to a different work.
+  - MangaBaka's API, searching by title, accepted 460 (77%).
   - AniList accepted 232 of 400 (58%).
   - Details are in the [probe](#probe).
 - **The dump allows matching the API can't do.** Site links match WebToons titles by `title_no` (101 of 150 WebToons titles). Cross-site IDs match MangaDex titles through the AniList, MangaUpdates, MAL and Kitsu IDs on their MangaDex entries (101 of 150).
@@ -69,9 +69,10 @@ Primary sources were read on 2026-10-09. A "live" figure was measured with a req
 | Rate limit | 30 searches/min, 180 other requests/min per IP; CDN hits don't count ([API page](https://mangabaka.org/data/api)) | 90/min, **degraded to 30/min** (live `x-ratelimit-limit: 30`); raises not accepted ([rate limiting](https://docs.anilist.co/guide/rate-limiting)) | ~5/s per IP ([limitations](https://api.mangadex.org/docs/2-limitations/)) | not published; "reasonable spacing" and caching required | not published | Jikan 60/min and 3/s; official not published |
 | Caching / bulk terms | "Reasonable caching for performance purposes is permitted"; "no bulk harvesting via API", use the dump instead ([data licence §6.2](https://mangabaka.org/about/data-license)) | "Hoarding or mass collection of data … strictly prohibited"; no use as "backup or data storage"; no use in "competing … list or tracker services" ([terms](https://docs.anilist.co/guide/terms-of-use)) | no caching limits; "MUST credit MangaDex", no ads or paid services ([AUP](https://api.mangadex.org/docs/)) | "employ caching mechanisms"; must credit MangaUpdates | none published (the ToS page could not be read) | MAL ToS: no scraping, and "not to collate or aggregate any of the content" ([ToS](https://myanimelist.net/about/terms_of_use)); Jikan's terms link is dead |
 | Bulk dump | **yes**: nightly JSON, JSONL and SQLite, tar.gz or zst (~390 MB), with cover URLs and cross-site IDs ([database](https://mangabaka.org/data/database)) | no | no | no | no | no |
-| Cover sizes | thumbnails 150, 250 and 350 px tall (×1/×2/×3) from `cdn.mangabaka.dev`, plus the original (median ~360 px wide) | 100×150, 230×345, 460×690 (`s4.anilist.co`) | 256 and 512 px wide, plus original | thumb ~106×150, original ~283×400 | 110×156 up to 550×780, plus original | small, normal, large |
+| Cover sizes | thumbnails 150, 250 and 350 px tall (×1/×2/×3) from `cdn.mangabaka.dev`, plus the original (on average 356 px wide) | 100×150, 230×345, 460×690 (`s4.anilist.co`) | 256 and 512 px wide, plus original | thumb ~106×150, original ~283×400 | 110×156 up to 550×780, plus original | small, normal, large |
 | Hotlinking | CDN sends `access-control-allow-origin: *` and a one-year cache | no rule published | "We will serve the wrong response for any image hotlinked … you MUST proxy" | none published | none published | none published |
 | Fields | titles in many languages, native and romanized; description; type (manga / manhwa / manhua / OEL / novel); status; genres and tags; authors and artists; year; content rating; publishers; links to official sites; IDs on AniList, Anime-Planet, Kitsu, MangaUpdates, MAL, Shikimori, ANN | titles, synonyms, description, genres, rich tags, status, format, country of origin, staff, `idMal` | titles and alt titles, descriptions, tags, status, original language, year, content rating, authors, `links` (AniList, MU, MAL, Kitsu, AP, NU) | titles, description, type, genres, categories, status (free text), authors, publishers | titles, synopsis, subtype (manga / manhwa / manhua), status, categories, `mappings` (AniList, MAL, MU) | titles, synopsis, type, status, authors, genres and themes |
+| Coverage of FMD2's kinds of titles | measured: 82% of 600 list titles (MangaDex 74%, MangaFire 88%, Asura Scans manhwa 72%, WebToons 93%); covers doujinshi and scanlated manhwa/manhua | measured: 58% of 400 (MangaDex 36%, MangaFire 67%, Asura Scans 65%, WebToons 64%); misses doujinshi and most WebToons originals | not probed; scanlation-driven, strong on manhwa/manhua, includes doujinshi | not probed; reputedly the broadest for scanlated and obscure titles | not probed; smallest catalogue, includes manhwa/manhua subtypes | not probed; weak on manhua (Martial Peak has no MAL ID on AniList) |
 | Size (comics) | 306k active series, of which 277k are comics: 205k manga, 22k manhwa, 12k manhua, 37k other, 1.5k OEL; 98% have a cover | 141k manga entries | 115k | not countable (search stops at 10,000), believed largest for scanlated titles | 63k | MAL catalogue |
 | Search | `/v1/series/match` (exact full title, any language, edge-cached 7 days) and `/v1/series/search` (fuzzy) | fuzzy, includes synonyms | fuzzy over alt titles | fuzzy over associated titles | full text over titles | fuzzy |
 
@@ -155,13 +156,13 @@ Seeds 71 / 72 / 73, with totals:
 
 | List | MangaBaka dump | MangaBaka API | AniList (71 / 72 only) |
 |---|---|---|---|
-| MangaDex | 41 / 38 / 32 (111/150, 74%) | 34 / 28 / 28 (90/150, 60%) | 13 / 23 (36/100, 36%) |
-| MangaFire | 45 / 42 / 45 (132/150, 88%) | 45 / 40 / 46 (131/150, 87%) | 37 / 30 (67/100, 67%) |
+| MangaDex | 41 / 38 / 32 (111/150, 74%) | 35 / 31 / 30 (96/150, 64%) | 13 / 23 (36/100, 36%) |
+| MangaFire | 45 / 42 / 45 (132/150, 88%) | 45 / 41 / 45 (131/150, 87%) | 37 / 30 (67/100, 67%) |
 | Asura Scans | 38 / 32 / 38 (108/150, 72%) | 36 / 31 / 36 (103/150, 69%) | 33 / 32 (65/100, 65%) |
-| WebToons | 46 / 47 / 47 (140/150, 93%) | 41 / 42 / 45 (128/150, 85%) | 26 / 38 (64/100, 64%) |
-| **All** | **491/600 (82%)** | **452/600 (75%)** | **232/400 (58%)** |
+| WebToons | 46 / 47 / 47 (140/150, 93%) | 41 / 44 / 45 (130/150, 87%) | 26 / 38 (64/100, 64%) |
+| **All** | **491/600 (82%)** | **460/600 (77%)** | **232/400 (58%)** |
 
-How the dump's 600 matches break down:
+How the dump's results for the 600 titles break down:
 
 | | Count |
 |---|---|
@@ -178,24 +179,27 @@ How the dump's 600 matches break down:
 **How the matches were checked:**
 
 - **Seeds 71 and 72:** every accepted match was read side by side with the list entry (`probe.py review`). Doubtful ones were looked up in the dump (titles, people, type) and on MangaBaka.
-- **Seed 73:** every accepted match whose title differs from the list's, or that rests on the title alone, was checked the same way.
+- **Seed 73:** every accepted match whose title differs from the list's, or that rests on the title alone (`title-unique`), was checked the same way: 67 of 162. The rest pair an identical title with a matching author.
 - **Automated cross-checks:**
-  - Where both MangaBaka routes accepted a title, they picked the same series in 450 of 451 cases. The exception is "King of Runes" (below).
+  - Where both MangaBaka routes accepted a title, they picked the same series in 459 of 460 cases. The exception is "King of Runes" (below).
   - Where AniList and the dump both accepted a title and MangaBaka's series has an AniList ID, AniList's pick matched it in 229 of 230 cases.
 
 **Wrong matches under the final rules:**
 
 | | MangaBaka dump | MangaBaka API | AniList |
 |---|---|---|---|
-| Seed 71 | 0 of 170 | 0 of 156 | 1 of 109 |
-| Seed 72 | 1 of 159 | 0 of 141 | 0 of 123 |
-| Seed 73 | 1 of 162 | 1 of 155 | – |
+| Seed 71 | 0 of 170 | 0 of 157 | 1 of 109 |
+| Seed 72 | 1 of 159 | 0 of 147 | 0 of 123 |
+| Seed 73 | 1 of 162 | 0 of 156 | – |
 
 - The two dump errors come from FMD2-DB entries whose alt titles name a different work.
   - "King of Runes" lists "King of Kung Fu • The Forbidden Kingdom" as alt titles.
   - Asura Scans' "The Time of the Terminally Ill Extra" lists the alt titles of the same author's "Bad Deeds of the Terminally Ill Empress".
   - Matching follows the list's data, so a wrong alt title gives a wrong cover.
-- The API's error is the second of these (its title search found the same series).
+- The API avoided both:
+  - For "King of Runes" it searched by the main title only and found "Lord of the Runes". AniList's pick for that title carries the same AniList ID, so that one is right.
+  - For the Asura Scans title it found the series but rejected it as an author conflict.
+- One accepted match has a bad *title* but the right series: WebToons' "Not So Silent" matched a MangaBaka entry titled "unknown title (please report on Discord)". The entry's description is that webtoon's, so the cover is right.
 - AniList's error is a WebToons title, "Our Time", matched to a different series of the same name.
 - The first rules also accepted the wrong *edition*:
   - "Never Die Extra" was matched to its pre-serialization entry.
@@ -224,7 +228,7 @@ For a whole list:
 
 ### What the misses are
 
-- **MangaDex:** doujinshi and one-shots that no tracker lists. Without the cross-IDs, the API route loses about 20 more MangaDex titles whose MangaDex name isn't among MangaBaka's titles.
+- **MangaDex:** doujinshi and one-shots that no tracker lists. Without the cross-IDs, the API route loses 15 more MangaDex titles whose MangaDex name isn't among MangaBaka's titles.
 - **Asura Scans:** mostly `author-conflict`. The list names the web novel's author, while MangaBaka's comic entry lists its adapters (and often lists the novel separately). These are usually the right series. But this is the case where editions and novels get confused, so they stay rejected and fall back to `GetInfo`.
   - T73 could accept them later through MangaBaka's `relationships` (adaptation links) once a correction UI exists.
 - **MangaFire:** studio names ("Island Project"), placeholder text ("작품정보") or untransliterated names on one side.

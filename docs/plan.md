@@ -259,7 +259,7 @@ Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53
 | T70 | Cover thumbnails on Discover | T71, T73 |
 | T71 | Research external metadata sources (MangaBaka, AniList, …) for list titles | — |
 | T72 | A clear, sorted list in Settings → Website modules | — |
-| T73 | MangaBaka database: offline list matching, format and status facets | T71 |
+| T73 | MangaBaka database for list metadata (offline matching, format and status facets) | T71 |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:

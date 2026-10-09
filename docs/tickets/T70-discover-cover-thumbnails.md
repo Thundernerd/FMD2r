@@ -4,7 +4,7 @@ Deps: T71, T73
 ## Goal
 Discover's cards show a coloured placeholder with the title (`web/src/routes/discover/+page.svelte:205-207`, hue from `hue()` at :120). That is because a manga list has no cover: `masterlist` holds the link, title and metadata only (`crates/fmd-store/src/migrations/lists_v1.sql:5-19`), like FMD2's per-site tables (`baseunits/DBDataProcess.pas:143-153`), and FMD2-DB dumps have no cover column either. A title's cover link is only known after fetching its info page (`GetInfo` → `MangaInfo.CoverLink`), as `GET /api/series` does (`crates/fmd-server/src/series.rs:215`). Show real thumbnails where possible, keeping the coloured placeholder as the fallback.
 
-T71 recommends taking covers from a local copy of MangaBaka's database (<https://mangabaka.org>), with the website's `GetInfo` as the fallback (`docs/research/metadata-sources.md`). T73 downloads that database and matches each list against it. In T71's probe, the match accepted 491 of 600 list titles, with 2 wrong matches. This ticket uses those stored matches for covers, and runs `GetInfo` for the titles without one, one website request per title.
+T71 recommends taking covers from a local copy of MangaBaka's database (<https://mangabaka.org>), with the website's `GetInfo` as the fallback (`docs/research/metadata-sources.md`). T73 downloads that database and matches each list against it. In T71's probe, the match accepted 491 of 600 list titles. Checking by hand found 2 wrong matches. This ticket uses those stored matches for covers, and runs `GetInfo` for the titles without one, one website request per title.
 
 ## Scope (in/out)
 In:

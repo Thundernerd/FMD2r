@@ -30,6 +30,7 @@ import subprocess
 import sys
 import time
 import unicodedata
+import urllib.error
 import urllib.parse
 import urllib.request
 from difflib import SequenceMatcher
@@ -50,7 +51,8 @@ DEFAULT_SEED = 71
 DB_URL = "https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/{}.7z"
 DUMP_URL = "https://api.mangabaka.org/v1/database/series.jsonl.zst"
 
-REQUESTS = {}  # route -> {"total": n, "cached": n}
+REQUESTS = {}  # route -> {"total": n, "cached": n (CDN cache hits), "429": n}
+LAST_REQUEST = {}  # route -> time.monotonic() of its last request
 
 
 # --- normalisation ------------------------------------------------------------------------
@@ -101,7 +103,7 @@ def same_person(x, y):
 # --- HTTP ---------------------------------------------------------------------------------
 
 
-def http_json(route, url, body=None, headers=None, min_interval=0.0, _last={}):
+def http_json(route, url, body=None, headers=None, min_interval=0.0):
     """GET (or POST `body`) JSON, cached in work/http-cache so a rerun with changed matching
     rules sends nothing. REQUESTS counts what went over the network."""
     key = hashlib.sha256(json.dumps([url, body]).encode()).hexdigest()
@@ -109,15 +111,15 @@ def http_json(route, url, body=None, headers=None, min_interval=0.0, _last={}):
     if os.path.exists(cache):
         with open(cache) as f:
             return json.load(f)
-    result = fetch_json(route, url, body, headers, min_interval, _last)
+    result = fetch_json(route, url, body, headers, min_interval)
     os.makedirs(os.path.dirname(cache), exist_ok=True)
     with open(cache, "w") as f:
         json.dump(result, f)
     return result
 
 
-def fetch_json(route, url, body, headers, min_interval, _last):
-    wait = _last.get(route, 0) + min_interval - time.monotonic()
+def fetch_json(route, url, body, headers, min_interval):
+    wait = LAST_REQUEST.get(route, 0) + min_interval - time.monotonic()
     if wait > 0:
         time.sleep(wait)
     h = {"User-Agent": UA, "Accept": "application/json"}
@@ -129,7 +131,7 @@ def fetch_json(route, url, body, headers, min_interval, _last):
         req = urllib.request.Request(url, data=data, headers=h)
         stat = REQUESTS.setdefault(route, {"total": 0, "cached": 0, "429": 0})
         stat["total"] += 1
-        _last[route] = time.monotonic()
+        LAST_REQUEST[route] = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 if r.headers.get("cf-cache-status", "").upper() == "HIT":
@@ -178,12 +180,8 @@ def cmd_index(args):
             merged[sid] = d["merged_with"]
         elif d.get("state") != "active":
             continue
-        names = [d.get("title"), d.get("native_title"), d.get("romanized_title")]
-        names += [t.get("title") for t in d.get("titles") or []]
-        for group in (d.get("secondary_titles") or {}).values():
-            names += [t.get("title") for t in group or []]
-        keys = {k for t in names if t for k in title_keys(t)}
-        db.executemany("INSERT INTO titles VALUES (?, ?)", [(k, sid) for k in keys])
+        cand = mangabaka_candidate(d)
+        db.executemany("INSERT INTO titles VALUES (?, ?)", [(k, sid) for k in cand["keys"]])
         for link in d.get("links") or []:
             key = link_key(link)
             if key:
@@ -193,18 +191,21 @@ def cmd_index(args):
                 db.execute("INSERT INTO xids VALUES (?, ?, ?)", (site, str(src["id"]), sid))
         if d.get("state") == "active":
             raw = ((d.get("cover") or {}).get("raw")) or {}
-            people = sorted(person_keys(", ".join((d.get("authors") or []) + (d.get("artists") or []))))
             db.execute(
                 "INSERT INTO series VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (sid, d.get("title"), d.get("type"), "|".join(people),
-                 ((d.get("cover") or {}).get("x250") or {}).get("x1"), raw.get("width"), raw.get("height")),
+                (sid, d.get("title"), d.get("type"), "|".join(sorted(cand["people"])),
+                 cand["cover"], raw.get("width"), raw.get("height")),
             )
         n += 1
     if zst.wait() != 0:
         sys.exit("zstd failed")
-    # A merged series' titles and IDs point at the series it was merged into.
+    # A merged series' titles and IDs point at the series it was finally merged into.
+    def final(sid, seen=()):
+        nxt = merged.get(sid)
+        return sid if nxt is None or nxt in seen else final(nxt, seen + (sid,))
+
     db.execute("CREATE TEMP TABLE merged (src INTEGER PRIMARY KEY, dst INTEGER)")
-    db.executemany("INSERT INTO merged VALUES (?, ?)", merged.items())
+    db.executemany("INSERT INTO merged VALUES (?, ?)", [(k, final(k)) for k in merged])
     for table in ("titles", "links", "xids"):
         db.execute(f"UPDATE {table} SET series = m.dst FROM merged m WHERE {table}.series = m.src")
     db.executescript(
@@ -223,10 +224,25 @@ def link_key(url):
     m = re.search(r"webtoons\.com/.*[?&]title_no=(\d+)", url)
     if m:
         return f"webtoons:{m.group(1)}"
-    m = re.search(r"mangadex\.org/title/([0-9a-f-]{36})", url)
-    if m:
-        return f"mangadex:{m.group(1)}"
     return None
+
+
+def mangabaka_candidate(d):
+    """A MangaBaka series (dump record or API result) as a matching candidate."""
+    names = [d.get("title"), d.get("native_title"), d.get("romanized_title")]
+    names += [t.get("title") for t in d.get("titles") or []]
+    for group in (d.get("secondary_titles") or {}).values():
+        names += [t.get("title") for t in group or []]
+    return {"id": d["id"], "title": d.get("title"),
+            "keys": {k for t in names if t for k in title_keys(t)},
+            "people": person_keys(", ".join((d.get("authors") or []) + (d.get("artists") or []))),
+            "cover": ((d.get("cover") or {}).get("x250") or {}).get("x1"),
+            "novel": d.get("type") == "novel"}
+
+
+def search_title(entry):
+    """The title sent to a search API: without decorations such as (Colored)."""
+    return BRACKETS.sub(" ", entry["title"]).strip() or entry["title"]
 
 
 # --- sample -------------------------------------------------------------------------------
@@ -319,12 +335,13 @@ def dump_candidates(db, ids):
     return out
 
 
-def match_dump(db, entry):
+def match_dump(entry, db):
     key = link_key(entry["link"])
     if key:
         ids = [s for (s,) in db.execute("SELECT DISTINCT series FROM links WHERE key = ?", (key,))]
-        if len(ids) == 1:
-            return dump_candidates(db, ids)[0], "link"
+        cands = dump_candidates(db, ids)
+        if len(cands) == 1:
+            return cands[0], "link"
     if entry["module"] == "MangaDex":
         found = match_mangadex_xids(db, entry)
         if found:
@@ -352,26 +369,15 @@ def match_mangadex_xids(db, entry):
             ids.update(s for (s,) in db.execute(
                 "SELECT series FROM xids WHERE site = ? AND xid = ?", (site, str(links[k]))))
     entry["mangadex_links"] = {k: v for k, v in links.items() if k in MD_LINKS}
-    if len(ids) == 1:
-        return dump_candidates(db, ids)[0]
-    return None
+    cands = dump_candidates(db, ids)
+    return cands[0] if len(cands) == 1 else None
 
 
-def match_mb_api(entry):
-    q = BRACKETS.sub(" ", entry["title"]).strip() or entry["title"]
+def match_mb_api(entry, db=None):
+    q = search_title(entry)
     url = "https://api.mangabaka.org/v1/series/match?" + urllib.parse.urlencode({"q": q, "limit": 10})
     r = http_json("mangabaka", url, min_interval=0.35)  # 180/min
-    cands = []
-    for d in (r or {}).get("data") or []:
-        names = [d.get("title"), d.get("native_title"), d.get("romanized_title")]
-        for group in (d.get("secondary_titles") or {}).values():
-            names += [t.get("title") for t in group or []]
-        cands.append({"id": d["id"], "title": d.get("title"),
-                      "keys": {k for t in names if t for k in title_keys(t)},
-                      "people": person_keys(", ".join((d.get("authors") or []) + (d.get("artists") or []))),
-                      "cover": ((d.get("cover") or {}).get("x250") or {}).get("x1"),
-                      "novel": d.get("type") == "novel"})
-    return decide(entry, cands)
+    return decide(entry, [mangabaka_candidate(d) for d in (r or {}).get("data") or []])
 
 
 ANILIST_QUERY = """
@@ -386,12 +392,12 @@ query ($q: String) {
 }"""
 
 
-def match_anilist(entry):
-    q = BRACKETS.sub(" ", entry["title"]).strip() or entry["title"]
+def match_anilist(entry, db=None):
+    q = search_title(entry)
     r = http_json("anilist", "https://graphql.anilist.co", {"query": ANILIST_QUERY, "variables": {"q": q}},
                   min_interval=2.1)  # 30/min while degraded
     cands = []
-    for m in ((r or {}).get("data") or {}).get("Page", {}).get("media") or []:
+    for m in (((r or {}).get("data") or {}).get("Page") or {}).get("media") or []:
         names = list((m.get("title") or {}).values()) + (m.get("synonyms") or [])
         staff = [n["name"].get("full") or "" for n in (m.get("staff") or {}).get("nodes") or []]
         cands.append({"id": m["id"], "title": (m.get("title") or {}).get("romaji"),
@@ -402,7 +408,7 @@ def match_anilist(entry):
     return decide(entry, cands)
 
 
-ROUTES = {"dump": None, "mb_api": match_mb_api, "anilist": match_anilist}
+ROUTES = {"dump": match_dump, "mb_api": match_mb_api, "anilist": match_anilist}
 ACCEPTED = {"link", "cross-id", "title+author", "title-unique"}
 
 
@@ -411,11 +417,14 @@ def cmd_match(args):
         sample = json.load(f)
     db = sqlite3.connect(os.path.join(WORK, "mangabaka.sqlite"))
     routes = args.routes.split(",")
+    unknown = [r for r in routes if r not in ROUTES]
+    if unknown:
+        sys.exit(f"unknown routes {unknown}; choose from {sorted(ROUTES)}")
     rows = []
     for i, e in enumerate(sample):
         row = {"module": e["module"], "link": e["link"], "title": e["title"], "authors": e["authors"]}
         for route in routes:
-            cand, conf = match_dump(db, e) if route == "dump" else ROUTES[route](e)
+            cand, conf = ROUTES[route](e, db)
             row[f"{route}_conf"] = conf
             row[f"{route}_id"] = cand["id"] if cand else ""
             row[f"{route}_title"] = cand["title"] if cand else ""
@@ -426,7 +435,14 @@ def cmd_match(args):
         print(f"{i + 1}/{len(sample)} {e['module']}: {e['title'][:50]!r} "
               + " ".join(f"{r}={row[f'{r}_conf']}" for r in routes), file=sys.stderr)
     write_csv(os.path.join(HERE, f"results-{args.seed}.csv"), rows)
-    summary = {"requests": REQUESTS, "routes": {}}
+    # A rerun answered from work/http-cache sends nothing; keep the counts of the run that did.
+    path = os.path.join(HERE, f"summary-{args.seed}.json")
+    requests = dict(REQUESTS)
+    if os.path.exists(path):
+        with open(path) as f:
+            for route, stat in json.load(f).get("requests", {}).items():
+                requests.setdefault(route, stat)
+    summary = {"requests": requests, "routes": {}}
     for route in routes:
         per = {}
         for mod in [n for n, _ in LISTS.values()] + ["all"]:
@@ -437,7 +453,7 @@ def cmd_match(args):
             accepted = sum(v for k, v in confs.items() if k in ACCEPTED)
             per[mod] = {"n": len(sel), "accepted": accepted, "by_confidence": confs}
         summary["routes"][route] = per
-    with open(os.path.join(HERE, f"summary-{args.seed}.json"), "w") as f:
+    with open(path, "w") as f:
         json.dump(summary, f, indent=1)
     print(json.dumps(summary, indent=1))
 
