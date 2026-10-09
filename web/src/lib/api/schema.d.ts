@@ -977,11 +977,11 @@ export interface components {
 			/** @description These favorites; every enabled favorite when missing. */
 			ids?: number[] | null;
 		};
-		ConnectionSettings: {
+		/** @description [`ConnectionSettings`] with the proxy password left out. */
+		ConnectionSettingsView: {
 			/**
 			 * @description Restart a task from its failed chapters (`connections/AlwaysStartFromFailedChapters`,
 			 *     baseunits/FMDOptions.pas:137).
-			 * @default true
 			 */
 			always_start_from_failed_chapters: boolean;
 			/**
@@ -989,7 +989,6 @@ export interface components {
 			 * @description Times a failed task is restarted automatically (`connections/NumberOfAutoRetryFailedTask`,
 			 *     `OptionRetryFailedTask` = 1, baseunits/FMDOptions.pas:136). Range 0..=100, the TSpinEdit default (no bounds
 			 *     set, mangadownloader/forms/frmMain.lfm:3669-3681).
-			 * @default 1
 			 */
 			auto_retry_failed_tasks: number;
 			/**
@@ -997,14 +996,12 @@ export interface components {
 			 *     for none. No FMD2 setting: FMD2r writes it into upstream's
 			 *     `lua/websitebypass/websitebypass_config.json` at startup
 			 *     ([`write_websitebypass_config`](super::write_websitebypass_config)).
-			 * @default
 			 */
 			flaresolverr_url: string;
 			/**
 			 * Format: int32
 			 * @description Threads checking favorites (`connections/MaxFavoriteThreads`,
 			 *     baseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).
-			 * @default 1
 			 */
 			max_favorite_threads: number;
 			/**
@@ -1012,33 +1009,21 @@ export interface components {
 			 * @description Tasks downloading at once, over all modules (`connections/NumberOfTasks`,
 			 *     `OptionMaxParallel` = 1, baseunits/FMDOptions.pas:133). Range 1..=64: the Win64
 			 *     `MAX_TASKLIMIT` (baseunits/FMDOptions.pas:42), so any FMD2 value imports.
-			 * @default 1
 			 */
 			max_parallel_tasks: number;
 			/**
 			 * Format: int32
 			 * @description Threads updating manga lists (`connections/MaxUpdateListThreads`,
 			 *     baseunits/FMDOptions.pas:131). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3827-3828).
-			 * @default 1
 			 */
 			max_update_list_threads: number;
-			/**
-			 * @default {
-			 *       "enabled": false,
-			 *       "host": "",
-			 *       "password": "",
-			 *       "port": null,
-			 *       "type": "http",
-			 *       "username": ""
-			 *     }
-			 */
-			proxy: components['schemas']['ProxySettings'];
+			/** @description Global proxy (mangadownloader/forms/frmMain.pas:5874-5879). */
+			proxy: components['schemas']['ProxySettingsView'];
 			/**
 			 * Format: int32
 			 * @description HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,
 			 *     baseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;
 			 *     meaning in baseunits/httpsendthread.pas:626).
-			 * @default 5
 			 */
 			retry_count: number;
 			/**
@@ -1046,7 +1031,6 @@ export interface components {
 			 * @description Page download threads per task (`connections/NumberOfThreadsPerTask`, `OptionMaxThreads`
 			 *     = 1, baseunits/FMDOptions.pas:134). Range 1..=256: the Win64 `MAX_CONNECTIONPERHOSTLIMIT`
 			 *     (baseunits/FMDOptions.pas:43).
-			 * @default 1
 			 */
 			threads_per_task: number;
 			/**
@@ -1054,13 +1038,12 @@ export interface components {
 			 * @description Connection timeout in seconds (`connections/ConnectionTimeout`, `OptionConnectionTimeout`
 			 *     = 30, baseunits/FMDOptions.pas:129). Range 1..=300
 			 *     (mangadownloader/forms/frmMain.lfm:3387-3388).
-			 * @default 30
 			 */
 			timeout_secs: number;
 			/**
-			 * @description Default user agent; an empty value resets to [`DEFAULT_USER_AGENT`]
-			 *     (`connections/DefaultUserAgent`, mangadownloader/forms/frmMain.pas:5867-5871).
-			 * @default Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36
+			 * @description Default user agent; an empty value resets to
+			 *     [`DEFAULT_USER_AGENT`](super::DEFAULT_USER_AGENT) (`connections/DefaultUserAgent`,
+			 *     mangadownloader/forms/frmMain.pas:5867-5871).
 			 */
 			user_agent: string;
 		};
@@ -1244,28 +1227,15 @@ export interface components {
 			/** @description Always `ok` while the server answers. */
 			status: string;
 		};
-		/** @description HTTP overrides applied in `PrepareHTTP` (baseunits/WebsiteModules.pas:353-379). */
-		HttpOverrides: {
+		/** @description [`HttpOverrides`] with the proxy password left out. */
+		HttpOverridesView: {
 			/**
 			 * @description Cookies merged into every request (`HTTP.Cookies`,
 			 *     baseunits/WebsiteModulesSettings.pas:41).
-			 * @default
 			 */
 			cookies: string;
-			/**
-			 * @default {
-			 *       "host": "",
-			 *       "password": "",
-			 *       "port": "",
-			 *       "type": "default",
-			 *       "username": ""
-			 *     }
-			 */
-			proxy: components['schemas']['ProxyOverride'];
-			/**
-			 * @description Replaces the default user agent when non-empty.
-			 * @default
-			 */
+			proxy: components['schemas']['ProxyOverrideView'];
+			/** @description Replaces the default user agent when non-empty. */
 			user_agent: string;
 		};
 		/** @description Optional ImageMagick conversion (mangadownloader/forms/frmMain.pas:5925-5942). */
@@ -1601,7 +1571,7 @@ export interface components {
 		ModuleSettingsView: {
 			/** @description Whether `limits` and `http` apply (`Settings.Enabled`); options always do. */
 			enabled: boolean;
-			http: components['schemas']['HttpOverrides'];
+			http: components['schemas']['HttpOverridesView'];
 			id: string;
 			/** @description The user's limit overrides. */
 			limits: components['schemas']['LimitOverrides'];
@@ -1638,41 +1608,28 @@ export interface components {
 			/** @description The website's root URL, lowercased as the loader leaves it. */
 			root_url: string;
 		};
-		/**
-		 * @description Lua module sync from GitHub. The repo defaults are FMD2's `GitHub` section
-		 *     (dist/config.json:8-15).
-		 */
-		ModuleUpdaterSettings: {
+		/** @description [`ModuleUpdaterSettings`] with the GitHub token left out. */
+		ModuleUpdaterSettingsView: {
 			/**
 			 * @description Sync at startup and on the interval. No FMD2 counterpart: FMD2 checks when the user
 			 *     clicks "Check update" (`btCheckUpdateClick`, mangadownloader/forms/frmLuaModulesUpdater.pas:70).
-			 * @default true
 			 */
 			auto_update: boolean;
-			/**
-			 * @description Optional GitHub token to raise the API rate limit. No FMD2 counterpart.
-			 * @default null
-			 */
-			github_token: string | null;
+			/** @description Whether a GitHub token is set. Patch `github_token` to set it; an empty one clears it. */
+			has_github_token: boolean;
 			/**
 			 * Format: int32
 			 * @description Minutes between syncs. No FMD2 counterpart. Minimum 1.
-			 * @default 60
 			 */
 			interval_minutes: number;
 			/**
 			 * @description Keep the previous version of a module that fails to load after an update. No FMD2
 			 *     counterpart.
-			 * @default true
 			 */
 			keep_last_good: boolean;
-			/** @default FMD2 */
 			repo_name: string;
-			/** @default dazedcat19 */
 			repo_owner: string;
-			/** @default lua */
 			repo_path: string;
-			/** @default master */
 			repo_ref: string;
 		};
 		/** @description A download to queue: chapters of one series. */
@@ -1745,46 +1702,34 @@ export interface components {
 			/** @description Always `about:blank`: the status code says it all. */
 			type: string;
 		};
-		ProxyOverride: {
-			/** @default  */
-			host: string;
-			/** @default  */
-			password: string;
-			/** @default  */
-			port: string;
-			/** @default default */
-			type: components['schemas']['ProxyOverrideType'];
-			/** @default  */
-			username: string;
-		};
 		/**
 		 * @description `TProxyType` (baseunits/WebsiteModulesSettings.pas:11).
 		 * @enum {string}
 		 */
 		ProxyOverrideType: 'default' | 'direct' | 'http' | 'socks4' | 'socks5';
-		/**
-		 * @description Global proxy. Unlike FMD2 (which encrypts `User`/`Pass` with `EncryptString`), the
-		 *     credentials are stored as plain JSON in `app.db`.
-		 */
-		ProxySettings: {
-			/**
-			 * @description `connections/UseProxy`, default false.
-			 * @default false
-			 */
-			enabled: boolean;
-			/** @default  */
+		/** @description [`ProxyOverride`] with the password left out. */
+		ProxyOverrideView: {
+			/** @description Whether a password is set. Patch `password` to set it; an empty one clears it. */
+			has_password: boolean;
 			host: string;
-			/** @default  */
-			password: string;
+			port: string;
+			type: components['schemas']['ProxyOverrideType'];
+			username: string;
+		};
+		/** @description [`ProxySettings`] with the password left out. */
+		ProxySettingsView: {
+			/** @description `connections/UseProxy`, default false. */
+			enabled: boolean;
+			/** @description Whether a password is set. Patch `password` to set it; an empty one clears it. */
+			has_password: boolean;
+			host: string;
 			/**
 			 * Format: int32
 			 * @description `connections/Port`, default empty.
-			 * @default null
 			 */
-			port: number | null;
-			/** @default http */
+			port?: number | null;
+			/** @description `connections/ProxyType`, default `HTTP`. */
 			type: components['schemas']['ProxyType'];
-			/** @default  */
 			username: string;
 		};
 		/**
@@ -1945,7 +1890,7 @@ export interface components {
 			modules: {
 				[key: string]: components['schemas']['ModuleSettingsView'];
 			};
-			settings: components['schemas']['Settings'];
+			settings: components['schemas']['SettingsView'];
 		};
 		/** @description One page of search results. */
 		SearchPage: {
@@ -1993,34 +1938,42 @@ export interface components {
 		 * @enum {string}
 		 */
 		SeriesStatus: 'completed' | 'ongoing' | 'hiatus' | 'cancelled' | 'unknown';
-		/** @description The HTTP server. No FMD2 counterpart. */
-		ServerSettings: {
-			/**
-			 * @description Password/bearer token clients must present; `None` disables auth. Stored as plain JSON.
-			 * @default null
-			 */
-			auth_token: string | null;
-			/**
-			 * @description Socket address to listen on.
-			 * @default 0.0.0.0:8080
-			 */
+		/** @description [`ServerSettings`] with the password left out. */
+		ServerSettingsView: {
+			/** @description Socket address to listen on. */
 			bind: string;
+			/** @description Whether a password is set. Patch `auth_token` to set it; an empty one clears it. */
+			has_auth_token: boolean;
 			/**
 			 * Format: int32
 			 * @description Days a login session may go unused before it ends; every authorized request restarts
 			 *     the count.
-			 * @default 7
 			 */
 			session_idle_days: number;
 			/**
 			 * Format: int32
 			 * @description Days a login session lasts at most, however often it is used.
-			 * @default 30
 			 */
 			session_lifetime_days: number;
 		};
-		/** @description Every application setting. Stored one group per key in `app.db`'s `settings` table. */
-		Settings: {
+		/** @description The body of [`patch_all`]; either part may be left out. */
+		SettingsSave: {
+			/** @description A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID. */
+			modules?: {
+				[key: string]: {
+					[key: string]: unknown;
+				};
+			} | null;
+			/** @description A merge patch as for `PATCH /api/settings`. */
+			settings?: {
+				[key: string]: unknown;
+			} | null;
+		};
+		/**
+		 * @description Every application setting, with the secrets left out: [`Settings`] as the API shows it.
+		 *     Each group's schema carries its defaults.
+		 */
+		SettingsView: {
 			/**
 			 * @default {
 			 *       "always_start_from_failed_chapters": true,
@@ -2031,8 +1984,8 @@ export interface components {
 			 *       "max_update_list_threads": 1,
 			 *       "proxy": {
 			 *         "enabled": false,
+			 *         "has_password": false,
 			 *         "host": "",
-			 *         "password": "",
 			 *         "port": null,
 			 *         "type": "http",
 			 *         "username": ""
@@ -2043,7 +1996,7 @@ export interface components {
 			 *       "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 			 *     }
 			 */
-			connections: components['schemas']['ConnectionSettings'];
+			connections: components['schemas']['ConnectionSettingsView'];
 			/**
 			 * @default {
 			 *       "cache_size_mb": 256,
@@ -2096,7 +2049,7 @@ export interface components {
 			/**
 			 * @default {
 			 *       "auto_update": true,
-			 *       "github_token": null,
+			 *       "has_github_token": false,
 			 *       "interval_minutes": 60,
 			 *       "keep_last_good": true,
 			 *       "repo_name": "FMD2",
@@ -2105,7 +2058,7 @@ export interface components {
 			 *       "repo_ref": "master"
 			 *     }
 			 */
-			module_updater: components['schemas']['ModuleUpdaterSettings'];
+			module_updater: components['schemas']['ModuleUpdaterSettingsView'];
 			/**
 			 * @default {
 			 *       "format": "folder",
@@ -2134,13 +2087,13 @@ export interface components {
 			saveto: components['schemas']['SaveToSettings'];
 			/**
 			 * @default {
-			 *       "auth_token": null,
 			 *       "bind": "0.0.0.0:8080",
+			 *       "has_auth_token": false,
 			 *       "session_idle_days": 7,
 			 *       "session_lifetime_days": 30
 			 *     }
 			 */
-			server: components['schemas']['ServerSettings'];
+			server: components['schemas']['ServerSettingsView'];
 			/**
 			 * @default {
 			 *       "auto_update": false,
@@ -2158,19 +2111,6 @@ export interface components {
 			 *     }
 			 */
 			xpath: components['schemas']['XPathSettings'];
-		};
-		/** @description The body of [`patch_all`]; either part may be left out. */
-		SettingsSave: {
-			/** @description A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID. */
-			modules?: {
-				[key: string]: {
-					[key: string]: unknown;
-				};
-			} | null;
-			/** @description A merge patch as for `PATCH /api/settings`. */
-			settings?: {
-				[key: string]: unknown;
-			} | null;
 		};
 		SkipReason:
 			| {
@@ -3832,7 +3772,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['Settings'];
+					'application/json': components['schemas']['SettingsView'];
 				};
 			};
 		};
@@ -3858,7 +3798,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['Settings'];
+					'application/json': components['schemas']['SettingsView'];
 				};
 			};
 			/** @description The patch is not a JSON object */

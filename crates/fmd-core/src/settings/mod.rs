@@ -3,8 +3,10 @@
 
 mod model;
 mod module_overrides;
+mod secrets;
 mod service;
 mod validate;
+mod view;
 mod websitebypass;
 
 pub use model::*;
@@ -14,4 +16,8 @@ pub use module_overrides::{
 };
 pub use service::{FieldError, ModulePatch, SettingsError, SettingsService};
 pub(crate) use validate::normalize;
+pub use view::{
+    ConnectionSettingsView, HttpOverridesView, ModuleUpdaterSettingsView, ProxyOverrideView,
+    ProxySettingsView, ServerSettingsView, SettingsView,
+};
 pub use websitebypass::write_websitebypass_config;

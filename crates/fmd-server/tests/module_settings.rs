@@ -391,3 +391,34 @@ async fn modules_sharing_an_id_are_both_listed_with_their_root_urls() {
         ]
     );
 }
+
+#[tokio::test]
+async fn a_module_proxy_password_is_never_returned_only_whether_it_is_set() {
+    let h = harness();
+    let set = json!({ "http": { "proxy": { "type": "http", "password": "module-secret" } } });
+    let res = send(&h.state, patch_json("/api/modules/fixture/settings", set)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    assert!(!body.to_string().contains("module-secret"), "{body}");
+    assert_eq!(body["http"]["proxy"]["has_password"], true);
+
+    let all = json!({ "modules": { "fixture": { "http": { "proxy": { "host": "p.example" } } } } });
+    let res = send(&h.state, patch_json("/api/settings/all", all)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    assert!(!body.to_string().contains("module-secret"), "{body}");
+    assert_eq!(
+        body["modules"]["fixture"]["http"]["proxy"]["has_password"],
+        true
+    );
+
+    let body = body_json(send(&h.state, get("/api/modules/fixture/settings")).await).await;
+    assert!(!body.to_string().contains("module-secret"), "{body}");
+    assert!(body["http"]["proxy"].get("password").is_none());
+    assert_eq!(body["http"]["proxy"]["has_password"], true);
+
+    let clear = json!({ "http": { "proxy": { "password": "" } } });
+    send(&h.state, patch_json("/api/modules/fixture/settings", clear)).await;
+    let body = body_json(send(&h.state, get("/api/modules/fixture/settings")).await).await;
+    assert_eq!(body["http"]["proxy"]["has_password"], false);
+}

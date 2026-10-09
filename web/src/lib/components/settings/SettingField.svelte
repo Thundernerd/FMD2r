@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Draft, Json } from '#lib/settings/draft.svelte.ts';
-	import type { Field } from '#lib/settings/fields.ts';
+	import { secretFlag, type Field } from '#lib/settings/fields.ts';
 
 	let {
 		field,
@@ -16,6 +16,20 @@
 		[error ? `${id}-error` : '', field.help ? `${id}-help` : ''].filter(Boolean).join(' ') ||
 			undefined
 	);
+
+	/** Whether the secret is set on the server; it never sends the value. */
+	const secretSet = $derived(draft.get(secretFlag(field.path)) === true);
+	const secretStatus = $derived.by(() => {
+		if (value === '') return 'Cleared when saved';
+		if (typeof value === 'string') return 'Changed when saved';
+		return secretSet ? 'Set' : 'Not set';
+	});
+
+	/** Erasing what was typed leaves the stored secret as it is. */
+	function onSecret(raw: string) {
+		if (raw === '') draft.unset(field.path);
+		else draft.set(field.path, raw);
+	}
 
 	function onText(raw: string) {
 		const control = field.control;
@@ -62,7 +76,7 @@
 			<input
 				{id}
 				class="input"
-				type={field.control.secret ? 'password' : 'text'}
+				type="text"
 				autocomplete="off"
 				value={typeof value === 'string' ? value : ''}
 				placeholder={field.control.placeholder}
@@ -70,6 +84,26 @@
 				aria-describedby={describedBy}
 				oninput={(e) => onText(e.currentTarget.value)}
 			/>
+		{:else if field.control.kind === 'secret'}
+			<div class="secret">
+				<input
+					{id}
+					class="input"
+					type="password"
+					autocomplete="new-password"
+					value={typeof value === 'string' ? value : ''}
+					placeholder={secretSet ? 'Unchanged' : ''}
+					aria-invalid={error ? true : undefined}
+					aria-describedby={describedBy}
+					oninput={(e) => onSecret(e.currentTarget.value)}
+				/>
+				<span class="small muted">{secretStatus}</span>
+				{#if secretSet && value === undefined}
+					<button type="button" class="btn sm" onclick={() => draft.set(field.path, '')}>
+						Clear
+					</button>
+				{/if}
+			</div>
 		{:else if field.control.kind === 'number'}
 			<input
 				{id}
@@ -132,6 +166,11 @@
 	}
 	.input {
 		max-width: 480px;
+	}
+	.secret {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
 	}
 	.input.num {
 		max-width: 140px;

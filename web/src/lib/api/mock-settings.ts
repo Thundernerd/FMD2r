@@ -37,7 +37,7 @@ export const defaultSettings = (): Settings => ({
 		timeout_secs: 30,
 		user_agent: DEFAULT_USER_AGENT,
 		flaresolverr_url: '',
-		proxy: { enabled: false, type: 'http', host: '', port: null, username: '', password: '' }
+		proxy: { enabled: false, type: 'http', host: '', port: null, username: '', has_password: false }
 	},
 	saveto: {
 		default_dir: 'downloads',
@@ -85,14 +85,14 @@ export const defaultSettings = (): Settings => ({
 		repo_name: 'FMD2',
 		repo_ref: 'master',
 		repo_path: 'lua',
-		github_token: null,
+		has_github_token: false,
 		keep_last_good: true
 	},
 	covers: { revalidate_after_hours: 168, cache_size_mb: 256 },
 	logs: { max_file_size_mb: 10, max_files: 5 },
 	server: {
 		bind: '0.0.0.0:8080',
-		auth_token: null,
+		has_auth_token: false,
 		session_idle_days: 7,
 		session_lifetime_days: 30
 	},
@@ -241,7 +241,7 @@ const defaultOverrides = (): Overrides => ({
 	http: {
 		user_agent: '',
 		cookies: '',
-		proxy: { type: 'default', host: '', port: '', username: '', password: '' }
+		proxy: { type: 'default', host: '', port: '', username: '', has_password: false }
 	},
 	options: {}
 });
@@ -265,7 +265,8 @@ const prefixed = (problems: FieldProblem[], prefix: string) =>
 
 /**
  * RFC 7396 merge of `patch` into `target`, rejecting unknown keys like the server does. `null`
- * resets a value to the one in `defaults`.
+ * resets a value to the one in `defaults`. A secret is write-only, like on the server: `target`
+ * only holds its `has_<name>` flag, which a patch of `<name>` sets (`''` or `null` clears it).
  */
 function mergePatch(
 	target: JsonObject,
@@ -276,7 +277,12 @@ function mergePatch(
 ) {
 	for (const [key, value] of Object.entries(patch)) {
 		const field = path ? `${path}.${key}` : key;
-		if (!(key in target)) {
+		const flag = `has_${key}`;
+		if (flag in target && (typeof value === 'string' || value === null)) {
+			target[flag] = typeof value === 'string' && value !== '';
+			continue;
+		}
+		if (!(key in target) || key.startsWith('has_')) {
 			problems.push({ field, detail: 'unknown setting' });
 			continue;
 		}

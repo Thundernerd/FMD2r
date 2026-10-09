@@ -89,7 +89,7 @@
 		{
 			path: 'http.proxy.password',
 			label: 'Proxy password',
-			control: { kind: 'text', secret: true }
+			control: { kind: 'secret' }
 		}
 	];
 </script>

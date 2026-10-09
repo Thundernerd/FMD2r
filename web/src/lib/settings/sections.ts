@@ -19,6 +19,13 @@ const text = (
 	help?: string,
 	extra: Omit<Extract<Control, { kind: 'text' }>, 'kind'> = {}
 ): Field => ({ path, label, help, control: { kind: 'text', ...extra } });
+/** A password or token: write-only, see `Control`. */
+const secret = (path: string, label: string, help?: string): Field => ({
+	path,
+	label,
+	help,
+	control: { kind: 'secret' }
+});
 const number = (path: string, label: string, min: number, max: number, help?: string): Field => ({
 	path,
 	label,
@@ -94,7 +101,7 @@ export const SETTINGS_SECTIONS: Section[] = [
 				control: { kind: 'number', min: 1, max: 65535, nullable: true }
 			},
 			text('connections.proxy.username', 'Proxy username'),
-			text('connections.proxy.password', 'Proxy password', undefined, { secret: true })
+			secret('connections.proxy.password', 'Proxy password')
 		]
 	},
 	{
@@ -199,10 +206,7 @@ export const SETTINGS_SECTIONS: Section[] = [
 			text('module_updater.repo_name', 'Repository name'),
 			text('module_updater.repo_ref', 'Branch'),
 			text('module_updater.repo_path', 'Path in the repository'),
-			text('module_updater.github_token', 'GitHub token', 'Raises the API rate limit. Optional.', {
-				secret: true,
-				nullable: true
-			}),
+			secret('module_updater.github_token', 'GitHub token', 'Raises the API rate limit. Optional.'),
 			checkbox('module_updater.keep_last_good', 'Keep the last working version of a broken module')
 		]
 	},
@@ -245,10 +249,7 @@ export const SETTINGS_SECTIONS: Section[] = [
 		title: 'Server',
 		fields: [
 			text('server.bind', 'Listen address', 'Takes effect after a restart.'),
-			text('server.auth_token', 'Password', 'Leave empty to disable authentication.', {
-				secret: true,
-				nullable: true
-			}),
+			secret('server.auth_token', 'Password', 'Clear it to disable authentication.'),
 			number(
 				'server.session_idle_days',
 				'Log out after (days unused)',

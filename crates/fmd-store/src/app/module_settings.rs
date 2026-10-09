@@ -6,6 +6,7 @@
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::{Map, Value};
 
+use crate::crypto::Cipher;
 use crate::db::Db;
 use crate::error::Result;
 
@@ -68,11 +69,28 @@ const SELECT: &str =
 /// `ModuleSettingsStore` (T06).
 pub struct ModuleSettingsRepo<'a> {
     db: &'a Db,
+    cipher: &'a dyn Cipher,
 }
 
 impl<'a> ModuleSettingsRepo<'a> {
-    pub(crate) fn new(db: &'a Db) -> Self {
-        Self { db }
+    pub(crate) fn new(db: &'a Db, cipher: &'a dyn Cipher) -> Self {
+        Self { db, cipher }
+    }
+
+    /// The database's cipher, for the settings model to encrypt the secrets in the opaque
+    /// JSON columns with ([`crate::AppDb::cipher`]).
+    pub fn cipher(&self) -> &'a dyn Cipher {
+        self.cipher
+    }
+
+    /// The IDs of every module with stored settings.
+    pub fn module_ids(&self) -> Result<Vec<String>> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare("SELECT module_id FROM module_settings ORDER BY module_id")?;
+        let ids = stmt
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<Vec<String>>>()?;
+        Ok(ids)
     }
 
     pub fn get(&self, module_id: &str) -> Result<Option<ModuleSettings>> {

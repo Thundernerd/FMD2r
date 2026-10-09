@@ -734,3 +734,72 @@ async fn the_preview_path_is_where_the_engine_writes_the_first_page() {
     assert_eq!(body["page"], "001.jpg");
     assert_eq!(body["path"], "/data/Sample Manga - Vol. 1 Ch. 5.cbz");
 }
+
+/// Patches every settings secret, each to a value that appears nowhere else in a response.
+fn set_every_secret() -> Request<Body> {
+    patch_json(
+        "/api/settings",
+        serde_json::json!({
+            "connections": { "proxy": { "password": "proxy-secret" } },
+            "module_updater": { "github_token": "token-secret" },
+            "server": { "auth_token": "server-secret" },
+        }),
+    )
+}
+
+/// Asserts that `body` holds none of the values [`set_every_secret`] stores.
+fn assert_no_secret(body: &serde_json::Value) {
+    let text = body.to_string();
+    for secret in ["proxy-secret", "token-secret", "server-secret"] {
+        assert!(!text.contains(secret), "{secret} leaked: {text}");
+    }
+    assert!(body["connections"]["proxy"].get("password").is_none());
+    assert!(body["module_updater"].get("github_token").is_none());
+    assert!(body["server"].get("auth_token").is_none());
+}
+
+#[tokio::test]
+async fn settings_secrets_are_never_returned_only_whether_they_are_set() {
+    let h = harness();
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_no_secret(&body);
+    assert_eq!(body["connections"]["proxy"]["has_password"], false);
+    assert_eq!(body["module_updater"]["has_github_token"], false);
+    assert_eq!(body["server"]["has_auth_token"], false);
+
+    let res = send(&h.state, set_every_secret()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_no_secret(&body_json(res).await);
+
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_no_secret(&body);
+    assert_eq!(body["connections"]["proxy"]["has_password"], true);
+    assert_eq!(body["module_updater"]["has_github_token"], true);
+    assert_eq!(body["server"]["has_auth_token"], true);
+}
+
+#[tokio::test]
+async fn a_patch_without_a_secret_keeps_it_and_an_empty_one_clears_it() {
+    let h = harness();
+    send(&h.state, set_every_secret()).await;
+
+    let patch = serde_json::json!({ "connections": { "proxy": { "host": "proxy.example" } } });
+    let res = send(&h.state, patch_json("/api/settings", patch)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(body["connections"]["proxy"]["has_password"], true);
+    assert_eq!(body["module_updater"]["has_github_token"], true);
+    assert_eq!(body["server"]["has_auth_token"], true);
+
+    let clear = serde_json::json!({
+        "connections": { "proxy": { "password": "" } },
+        "module_updater": { "github_token": "" },
+        "server": { "auth_token": "" },
+    });
+    let res = send(&h.state, patch_json("/api/settings", clear)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(body["connections"]["proxy"]["has_password"], false);
+    assert_eq!(body["module_updater"]["has_github_token"], false);
+    assert_eq!(body["server"]["has_auth_token"], false);
+}

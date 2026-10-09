@@ -72,9 +72,21 @@ export class Draft<T extends object = JsonObject> {
 		delete this.errors[path];
 	}
 
+	/** Drops the value at `path`, so the changes leave it out. */
+	unset(path: string) {
+		const keys = path.split('.');
+		const last = keys.pop();
+		const parent = keys.length ? getPath(this.#current, keys.join('.')) : this.#current;
+		if (last !== undefined && isObject(parent)) delete parent[last];
+		delete this.errors[path];
+	}
+
 	/** Whether the value at `path` differs from the saved one. */
 	isDirty(path: string): boolean {
-		return diff(getPath(this.#saved, path), this.get(path) ?? null) !== undefined;
+		const saved = getPath(this.#saved, path);
+		const current = this.get(path);
+		if (saved === undefined && current === undefined) return false;
+		return diff(saved, current ?? null) !== undefined;
 	}
 
 	get dirty(): boolean {
