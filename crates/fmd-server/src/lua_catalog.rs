@@ -28,8 +28,11 @@ pub(crate) struct LuaCatalog {
     infos: Arc<Mutex<Option<ModuleList>>>,
 }
 
-/// A registry and its module list.
-type ModuleList = (Arc<ModuleRegistry>, Arc<Vec<ModuleInfo>>);
+/// The module list of one registry.
+struct ModuleList {
+    built_from: Arc<ModuleRegistry>,
+    infos: Arc<Vec<ModuleInfo>>,
+}
 
 impl LuaCatalog {
     /// The modules of `runtime`, their HTTP settings stored in `db`.
@@ -47,10 +50,10 @@ impl LuaCatalog {
     fn infos(&self) -> Arc<Vec<ModuleInfo>> {
         let registry = self.modules.current();
         let mut cached = self.infos.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some((built_from, infos)) = cached.as_ref()
-            && Arc::ptr_eq(built_from, &registry)
+        if let Some(list) = cached.as_ref()
+            && Arc::ptr_eq(&list.built_from, &registry)
         {
-            return infos.clone();
+            return list.infos.clone();
         }
         // The registry keeps its modules sorted by ID.
         let infos: Arc<Vec<ModuleInfo>> = Arc::new(
@@ -60,7 +63,10 @@ impl LuaCatalog {
                 .map(|m| ModuleInfo::from(&m.def()))
                 .collect(),
         );
-        *cached = Some((registry, infos.clone()));
+        *cached = Some(ModuleList {
+            built_from: registry,
+            infos: infos.clone(),
+        });
         infos
     }
 }

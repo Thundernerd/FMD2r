@@ -40,6 +40,8 @@ pub(crate) struct LuaRuntime {
     pub(crate) modules: Arc<LiveModules>,
     pub(crate) pool: Arc<WorkerPool>,
     pub(crate) http: HttpClient,
+    /// The `xpath.backend` setting the workers were started with.
+    xpath_backend: XPathBackend,
 }
 
 impl LuaRuntime {
@@ -78,6 +80,7 @@ impl LuaRuntime {
             modules,
             pool,
             http,
+            xpath_backend,
         })
     }
 }
@@ -90,17 +93,19 @@ fn lua_xpath_backend(setting: XPathBackend) -> Option<fmd_lua::XPathBackend> {
         XPathBackend::Native => fmd_lua::XPathBackend::Native,
     };
     if backend.engine().is_none() {
-        tracing::error!(target: "fmd_server", "xpath.backend {backend:?}: not in this build, keeping the current backend");
+        tracing::error!(target: "fmd_server", "xpath.backend {backend:?} is not in this build; ignoring it");
         return None;
     }
     Some(backend)
 }
 
-/// Switches `runtime`'s workers to the `xpath.backend` setting whenever it changes.
+/// Switches `runtime`'s workers to the `xpath.backend` setting whenever it changes, starting with
+/// a change made while the runtime loaded.
 pub(crate) fn follow_xpath_backend(settings: Arc<SettingsService>, runtime: &LuaRuntime) {
     let pool = runtime.pool.clone();
     let mut changes = settings.subscribe();
-    let mut current = changes.borrow_and_update().xpath.backend;
+    changes.mark_changed();
+    let mut current = runtime.xpath_backend;
     tokio::spawn(async move {
         while changes.changed().await.is_ok() {
             let next = changes.borrow_and_update().xpath.backend;
