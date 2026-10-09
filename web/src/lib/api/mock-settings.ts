@@ -228,7 +228,7 @@ const MODULES: MockModule[] = [
 /** What the settings know of a module for `GET /api/modules`; the list fields come from the lists mock. */
 export type ModuleBasics = Pick<
 	ModuleSummary,
-	'id' | 'name' | 'root_url' | 'category' | 'option_count'
+	'id' | 'name' | 'root_url' | 'category' | 'option_count' | 'customized'
 >;
 
 type Overrides = Pick<ModuleSettingsView, 'enabled' | 'limits' | 'http'> & {
@@ -463,7 +463,14 @@ export function createMockSettings() {
 		previewRename,
 
 		listModules: (): ModuleBasics[] =>
-			MODULES.map((m) => ({ ...m.summary, option_count: m.options.length })),
+			MODULES.map((m) => {
+				const { enabled, options } = view(m);
+				return {
+					...m.summary,
+					option_count: m.options.length,
+					customized: enabled || options.some((o) => o.value !== o.default)
+				};
+			}),
 
 		getModule(id: string): ModuleSettingsView | null {
 			const module = find(id);

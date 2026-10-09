@@ -352,6 +352,7 @@ async fn modules_are_listed_for_the_picker() {
             "list_size": 0,
             "list_updated": null,
             "list_job_running": false,
+            "customized": false,
         }])
     );
 }
@@ -421,4 +422,51 @@ async fn a_module_proxy_password_is_never_returned_only_whether_it_is_set() {
     send(&h.state, patch_json("/api/modules/fixture/settings", clear)).await;
     let body = body_json(send(&h.state, get("/api/modules/fixture/settings")).await).await;
     assert_eq!(body["http"]["proxy"]["has_password"], false);
+}
+
+/// What `GET /api/modules` reports as `customized` for the fixture module.
+async fn customized(h: &Harness) -> serde_json::Value {
+    let body = body_json(send(&h.state, get("/api/modules")).await).await;
+    body[0]["customized"].clone()
+}
+
+#[tokio::test]
+async fn a_module_is_customized_while_its_settings_differ_from_the_defaults() {
+    let h = harness();
+    assert_eq!(customized(&h).await, json!(false));
+
+    let uri = "/api/modules/fixture/settings";
+    let change = json!({ "options": { "lang": "fr" } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, change)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(true));
+    let reset = json!({ "options": { "lang": null } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, reset)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(false));
+
+    let change = json!({ "enabled": true, "limits": { "max_task_limit": 1 } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, change)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(true));
+    let reset = json!({ "enabled": false, "limits": { "max_task_limit": 0 } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, reset)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(false));
+
+    // An option set to its declared default is not a change.
+    let same = json!({ "options": { "hq": true } });
+    assert_eq!(
+        send(&h.state, patch_json(uri, same)).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(customized(&h).await, json!(false));
 }

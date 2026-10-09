@@ -23,3 +23,29 @@ export function repeatedNames(modules: ModuleSummary[]): Set<string> {
 	for (const m of modules) (seen.has(m.name) ? repeated : seen).add(m.name);
 	return repeated;
 }
+
+/** A category of modules, as the pickers list them. */
+export interface ModuleGroup {
+	category: string;
+	modules: ModuleSummary[];
+}
+
+/** The category a module is listed under; modules without one are listed under "Other". */
+export const moduleCategory = (m: ModuleSummary): string => m.category || 'Other';
+
+const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+
+/**
+ * `modules` grouped by category, the groups sorted by category and each group's modules by name,
+ * ignoring case; modules sharing a name are sorted by host.
+ */
+export function groupModules(modules: ModuleSummary[]): ModuleGroup[] {
+	return Object.entries(Object.groupBy(modules, moduleCategory))
+		.sort(([a], [b]) => byText(a, b))
+		.map(([category, list = []]) => ({
+			category,
+			modules: list.toSorted(
+				(a, b) => byText(a.name, b.name) || byText(moduleHost(a), moduleHost(b))
+			)
+		}));
+}

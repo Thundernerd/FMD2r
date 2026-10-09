@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde_json::Value;
 use utoipa::ToSchema;
 
-use fmd_store::ListSummary;
+use fmd_store::{AppDb, ListSummary};
 
 use crate::error::ApiJson;
 use crate::state::off_thread;
@@ -40,6 +40,10 @@ pub struct ModuleSummary {
     pub list_updated: Option<String>,
     /// Whether a list update or import of it is running.
     pub list_job_running: bool,
+    /// Whether its settings differ from the defaults: its overrides are on
+    /// (`Settings.Enabled`, baseunits/WebsiteModulesSettings.pas:80) or an option's value is not
+    /// the one it declares.
+    pub customized: bool,
 }
 
 /// A module's settings.
@@ -98,6 +102,18 @@ pub enum ModuleOptionSetting {
 }
 
 impl ModuleSettingsView {
+    /// Whether these settings differ from the module's defaults, as [`ModuleSummary::customized`]
+    /// reports.
+    fn customized(&self) -> bool {
+        self.enabled
+            || self.options.iter().any(|o| match o {
+                ModuleOptionSetting::Checkbox { default, value, .. } => default != value,
+                ModuleOptionSetting::Edit { default, value, .. } => default != value,
+                ModuleOptionSetting::Spinedit { default, value, .. }
+                | ModuleOptionSetting::Combobox { default, value, .. } => default != value,
+            })
+    }
+
     /// Option values resolve like `MODULE.GetOption`: the stored value when it has the option's
     /// type, else the default (`fmd_lua::Module::option_value`,
     /// baseunits/lua/LuaWebsiteModules.pas:921-949).
@@ -167,6 +183,7 @@ pub(crate) async fn list(
             .collect(),
         None => HashMap::new(),
     };
+    let overrides = state.blocking(stored_overrides).await?;
     Ok(Json(
         state
             .modules
@@ -174,7 +191,11 @@ pub(crate) async fn list(
             .into_iter()
             .map(|m| {
                 let list = lists.get(&m.id);
+                let customized = overrides
+                    .get(&m.id)
+                    .is_some_and(|o| ModuleSettingsView::new(m.clone(), o.clone()).customized());
                 ModuleSummary {
+                    customized,
                     option_count: m.options.len(),
                     capabilities: m.capabilities,
                     list_size: list.map_or(0, |l| l.count),
@@ -193,6 +214,25 @@ pub(crate) async fn list(
             })
             .collect(),
     ))
+}
+
+/// The overrides stored for each module that has any. A module whose overrides fail to load is
+/// left out, so one bad row does not hide the module list.
+fn stored_overrides(db: &AppDb) -> Result<HashMap<String, ModuleOverrides>, ApiError> {
+    let repo = db.module_settings();
+    let ids = repo
+        .module_ids()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(ids
+        .into_iter()
+        .filter_map(|id| match ModuleOverrides::load(&repo, &id) {
+            Ok(overrides) => Some((id, overrides)),
+            Err(e) => {
+                tracing::warn!(target: "fmd_server", "settings of module {id}: {e}");
+                None
+            }
+        })
+        .collect())
 }
 
 /// A module's options, limits and overrides.

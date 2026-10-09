@@ -1599,6 +1599,12 @@ export interface components {
 		ModuleSummary: {
 			capabilities: components['schemas']['ModuleCapabilities'];
 			category: string;
+			/**
+			 * @description Whether its settings differ from the defaults: its overrides are on
+			 *     (`Settings.Enabled`, baseunits/WebsiteModulesSettings.pas:80) or an option's value is not
+			 *     the one it declares.
+			 */
+			customized: boolean;
 			id: string;
 			/** @description Whether a list update or import of it is running. */
 			list_job_running: boolean;

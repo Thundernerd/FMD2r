@@ -128,6 +128,11 @@
 			if (view && moduleDraft) {
 				moduleView = view;
 				moduleDraft.commit(editable(view));
+				// The list marks the modules whose settings differ from the defaults.
+				api
+					.listModules()
+					.then((list) => (modules = list))
+					.catch(() => {});
 			}
 		} catch (e) {
 			await reject(e, moduleId);
