@@ -11,7 +11,7 @@ export function selectAll(count: number): Set<number> {
 	return new Set(displayOrder(count, false));
 }
 
-/** The chapters not downloaded yet. */
+/** The chapters not seen yet. */
 export function selectNew(chapters: readonly { downloaded: boolean }[]): Set<number> {
 	const selected = new Set<number>();
 	chapters.forEach((c, i) => {

@@ -47,7 +47,7 @@ describe('library chips', () => {
 		expect(titles({})).toEqual(['Frieren', 'One Piece', 'Blue Lock', 'Kagurabachi']);
 	});
 
-	it('New shows favorites with chapters not downloaded', () => {
+	it('New shows favorites with chapters not seen', () => {
 		expect(titles({ chip: 'new' })).toEqual(['Frieren', 'Kagurabachi']);
 	});
 

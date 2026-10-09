@@ -44,7 +44,7 @@
 	);
 	const count = $derived(picked.length);
 	const noun = $derived(count === 1 ? 'chapter' : 'chapters');
-	const already = $derived(picked.filter((c) => c.downloaded).length);
+	const seen = $derived(picked.filter((c) => c.downloaded).length);
 
 	async function download() {
 		if (count === 0 || busy) return;
@@ -84,8 +84,8 @@
 			<span class="muted">No chapters selected</span>
 		{:else}
 			<b class="num">{count} {noun} selected</b>
-			{#if already}
-				<span class="small muted">· {already} downloaded before</span>
+			{#if seen}
+				<span class="small muted">· {seen} seen before</span>
 			{/if}
 		{/if}
 	</p>

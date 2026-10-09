@@ -18,7 +18,7 @@
 	const OVERSCAN = 10;
 
 	let newestFirst = $state(false);
-	let hideDownloaded = $state(false);
+	let hideSeen = $state(false);
 	let range = $state('');
 	let rangeError = $state(false);
 	/** The chapter a shift-click extends from. */
@@ -28,9 +28,7 @@
 	let viewport = $state(0);
 
 	const order = $derived(
-		displayOrder(chapters.length, newestFirst).filter(
-			(i) => !hideDownloaded || !chapters[i]?.downloaded
-		)
+		displayOrder(chapters.length, newestFirst).filter((i) => !hideSeen || !chapters[i]?.downloaded)
 	);
 	const first = $derived(Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN));
 	const last = $derived(Math.min(order.length, Math.ceil((scrollTop + viewport) / ROW) + OVERSCAN));
@@ -87,8 +85,8 @@
 			<button class="btn sm" type="submit">Select range</button>
 		</form>
 		<label class="hide small">
-			<input type="checkbox" class="chk" bind:checked={hideDownloaded} />
-			Hide downloaded
+			<input type="checkbox" class="chk" bind:checked={hideSeen} />
+			Hide seen
 		</label>
 	</div>
 	{#if rangeError}
@@ -98,7 +96,7 @@
 	{/if}
 	{#if order.length === 0}
 		<p class="empty muted">
-			{chapters.length === 0 ? 'The website lists no chapters.' : 'Every chapter is downloaded.'}
+			{chapters.length === 0 ? 'The website lists no chapters.' : 'Every chapter is seen.'}
 		</p>
 	{:else}
 		<ul
@@ -127,7 +125,7 @@
 							<span class="mono muted n" aria-hidden="true">{number(index)}</span>
 							<span class="name">{chapter.name || chapter.link}</span>
 							{#if chapter.downloaded}
-								<span class="mark small">✓ downloaded</span>
+								<span class="mark small">✓ seen</span>
 							{/if}
 						</label>
 					</li>

@@ -252,7 +252,7 @@ const MODULES: Record<string, string> = {
 	'www.webtoons.com': 'webtoons'
 };
 
-/** Series the mock knows, by link; `chapters` of them, the first `downloaded` downloaded. */
+/** Series the mock knows, by link; `chapters` of them, the first `downloaded` seen. */
 const SERIES: Record<
 	string,
 	Omit<SeriesInfo, 'module_id' | 'link' | 'chapters'> & {

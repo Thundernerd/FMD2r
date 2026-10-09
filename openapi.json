@@ -2719,7 +2719,7 @@
         "properties": {
           "downloaded": {
             "type": "boolean",
-            "description": "Whether the chapter was downloaded before."
+            "description": "Whether the chapter was downloaded before, or marked when the series was added to the\nlibrary (mangadownloader/forms/frmMain.pas:2797-2846). The UI calls it \"seen\"."
           },
           "link": {
             "type": "string",
