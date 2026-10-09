@@ -82,7 +82,9 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     // Opening the stores and loading the settings block.
     let state = tokio::task::spawn_blocking(move || -> Result<AppState, ServeError> {
         let lists = ListsDb::open(lists_path)?;
-        Ok(AppState::new(AppDb::open(db_path)?)?.with_lists(lists))
+        let state = AppState::new(AppDb::open(db_path)?)?;
+        state.settings.select_listed_websites(&lists)?;
+        Ok(state.with_lists(lists))
     })
     .await
     .map_err(std::io::Error::other)??;

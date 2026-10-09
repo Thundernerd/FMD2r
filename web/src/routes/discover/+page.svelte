@@ -23,7 +23,9 @@
 		'3': 'Cancelled'
 	};
 
-	let modules = $state<ModuleSummary[]>([]);
+	let modules = $state<ModuleSummary[] | null>(null);
+	/** `general.selected_websites`, once loaded. */
+	let websites = $state<string[] | null>(null);
 	let module = $state('');
 	let text = $state('');
 	let q = $state('');
@@ -38,8 +40,12 @@
 	let error = $state<string | null>(null);
 	let facets = $state<ListFacets>({ genres: [], statuses: [] });
 
-	const selected = $derived(modules.find((m) => m.id === module));
-	const names = $derived(new Map(modules.map((m) => [m.id, m.name])));
+	const selected = $derived(modules?.find((m) => m.id === module));
+	const names = $derived(new Map(modules?.map((m) => [m.id, m.name])));
+	/** Whether no loaded website is selected, so there is nothing to list. */
+	const noWebsites = $derived(
+		modules !== null && websites !== null && !modules.some((m) => websites?.includes(m.id))
+	);
 	const filters = $derived<Filters>({ module, q, genres, status, page: 1 });
 	const more = $derived(items.length < total);
 
@@ -50,6 +56,12 @@
 			.catch(() => (error = 'Could not load the websites.'));
 	}
 	$effect(loadModules);
+	$effect(() => {
+		api
+			.getSettings()
+			.then((settings) => (websites = settings.general.selected_websites))
+			.catch(() => (error = 'Could not load the selected websites.'));
+	});
 
 	$effect(() => {
 		const value = text;
@@ -135,100 +147,107 @@
 <div class="page">
 	<h1>Discover</h1>
 
-	<div class="discover">
-		{#if filtersOpen}
-			<button
-				class="scrim"
-				type="button"
-				aria-label="Close filters"
-				onclick={() => (filtersOpen = false)}
-			></button>
-		{/if}
-		<aside class="facets" class:open={filtersOpen} aria-label="Filters">
-			<div class="drawer-head">
-				<h2>Filters</h2>
-				<button class="btn ghost sm" type="button" onclick={() => (filtersOpen = false)}
-					>Done</button
-				>
-			</div>
-			<WebsitePicker {modules} bind:selected={module} />
-			{#if selected}
-				{#key selected.id}
-					<ListActions {api} store={events} module={selected} onfinished={afterJob} />
-				{/key}
-			{:else}
-				<p class="small muted">Searching every website’s list.</p>
+	{#if noWebsites}
+		<p class="muted empty">
+			No websites are selected. <a href="/settings#section-websites">Choose websites</a> to list and search
+			here.
+		</p>
+	{:else}
+		<div class="discover">
+			{#if filtersOpen}
+				<button
+					class="scrim"
+					type="button"
+					aria-label="Close filters"
+					onclick={() => (filtersOpen = false)}
+				></button>
 			{/if}
-			<div class="status">
-				<label class="label" for="status">Status</label>
-				<select id="status" class="input" bind:value={status}>
-					<option value="">Any</option>
-					{#each Object.entries(STATUS) as [value, label] (value)}
-						{@const count = facets.statuses.find((s) => s.value === value)?.count ?? 0}
-						<option {value}>{label} ({count})</option>
-					{/each}
-				</select>
-			</div>
-			<GenreChips genres={facets.genres} bind:states={genres} />
-		</aside>
-
-		<section class="results" aria-label="Results">
-			<div class="searchrow">
-				<input
-					class="input search"
-					type="search"
-					placeholder="Search titles"
-					aria-label="Search titles"
-					bind:value={text}
-				/>
-				<button class="btn filters-btn" type="button" onclick={() => (filtersOpen = true)}
-					>Filters</button
-				>
-			</div>
-			<div class="small muted" role="status">
-				{#if loading && !items.length}
-					Searching…
+			<aside class="facets" class:open={filtersOpen} aria-label="Filters">
+				<div class="drawer-head">
+					<h2>Filters</h2>
+					<button class="btn ghost sm" type="button" onclick={() => (filtersOpen = false)}
+						>Done</button
+					>
+				</div>
+				<WebsitePicker modules={modules ?? []} websites={websites ?? []} bind:selected={module} />
+				{#if selected}
+					{#key selected.id}
+						<ListActions {api} store={events} module={selected} onfinished={afterJob} />
+					{/key}
 				{:else}
-					<span class="num">{total.toLocaleString('en')}</span>
-					{total === 1 ? 'title' : 'titles'}
+					<p class="small muted">Searching every selected website’s list.</p>
 				{/if}
-			</div>
-			{#if error}
-				<p class="bad" role="alert">{error}</p>
-			{/if}
+				<div class="status">
+					<label class="label" for="status">Status</label>
+					<select id="status" class="input" bind:value={status}>
+						<option value="">Any</option>
+						{#each Object.entries(STATUS) as [value, label] (value)}
+							{@const count = facets.statuses.find((s) => s.value === value)?.count ?? 0}
+							<option {value}>{label} ({count})</option>
+						{/each}
+					</select>
+				</div>
+				<GenreChips genres={facets.genres} bind:states={genres} />
+			</aside>
 
-			{#if items.length}
-				<ul class="grid">
-					{#each items as item (`${item.module_id}\n${item.link}`)}
-						<li>
-							<a class="card" href={seriesHref(item)}>
-								<span class="cover" style:--h={hue(item.title)} aria-hidden="true"
-									>{item.title}</span
-								>
-								<span class="t">{item.title}</span>
-								<span class="small muted">{subtitle(item)}</span>
-							</a>
-						</li>
-					{/each}
-				</ul>
-				{#if more}
-					<div class="more" use:infinite>
-						<button class="btn" type="button" disabled={loading} onclick={loadMore}
-							>{loading ? 'Loading…' : 'Load more'}</button
-						>
-					</div>
-				{/if}
-			{:else if !loading && !error}
-				<p class="muted empty">
-					{#if selected && !selected.list_size}
-						{selected.name} has no list yet.
+			<section class="results" aria-label="Results">
+				<div class="searchrow">
+					<input
+						class="input search"
+						type="search"
+						placeholder="Search titles"
+						aria-label="Search titles"
+						bind:value={text}
+					/>
+					<button class="btn filters-btn" type="button" onclick={() => (filtersOpen = true)}
+						>Filters</button
+					>
+				</div>
+				<div class="small muted" role="status">
+					{#if loading && !items.length}
+						Searching…
 					{:else}
-						No titles match. Loosen the genre filter or the search.
+						<span class="num">{total.toLocaleString('en')}</span>
+						{total === 1 ? 'title' : 'titles'}
 					{/if}
-				</p>
-			{/if}
-		</section>
-	</div>
+				</div>
+				{#if error}
+					<p class="bad" role="alert">{error}</p>
+				{/if}
+
+				{#if items.length}
+					<ul class="grid">
+						{#each items as item (`${item.module_id}\n${item.link}`)}
+							<li>
+								<a class="card" href={seriesHref(item)}>
+									<span class="cover" style:--h={hue(item.title)} aria-hidden="true"
+										>{item.title}</span
+									>
+									<span class="t">{item.title}</span>
+									<span class="small muted">{subtitle(item)}</span>
+								</a>
+							</li>
+						{/each}
+					</ul>
+					{#if more}
+						<div class="more" use:infinite>
+							<button class="btn" type="button" disabled={loading} onclick={loadMore}
+								>{loading ? 'Loading…' : 'Load more'}</button
+							>
+						</div>
+					{/if}
+				{:else if !loading && !error}
+					<p class="muted empty">
+						{#if selected && !selected.list_size}
+							{selected.name} has no list yet.
+						{:else}
+							No titles match. Loosen the genre filter or the search.
+						{/if}
+					</p>
+				{/if}
+			</section>
+		</div>
+	{/if}
 </div>
 
 <style>

@@ -493,7 +493,7 @@ export function createMockBackend({
 	};
 
 	const settings = createMockSettings();
-	const lists = createMockLists();
+	const lists = createMockLists(() => settings.getSettings().general.selected_websites);
 	const modules = (): ModuleSummary[] =>
 		settings.listModules().map((m) => ({
 			...m,

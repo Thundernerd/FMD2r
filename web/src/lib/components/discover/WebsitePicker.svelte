@@ -4,10 +4,13 @@
 
 	let {
 		modules,
+		websites,
 		selected = $bindable()
 	}: {
 		modules: ModuleSummary[];
-		/** Module ID; empty for every website. */
+		/** The IDs of the websites to list (`general.selected_websites`). */
+		websites: string[];
+		/** Module ID; empty for every selected website. */
 		selected: string;
 	} = $props();
 
@@ -22,7 +25,9 @@
 	const groups = $derived.by(() => {
 		const words = search.toLowerCase().split(/\s+/).filter(Boolean);
 		// The selected module stays listed so the select keeps showing it.
+		const listed = new Set(websites);
 		const shown = modules.filter((m) => {
+			if (!listed.has(m.id)) return false;
 			const text = `${m.name} ${m.category}`.toLowerCase();
 			return m.id === selected || words.every((w) => text.includes(w));
 		});
@@ -38,7 +43,10 @@
 </script>
 
 <div class="picker">
-	<label class="label" for="website">Website</label>
+	<div class="head">
+		<label class="label" for="website">Website</label>
+		<a class="small" href="/settings#section-websites">Manage websites</a>
+	</div>
 	<input
 		class="input"
 		type="search"
@@ -66,6 +74,12 @@
 	.picker {
 		display: flex;
 		flex-direction: column;
+		gap: var(--sp-2);
+	}
+	.head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
 		gap: var(--sp-2);
 	}
 	p {

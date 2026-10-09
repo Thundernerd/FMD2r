@@ -88,7 +88,9 @@ export interface MockLists {
 	tick(emit: (event: ListEvent) => void): void;
 }
 
-export function createMockLists(): MockLists {
+/** @param selected The selected websites (`general.selected_websites`), which a search without
+ * a module covers. */
+export function createMockLists(selected: () => string[]): MockLists {
 	const lists = new Map<string, ListItem[]>(
 		Object.entries(LIST_SIZES).map(([module, size]) => [module, list(module, size)])
 	);
@@ -105,7 +107,8 @@ export function createMockLists(): MockLists {
 		const include = withFilters ? split('genres_include') : [];
 		const exclude = withFilters ? split('genres_exclude') : [];
 		const status = withFilters ? params.get('status') : null;
-		const items = module ? (lists.get(module) ?? []) : [...lists.values()].flat();
+		const modules = module ? [module] : selected();
+		const items = modules.flatMap((m) => lists.get(m) ?? []);
 		return items
 			.filter((item) => {
 				const titleWords = `${item.title} ${item.alttitles}`.toLowerCase().split(/\s+/);

@@ -12,7 +12,12 @@ use serde_json::json;
 /// written by `SaveOptions` and read by `LoadOptions` (mangadownloader/forms/frmMain.pas:5803-5980).
 fn settings_json() -> String {
     json!({
-        "general": { "OneInstanceOnly": false, "AddAsStopped": true },
+        "general": {
+            "OneInstanceOnly": false,
+            "AddAsStopped": true,
+            // Module IDs joined by commas (mangadownloader/forms/frmMain.pas:5990-6004).
+            "MangaListSelect": "a,b"
+        },
         "darkmode": { "mode": 1 },
         "languages": { "Selected": "nl" },
         "view": { "LoadMangaCover": false },
@@ -91,6 +96,7 @@ fn known_settings_map_to_the_settings_model() {
     assert!(s.general.add_as_stopped);
     assert!(!s.general.load_covers);
     assert_eq!(s.general.language, "nl");
+    assert_eq!(s.general.selected_websites, ["a", "b"]);
 
     let c = &s.connections;
     assert_eq!(

@@ -4,7 +4,7 @@
 use fmd_core::settings::{
     OutputFormat, SettingsError, SettingsService, SymbolMode, WebpSaveAs, XPathBackend,
 };
-use fmd_store::AppDb;
+use fmd_store::{AppDb, ListsDb, MangaListing};
 use serde_json::json;
 
 fn open_db() -> (tempfile::TempDir, AppDb) {
@@ -231,4 +231,75 @@ fn a_bad_stored_value_falls_back_to_its_default_without_losing_the_rest() {
     assert_eq!(s.output.pdf_quality, 50);
     assert_eq!(s.connections.max_parallel_tasks, 3);
     assert_eq!(s.connections.timeout_secs, 30);
+}
+
+#[test]
+fn selected_websites_round_trip_and_keep_unknown_module_ids() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db.clone()).unwrap();
+    // A fresh install selects nothing.
+    assert!(service.get().general.selected_websites.is_empty());
+
+    // `gone` is not a loaded module; it is kept so it is selected again when it comes back.
+    service
+        .update(json!({ "general": { "selected_websites": ["mangadex", "gone"] } }))
+        .unwrap();
+    service
+        .update(json!({ "general": { "language": "nl" } }))
+        .unwrap();
+
+    let reloaded = SettingsService::load(db).unwrap().get();
+    assert_eq!(reloaded.general.selected_websites, ["mangadex", "gone"]);
+}
+
+fn lists_with(dir: &std::path::Path, modules: &[&str]) -> ListsDb {
+    let lists = ListsDb::open(dir.join("lists.db")).unwrap();
+    for module in modules {
+        let listing = MangaListing {
+            link: "/1".into(),
+            title: "Title".into(),
+            ..MangaListing::default()
+        };
+        lists
+            .masterlist()
+            .replace_module(module, [listing])
+            .unwrap();
+    }
+    lists
+}
+
+#[test]
+fn a_fresh_install_selects_no_websites() {
+    let (dir, db) = open_db();
+    let lists = lists_with(dir.path(), &[]);
+    let service = SettingsService::load(db).unwrap();
+
+    service.select_listed_websites(&lists).unwrap();
+
+    assert!(service.get().general.selected_websites.is_empty());
+}
+
+#[test]
+fn upgrading_selects_the_websites_that_have_a_list_once() {
+    let (dir, db) = open_db();
+    // Stored by a build without `selected_websites`.
+    db.settings()
+        .set("general", &json!({ "language": "nl" }))
+        .unwrap();
+    let lists = lists_with(dir.path(), &["b", "a"]);
+    let service = SettingsService::load(db.clone()).unwrap();
+
+    service.select_listed_websites(&lists).unwrap();
+
+    assert_eq!(service.get().general.selected_websites, ["a", "b"]);
+    assert_eq!(service.get().general.language, "nl");
+    let reloaded = SettingsService::load(db).unwrap();
+    assert_eq!(reloaded.get().general.selected_websites, ["a", "b"]);
+
+    // Only on the first start: a selection the user changed stays.
+    reloaded
+        .update(json!({ "general": { "selected_websites": ["a"] } }))
+        .unwrap();
+    reloaded.select_listed_websites(&lists).unwrap();
+    assert_eq!(reloaded.get().general.selected_websites, ["a"]);
 }

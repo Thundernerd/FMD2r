@@ -14,12 +14,14 @@
 	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
+	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
 	import { showFieldErrors } from '#lib/settings/save.ts';
 	import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 
 	const TOC = [
 		...SETTINGS_SECTIONS.map(({ id, title }) => ({ id, title })),
+		{ id: 'websites', title: 'Websites' },
 		{ id: 'modules', title: 'Website modules' },
 		{ id: 'accounts', title: 'Accounts' }
 	];
@@ -169,6 +171,13 @@
 		document.getElementById(`section-${id}`)?.scrollIntoView({ block: 'start' });
 	}
 
+	// A link to a section (`/settings#section-websites`) opens there once the settings load.
+	$effect(() => {
+		if (!draft) return;
+		const id = page.url.hash.replace(/^#section-/, '');
+		if (id && TOC.some((entry) => entry.id === id)) void tick().then(() => jump(id));
+	});
+
 	// Highlight the section being read in the table of contents.
 	$effect(() => {
 		if (!draft) return;
@@ -247,6 +256,11 @@
 						{/if}
 					</section>
 				{/each}
+
+				<section id="section-websites" class="card" aria-labelledby="heading-websites">
+					<h2 id="heading-websites">Websites</h2>
+					<WebsiteSelection {modules} {draft} />
+				</section>
 
 				<section id="section-modules" class="card" aria-labelledby="heading-modules">
 					<h2 id="heading-modules">Website modules</h2>
