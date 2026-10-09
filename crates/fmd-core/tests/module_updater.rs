@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use fmd_core::module_updater::{
     LiveModules, ModuleUpdater, RepoConfig, UpdateError, UpdaterConfig,
 };
+use fmd_core::settings::write_websitebypass_config;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{MemorySettingsStore, PoolConfig, WorkerPool};
 use fmd_store::{AppDb, EventQuery, EventSeverity};
@@ -556,4 +557,161 @@ fn a_token_is_sent_to_the_api_only() {
             assert!(auth.is_empty(), "{}", request.url);
         }
     }
+}
+
+/// Module `a`, whose `GetInfo` makes one request and titles the manga after whether
+/// `websitebypass.lua` ran for it.
+impl Fixture {
+    /// A fixture whose updater invalidates a one-thread pool, and that pool.
+    fn pooled() -> (Fixture, Arc<WorkerPool>) {
+        let mut f = Fixture::new();
+        let pool = Arc::new(WorkerPool::new(pool_config(&f)).unwrap());
+        f.updater = f.updater.with_pool(pool.clone());
+        (f, pool)
+    }
+
+    /// The title `pool` gets from module `a`'s `GetInfo`.
+    fn title_on(&self, pool: &WorkerPool) -> String {
+        let a = self.modules.current().get("a").unwrap().clone();
+        pool.on(&a).get_info("/m").wait().unwrap().value.info.title
+    }
+}
+
+const BYPASS_PROBE: &str = "function Init() local m = NewWebsiteModule(); m.ID='a'; m.Name='a'; \
+     m.RootURL='https://a'; m.OnGetInfo='GetInfo' end\n\
+     function GetInfo() BYPASSED = false; HTTP.GET('http://site.test/'); \
+     MANGAINFO.Title = BYPASSED and 'bypassed' or 'plain'; return no_error end\n";
+
+/// A `websitebypass.lua` that marks the module state it runs in and fails.
+const WEBSITEBYPASS: &str =
+    "function ____WebsiteBypass(METHOD, URL) BYPASSED = true; return false end\n";
+
+/// A `checkantibot.lua` whose check answers `seen`.
+fn checkantibot(seen: bool) -> String {
+    format!("function ____CheckAntiBot(HTTP) return {seen} end\n")
+}
+
+#[test]
+fn a_synced_checkantibot_is_used_by_the_next_request_without_a_restart() {
+    let (f, pool) = Fixture::pooled();
+    let publish = |commit: &str, etag: &str, check_sha: &str, seen: bool| {
+        f.github.publish(
+            commit,
+            etag,
+            &[
+                ("modules/A.lua", "sa1", BYPASS_PROBE),
+                (
+                    "websitebypass/checkantibot.lua",
+                    check_sha,
+                    &checkantibot(seen),
+                ),
+                ("websitebypass/websitebypass.lua", "sw1", WEBSITEBYPASS),
+            ],
+        );
+    };
+    publish("c1", "\"e1\"", "sc1", false);
+    f.updater.sync().unwrap();
+    let title = || f.title_on(&pool);
+    assert_eq!(title(), "plain");
+    publish("c2", "\"e2\"", "sc2", true);
+
+    f.updater.sync().unwrap();
+
+    // CheckAntiBot now sees a challenge, so `websitebypass.lua` runs
+    // (baseunits/lua/LuaWebsiteBypass.pas:160-172).
+    assert_eq!(title(), "bypassed");
+}
+
+/// Module `a`, whose `GetInfo` makes one request and titles the manga with the FlareSolverr
+/// host `websitebypass.lua` read for it.
+const CONFIG_PROBE: &str = "function Init() local m = NewWebsiteModule(); m.ID='a'; m.Name='a'; \
+     m.RootURL='https://a'; m.OnGetInfo='GetInfo' end\n\
+     function GetInfo() SOLVER = nil; HTTP.GET('http://site.test/'); \
+     MANGAINFO.Title = SOLVER or 'none'; return no_error end\n";
+
+/// A `websitebypass.lua` that reads the config by the relative Windows path `cloudflare.lua`
+/// uses on every bypass (lua/websitebypass/cloudflare.lua:271-325, :341).
+const CONFIG_READING_BYPASS: &str = r#"function ____WebsiteBypass(METHOD, URL)
+  local f = io.open([[lua\websitebypass\websitebypass_config.json]], 'r')
+  if f then SOLVER = f:read('*a'):match('"flaresolverr_ip"%s*:%s*"([^"]*)"'); f:close() end
+  return false
+end
+"#;
+
+#[test]
+fn a_flaresolverr_change_is_read_by_the_next_bypass_without_a_restart() {
+    let (f, pool) = Fixture::pooled();
+    f.github.publish(
+        "c1",
+        "\"e1\"",
+        &[
+            ("modules/A.lua", "sa1", CONFIG_PROBE),
+            ("websitebypass/checkantibot.lua", "sc1", &checkantibot(true)),
+            (
+                "websitebypass/websitebypass.lua",
+                "sw1",
+                CONFIG_READING_BYPASS,
+            ),
+        ],
+    );
+    f.updater.sync().unwrap();
+    let title = || f.title_on(&pool);
+    write_websitebypass_config(&f.lua_dir(), "http://solver-a:8191").unwrap();
+    assert_eq!(title(), "solver-a");
+
+    write_websitebypass_config(&f.lua_dir(), "http://solver-b:8191").unwrap();
+
+    assert_eq!(title(), "solver-b");
+}
+
+#[test]
+fn a_broken_module_from_a_sync_is_never_loaded_by_a_concurrent_job() {
+    let (f, pool) = Fixture::pooled();
+    publish_first(&f.github);
+    f.updater.sync().unwrap();
+    // Its `Init` signals that the update is being loaded, holds it there until released, then
+    // fails; a state built from it titles every manga `BROKEN`.
+    let started = f.dir.path().join("started");
+    let release = f.dir.path().join("release");
+    let broken = format!(
+        "function Init()\n\
+           local s = io.open([[{}]], 'w'); s:close()\n\
+           while not io.open([[{}]], 'r') do end\n\
+           error('broken')\n\
+         end\n\
+         function GetInfo() MANGAINFO.Title = 'BROKEN'; return no_error end\n",
+        started.display(),
+        release.display()
+    );
+    f.github.publish(
+        "c2",
+        "\"e2\"",
+        &[
+            ("modules/A.lua", "sa2", &broken),
+            ("modules/B.lua", "sb1", &module("b", "B1")),
+            ("utils/helper.lua", "sh1", "return {}"),
+        ],
+    );
+
+    let title = std::thread::scope(|scope| {
+        let sync = scope.spawn(|| f.updater.sync().unwrap());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !started.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        // The pool has never run `a`, so its worker compiles the module file now.
+        let a = f.modules.current().get("a").unwrap().clone();
+        let title = pool
+            .on(&a)
+            .get_info("/m")
+            .wait()
+            .map(|r| r.value.info.title);
+        std::fs::write(&release, "").unwrap();
+        sync.join().unwrap();
+        title
+    });
+
+    assert!(started.exists(), "the update's Init never ran");
+    assert_eq!(title.unwrap(), "A1");
+    assert_eq!(f.read("modules/A.lua"), Some(module("a", "A1")));
 }

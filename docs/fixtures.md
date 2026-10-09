@@ -96,6 +96,37 @@ A request with no matching exchange fails like a network error, so `HTTP.GET` re
 The command then exits non-zero and prints `replay: no recorded exchange for <METHOD> <URL>` for
 each such request.
 
+## Subprocesses
+
+`--record` also records every process a module starts through `fmd.subprocess` (after the
+Windows command translation, `lua/utils/nodejs.lua`'s `node` and `npm` runs for instance), and
+`--replay` answers them from the recording without starting anything. A module that runs node
+fetches pages from inside that process, past the recorded HTTP; with its processes replayed it
+runs offline too. The transports behind this are `fmd_lua::subprocess::RecordingSpawner` and
+`ReplaySpawner`.
+
+The calls are kept in `<dir>/subprocess.json`, written only when a process ran (`--record`
+removes the one a previous recording left):
+
+```json
+{
+  "format": 1,
+  "calls": [
+    { "program": "node", "args": ["-v"], "output": { "stdout": "v24.18.0\n", "stderr": "", "status": 0 } }
+  ]
+}
+```
+
+`stdout` and `stderr` are strings when they are UTF-8, else arrays of bytes. A process that
+could not start has `"error": "<message>"` instead of `"output"`. A call is answered by the
+recorded calls with the same program and arguments (not the directory it runs in), in
+recording order, the last one repeating once they're used up, like HTTP exchanges. A call with
+no recording fails to start, so the module sees the program as missing; the command then exits
+non-zero and prints `replay: no recorded call for <PROGRAM ARGS...>` for each.
+
+Files a process writes for the module to read (nodejs.lua's `tmp_cookies.json`) are not
+recorded; the module goes on without them, as when the process writes none.
+
 ## Output
 
 `module info` prints the `OnGetInfo` status and `MANGAINFO` fields as the callback left them, as

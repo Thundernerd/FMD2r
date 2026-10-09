@@ -7,6 +7,9 @@ import type {
 	AccountRequest,
 	FavoritePatch,
 	FavoriteView,
+	Health,
+	ImportOptions,
+	ImportReport,
 	InboxItem,
 	JobState,
 	ListFacets,
@@ -16,8 +19,11 @@ import type {
 	ModuleSummary,
 	NewTask,
 	Problem,
+	FieldProblem,
 	RenamePreview,
-	SaveToSettings,
+	RenamePreviewRequest,
+	SavedSettings,
+	SettingsSave,
 	SearchPage,
 	SeriesInfo,
 	SeriesRef,
@@ -38,14 +44,19 @@ export class ApiError extends Error {
 	}
 }
 
-/** An update the server rejected as invalid (422); `field` names the offending setting. */
+/**
+ * An update the server rejected as invalid (422). `fields` names every offending setting, each
+ * with why; `field` is the first of them.
+ */
 export class ValidationError extends ApiError {
+	readonly field: string | null;
 	constructor(
-		readonly field: string | null,
+		readonly fields: FieldProblem[],
 		readonly detail: string,
 		what: string
 	) {
 		super(422, what, detail);
+		this.field = fields[0]?.field ?? null;
 	}
 }
 
@@ -55,6 +66,12 @@ export type MergePatch =
 
 /** Everything the UI asks of fmd-server. Pages talk to this, never to `fetch` directly. */
 export interface Api {
+	/** Liveness, and whether the server requires the password. Never needs auth. */
+	health(): Promise<Health>;
+	/** Trades the password for a session cookie; resolves to `false` when it is wrong. */
+	login(password: string): Promise<boolean>;
+	/** Ends this browser's session and clears its cookie. */
+	logout(): Promise<void>;
 	listInbox(): Promise<InboxItem[]>;
 	markRead(id: string): Promise<void>;
 	/** The whole download queue, in queue order. */
@@ -73,6 +90,8 @@ export interface Api {
 	reorderTasks(ids: number[]): Promise<void>;
 	/** Where a task's files download from (the archive, or a zip of them all). */
 	taskFilesUrl(id: number): string;
+	/** Where the persisted log files download from, as one JSON-lines file. */
+	logsDownloadUrl(): string;
 	/** The series a manga URL points at, or `null` when no module handles the URL. */
 	resolveUrl(url: string): Promise<SeriesRef | null>;
 	/**
@@ -94,8 +113,13 @@ export interface Api {
 	getSettings(): Promise<Settings>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
 	patchSettings(patch: MergePatch): Promise<Settings>;
-	/** The names a draft's rename templates produce for a sample series. */
-	previewRename(saveto: SaveToSettings): Promise<RenamePreview>;
+	/**
+	 * Applies the settings patch and each module's patch together, all or nothing; rejects with a
+	 * {@link ValidationError} naming every invalid field, prefixed `settings.` or `modules.<id>.`.
+	 */
+	patchAllSettings(patch: SettingsSave): Promise<SavedSettings>;
+	/** The names and path a draft's naming settings give a sample chapter. */
+	previewRename(draft: RenamePreviewRequest): Promise<RenamePreview>;
 	listModules(): Promise<ModuleSummary[]>;
 	getModuleSettings(id: string): Promise<ModuleSettingsView>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
@@ -138,6 +162,13 @@ export interface Api {
 	deleteAccount(module: string): Promise<void>;
 	/** Logs in; resolves once the module's login is done. Rejects with 409 while one runs. */
 	loginAccount(module: string): Promise<AccountInfo>;
+	/**
+	 * Imports a zipped FMD2 `userdata` folder (with `dry_run`, only reports what it would import).
+	 * Resolves once done; progress follows as `job.state` events of the `import` job. Rejects with
+	 * an {@link ApiError} carrying the server's reason: 400 for a bad zip, 409 while an import
+	 * runs, 413 when the zip is too large, 422 for a bad path map or time zone.
+	 */
+	importFmd2(zip: Blob, options: ImportOptions): Promise<ImportReport>;
 }
 
 /** What a task's action buttons do (`POST /api/tasks/{id}/<action>`). */
@@ -152,10 +183,27 @@ export interface ApiOptions {
 	fetch?: (input: Request) => Promise<Response>;
 	/** Overrides where task files download from (mock mode has no server to link to). */
 	taskFilesUrl?: (id: number) => string;
+	/** Overrides where the logs download from (mock mode has no server to link to). */
+	logsDownloadUrl?: () => string;
+	/** Called whenever the server answers 401 to anything but a login attempt. */
+	onUnauthorized?: () => void;
 }
 
-export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}): Api {
-	const client = createClient<paths>({ baseUrl, ...(fetch ? { fetch } : {}) });
+export function createApi({
+	baseUrl = '',
+	fetch = (input) => globalThis.fetch(input),
+	taskFilesUrl,
+	logsDownloadUrl,
+	onUnauthorized
+}: ApiOptions = {}): Api {
+	const client = createClient<paths>({
+		baseUrl,
+		fetch: async (input) => {
+			const res = await fetch(input);
+			if (res.status === 401 && new URL(input.url).pathname !== '/api/login') onUnauthorized?.();
+			return res;
+		}
+	});
 
 	const unwrap = <T>(what: string, res: { data?: T; response: Response }): T => {
 		if (!res.response.ok || res.data === undefined) throw new ApiError(res.response.status, what);
@@ -170,12 +218,28 @@ export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}
 		if (res.response.status === 422) {
 			// The problem body is typed per operation; every 422 here is a `Problem`.
 			const problem = res.error as Partial<Problem> | undefined;
-			throw new ValidationError(problem?.field ?? null, problem?.detail ?? 'Invalid value.', what);
+			const fields =
+				problem?.fields ??
+				(problem?.field ? [{ field: problem.field, detail: problem.detail ?? '' }] : []);
+			throw new ValidationError(fields, problem?.detail ?? 'Invalid value.', what);
 		}
 		return unwrap(what, res);
 	};
 
 	return {
+		async health() {
+			return unwrap('health', await client.GET('/api/health'));
+		},
+		async login(password) {
+			const { response } = await client.POST('/api/login', { body: { password } });
+			if (response.status === 401) return false;
+			if (!response.ok) throw new ApiError(response.status, 'login');
+			return true;
+		},
+		async logout() {
+			const { response } = await client.POST('/api/logout');
+			if (!response.ok) throw new ApiError(response.status, 'logout');
+		},
 		async listInbox() {
 			return unwrap('listInbox', await client.GET('/api/inbox'));
 		},
@@ -244,6 +308,9 @@ export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}
 		taskFilesUrl(id) {
 			return taskFilesUrl ? taskFilesUrl(id) : `${baseUrl}/api/tasks/${id}/files`;
 		},
+		logsDownloadUrl() {
+			return logsDownloadUrl ? logsDownloadUrl() : `${baseUrl}/api/logs/download`;
+		},
 		async resolveUrl(url) {
 			const res = await client.POST('/api/resolve', { body: { url } });
 			if (res.response.status === 404) return null;
@@ -288,8 +355,14 @@ export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}
 		async patchSettings(patch) {
 			return validated('patchSettings', await client.PATCH('/api/settings', { body: patch }));
 		},
-		async previewRename(saveto) {
-			return unwrap('previewRename', await client.POST('/api/preview-rename', { body: saveto }));
+		async patchAllSettings(patch) {
+			return validated(
+				'patchAllSettings',
+				await client.PATCH('/api/settings/all', { body: patch })
+			);
+		},
+		async previewRename(draft) {
+			return unwrap('previewRename', await client.POST('/api/preview-rename', { body: draft }));
 		},
 		async listModules() {
 			return unwrap('listModules', await client.GET('/api/modules'));
@@ -392,6 +465,21 @@ export function createApi({ baseUrl = '', fetch, taskFilesUrl }: ApiOptions = {}
 				'loginAccount',
 				await client.POST('/api/accounts/{module}/login', { params: { path: { module } } })
 			);
+		},
+		async importFmd2(zip, options) {
+			const res = await client.POST('/api/import', {
+				params: { query: options },
+				// The body is the zip itself, sent as is.
+				body: zip as unknown as string,
+				bodySerializer: (body) => body,
+				headers: { 'content-type': 'application/zip' }
+			});
+			if (!res.response.ok || res.data === undefined) {
+				// Every error here is a `Problem`.
+				const problem = res.error as Partial<Problem> | undefined;
+				throw new ApiError(res.response.status, 'importFmd2', problem?.detail ?? null);
+			}
+			return res.data;
 		}
 	};
 }

@@ -9,7 +9,7 @@ publish = false
 [features]
 # Builds the `fpc` XPath backend too (needs `fpc`, see crates/xpath-fpc/README.md), for
 # `xpath.backend = "fpc"`, `fmd2r xpath eval --backend fpc` and `fmd2r xpath diff`.
-xpath-fpc = ["fmd-lua/xpath-fpc", "fmd-xpath/fpc"]
+xpath-fpc = ["fmd-lua/xpath-fpc", "fmd-server/xpath-fpc", "fmd-xpath/fpc"]
 
 [dependencies]
 anyhow.workspace = true

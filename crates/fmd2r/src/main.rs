@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
-use fmd_import::{ImportOptions, PathMap};
+use fmd_import::{ImportOptions, PathMap, TimeZone};
 use fmd_server::{EventBus, LogBuffer, ServeConfig};
 use fmd_store::{ACCOUNTS_KEY_FILE, AppDb, KeyFileCipher};
 use module::ModuleCommand;
@@ -84,6 +84,10 @@ struct ImportArgs {
     /// Queue tasks FMD2 was running as waiting, so they resume, instead of stopped.
     #[arg(long)]
     resume: bool,
+    /// The IANA time zone FMD2 ran in, e.g. 'Europe/Amsterdam': FMD2 stores local times without a
+    /// zone. This machine's zone by default.
+    #[arg(long, value_name = "ZONE")]
+    timezone: Option<TimeZone>,
 }
 
 /// Log lines kept for `GET /api/logs`.
@@ -144,6 +148,7 @@ fn import(args: ImportArgs) -> anyhow::Result<()> {
         dry_run: args.dry_run,
         resume_in_progress: args.resume,
         path_maps: args.map_path,
+        timezone: args.timezone.unwrap_or_default(),
     };
     let report = fmd_import::import(&args.from, &db, &cipher, &opts)
         .with_context(|| format!("importing {}", args.from.display()))?;

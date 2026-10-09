@@ -330,7 +330,10 @@ impl Inner {
         }
     }
 
-    /// `CheckAndActiveTaskAtStartup` (baseunits/uDownloadsManager.pas:1859-1893).
+    /// `CheckAndActiveTaskAtStartup` (baseunits/uDownloadsManager.pas:1859-1893). FMD2
+    /// resumes Downloading, Preparing and Waiting tasks; a process killed while converting or
+    /// packing leaves its task Converting or Compressing, so those resume too
+    /// (docs/tickets/T44-download-hard-crash-resume.md).
     pub(super) fn check_and_active_task_at_startup(self: &Arc<Self>) -> Result<(), EngineError> {
         let max = self.settings().connections.max_parallel_tasks;
         let mut started = 0;
@@ -339,7 +342,11 @@ impl Inner {
             for task in self.config.db.tasks().list()? {
                 if !matches!(
                     task.status,
-                    TaskStatus::Downloading | TaskStatus::Preparing | TaskStatus::Waiting
+                    TaskStatus::Downloading
+                        | TaskStatus::Preparing
+                        | TaskStatus::Waiting
+                        | TaskStatus::Converting
+                        | TaskStatus::Compressing
                 ) {
                     continue;
                 }
@@ -622,7 +629,7 @@ pub(crate) fn rename_options(saveto: &SaveToSettings) -> fmd_pack::RenameOptions
 
 /// A chapter's name: the chapter template with `%NUMBERING%` as four digits
 /// (mangadownloader/forms/frmMain.pas:2666-2675).
-fn chapter_name(
+pub(super) fn chapter_name(
     saveto: &SaveToSettings,
     website: &str,
     download: &NewDownload,
@@ -642,6 +649,23 @@ fn chapter_name(
     custom_rename(&saveto.chapter_rename, &ctx, &rename_options(saveto))
 }
 
+/// The manga folder's name: the manga template renamed for the download
+/// (mangadownloader/forms/frmMain.pas:2694-2703).
+pub(super) fn manga_folder(
+    saveto: &SaveToSettings,
+    website: &str,
+    download: &NewDownload,
+) -> String {
+    let ctx = RenameContext {
+        website,
+        manga: &download.title,
+        author: &download.authors,
+        artist: &download.artists,
+        ..RenameContext::default()
+    };
+    custom_rename(&saveto.manga_rename, &ctx, &rename_options(saveto))
+}
+
 /// The task's directory: the given or default download directory, plus the manga folder when
 /// generated and not already part of it, without trailing dots
 /// (mangadownloader/forms/frmMain.pas:2685-2710).
@@ -651,14 +675,7 @@ pub(crate) fn save_to(saveto: &SaveToSettings, website: &str, download: &NewDown
         dir => dir.to_owned(),
     };
     if saveto.generate_manga_folder {
-        let ctx = RenameContext {
-            website,
-            manga: &download.title,
-            author: &download.authors,
-            artist: &download.artists,
-            ..RenameContext::default()
-        };
-        let folder = custom_rename(&saveto.manga_rename, &ctx, &rename_options(saveto));
+        let folder = manga_folder(saveto, website, download);
         if !dir.contains(&folder) {
             dir = Path::new(&dir).join(folder).to_string_lossy().into_owned();
         }

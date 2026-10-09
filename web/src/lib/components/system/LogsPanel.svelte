@@ -118,6 +118,13 @@
 				type="button"
 				onclick={() => copy(view.text(), `${view.shown.length} lines`)}>Copy</button
 			>
+			<a
+				class="btn sm"
+				href={api.logsDownloadUrl()}
+				download="fmd2r-logs.jsonl"
+				title="Every log line kept on disk, including those from before the last restart"
+				>Download logs</a
+			>
 		</div>
 	</div>
 

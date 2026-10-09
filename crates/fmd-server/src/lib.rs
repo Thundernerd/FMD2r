@@ -8,10 +8,13 @@ mod error;
 mod events;
 mod favorites;
 mod health;
+mod import;
 mod inbox;
 mod jobs;
 mod lists;
+mod log_files;
 mod logs;
+mod lua_catalog;
 mod module_settings;
 mod module_updates;
 mod series;
@@ -35,8 +38,10 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange};
-pub use covers::{CoverConfig, CoverModules, CoverSession, cover_url};
-pub use error::{ApiError, Problem};
+pub use covers::{
+    CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
+};
+pub use error::{ApiError, FieldProblem, Problem};
 pub use events::{
     EventBus, JobState, ServerEvent, TaskProgress, TaskRemoved, TaskState, TaskStatusChange,
     TasksReordered,
@@ -44,8 +49,10 @@ pub use events::{
 pub use favorites::{AddFavorite, CheckRequest, FavoriteFilter, FavoritePatch, FavoriteView};
 pub use fmd_core::jobs::JobPhase;
 pub use fmd_core::lists::{ListEvent, ListEventKind};
+pub use import::ImportLimits;
 pub use inbox::{InboxItem, InboxKind};
 pub use lists::{FacetValue, ListFacets, ListItem, ListJobStarted, SearchPage};
+pub use log_files::{LogRotation, LogWriter};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
 pub use series::{ChapterInfo, ResolveRequest, SeriesInfo, SeriesRef, SeriesStatus};
@@ -53,7 +60,7 @@ pub use serve::{ServeConfig, ServeError, serve};
 pub use services::{
     DownloadEngine, FavoritesJobs, Idle, LoadFailure, ModuleCatalog, ModulesReport,
 };
-pub use settings::RenamePreview;
+pub use settings::{RenamePreview, SavedSettings, SettingsSave};
 pub use spa::{Assets, EmbeddedAssets};
 pub use state::AppState;
 pub use tasks::{
@@ -87,23 +94,28 @@ fn public_api() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::health))
         .routes(routes!(auth::login))
+        .routes(routes!(auth::logout))
 }
 
 /// Routes behind the auth layer (when auth is configured).
 fn protected_api() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .routes(routes!(auth::revoke_all))
         .routes(routes!(events::stream))
         .routes(routes!(inbox::list))
         .routes(routes!(inbox::mark_read))
         .routes(routes!(logs::list))
+        .routes(routes!(logs::download))
         .routes(routes!(jobs::list))
         .routes(routes!(jobs::get))
         .routes(routes!(jobs::update_modules))
         .routes(routes!(jobs::run))
         .routes(routes!(jobs::cancel))
         .routes(routes!(about::about))
+        .routes(routes!(import::import))
         .routes(routes!(covers::get))
         .routes(routes!(settings::get, settings::patch))
+        .routes(routes!(settings::patch_all))
         .routes(routes!(settings::preview_rename))
         .routes(routes!(module_settings::list))
         .routes(routes!(module_settings::get, module_settings::patch))

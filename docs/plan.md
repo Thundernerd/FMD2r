@@ -114,7 +114,7 @@ web/           SvelteKit (Svelte 5, adapter-static SPA), API client generated fr
 
 **`lists.db`** holds a single `masterlist(module_id, link, title, alttitles, authors, artists, genres, status, summary, numchapter, added_jdn)` table with FTS5. One table avoids FMD2's limit of 125 `ATTACH`ed site DBs. FMD2-DB prebuilt `<site>.7z` files are downloaded, extracted (`sevenz-rust`) and bulk-imported into it.
 
-The importer reads FMD2's schemas (documented from `DownloadsDB.pas`, `FavoritesDB.pas`, `DownloadedChaptersDB.pas`, `DBDataProcess.pas`) and `modules.json`. Account passwords are decrypted with the `EncryptString` key from `uBaseUnit.pas:1556-1587`.
+The importer reads FMD2's schemas (documented from `DownloadsDB.pas`, `FavoritesDB.pas`, `DownloadedChaptersDB.pas`, `DBDataProcess.pas`) and `modules.json`. Account passwords are decrypted with the `EncryptString` key from `uBaseUnit.pas:1556-1587`. It runs as `fmd2r import` on a stopped server, or as `POST /api/import` (the Library page's "Import from FMD2") with the `userdata` folder zipped; the upload is size-limited and extracted to a temp dir, and the import runs as the `import` job. FMD2's timestamps are local time without a zone, read in a chosen IANA zone (the server's by default) (T47).
 
 ## Download engine (fmd-core, mirrors `uDownloadsManager.pas`)
 
@@ -232,6 +232,7 @@ Found by reading every merged PR's notes after T35. Wiring first: T37 → T38 �
 | T49 | arm64 images now that the native XPath backend is the default | — |
 | T50 | Verify the JS engine against Duktape on the untested cases | — |
 | T51 | Sign off decisions flagged in the merged PRs (owner: maintainer) | — |
+| T52 | A numeric `fmd.env.Revision` (found by T42; MangaHub needs it) | — |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:

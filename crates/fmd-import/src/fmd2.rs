@@ -7,6 +7,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use crate::ImportOptions;
 use crate::error::ImportError;
 
 /// Opens an FMD2 database read-only, or `None` when the file does not exist.
@@ -88,7 +89,7 @@ pub(crate) fn sql_bool(value: ValueRef<'_>) -> bool {
     }
 }
 
-/// Unix milliseconds of a DATETIME column, or `None` when it is empty, unreadable or FMD2's zero
+/// Milliseconds since 1970-01-01 on FMD2's local clock (see [`wall_clock_to_utc`]) of a DATETIME column, or `None` when it is empty, unreadable or FMD2's zero
 /// date (`TDateTime` 0, 1899-12-30).
 ///
 /// FMD2 writes `'YYYY-MM-DD hh:nn:ss.zzz'` (`PrepSQLValue`, baseunits/SQLiteData.pas:159-167);
@@ -102,6 +103,12 @@ pub(crate) fn datetime(value: ValueRef<'_>) -> Option<i64> {
     }
 }
 
+/// Unix milliseconds of a wall-clock time read by [`datetime`] or [`parse_datetime_text`], in
+/// the zone FMD2 ran in.
+pub(crate) fn wall_clock_to_utc(wall_clock: Option<i64>, opts: &ImportOptions) -> Option<i64> {
+    opts.timezone.to_utc(wall_clock?)
+}
+
 /// Days from 1899-12-30 (`TDateTime` 0) to 1970-01-01.
 const TDATETIME_UNIX_EPOCH: f64 = 25_569.0;
 
@@ -112,7 +119,8 @@ pub(crate) fn tdatetime_to_ms(days: f64) -> Option<i64> {
     Some(((days - TDATETIME_UNIX_EPOCH) * 86_400_000.0).round() as i64)
 }
 
-/// `YYYY-MM-DD[ T]hh:nn[:ss[.zzz]]` or `YYYY-MM-DD`, as UTC.
+/// `YYYY-MM-DD[ T]hh:nn[:ss[.zzz]]` or `YYYY-MM-DD`, as milliseconds since 1970-01-01 on the same
+/// clock.
 pub(crate) fn parse_iso_datetime(s: &str) -> Option<i64> {
     let (date, time) = match s.find([' ', 'T']) {
         Some(i) => (&s[..i], s[i + 1..].trim()),
@@ -178,7 +186,7 @@ pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> Option<i64> {
     Some(era * 146_097 + doe - 719_468)
 }
 
-/// Unix milliseconds of a `TDateTime` written as text by `DateTimeToStr`, whose date format
+/// Milliseconds since 1970-01-01 on FMD2's local clock of a `TDateTime` written as text by `DateTimeToStr`, whose date format
 /// follows the Windows locale FMD2 ran under: ISO `YYYY-MM-DD`, or `D-M-YYYY`/`D.M.YYYY` and
 /// `M/D/YYYY` (swapped when the first field cannot be the month), each optionally followed by a
 /// time. A plain number is a `TDateTime`.

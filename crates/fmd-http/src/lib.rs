@@ -33,7 +33,7 @@ pub use session::{HttpSession, SessionHook, USER_AGENT_DEFAULT, USER_AGENT_SYNAP
 pub use strings::NameValueList;
 pub use terminate::TerminateToken;
 pub use transport::{
-    BoxFuture, Proxy, ProxyKind, Transport, TransportError, WireRequest, WireResponse,
+    BoxFuture, ConnectTo, Proxy, ProxyKind, Transport, TransportError, WireRequest, WireResponse,
 };
 pub use url::split_url_bytes;
 
