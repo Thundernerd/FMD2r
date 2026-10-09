@@ -80,6 +80,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/check-folders': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Check whether folders exist and are writable by the server (T74), for the destinations'
+		 *     warnings. Relative paths resolve against the server's working directory, as downloads do.
+		 */
+		post: operations['checkFolders'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/covers': {
 		parameters: {
 			query?: never;
@@ -545,7 +565,7 @@ export interface paths {
 		head?: never;
 		/**
 		 * Update a module's settings with a JSON merge patch (RFC 7396) over `enabled`, `limits`,
-		 *     `http` and `options` (option values keyed by `key`; `null` resets one to its default).
+		 *     `http`, `save_to` and `options` (option values keyed by `key`; `null` resets one to its default).
 		 *     Nothing is stored unless the whole patch is valid.
 		 */
 		patch: operations['patchModuleSettings'];
@@ -582,6 +602,27 @@ export interface paths {
 		put?: never;
 		/** Find the module that handles a manga URL. */
 		post: operations['resolveUrl'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/save-folder': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * The folder a download of the series would be saved in with the saved settings, the manga
+		 *     folder included: what `POST /api/tasks` stores as the task's `save_to`
+		 *     (mangadownloader/forms/frmMain.pas:2685-2710).
+		 */
+		post: operations['saveFolder'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -1076,6 +1117,13 @@ export interface components {
 			bytes?: number | null;
 			name: string;
 		};
+		/** @description A named download folder. */
+		Destination: {
+			/** @description Whether downloads go here when neither the user nor the website picks a folder. */
+			default?: boolean;
+			name: string;
+			path: string;
+		};
 		/** @description How many matching titles carry a genre or status. */
 		FacetValue: {
 			/** Format: int64 */
@@ -1190,6 +1238,20 @@ export interface components {
 			detail: string;
 			/** @description The setting as a dotted path, like [`Problem::field`]. */
 			field: string;
+		};
+		/** @description Whether downloads can be saved in one folder. */
+		FolderCheck: {
+			path: string;
+			/**
+			 * @description Why downloads can't be saved there now, or `None` when they can. A missing folder is
+			 *     created by the first download into it, so this is a warning, not an error: a disk may be
+			 *     unmounted for a while.
+			 */
+			problem?: string | null;
+		};
+		/** @description Folders to check, such as the destinations of a settings draft. */
+		FolderCheckRequest: {
+			paths: string[];
 		};
 		GeneralSettings: {
 			/**
@@ -1604,6 +1666,12 @@ export interface components {
 			name: string;
 			/** @description The options the module declares with `AddOption*`, in declaration order. */
 			options: components['schemas']['ModuleOptionSetting'][];
+			/**
+			 * @description The folder the website's downloads go to when the user picks none; empty for the default
+			 *     destination (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50).
+			 *     Applies whether or not `enabled` is set.
+			 */
+			save_to: string;
 		};
 		/**
 		 * @description A loaded module, for the module pickers.
@@ -1619,7 +1687,8 @@ export interface components {
 			/**
 			 * @description Whether its settings differ from the defaults: an option's value is not the one it
 			 *     declares, or its overrides are on (`Settings.Enabled`,
-			 *     baseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting.
+			 *     baseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting, or it has
+			 *     its own download folder.
 			 */
 			customized: boolean;
 			id: string;
@@ -1813,6 +1882,13 @@ export interface components {
 			 *       "convert_digit_chapter": true,
 			 *       "convert_digit_volume": true,
 			 *       "default_dir": "downloads",
+			 *       "destinations": [
+			 *         {
+			 *           "default": true,
+			 *           "name": "Downloads",
+			 *           "path": "downloads"
+			 *         }
+			 *       ],
 			 *       "digit_chapter_length": 3,
 			 *       "digit_volume_length": 2,
 			 *       "filename_rename": "%FILENAME%",
@@ -1830,6 +1906,19 @@ export interface components {
 		/** @description A manga URL to resolve. */
 		ResolveRequest: {
 			url: string;
+		};
+		/** @description The folder a download is saved in. */
+		SaveFolder: {
+			folder: string;
+		};
+		/** @description A download whose folder to show before it is queued. */
+		SaveFolderRequest: {
+			artists?: string;
+			authors?: string;
+			module_id: string;
+			/** @description The folder the user picked; the website's or the default destination when empty. */
+			save_to?: string;
+			title: string;
 		};
 		/**
 		 * @description Where and under which names downloads are saved. The templates take the tokens `%MANGA%`,
@@ -1854,11 +1943,28 @@ export interface components {
 			 */
 			convert_digit_volume: boolean;
 			/**
-			 * @description Download directory; empty resets to the default (`saveto/SaveTo`, `DEFAULT_PATH`,
-			 *     baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886).
+			 * @description The default destination's path (`saveto/SaveTo`, `DEFAULT_PATH`,
+			 *     baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for API
+			 *     clients that predate [`Self::destinations`]: it always mirrors the default's path, and
+			 *     a patch that changes it alone moves the default destination there. Empty resets it to
+			 *     the default.
 			 * @default downloads
 			 */
 			default_dir: string;
+			/**
+			 * @description The named download folders a download can go to, one of them the default. No FMD2
+			 *     counterpart: FMD2 has one folder (`saveto/SaveTo`) plus a per-website override
+			 *     (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names are
+			 *     unique (ignoring case and surrounding spaces) and not empty; paths are not empty.
+			 * @default [
+			 *       {
+			 *         "default": true,
+			 *         "name": "Downloads",
+			 *         "path": "downloads"
+			 *       }
+			 *     ]
+			 */
+			destinations: components['schemas']['Destination'][];
 			/**
 			 * Format: int32
 			 * @description `saveto/DigitChapterLength`, default 3 (mangadownloader/forms/frmMain.pas:5911). Range
@@ -2103,6 +2209,13 @@ export interface components {
 			 *       "convert_digit_chapter": true,
 			 *       "convert_digit_volume": true,
 			 *       "default_dir": "downloads",
+			 *       "destinations": [
+			 *         {
+			 *           "default": true,
+			 *           "name": "Downloads",
+			 *           "path": "downloads"
+			 *         }
+			 *       ],
 			 *       "digit_chapter_length": 3,
 			 *       "digit_volume_length": 2,
 			 *       "filename_rename": "%FILENAME%",
@@ -2589,6 +2702,39 @@ export interface operations {
 			};
 			/** @description The module has no login, or a login is already running */
 			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	checkFolders: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['FolderCheckRequest'];
+			};
+		};
+		responses: {
+			/** @description One check per path, in order */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['FolderCheck'][];
+				};
+			};
+			/** @description Malformed body */
+			400: {
 				headers: {
 					[name: string]: unknown;
 				};
@@ -3715,6 +3861,38 @@ export interface operations {
 			};
 			/** @description No module handles this URL */
 			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	saveFolder: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['SaveFolderRequest'];
+			};
+		};
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SaveFolder'];
+				};
+			};
+			/** @description Malformed body */
+			400: {
 				headers: {
 					[name: string]: unknown;
 				};

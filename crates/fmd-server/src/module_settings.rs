@@ -44,7 +44,8 @@ pub struct ModuleSummary {
     pub list_job_running: bool,
     /// Whether its settings differ from the defaults: an option's value is not the one it
     /// declares, or its overrides are on (`Settings.Enabled`,
-    /// baseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting.
+    /// baseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting, or it has
+    /// its own download folder.
     pub customized: bool,
 }
 
@@ -62,6 +63,10 @@ pub struct ModuleSettingsView {
     /// The limits the module itself declares; 0 means unlimited.
     pub module_limits: ModuleLimits,
     pub http: HttpOverridesView,
+    /// The folder the website's downloads go to when the user picks none; empty for the default
+    /// destination (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50).
+    /// Applies whether or not `enabled` is set.
+    pub save_to: String,
 }
 
 /// One declared option, its default and the value `MODULE.GetOption` returns for it.
@@ -166,6 +171,7 @@ impl ModuleSettingsView {
             limits: overrides.limits,
             module_limits: module.limits,
             http: overrides.http.into(),
+            save_to: overrides.save_to,
         }
     }
 }
@@ -226,7 +232,9 @@ fn customized(module: ModuleInfo, overrides: ModuleOverrides) -> bool {
         && (overrides.limits != LimitOverrides::default()
             || overrides.http != HttpOverrides::default()
             || module.limits.max_connection_limit != 0);
-    overridden || ModuleSettingsView::new(module, overrides).options_changed()
+    overridden
+        || !overrides.save_to.is_empty()
+        || ModuleSettingsView::new(module, overrides).options_changed()
 }
 
 /// The overrides stored for each module that has any. A module whose overrides fail to load is
@@ -268,7 +276,7 @@ pub(crate) async fn get(
 }
 
 /// Update a module's settings with a JSON merge patch (RFC 7396) over `enabled`, `limits`,
-/// `http` and `options` (option values keyed by `key`; `null` resets one to its default).
+/// `http`, `save_to` and `options` (option values keyed by `key`; `null` resets one to its default).
 /// Nothing is stored unless the whole patch is valid.
 #[utoipa::path(patch, path = "/api/modules/{id}/settings", tag = "modules",
     operation_id = "patchModuleSettings",

@@ -10,12 +10,13 @@
 use std::path::Path;
 
 use fmd_core::settings::{
-    HttpOverrides, LimitOverrides, ModuleOverrides, ProxyOverride, ProxyOverrideType,
+    Destination, HttpOverrides, LimitOverrides, ModuleOverrides, ProxyOverride, ProxyOverrideType,
+    SettingsService,
 };
 use fmd_http::Cookie;
 use fmd_lua::crypto::decrypt_string;
 use fmd_store::{Account, AccountStatus, AppDb, Cipher};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::ImportOptions;
 use crate::error::ImportError;
@@ -23,6 +24,7 @@ use crate::fmd2::{
     json_bool, json_int, json_text, parse_datetime_text, read_json, tdatetime_to_ms,
     wall_clock_to_utc,
 };
+use crate::paths::translate;
 use crate::report::{ImportReport, SkipReason, Unmapped};
 
 const SOURCE: &str = "modules.json";
@@ -116,6 +118,7 @@ fn account_status(value: Option<&Value>) -> AccountStatus {
 fn overrides(
     module_id: &str,
     entry: &Map<String, Value>,
+    opts: &ImportOptions,
     report: &mut ImportReport,
 ) -> ModuleOverrides {
     let empty = Map::new();
@@ -132,10 +135,6 @@ fn overrides(
             "Settings.UpdateListDirectoryPageNumber",
             get(settings, "UpdateListDirectoryPageNumber"),
         ),
-        (
-            "Settings.OverrideSettings.SaveToPath",
-            object(settings, "OverrideSettings").and_then(|o| get(o, "SaveToPath")),
-        ),
     ];
     for (key, value) in unmapped {
         let value = string(value);
@@ -148,8 +147,16 @@ fn overrides(
         }
     }
 
+    let save_to = string(object(settings, "OverrideSettings").and_then(|o| get(o, "SaveToPath")));
+    let save_to = if save_to.trim().is_empty() {
+        String::new()
+    } else {
+        translate(&opts.path_maps, &save_to, report)
+    };
+
     ModuleOverrides {
         enabled: boolean(get(settings, "Enabled")),
+        save_to,
         limits: LimitOverrides {
             max_task_limit: limit(get(settings, "MaxTaskLimit")),
             max_thread_per_task_limit: limit(get(settings, "MaxThreadPerTaskLimit")),
@@ -215,15 +222,18 @@ fn account(module_id: &str, a: &Map<String, Value>) -> Result<Account, String> {
     })
 }
 
+/// Imports each module's settings, option values, cookies and account; returns the download
+/// folders of the modules whose settings were imported, for [`add_destinations`].
 pub(crate) fn import(
     entries: Option<&[Map<String, Value>]>,
     db: &AppDb,
     cipher: &dyn Cipher,
     opts: &ImportOptions,
     report: &mut ImportReport,
-) -> Result<(), ImportError> {
+) -> Result<Vec<String>, ImportError> {
+    let mut folders = Vec::new();
     let Some(entries) = entries else {
-        return Ok(());
+        return Ok(folders);
     };
     report.module_settings.found = true;
     report.accounts.found = true;
@@ -239,7 +249,7 @@ pub(crate) fn import(
             continue;
         }
 
-        let overrides = overrides(&module_id, entry, report);
+        let overrides = overrides(&module_id, entry, opts, report);
         let cookies: Vec<Cookie> = get(entry, "Cookies")
             .and_then(Value::as_array)
             .map(|a| {
@@ -267,6 +277,9 @@ pub(crate) fn import(
                     }
                 }
                 report.module_settings.imported += 1;
+                if !overrides.save_to.is_empty() {
+                    folders.push(overrides.save_to.clone());
+                }
             }
         }
 
@@ -299,6 +312,52 @@ pub(crate) fn import(
             accounts.upsert(&account)?;
         }
         report.accounts.imported += 1;
+    }
+    Ok(folders)
+}
+
+/// Makes each website download folder in `folders` that no destination has yet a destination
+/// (T74), named after its last path component, numbered when that name is taken. A path that
+/// differs only by trailing separators is the same folder.
+pub(crate) fn add_destinations(
+    settings: &SettingsService,
+    folders: &[String],
+    opts: &ImportOptions,
+) -> Result<(), ImportError> {
+    let same =
+        |a: &str, b: &str| a.trim_end_matches(['/', '\\']) == b.trim_end_matches(['/', '\\']);
+    let mut destinations = settings.get().saveto.destinations.clone();
+    let before = destinations.len();
+    for folder in folders {
+        if destinations.iter().any(|d| same(&d.path, folder)) {
+            continue;
+        }
+        let base = folder
+            .trim_end_matches(['/', '\\'])
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|name| !name.is_empty())
+            .unwrap_or(folder)
+            .to_string();
+        let taken = |name: &str| {
+            destinations
+                .iter()
+                .any(|d| d.name.eq_ignore_ascii_case(name))
+        };
+        let mut name = base.clone();
+        let mut n = 2;
+        while taken(&name) {
+            name = format!("{base} {n}");
+            n += 1;
+        }
+        destinations.push(Destination {
+            name,
+            path: folder.clone(),
+            default: false,
+        });
+    }
+    if destinations.len() != before && !opts.dry_run {
+        settings.update(json!({ "saveto": { "destinations": destinations } }))?;
     }
     Ok(())
 }

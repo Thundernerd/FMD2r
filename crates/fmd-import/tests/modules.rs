@@ -4,7 +4,8 @@
 mod common;
 
 use common::{App, Fmd2};
-use fmd_core::settings::{ModuleOverrides, ProxyOverrideType};
+use fmd_core::settings::{Destination, ModuleOverrides, ProxyOverrideType, SettingsService};
+use fmd_import::ImportOptions;
 use fmd_store::{AccountStatus, Cipher};
 use serde_json::json;
 
@@ -140,10 +141,67 @@ fn module_settings_options_and_cookies_are_imported() {
     assert_eq!(c.expires, Some(1_893_553_445));
     assert!(c.http_only && c.secure && !c.host_only);
 
-    // The per-module save path has no FMD2r counterpart.
-    assert!(report.unmapped.iter().any(|u| u.source == "modules.json"
-        && u.key == format!("{MANGADEX} Settings.OverrideSettings.SaveToPath")
-        && u.value == "D:\\Dex"));
+    // The per-module save path is the website's destination (T74).
+    assert_eq!(o.save_to, "D:\\Dex");
+    assert!(!report.unmapped.iter().any(|u| u.key.contains("SaveToPath")));
+}
+
+/// FMD2's per-module `OverrideSettings.SaveToPath` (baseunits/WebsiteModulesSettings.pas:50),
+/// which `OverrideSaveTo` puts in the "Save to" box (mangadownloader/forms/frmMain.pas:5631-5643),
+/// becomes the website's destination: a destination per distinct path, through the path maps.
+#[test]
+fn a_modules_save_path_becomes_its_website_destination() {
+    let fmd2 = Fmd2::new();
+    let module = |id: &str, path: &str| json!({ "ID": id, "Settings": { "OverrideSettings": { "SaveToPath": path } } });
+    fmd2.file(
+        "modules.json",
+        &json!([
+            module(MANGADEX, "D:\\Manhwa"),
+            module(PLAIN, "d:\\manhwa\\"),
+            module("third", "D:\\Manga"),
+            module("fourth", ""),
+        ])
+        .to_string(),
+    );
+    fmd2.file("settings.json", r#"{"saveto":{"SaveTo":"D:\\Manga"}}"#);
+    let app = App::new();
+
+    let report = app.import_with(
+        &fmd2,
+        &ImportOptions {
+            path_maps: vec!["D:\\=/data/".parse().unwrap()],
+            ..ImportOptions::default()
+        },
+    );
+
+    let repo = app.db.module_settings();
+    let save_to = |id: &str| ModuleOverrides::load(&repo, id).unwrap().save_to;
+    assert_eq!(save_to(MANGADEX), "/data/Manhwa");
+    assert_eq!(save_to(PLAIN), "/data/manhwa/");
+    assert_eq!(save_to("third"), "/data/Manga");
+    assert_eq!(save_to("fourth"), "");
+    let destinations = SettingsService::load(app.db.clone())
+        .unwrap()
+        .get()
+        .saveto
+        .destinations
+        .clone();
+    let destination = |name: &str, path: &str, default| Destination {
+        name: name.into(),
+        path: path.into(),
+        default,
+    };
+    // The default destination is the download folder; the website folders that are not a
+    // destination yet become one each, named after the folder.
+    assert_eq!(
+        destinations,
+        [
+            destination("Downloads", "/data/Manga", true),
+            destination("Manhwa", "/data/Manhwa", false),
+            destination("manhwa 2", "/data/manhwa/", false),
+        ]
+    );
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
 }
 
 #[test]

@@ -768,3 +768,41 @@ async fn a_changed_user_agent_is_sent_by_new_sessions() {
         .patch_settings_until(patch, || last_user_agent() == "After/2.0")
         .await;
 }
+
+/// A library series keeps its folder (`TFavoriteInfo.SaveTo`); changing it (`UpdateSaveTo`,
+/// baseunits/FavoritesDB.pas:136-160) makes the chapters its next check queues go there (T74).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_library_series_moved_to_another_destination_downloads_there_next() {
+    let server = Server::start_with(json!({
+        "favorites": { "check_at_startup": false, "auto_download": true },
+        "saveto": { "destinations": [
+            { "name": "Manga", "path": "/data/manga", "default": true },
+            { "name": "Manhwa", "path": "/data/manhwa" },
+        ] },
+    }))
+    .await;
+    server.add_saga_to_the_library().await;
+    let library = server.get_json("/api/favorites").await;
+    let favorite = &library.as_array().unwrap()[0];
+    assert_eq!(
+        favorite["save_to"], "/data/manga/The Stub Saga",
+        "{library}"
+    );
+
+    let id = favorite["id"].as_i64().unwrap();
+    let patched = server
+        .send_json(
+            reqwest::Method::PATCH,
+            &format!("/api/favorites/{id}"),
+            json!({ "save_to": "/data/manhwa/The Stub Saga" }),
+        )
+        .await;
+    assert_eq!(patched["save_to"], "/data/manhwa/The Stub Saga");
+    server.site.chapter_3.store(true, Ordering::SeqCst);
+    server.check_favorites().await;
+
+    let tasks = server.get_json("/api/tasks").await;
+    let items = tasks["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "{tasks}");
+    assert_eq!(items[0]["save_to"], "/data/manhwa/The Stub Saga");
+}

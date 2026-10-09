@@ -212,6 +212,50 @@
         }
       }
     },
+    "/api/check-folders": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Check whether folders exist and are writable by the server (T74), for the destinations'\nwarnings. Relative paths resolve against the server's working directory, as downloads do.",
+        "operationId": "checkFolders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "One check per path, in order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FolderCheck"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/covers": {
       "get": {
         "tags": [
@@ -1563,7 +1607,7 @@
         "tags": [
           "modules"
         ],
-        "summary": "Update a module's settings with a JSON merge patch (RFC 7396) over `enabled`, `limits`,\n`http` and `options` (option values keyed by `key`; `null` resets one to its default).\nNothing is stored unless the whole patch is valid.",
+        "summary": "Update a module's settings with a JSON merge patch (RFC 7396) over `enabled`, `limits`,\n`http`, `save_to` and `options` (option values keyed by `key`; `null` resets one to its default).\nNothing is stored unless the whole patch is valid.",
         "operationId": "patchModuleSettings",
         "parameters": [
           {
@@ -1705,6 +1749,47 @@
           },
           "404": {
             "description": "No module handles this URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/save-folder": {
+      "post": {
+        "tags": [
+          "series"
+        ],
+        "summary": "The folder a download of the series would be saved in with the saved settings, the manga\nfolder included: what `POST /api/tasks` stores as the task's `save_to`\n(mangadownloader/forms/frmMain.pas:2685-2710).",
+        "operationId": "saveFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveFolderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveFolder"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body",
             "content": {
               "application/json": {
                 "schema": {
@@ -2889,6 +2974,26 @@
           }
         }
       },
+      "Destination": {
+        "type": "object",
+        "description": "A named download folder.",
+        "required": [
+          "name",
+          "path"
+        ],
+        "properties": {
+          "default": {
+            "type": "boolean",
+            "description": "Whether downloads go here when neither the user nor the website picks a folder."
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
       "FacetValue": {
         "type": "object",
         "description": "How many matching titles carry a genre or status.",
@@ -3128,6 +3233,40 @@
           "field": {
             "type": "string",
             "description": "The setting as a dotted path, like [`Problem::field`]."
+          }
+        }
+      },
+      "FolderCheck": {
+        "type": "object",
+        "description": "Whether downloads can be saved in one folder.",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "problem": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why downloads can't be saved there now, or `None` when they can. A missing folder is\ncreated by the first download into it, so this is a warning, not an error: a disk may be\nunmounted for a while."
+          }
+        }
+      },
+      "FolderCheckRequest": {
+        "type": "object",
+        "description": "Folders to check, such as the destinations of a settings draft.",
+        "required": [
+          "paths"
+        ],
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -4000,7 +4139,8 @@
           "options",
           "limits",
           "module_limits",
-          "http"
+          "http",
+          "save_to"
         ],
         "properties": {
           "enabled": {
@@ -4030,6 +4170,10 @@
               "$ref": "#/components/schemas/ModuleOptionSetting"
             },
             "description": "The options the module declares with `AddOption*`, in declaration order."
+          },
+          "save_to": {
+            "type": "string",
+            "description": "The folder the website's downloads go to when the user picks none; empty for the default\ndestination (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50).\nApplies whether or not `enabled` is set."
           }
         }
       },
@@ -4056,7 +4200,7 @@
           },
           "customized": {
             "type": "boolean",
-            "description": "Whether its settings differ from the defaults: an option's value is not the one it\ndeclares, or its overrides are on (`Settings.Enabled`,\nbaseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting."
+            "description": "Whether its settings differ from the defaults: an option's value is not the one it\ndeclares, or its overrides are on (`Settings.Enabled`,\nbaseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting, or it has\nits own download folder."
           },
           "id": {
             "type": "string"
@@ -4458,6 +4602,13 @@
               "convert_digit_chapter": true,
               "convert_digit_volume": true,
               "default_dir": "downloads",
+              "destinations": [
+                {
+                  "default": true,
+                  "name": "Downloads",
+                  "path": "downloads"
+                }
+              ],
               "digit_chapter_length": 3,
               "digit_volume_length": 2,
               "filename_rename": "%FILENAME%",
@@ -4484,6 +4635,44 @@
           }
         }
       },
+      "SaveFolder": {
+        "type": "object",
+        "description": "The folder a download is saved in.",
+        "required": [
+          "folder"
+        ],
+        "properties": {
+          "folder": {
+            "type": "string"
+          }
+        }
+      },
+      "SaveFolderRequest": {
+        "type": "object",
+        "description": "A download whose folder to show before it is queued.",
+        "required": [
+          "module_id",
+          "title"
+        ],
+        "properties": {
+          "artists": {
+            "type": "string"
+          },
+          "authors": {
+            "type": "string"
+          },
+          "module_id": {
+            "type": "string"
+          },
+          "save_to": {
+            "type": "string",
+            "description": "The folder the user picked; the website's or the default destination when empty."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "SaveToSettings": {
         "type": "object",
         "description": "Where and under which names downloads are saved. The templates take the tokens `%MANGA%`,\n`%CHAPTER%`, `%NUMBERING%`, `%WEBSITE%`, `%AUTHOR%`, `%ARTIST%` and `%FILENAME%`\n(baseunits/uBaseUnit.pas:251-257); an empty template resets to its default\n(mangadownloader/forms/frmMain.pas:5894-5917).",
@@ -4505,8 +4694,22 @@
           },
           "default_dir": {
             "type": "string",
-            "description": "Download directory; empty resets to the default (`saveto/SaveTo`, `DEFAULT_PATH`,\nbaseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886).",
+            "description": "The default destination's path (`saveto/SaveTo`, `DEFAULT_PATH`,\nbaseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for API\nclients that predate [`Self::destinations`]: it always mirrors the default's path, and\na patch that changes it alone moves the default destination there. Empty resets it to\nthe default.",
             "default": "downloads"
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Destination"
+            },
+            "description": "The named download folders a download can go to, one of them the default. No FMD2\ncounterpart: FMD2 has one folder (`saveto/SaveTo`) plus a per-website override\n(`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names are\nunique (ignoring case and surrounding spaces) and not empty; paths are not empty.",
+            "default": [
+              {
+                "default": true,
+                "name": "Downloads",
+                "path": "downloads"
+              }
+            ]
           },
           "digit_chapter_length": {
             "type": "integer",
@@ -4933,6 +5136,13 @@
               "convert_digit_chapter": true,
               "convert_digit_volume": true,
               "default_dir": "downloads",
+              "destinations": [
+                {
+                  "default": true,
+                  "name": "Downloads",
+                  "path": "downloads"
+                }
+              ],
               "digit_chapter_length": 3,
               "digit_volume_length": 2,
               "filename_rename": "%FILENAME%",

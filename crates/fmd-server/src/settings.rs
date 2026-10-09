@@ -1,4 +1,5 @@
-//! `GET/PATCH /api/settings` over the typed settings model (T18), and `POST /api/preview-rename`.
+//! `GET/PATCH /api/settings` over the typed settings model (T18), `POST /api/preview-rename`
+//! and `POST /api/check-folders`.
 
 use axum::Json;
 use axum::extract::State;
@@ -203,4 +204,76 @@ pub(crate) async fn preview_rename(
         page: placement.page,
         path: placement.path.to_string_lossy().into_owned(),
     })
+}
+
+/// Folders to check, such as the destinations of a settings draft.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct FolderCheckRequest {
+    pub paths: Vec<String>,
+}
+
+/// Whether downloads can be saved in one folder.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FolderCheck {
+    pub path: String,
+    /// Why downloads can't be saved there now, or `None` when they can. A missing folder is
+    /// created by the first download into it, so this is a warning, not an error: a disk may be
+    /// unmounted for a while.
+    pub problem: Option<String>,
+}
+
+/// Check whether folders exist and are writable by the server (T74), for the destinations'
+/// warnings. Relative paths resolve against the server's working directory, as downloads do.
+#[utoipa::path(post, path = "/api/check-folders", tag = "settings",
+    operation_id = "checkFolders",
+    request_body(content = FolderCheckRequest, content_type = "application/json"),
+    responses(
+        (status = 200, body = Vec<FolderCheck>, description = "One check per path, in order"),
+        (status = 400, description = "Malformed body", body = Problem),
+    ))]
+pub(crate) async fn check_folders(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<FolderCheckRequest>,
+) -> Result<Json<Vec<FolderCheck>>, ApiError> {
+    let checks = state
+        .blocking(move |_| {
+            Ok::<_, ApiError>(
+                req.paths
+                    .into_iter()
+                    .map(|path| FolderCheck {
+                        problem: folder_problem(std::path::Path::new(path.trim())),
+                        path,
+                    })
+                    .collect(),
+            )
+        })
+        .await?;
+    Ok(Json(checks))
+}
+
+/// Why `dir` can't take downloads: it is missing, not a folder, or a file can't be created in
+/// it (tried with a scratch file that is removed again).
+fn folder_problem(dir: &std::path::Path) -> Option<String> {
+    match std::fs::metadata(dir) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Some("the folder does not exist".into());
+        }
+        Err(e) => return Some(format!("the folder can't be read: {e}")),
+        Ok(meta) if !meta.is_dir() => return Some("this is not a folder".into()),
+        Ok(_) => {}
+    }
+    let probe = dir.join(format!(".fmd2r-write-check-{}", std::process::id()));
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+    {
+        Ok(file) => {
+            drop(file);
+            let _ = std::fs::remove_file(&probe);
+            None
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => None,
+        Err(e) => Some(format!("the folder is not writable: {e}")),
+    }
 }

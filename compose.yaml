@@ -28,8 +28,12 @@ services:
     volumes:
       # app.db, lists.db, lua/, the cover cache.
       - fmd2r-data:/data
-      # The default save-to directory (`downloads`, relative to /data).
+      # The default download destination (`downloads`, relative to /data).
       - ${MANGA_DIR:-./manga}:/data/downloads
+      # More destinations (Settings → Save to): mount one host folder each, then add a
+      # destination per container path, e.g. "Manga" → /data/manga, "Manhwa" → /data/manhwa.
+      # - /mnt/disk1/manga:/data/manga
+      # - /mnt/disk2/manhwa:/data/manhwa
     depends_on:
       - flaresolverr
     restart: unless-stopped

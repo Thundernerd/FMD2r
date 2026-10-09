@@ -2,7 +2,8 @@
 	import { page } from '$app/state';
 	import { api, events } from '#lib/app.ts';
 	import { ApiError } from '#lib/api/client.ts';
-	import type { OutputFormat, SeriesInfo } from '#lib/api/types.ts';
+	import type { Destination, OutputFormat, SeriesInfo } from '#lib/api/types.ts';
+	import { defaultDestination } from '#lib/destinations/destinations.ts';
 	import ChapterList from '#lib/components/series/ChapterList.svelte';
 	import DownloadBox from '#lib/components/series/DownloadBox.svelte';
 	import SeriesHeader from '#lib/components/series/SeriesHeader.svelte';
@@ -17,6 +18,7 @@
 	let website = $state('');
 	let selected = $state(new Set<number>());
 	let saveTo = $state('');
+	let destinations = $state<Destination[]>([]);
 	let format = $state<OutputFormat | null>(null);
 
 	$effect(() => {
@@ -48,12 +50,21 @@
 		return () => (current = false);
 	});
 
-	// The download box starts from the saved defaults.
+	// The download box starts on the website's destination, else the default one
+	// (`OverrideSaveTo`, mangadownloader/forms/frmMain.pas:5631-5643, after `FillSaveTo`).
 	$effect(() => {
-		api
-			.getSettings()
-			.then((settings) => {
-				saveTo ||= settings.saveto.default_dir;
+		const m = module;
+		const website = m
+			? api
+					.getModuleSettings(m)
+					.then((s) => s.save_to)
+					.catch(() => '')
+			: Promise.resolve('');
+		Promise.all([api.getSettings(), website])
+			.then(([settings, websiteDir]) => {
+				destinations = settings.saveto.destinations;
+				const fallback = defaultDestination(destinations)?.path ?? settings.saveto.default_dir;
+				saveTo ||= websiteDir.trim() || fallback;
 				format = settings.output.format;
 			})
 			.catch(() => {});
@@ -81,7 +92,7 @@
 	{:else}
 		<!-- Snippets don't keep the narrowing to non-null. -->
 		{@const info = series}
-		<SeriesHeader {api} bind:series {website} />
+		<SeriesHeader {api} bind:series {website} {saveTo} />
 		<SeriesLayout>
 			{#snippet list()}
 				<ChapterList chapters={info.chapters} bind:selected />
@@ -92,6 +103,7 @@
 					series={info}
 					{selected}
 					bind:saveTo
+					{destinations}
 					{format}
 					onqueued={(task) => events.queue.upsert(task)}
 				/>

@@ -130,9 +130,11 @@ pub(crate) async fn add(
 ) -> Result<(StatusCode, Json<FavoriteView>), ApiError> {
     let info = fetch_info(&state, &req.module_id, &req.link).await?;
     let website = website(&state, &req.module_id);
+    let website_dir = state.website_dir(&req.module_id).await?;
     let save_to = favorite_save_to(
         &state.settings.get().saveto,
         &website,
+        &website_dir,
         &info,
         req.save_to.as_deref().unwrap_or_default(),
     );

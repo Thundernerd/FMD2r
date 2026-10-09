@@ -47,7 +47,8 @@ use tokio::sync::broadcast;
 
 use crate::settings::{SettingsError, SettingsService};
 use manager::Inner;
-pub(crate) use manager::{rename_options, save_to};
+pub(crate) use manager::rename_options;
+pub use manager::save_to;
 
 pub use fmd_store::{ChapterStatus, Task, TaskChapter, TaskId, TaskStatus};
 pub use preview::{PagePlacement, SampleChapter, first_page};

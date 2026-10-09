@@ -25,6 +25,9 @@ pub struct ModuleSettings {
     pub limits: Value,
     /// Serialised cookie jar (FMD2's per-module `Cookies` array).
     pub cookie_jar: Option<Vec<u8>>,
+    /// The module's download folder, empty for the default one
+    /// (`Settings.OverrideSettings.SaveToPath`).
+    pub save_to: String,
 }
 
 impl ModuleSettings {
@@ -37,6 +40,7 @@ impl ModuleSettings {
             http: Value::Object(Map::new()),
             limits: Value::Object(Map::new()),
             cookie_jar: None,
+            save_to: String::new(),
         }
     }
 }
@@ -48,6 +52,7 @@ struct RawSettings {
     http: String,
     limits: String,
     cookie_jar: Option<Vec<u8>>,
+    save_to: String,
 }
 
 fn raw_from_row(row: &Row<'_>) -> rusqlite::Result<RawSettings> {
@@ -57,11 +62,12 @@ fn raw_from_row(row: &Row<'_>) -> rusqlite::Result<RawSettings> {
         http: row.get(2)?,
         limits: row.get(3)?,
         cookie_jar: row.get(4)?,
+        save_to: row.get(5)?,
     })
 }
 
-const SELECT: &str =
-    "SELECT enabled, options, http, limits, cookie_jar FROM module_settings WHERE module_id = ?1";
+const SELECT: &str = "SELECT enabled, options, http, limits, cookie_jar, save_to FROM module_settings \
+     WHERE module_id = ?1";
 
 /// Repository for per-module settings. Obtain it with [`crate::AppDb::module_settings`].
 ///
@@ -107,6 +113,7 @@ impl<'a> ModuleSettingsRepo<'a> {
                 http: serde_json::from_str(&raw.http)?,
                 limits: serde_json::from_str(&raw.limits)?,
                 cookie_jar: raw.cookie_jar,
+                save_to: raw.save_to,
             })
         })
         .transpose()
@@ -119,38 +126,42 @@ impl<'a> ModuleSettingsRepo<'a> {
         let limits = serde_json::to_string(&settings.limits)?;
         let conn = self.db.lock();
         conn.execute(
-            "INSERT INTO module_settings (module_id, enabled, options, http, limits, cookie_jar)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "INSERT INTO module_settings
+                (module_id, enabled, options, http, limits, cookie_jar, save_to)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT (module_id) DO UPDATE SET
                 enabled = excluded.enabled, options = excluded.options, http = excluded.http,
-                limits = excluded.limits, cookie_jar = excluded.cookie_jar",
+                limits = excluded.limits, cookie_jar = excluded.cookie_jar,
+                save_to = excluded.save_to",
             params![
                 settings.module_id,
                 settings.enabled,
                 options,
                 http,
                 limits,
-                settings.cookie_jar
+                settings.cookie_jar,
+                settings.save_to
             ],
         )?;
         Ok(())
     }
 
-    /// Stores the module's options and HTTP and limit overrides and its `enabled` flag, keeping
-    /// its cookie jar.
+    /// Stores the module's options, HTTP and limit overrides, download folder and `enabled`
+    /// flag, keeping its cookie jar.
     pub(crate) fn put_overrides(conn: &Connection, settings: &ModuleSettings) -> Result<()> {
         conn.execute(
-            "INSERT INTO module_settings (module_id, enabled, options, http, limits)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO module_settings (module_id, enabled, options, http, limits, save_to)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (module_id) DO UPDATE SET
                 enabled = excluded.enabled, options = excluded.options, http = excluded.http,
-                limits = excluded.limits",
+                limits = excluded.limits, save_to = excluded.save_to",
             params![
                 settings.module_id,
                 settings.enabled,
                 serde_json::to_string(&settings.options)?,
                 serde_json::to_string(&settings.http)?,
                 serde_json::to_string(&settings.limits)?,
+                settings.save_to,
             ],
         )?;
         Ok(())

@@ -301,6 +301,20 @@ impl AppState {
     }
 
     /// Runs blocking store work on the blocking thread pool.
+    /// The folder the module's downloads go to when the user picks none; empty for the default
+    /// destination (its `OverrideSettings.SaveToPath`, T74).
+    pub(crate) async fn website_dir(&self, module_id: &str) -> Result<String, ApiError> {
+        let id = module_id.to_owned();
+        self.blocking(move |db| -> Result<String, ApiError> {
+            Ok(db
+                .module_settings()
+                .get(&id)?
+                .map(|stored| stored.save_to)
+                .unwrap_or_default())
+        })
+        .await
+    }
+
     pub(crate) async fn blocking<T, E>(
         &self,
         f: impl FnOnce(&AppDb) -> Result<T, E> + Send + 'static,

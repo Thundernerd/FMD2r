@@ -85,6 +85,7 @@
 			<span class="mono num">{formatRate(task.bytes_per_sec)}</span>
 		{/if}
 		<span>{task.module_id}</span>
+		<span class="mono folder" title="Saved in">{task.save_to}</span>
 	</div>
 	{#if group === 'downloading' || task.total > 0}
 		<div
@@ -209,6 +210,10 @@
 		flex-wrap: wrap;
 		column-gap: var(--sp-3);
 		row-gap: 2px;
+	}
+	.folder {
+		min-width: 0;
+		word-break: break-all;
 	}
 	.error {
 		margin: 0;

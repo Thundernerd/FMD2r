@@ -12,12 +12,17 @@
 		Settings
 	} from '#lib/api/types.ts';
 	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
+	import DestinationsEditor from '#lib/components/settings/DestinationsEditor.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
 	import { showFieldErrors } from '#lib/settings/save.ts';
-	import { OWN_SECTION_PATHS, SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
+	import {
+		OWN_SECTION_PATHS,
+		SECTION_EXTRA_PATHS,
+		SETTINGS_SECTIONS
+	} from '#lib/settings/sections.ts';
 
 	const TOC = [
 		...SETTINGS_SECTIONS.map(({ id, title }) => ({ id, title })),
@@ -59,12 +64,15 @@
 		dirty: 'Unsaved changes'
 	};
 	function pending(id: string): Pending | null {
-		const paths =
+		const fields =
 			id === 'websites'
 				? OWN_SECTION_PATHS
 				: SETTINGS_SECTIONS.find((s) => s.id === id)?.fields.map((f) => f.path);
-		if (paths) {
-			if (paths.some((p) => draft?.errors[p])) return 'invalid';
+		if (fields) {
+			const paths = [...fields, ...(SECTION_EXTRA_PATHS[id] ?? [])];
+			const errors = Object.keys(draft?.errors ?? {});
+			const invalid = (p: string) => errors.some((e) => e === p || e.startsWith(`${p}.`));
+			if (paths.some(invalid)) return 'invalid';
 			return paths.some((p) => draft?.isDirty(p)) ? 'dirty' : null;
 		}
 		if (id !== 'modules') return null;
@@ -91,6 +99,7 @@
 		enabled: view.enabled,
 		limits: view.limits,
 		http: view.http,
+		save_to: view.save_to,
 		options: Object.fromEntries(view.options.map((o) => [o.key, o.value]))
 	});
 
@@ -196,7 +205,10 @@
 		const first = document.querySelector<HTMLElement>('.field.invalid');
 		if (first) {
 			first.scrollIntoView({ block: 'center' });
-			first.querySelector<HTMLElement>('input, select')?.focus({ preventScroll: true });
+			const control =
+				first.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+				first.querySelector<HTMLElement>('input, select');
+			control?.focus({ preventScroll: true });
 		}
 	}
 
@@ -278,6 +290,7 @@
 							view={moduleView}
 							draft={moduleDraft}
 							loading={moduleLoading}
+							destinations={(draft.value as Settings).saveto.destinations}
 							onselect={selectModule}
 						/>
 					</section>
@@ -298,6 +311,9 @@
 				{:else if section}
 					<section id="section-{section.id}" class="card" aria-labelledby="heading-{section.id}">
 						<h2 id="heading-{section.id}">{section.title}</h2>
+						{#if section.id === 'saveto'}
+							<DestinationsEditor {draft} checkFolders={(paths) => api.checkFolders(paths)} />
+						{/if}
 						{#each section.fields as field (field.path)}
 							<SettingField {field} {draft} overridden={session.overridden(field.path)} />
 						{/each}

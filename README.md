@@ -45,6 +45,23 @@ FMD2R_GIT_REVISION=$(git rev-parse --short=12 HEAD) docker compose up -d --build
   (`downloads` is relative to the working directory, `/data`, not to `FMD2R_DATA_DIR`.)
   The container runs as the non-root user `fmd2r` (uid 1000), so bind-mounted directories must be
   writable by that uid.
+- **Several download folders:** Settings → Save to holds named destinations (one of them the
+  default); the series page, the library and each website (Settings → Website modules) pick one.
+  To keep, say, manga and manhwa on different disks, mount each host folder into the container
+  and add a destination for its container path:
+
+  ```yaml
+  services:
+    fmd2r:
+      volumes:
+        - fmd2r-data:/data
+        - ${MANGA_DIR:-./manga}:/data/downloads   # the default destination, "Downloads"
+        - /mnt/disk1/manga:/data/manga             # destination "Manga" → /data/manga
+        - /mnt/disk2/manhwa:/data/manhwa           # destination "Manhwa" → /data/manhwa
+  ```
+
+  A destination whose folder is missing (a disk not mounted yet) gets a warning in Settings, not
+  an error.
 - **Lua modules:** on first start, when `/data/lua` has no modules, it is seeded from the upstream
   snapshot baked into the image (`fixtures/lua`); existing files are never overwritten.
 - **Configuration:** `serve` reads `FMD2R_BIND` (default `0.0.0.0:8080` in the image),

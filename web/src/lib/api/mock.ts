@@ -16,6 +16,7 @@ import type {
 	ModuleSummary,
 	NewTask,
 	RenamePreviewRequest,
+	SaveFolderRequest,
 	SeriesInfo,
 	SeriesRef,
 	TaskDetail,
@@ -418,6 +419,7 @@ export function createMockBackend({
 				title: task.title,
 				module_id: task.module_id,
 				link: task.link,
+				save_to: settings.saveFolder(task.module_id, task.title, task.save_to ?? ''),
 				status: 'waiting',
 				chapter_count: task.chapters.length,
 				total: 0,
@@ -590,7 +592,8 @@ export function createMockBackend({
 		const dryRun = query.get('dry_run') === 'true';
 		const onePiece = series('mangadex', '/title/op/one-piece');
 		const exists = favorites.has('mangadex', '/title/op/one-piece');
-		if (!dryRun && onePiece && !exists) favorites.add(onePiece, 'MangaDex');
+		if (!dryRun && onePiece && !exists)
+			favorites.add(onePiece, 'MangaDex', '/data/downloads/One Piece');
 		importJob.state = 'done';
 		broadcast('job.state', importJob);
 		return json(mockImportReport(dryRun, query.getAll('map_path'), exists));
@@ -686,14 +689,20 @@ export function createMockBackend({
 		if (route === 'GET /api/favorites') return json(favorites.list());
 		if (route === 'POST /api/favorites') {
 			// Untrusted input: check the shape instead of trusting the generated type.
-			const body = (await req.json()) as { module_id?: unknown; link?: unknown } | null;
+			const body = (await req.json()) as {
+				module_id?: unknown;
+				link?: unknown;
+				save_to?: unknown;
+			} | null;
 			const info =
 				typeof body?.module_id === 'string' && typeof body.link === 'string'
 					? series(body.module_id, body.link)
 					: null;
 			if (!info) return json({ status: 404, detail: 'series not found' }, 404);
 			const website = modules().find((m) => m.id === info.module_id)?.name ?? info.module_id;
-			const { status, body: added } = favorites.add(info, website);
+			const dir = typeof body?.save_to === 'string' ? body.save_to : '';
+			const saveTo = settings.saveFolder(info.module_id, info.title, dir);
+			const { status, body: added } = favorites.add(info, website, saveTo);
 			return json(added, status);
 		}
 		if (route === 'POST /api/favorites/check') {
@@ -724,6 +733,18 @@ export function createMockBackend({
 		if (route === 'GET /api/settings') return json(settings.getSettings());
 		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
 		if (route === 'PATCH /api/settings/all') return update(req, settings.patchAll);
+		if (route === 'POST /api/check-folders') {
+			const body = (await req.json()) as { paths?: unknown } | null;
+			const paths = Array.isArray(body?.paths) ? body.paths.map(String) : [];
+			return json(settings.checkFolders(paths));
+		}
+		if (route === 'POST /api/save-folder') {
+			const body = (await req.json()) as Partial<SaveFolderRequest> | null;
+			if (typeof body?.module_id !== 'string' || typeof body.title !== 'string') {
+				return json({ status: 400, detail: 'expected a series' }, 400);
+			}
+			return json({ folder: settings.saveFolder(body.module_id, body.title, body.save_to ?? '') });
+		}
 		if (route === 'POST /api/preview-rename') {
 			return json(settings.previewRename((await req.json()) as RenamePreviewRequest));
 		}

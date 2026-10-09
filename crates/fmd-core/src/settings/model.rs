@@ -184,9 +184,17 @@ pub const DEFAULT_FILENAME_CUSTOMRENAME: &str = "%FILENAME%";
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(default)]
 pub struct SaveToSettings {
-    /// Download directory; empty resets to the default (`saveto/SaveTo`, `DEFAULT_PATH`,
-    /// baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886).
+    /// The default destination's path (`saveto/SaveTo`, `DEFAULT_PATH`,
+    /// baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for API
+    /// clients that predate [`Self::destinations`]: it always mirrors the default's path, and
+    /// a patch that changes it alone moves the default destination there. Empty resets it to
+    /// the default.
     pub default_dir: String,
+    /// The named download folders a download can go to, one of them the default. No FMD2
+    /// counterpart: FMD2 has one folder (`saveto/SaveTo`) plus a per-website override
+    /// (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names are
+    /// unique (ignoring case and surrounding spaces) and not empty; paths are not empty.
+    pub destinations: Vec<Destination>,
     /// `saveto/GenerateMangaFolder`, default true (mangadownloader/forms/frmMain.pas:5893).
     pub generate_manga_folder: bool,
     /// `saveto/MangaCustomRename` (mangadownloader/forms/frmMain.pas:5894).
@@ -228,6 +236,11 @@ impl Default for SaveToSettings {
     fn default() -> Self {
         Self {
             default_dir: DEFAULT_PATH.into(),
+            destinations: vec![Destination {
+                name: DEFAULT_DESTINATION_NAME.into(),
+                path: DEFAULT_PATH.into(),
+                default: true,
+            }],
             generate_manga_folder: true,
             manga_rename: DEFAULT_MANGA_CUSTOMRENAME.into(),
             generate_chapter_folder: true,
@@ -243,6 +256,30 @@ impl Default for SaveToSettings {
             illegal_chars: SymbolMode::Posix,
         }
     }
+}
+
+impl SaveToSettings {
+    /// The default destination's path, or [`Self::default_dir`] when none is marked (settings
+    /// are validated, so only before they are).
+    pub fn default_path(&self) -> &str {
+        self.destinations
+            .iter()
+            .find(|d| d.default)
+            .map_or(self.default_dir.as_str(), |d| d.path.as_str())
+    }
+}
+
+/// The name of the destination an install's download folder becomes (T74).
+pub const DEFAULT_DESTINATION_NAME: &str = "Downloads";
+
+/// A named download folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct Destination {
+    pub name: String,
+    pub path: String,
+    /// Whether downloads go here when neither the user nor the website picks a folder.
+    #[serde(default)]
+    pub default: bool,
 }
 
 /// How characters that are illegal in file names are handled (mirrors `fmd_pack::SymbolMode`).

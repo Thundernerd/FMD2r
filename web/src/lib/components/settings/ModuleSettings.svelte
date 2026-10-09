@@ -1,5 +1,7 @@
 <script lang="ts">
-	import type { ModuleSettingsView, ModuleSummary } from '#lib/api/types.ts';
+	import type { Destination, ModuleSettingsView, ModuleSummary } from '#lib/api/types.ts';
+	import DestinationPicker from '#lib/components/destinations/DestinationPicker.svelte';
+	import { defaultDestination } from '#lib/destinations/destinations.ts';
 	import type { Draft } from '#lib/settings/draft.svelte.ts';
 	import {
 		groupModules,
@@ -17,15 +19,21 @@
 		view,
 		draft,
 		loading,
+		destinations = [],
 		onselect
 	}: {
 		modules: ModuleSummary[];
 		selected: string | null;
 		/** The selected module's settings as last saved, once loaded. */
 		view: ModuleSettingsView | null;
-		/** Edits to `view`: `enabled`, `limits`, `http` and `options` keyed by option key. */
+		/**
+		 * Edits to `view`: `enabled`, `limits`, `http`, `save_to` and `options` keyed by option
+		 * key.
+		 */
 		draft: Draft<object> | null;
 		loading: boolean;
+		/** The configured destinations (possibly unsaved), for the website's own. */
+		destinations?: Destination[];
 		onselect: (id: string) => void;
 	} = $props();
 
@@ -82,6 +90,7 @@
 	});
 
 	const options = $derived(view ? optionFields(view.options) : []);
+	const fallback = $derived(defaultDestination(destinations)?.name ?? 'the default destination');
 	const enabled = $derived(draft?.get('enabled') === true);
 
 	/**
@@ -220,6 +229,32 @@
 					<p class="small muted">This module declares no options.</p>
 				{/each}
 			</fieldset>
+
+			<div
+				class="field destination"
+				class:dirty={draft.isDirty('save_to')}
+				class:invalid={!!draft.errors['save_to']}
+				data-path="save_to"
+			>
+				<label class="caption" for="{uid}-save-to">Download destination</label>
+				<DestinationPicker
+					id="{uid}-save-to"
+					label="Download destination"
+					inherit="Default destination ({fallback})"
+					{destinations}
+					bind:value={
+						() => (typeof draft?.get('save_to') === 'string' ? String(draft.get('save_to')) : ''),
+						(v) => draft?.set('save_to', v)
+					}
+				/>
+				<p class="help small muted">
+					Where this website's downloads go unless another folder is picked on the series page.
+					Applies whether or not the overrides below are on.
+				</p>
+				{#if draft.errors['save_to']}
+					<p class="field-error small" role="alert">{draft.errors['save_to']}</p>
+				{/if}
+			</div>
 
 			<SettingField
 				field={{
@@ -367,6 +402,30 @@
 	}
 	legend {
 		margin-bottom: var(--sp-1);
+	}
+	.destination {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-1);
+		max-width: 480px;
+		padding: var(--sp-2) 0 var(--sp-2) var(--sp-3);
+		border-left: 2px solid transparent;
+	}
+	.destination.dirty {
+		border-left-color: var(--accent);
+	}
+	.destination.invalid {
+		border-left-color: var(--bad);
+	}
+	.destination .caption {
+		font-weight: 500;
+	}
+	.destination .help,
+	.destination .field-error {
+		margin: 0;
+	}
+	.destination .field-error {
+		color: var(--bad);
 	}
 	.limit .check {
 		display: flex;
