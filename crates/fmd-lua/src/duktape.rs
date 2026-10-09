@@ -111,8 +111,9 @@ fn eval(source: &[u8], lua_dir: &Path, settings: JsSettings) -> Result<Vec<u8>, 
     })
 }
 
-/// Gives the heap Duktape 2.3's built-ins where QuickJS's differ (`builtins.js`), then adds
-/// `print` and `require` (baseunits/Duktape.pas:88-90), implemented in `prelude.js`.
+/// Gives the heap Duktape 2.3's built-ins where QuickJS's differ (`builtins.js`), adds `print`
+/// and `require` (baseunits/Duktape.pas:88-90, `prelude.js`), then removes the built-in members
+/// Duktape lacks (`surface.js`).
 fn install_globals<'js>(ctx: &Ctx<'js>, lua_dir: PathBuf) -> rquickjs::Result<()> {
     let builtins: Function = ctx.eval(include_str!("duktape/builtins.js"))?;
     builtins.call::<_, ()>(())?;
@@ -120,7 +121,9 @@ fn install_globals<'js>(ctx: &Ctx<'js>, lua_dir: PathBuf) -> rquickjs::Result<()
     let mod_search = Function::new(ctx.clone(), move |id: String| mod_search(&lua_dir, &id))?;
     // baseunits/Duktape.pas:28.
     let log = Function::new(ctx.clone(), |text: String| tracing::info!("{text}"))?;
-    prelude.call::<_, ()>((mod_search, log))
+    prelude.call::<_, ()>((mod_search, log))?;
+    let surface: Function = ctx.eval(include_str!("duktape/surface.js"))?;
+    surface.call::<_, ()>(())
 }
 
 /// `Duktape.modSearch` (baseunits/Duktape.pas:39-67): the source of module `id`, read by

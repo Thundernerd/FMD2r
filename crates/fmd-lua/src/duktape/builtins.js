@@ -10,13 +10,19 @@
   var Bytes = Uint8Array;
 
   // Defines `value` on `target` like a built-in property: writable, configurable, not
-  // enumerable.
+  // enumerable. Functions are passed as methods (`{ name() {} }.name`), which like Duktape's
+  // native functions have no `prototype`; this file only runs on QuickJS, so ES2015 syntax is
+  // fine.
   function builtin(target, name, value) {
     define(target, name, { value: value, writable: true, enumerable: false, configurable: true });
   }
 
-  function getter(target, name, get) {
-    define(target, name, { get: get, enumerable: false, configurable: true });
+  // Defines the accessors of `accessors` (`{ get name() {} }`) on `target` like built-in ones.
+  function getters(target, accessors) {
+    Object.getOwnPropertyNames(accessors).forEach(function (name) {
+      var get = Object.getOwnPropertyDescriptor(accessors, name).get;
+      define(target, name, { get: get, enumerable: false, configurable: true });
+    });
   }
 
   // A string's bytes in Duktape's internal encoding: each UTF-16 code unit is its own UTF-8
@@ -174,10 +180,13 @@
   // by the module loader (prelude.js).
   var Duktape = {};
   builtin(Duktape, 'version', 20300);
-  builtin(Duktape, 'env', 'll u n p2 a8 x64');
+  // What FMD2's build reports (dist/x86_64-win64/libduktape.dll).
+  builtin(Duktape, 'env', 'll u nl p2 a8 x64 windows mingw');
   // duk_bi_duktape_object_enc: 'hex' and 'base64'. The 'jx' and 'jc' JSON formats are not
   // reproduced.
-  builtin(Duktape, 'enc', function enc(format, value) {
+  builtin(Duktape, 'enc', { enc() {
+    var format = arguments[0];
+    var value = arguments[1];
     checkCodecArgs(arguments);
     if (format === 'hex') {
       return hexEncode(codecBytes(value));
@@ -186,9 +195,11 @@
       return base64Encode(codecBytes(value));
     }
     throw new TypeError('invalid args');
-  });
+  } }.enc);
   // duk_bi_duktape_object_dec: the decoded bytes, as a Uint8Array (Duktape's plain buffer).
-  builtin(Duktape, 'dec', function dec(format, value) {
+  builtin(Duktape, 'dec', { dec() {
+    var format = arguments[0];
+    var value = arguments[1];
     checkCodecArgs(arguments);
     if (format === 'hex') {
       return hexDecode(codecBytes(value));
@@ -197,13 +208,13 @@
       return base64Decode(codecBytes(value));
     }
     throw new TypeError('invalid args');
-  });
-  builtin(Duktape, 'gc', function gc() {
+  } }.dec);
+  builtin(Duktape, 'gc', { gc() {
     return true;
-  });
-  builtin(Duktape, 'compact', function compact(obj) {
+  } }.gc);
+  builtin(Duktape, 'compact', { compact(obj) {
     return obj;
-  });
+  } }.compact);
   builtin(globalThis, 'Duktape', Duktape);
 
   // A string of the code points in `codepoints`, those above U+FFFF as surrogate pairs.
@@ -242,7 +253,9 @@
     state.bomHandled = false;
   }
 
-  function TextDecoder(label, options) {
+  function TextDecoder() {
+    var label = arguments[0];
+    var options = arguments[1];
     if (!(this instanceof TextDecoder)) {
       throw new TypeError('constructor requires \'new\'');
     }
@@ -257,17 +270,21 @@
     resetDecoder(state);
     decoders.set(this, state);
   }
-  getter(TextDecoder.prototype, 'encoding', function () {
-    decoderState(this);
-    return 'utf-8';
+  getters(TextDecoder.prototype, {
+    get encoding() {
+      decoderState(this);
+      return 'utf-8';
+    },
+    get fatal() {
+      return decoderState(this).fatal;
+    },
+    get ignoreBOM() {
+      return decoderState(this).ignoreBOM;
+    }
   });
-  getter(TextDecoder.prototype, 'fatal', function () {
-    return decoderState(this).fatal;
-  });
-  getter(TextDecoder.prototype, 'ignoreBOM', function () {
-    return decoderState(this).ignoreBOM;
-  });
-  builtin(TextDecoder.prototype, 'decode', function decode(input, options) {
+  builtin(TextDecoder.prototype, 'decode', { decode() {
+    var input = arguments[0];
+    var options = arguments[1];
     var state = decoderState(this);
     var bytes = input === undefined ? new Bytes(0) : bufferBytes(input);
     if (bytes === null) {
@@ -343,7 +360,7 @@
       resetDecoder(state);
     }
     return codepointString(out);
-  });
+  } }.decode);
   builtin(globalThis, 'TextDecoder', TextDecoder);
 
   // TextEncoder (duk_bi_textencoder_*): UTF-8, a lone surrogate as U+FFFD.
@@ -352,10 +369,13 @@
       throw new TypeError('constructor requires \'new\'');
     }
   }
-  getter(TextEncoder.prototype, 'encoding', function () {
-    return 'utf-8';
+  getters(TextEncoder.prototype, {
+    get encoding() {
+      return 'utf-8';
+    }
   });
-  builtin(TextEncoder.prototype, 'encode', function encode(input) {
+  builtin(TextEncoder.prototype, 'encode', { encode() {
+    var input = arguments[0];
     var s = input === undefined ? '' : String(input);
     var out = [];
     for (var i = 0; i < s.length; i++) {
@@ -381,14 +401,49 @@
       }
     }
     return new Bytes(out);
-  });
+  } }.encode);
   builtin(globalThis, 'TextEncoder', TextEncoder);
+
+  // RegExp.prototype is itself a RegExp in Duktape (ES5), so it has its own `lastIndex`.
+  define(RegExp.prototype, 'lastIndex', { value: 0, writable: true });
+
+  // `performance` with only `now` (QuickJS's `timeOrigin` cannot be deleted).
+  var quickPerformance = performance;
+  var quickNow = performance.now;
+  var duktapePerformance = {};
+  builtin(duktapePerformance, 'now', { now() {
+    return quickNow.call(quickPerformance);
+  } }.now);
+  globalThis.performance = duktapePerformance;
+
+  // Duktape's plain-buffer helpers on Uint8Array (duk_bi_uint8array_allocplain/plainof); a
+  // plain buffer is a Uint8Array here. allocPlain(n) is n zero bytes, or a copy of the bytes of a
+  // buffer, a string (internal encoding) or an array; plainOf(view) is the whole buffer behind it.
+  builtin(Bytes, 'allocPlain', { allocPlain(value) {
+    if (typeof value === 'number') {
+      return new Bytes(value);
+    }
+    if (typeof value === 'string') {
+      return new Bytes(stringBytes(value));
+    }
+    var bytes = bufferBytes(value);
+    return bytes !== null ? new Bytes(bytes) : new Bytes(value);
+  } }.allocPlain);
+  builtin(Bytes, 'plainOf', { plainOf(value) {
+    if (value instanceof ArrayBuffer) {
+      return new Bytes(value);
+    }
+    if (ArrayBuffer.isView(value)) {
+      return new Bytes(value.buffer);
+    }
+    throw new TypeError('buffer required');
+  } }.plainOf);
 
   // Duktape's JSON.stringify writes lone surrogates as they are and escapes U+2028 and U+2029
   // (DUK_USE_NONSTD_JSON_ESC_U2028_U2029); QuickJS does the opposite (ES2019). An escaped
   // backslash is matched first so `\\ud800` stays as it is.
   var quickStringify = JSON.stringify;
-  builtin(JSON, 'stringify', function stringify(value, replacer, space) {
+  builtin(JSON, 'stringify', { stringify(value, replacer, space) {
     var json = quickStringify.apply(JSON, arguments);
     if (typeof json !== 'string') {
       return json;
@@ -399,5 +454,5 @@
       }
       return m.length === 1 ? '\\u' + m.charCodeAt(0).toString(16) : m;
     });
-  });
+  } }.stringify);
 })

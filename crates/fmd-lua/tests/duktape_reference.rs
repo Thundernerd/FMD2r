@@ -327,3 +327,50 @@ function atob(s) {return new TextDecoder().decode(Duktape.dec('base64', s));};
         )
         .unwrap();
 }
+
+/// The global object and the built-ins have the members Duktape 2.3 has and no others, so
+/// scripts that detect features (`typeof Symbol`, `Array.prototype.find || polyfill`) take the
+/// same branch. Members Duktape has and QuickJS lacks are in docs/duktape-differences.md.
+#[test]
+fn builtin_members_match_duktape() {
+    runtime()
+        .exec(
+            r#"
+            local inventory = [[
+              var g = new Function('return this')();
+              var skip = { Buffer: 1, 'Buffer.prototype': 1 };
+              var missing = { global: 'Buffer', Duktape: 'Pointer Thread act fin info', 'Error.prototype': 'fileName lineNumber', '%TypedArray%.prototype': 'length' };
+              function names(path, o) {
+                var drop = (missing[path] || '').split(' ');
+                return path + ': ' + Object.getOwnPropertyNames(o).filter(function (k) {
+                  return drop.indexOf(k) < 0;
+                }).sort().join(' ');
+              }
+              var out = [names('global', g)];
+              Object.getOwnPropertyNames(g).sort().forEach(function (k) {
+                var v = g[k];
+                if (skip[k] || v === g || v === null || (typeof v !== 'object' && typeof v !== 'function')) return;
+                out.push(names(k, v));
+                if (typeof v === 'function' && v.prototype) out.push(names(k + '.prototype', v.prototype));
+              });
+              var ta = Object.getPrototypeOf(Uint8Array);
+              out.push(names('%TypedArray%', ta), names('%TypedArray%.prototype', ta.prototype));
+            ]]
+            same('(function () {' .. inventory .. 'return out.join("\\n") })()')
+            same('Object.keys(this).join()')
+            same('for (var k in this) {}; Object.keys(new Function("return this")()).join()')
+            same('typeof Symbol + typeof Map + typeof Promise + typeof globalThis + typeof atob')
+            same('String(new Uint8Array([1, 2]))')
+            same('typeof Array.prototype.find + typeof Array.prototype.includes + typeof String.prototype.includes')
+            same('typeof Object.assign + typeof Object.entries + typeof String.prototype.padStart')
+            same('var b = Uint8Array.allocPlain(3); [b.length, b instanceof Uint8Array].join()')
+            same('var p = Uint8Array.plainOf(new Uint8Array([1, 2, 3]).subarray(1)); [p.length, p[0]].join()')
+            same('Duktape.gc() + "," + (Duktape.compact(Math) === Math) + "," + typeof Duktape.env')
+            -- The build's description: FMD2's DLL (dist/x86_64-win64/libduktape.dll), not the
+            -- reference built here.
+            assert(require('fmd.duktape').ExecJS('Duktape.env') == 'll u nl p2 a8 x64 windows mingw')
+            same('[require.name, typeof require.length, "length" in print, "name" in print].join()')
+            "#,
+        )
+        .unwrap();
+}

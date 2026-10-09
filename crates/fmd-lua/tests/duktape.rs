@@ -118,7 +118,7 @@ fn require_resolves_module_ids_like_duktape() {
         ("this.js", "exports.same = (this === exports);"),
         (
             "count.js",
-            "globalThis.loads = (globalThis.loads || 0) + 1; exports.n = loads;",
+            "var g = new Function('return this')(); g.loads = (g.loads || 0) + 1; exports.n = loads;",
         ),
         ("bare", "exports.ext = 'none';"),
     ]);
