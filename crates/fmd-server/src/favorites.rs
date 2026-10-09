@@ -340,9 +340,9 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
 }
 
 async fn view(state: &AppState, favorite: Favorite) -> Result<FavoriteView, ApiError> {
-    let stored = favorite.clone();
+    let counted = favorite.clone();
     let new_chapters = state
-        .blocking(move |db| db.favorites().new_chapter_count(&stored))
+        .blocking(move |db| db.favorites().new_chapter_count(&counted))
         .await?;
     let website = website(state, &favorite.module_id);
     Ok(to_view(favorite, website, new_chapters))
