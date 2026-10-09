@@ -5,9 +5,14 @@ name: Smoke (nightly)
 # fails is an FMD2r regression, one that fails only live had its site or upstream module change.
 #
 # Entry failures don't fail the job (`fmd-smoke run` exits 0 on them): live sites break all the
-# time, and this workflow only reports. The run steps also continue on errors, so the report is
+# time, and the smoke steps only report. The run steps also continue on errors, so the report is
 # written from whatever results exist. It runs on a schedule, not on pushes or PRs, so it doesn't
 # gate merges; CI's own replay (the `smoke` test run by `cargo test` in ci.yml) does.
+#
+# Both runs also record their XPath evaluations into a differential corpus, which `fmd2r xpath
+# diff` then evaluates on the fpc and native backends: the live run brings today's pages, so this
+# catches native/fpc differences the committed corpus (fixtures/xpath-corpus) doesn't have. A
+# mismatch fails the job (after the report is written), unlike entry failures.
 on:
   schedule:
     - cron: "23 3 * * *"
@@ -23,22 +28,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install FPC
+        run: sudo apt-get update && sudo apt-get install -y fpc
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      # fmd2r links libfmdxpath.so (the fpc backend) from the build directory, without an rpath.
       - name: Build
-        run: cargo build -p fmd2r -p fmd-smoke
+        run: |
+          cargo build -p fmd2r -p fmd-smoke --features fmd2r/xpath-fpc
+          echo "LD_LIBRARY_PATH=$(dirname "$(ls target/debug/build/xpath-fpc-*/out/libfmdxpath.so | head -n1)")" >> "$GITHUB_ENV"
       - name: Replay
         continue-on-error: true
-        run: target/debug/fmd-smoke run --out smoke-replay.json
+        run: target/debug/fmd-smoke run --xpath-corpus xpath-corpus --out smoke-replay.json
       - name: Live
         continue-on-error: true
-        run: target/debug/fmd-smoke run --live --out smoke-live.json
+        run: target/debug/fmd-smoke run --live --xpath-corpus xpath-corpus --out smoke-live.json
       - name: Report
         if: always()
         continue-on-error: true
         run: |
           target/debug/fmd-smoke report --live smoke-live.json --replay smoke-replay.json --out smoke-report.md
           cat smoke-report.md >> "$GITHUB_STEP_SUMMARY"
+      # Fails the job on a mismatch, so a native/fpc difference on live pages is visible.
+      - name: XPath differential
+        if: always()
+        run: |
+          status=0
+          target/debug/fmd2r xpath diff --corpus xpath-corpus --out xpath-diff.md || status=$?
+          if [ -f xpath-diff.md ]; then head -c 60000 xpath-diff.md >> "$GITHUB_STEP_SUMMARY"; fi
+          exit $status
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -47,4 +65,6 @@ jobs:
             smoke-report.md
             smoke-live.json
             smoke-replay.json
+            xpath-diff.md
+            xpath-corpus
           if-no-files-found: warn

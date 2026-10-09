@@ -7,6 +7,11 @@
 use std::any::Any;
 use std::rc::Rc;
 
+use corpus::{Entry, Origin, Step};
+pub use diff::{Mismatch, Normalized, NormalizedItem, Report, diff};
+
+pub mod corpus;
+mod diff;
 #[cfg(feature = "fpc")]
 pub mod fpc;
 #[cfg(feature = "native")]
@@ -35,6 +40,14 @@ impl Backend {
     }
 }
 
+impl Default for Backend {
+    /// `native`, since the differential corpus showed parity with `fpc` (T35,
+    /// fixtures/xpath-corpus).
+    fn default() -> Self {
+        Backend::Native
+    }
+}
+
 /// Errors raised by an XPath backend.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -54,6 +67,12 @@ pub trait XPathEngine {
     /// trimmed, no comments or processing instructions (baseunits/XQueryEngineHTML.pas:390-396).
     /// Empty input gives an empty document.
     fn parse(&self, html: &[u8]) -> Result<Box<dyn Document>>;
+}
+
+impl<E: XPathEngine + ?Sized> XPathEngine for Rc<E> {
+    fn parse(&self, html: &[u8]) -> Result<Box<dyn Document>> {
+        (**self).parse(html)
+    }
 }
 
 /// A parsed document that expressions are evaluated against.
@@ -78,6 +97,9 @@ pub trait XPathValue: Any {
     fn get(&self, index: i64) -> Box<dyn XPathValue>;
     /// Whether this is the empty sequence (`pvkUndefined`, baseunits/lua/LuaIXQValue.pas:101).
     fn is_undefined(&self) -> bool;
+    /// The value's kind (`IXQValue.kind`, internettools data/xquery.pas:103-109, which the
+    /// `Get()` iterator checks, baseunits/lua/LuaIXQValue.pas:101).
+    fn kind(&self) -> Kind;
     /// `IXQValue.toString`; for nodes the text content, trimmed
     /// (baseunits/lua/LuaIXQValue.pas:37-41).
     fn string(&self) -> String;
@@ -98,6 +120,54 @@ pub trait XPathValue: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
+/// The primary type of a value: internettools' `TXQValueKind` (data/xquery.pas:103-109), as
+/// `fx_kind` exports it (crates/xpath-fpc/fmdxpath.h).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Kind {
+    /// The empty sequence.
+    Undefined,
+    Boolean,
+    Int64,
+    /// JSON `null`.
+    Null,
+    Node,
+    /// A sequence of more than one item.
+    Sequence,
+    /// A JSON array.
+    Array,
+    Double,
+    String,
+    Decimal,
+    Binary,
+    QName,
+    DateTime,
+    /// A JSON object.
+    Object,
+    Function,
+}
+
+impl std::fmt::Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Kind::Undefined => "undefined",
+            Kind::Boolean => "boolean",
+            Kind::Int64 => "int64",
+            Kind::Null => "null",
+            Kind::Node => "node",
+            Kind::Sequence => "sequence",
+            Kind::Array => "array",
+            Kind::Double => "double",
+            Kind::String => "string",
+            Kind::Decimal => "decimal",
+            Kind::Binary => "binary",
+            Kind::QName => "qname",
+            Kind::DateTime => "datetime",
+            Kind::Object => "object",
+            Kind::Function => "function",
+        })
+    }
+}
+
 /// One evaluation, as seen by a [`LoggingEngine`] hook: the inputs of the XPath differential
 /// corpus (docs/plan.md, "XPath differential tests").
 #[derive(Debug, Clone, Copy)]
@@ -108,6 +178,10 @@ pub struct Query<'a> {
     pub css: bool,
     /// [`document_hash`] of the document the expression ran against.
     pub document_hash: u64,
+    /// The document's bytes, as parsed.
+    pub document: &'a [u8],
+    /// Where the context value came from, when the expression ran against one.
+    pub context: Option<&'a Origin>,
 }
 
 /// A stable hash of a document's bytes (64-bit FNV-1a), the same across runs, builds and
@@ -118,7 +192,9 @@ pub fn document_hash(html: &[u8]) -> u64 {
     })
 }
 
-/// Wraps an engine and reports every evaluation to a hook, without changing any result.
+/// Wraps an engine and reports every evaluation to a hook, without changing any result. Its
+/// values remember where they came from, so an evaluation against one can be reported with its
+/// context's [`Origin`].
 pub struct LoggingEngine<E> {
     inner: E,
     hook: Rc<dyn Fn(&Query)>,
@@ -138,6 +214,7 @@ impl<E: XPathEngine> XPathEngine for LoggingEngine<E> {
     fn parse(&self, html: &[u8]) -> Result<Box<dyn Document>> {
         Ok(Box::new(LoggingDocument {
             inner: self.inner.parse(html)?,
+            html: Rc::from(html),
             hash: document_hash(html),
             hook: self.hook.clone(),
         }))
@@ -147,17 +224,94 @@ impl<E: XPathEngine> XPathEngine for LoggingEngine<E> {
 /// A document of a [`LoggingEngine`].
 struct LoggingDocument {
     inner: Box<dyn Document>,
+    html: Rc<[u8]>,
     hash: u64,
     hook: Rc<dyn Fn(&Query)>,
 }
 
 impl Document for LoggingDocument {
     fn eval(&self, expr: &str, context: Option<&dyn XPathValue>, css: bool) -> Box<dyn XPathValue> {
+        // Our own values are unwrapped for the inner engine; any other value goes through as is,
+        // with no origin to report.
+        let (context, origin) = match context {
+            Some(value) => match value.as_any().downcast_ref::<LoggingValue>() {
+                Some(logged) => (Some(logged.inner.as_ref()), Some(&logged.origin)),
+                None => (Some(value), None),
+            },
+            None => (None, None),
+        };
         (self.hook)(&Query {
             expression: expr,
             css,
             document_hash: self.hash,
+            document: &self.html,
+            context: origin.map(Rc::as_ref),
         });
-        self.inner.eval(expr, context, css)
+        Box::new(LoggingValue {
+            inner: self.inner.eval(expr, context, css),
+            origin: Rc::new(Origin {
+                entry: Entry {
+                    document: self.hash,
+                    expression: expr.to_owned(),
+                    css,
+                    context: origin.map(|o| Box::new(Origin::clone(o))),
+                },
+                path: Vec::new(),
+            }),
+        })
+    }
+}
+
+/// A value of a [`LoggingEngine`]: the inner engine's value and where it came from.
+struct LoggingValue {
+    inner: Box<dyn XPathValue>,
+    origin: Rc<Origin>,
+}
+
+impl LoggingValue {
+    /// `value`, reached from this one by `step`.
+    fn step(&self, value: Box<dyn XPathValue>, step: Step) -> Box<dyn XPathValue> {
+        let mut origin = Origin::clone(&self.origin);
+        origin.path.push(step);
+        Box::new(LoggingValue {
+            inner: value,
+            origin: Rc::new(origin),
+        })
+    }
+}
+
+impl XPathValue for LoggingValue {
+    fn count(&self) -> i64 {
+        self.inner.count()
+    }
+    fn get(&self, index: i64) -> Box<dyn XPathValue> {
+        self.step(self.inner.get(index), Step::Item(index))
+    }
+    fn is_undefined(&self) -> bool {
+        self.inner.is_undefined()
+    }
+    fn kind(&self) -> Kind {
+        self.inner.kind()
+    }
+    fn string(&self) -> String {
+        self.inner.string()
+    }
+    fn inner_html(&self) -> String {
+        self.inner.inner_html()
+    }
+    fn outer_html(&self) -> String {
+        self.inner.outer_html()
+    }
+    fn inner_text(&self) -> String {
+        self.inner.inner_text()
+    }
+    fn attribute(&self, name: &str) -> String {
+        self.inner.attribute(name)
+    }
+    fn property(&self, name: &str) -> Box<dyn XPathValue> {
+        self.step(self.inner.property(name), Step::Property(name.to_owned()))
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

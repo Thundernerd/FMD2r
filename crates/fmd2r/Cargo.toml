@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+# Builds the `fpc` XPath backend too (needs `fpc`, see crates/xpath-fpc/README.md), for
+# `xpath.backend = "fpc"`, `fmd2r xpath eval --backend fpc` and `fmd2r xpath diff`.
+xpath-fpc = ["fmd-lua/xpath-fpc", "fmd-xpath/fpc"]
+
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["env"] }
@@ -14,6 +19,7 @@ fmd-import = { path = "../fmd-import" }
 fmd-lua = { path = "../fmd-lua" }
 fmd-server = { path = "../fmd-server" }
 fmd-store = { path = "../fmd-store" }
+fmd-xpath = { path = "../fmd-xpath", default-features = false }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

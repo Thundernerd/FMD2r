@@ -14,7 +14,7 @@ mod value;
 use std::any::Any;
 use std::rc::Rc;
 
-use crate::{Document, Result, XPathEngine, XPathValue};
+use crate::{Document, Kind, Result, XPathEngine, XPathValue};
 use dom::Dom;
 use eval::{Evaluator, Focus};
 use value::{Item, NodeRef, Seq};
@@ -92,6 +92,26 @@ impl XPathValue for NativeValue {
 
     fn is_undefined(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// A sequence of one item is that item, as internettools stores it
+    /// (internettools data/xquery.pas:103-109).
+    fn kind(&self) -> Kind {
+        match self.0.as_slice() {
+            [] => Kind::Undefined,
+            [item] => match item {
+                Item::Node(_) => Kind::Node,
+                Item::Str(..) => Kind::String,
+                Item::Int(_) => Kind::Int64,
+                Item::Dec(_) => Kind::Decimal,
+                Item::Dbl(_) => Kind::Double,
+                Item::Bool(_) => Kind::Boolean,
+                Item::Null => Kind::Null,
+                Item::Object(_) => Kind::Object,
+                Item::Array(_) => Kind::Array,
+            },
+            _ => Kind::Sequence,
+        }
     }
 
     fn string(&self) -> String {

@@ -33,11 +33,58 @@ pub(crate) struct Node {
     pub(crate) children: Vec<NodeId>,
     /// The last id inside this node's subtree (itself when it has none).
     pub(crate) last: NodeId,
+    /// An element's or attribute's namespace, an index into [`Dom::namespaces`]; `None` for no
+    /// namespace (`TTreeNode.namespace = nil`).
+    pub(crate) namespace: Option<NsId>,
+    /// The namespaces an element's `xmlns` and `xmlns:p` attributes declare, in order.
+    declarations: Vec<NsId>,
+    /// The default namespace in scope inside an element (the parser's `FCurrentNamespace`).
+    default_namespace: Option<NsId>,
+}
+
+impl Node {
+    /// A node with id `id` and no attributes, children or namespace yet.
+    fn new(kind: NodeKind, parent: Option<NodeId>, id: NodeId) -> Node {
+        Node {
+            kind,
+            parent,
+            attributes: Vec::new(),
+            children: Vec::new(),
+            last: id,
+            namespace: None,
+            declarations: Vec::new(),
+            default_namespace: None,
+        }
+    }
+}
+
+/// Index of a namespace in [`Dom::namespaces`].
+pub(crate) type NsId = usize;
+
+/// A namespace (internettools' `TNamespace`). Every declaration makes one, so nodes share a
+/// namespace only when they got it from the same declaration.
+pub(crate) struct Ns {
+    pub(crate) prefix: String,
+    pub(crate) url: String,
+}
+
+/// The XML namespace, bound to `xml:` without a declaration.
+const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
+/// The XMLNS namespace of namespace declarations.
+const XMLNS_NAMESPACE: &str = "http://www.w3.org/2000/xmlns/";
+/// The XHTML namespace, whose elements serialize as HTML.
+const XHTML_NAMESPACE: &str = "http://www.w3.org/1999/xhtml";
+
+/// Whether an attribute named `name` declares a namespace (`TTreeAttribute.isNamespaceNode`,
+/// internettools data/simplehtmltreeparser.pas:742-745).
+pub(crate) fn is_declaration(name: &str) -> bool {
+    name == "xmlns" || name.starts_with("xmlns:")
 }
 
 /// A parsed document. The document node is id 0.
 pub(crate) struct Dom {
     nodes: Vec<Node>,
+    namespaces: Vec<Ns>,
 }
 
 impl Dom {
@@ -90,6 +137,14 @@ impl Dom {
         }
     }
 
+    /// The URL of the node's namespace; empty when it has none (`fn:namespace-uri`, internettools
+    /// data/xquery__functions.pas:3290).
+    pub(crate) fn namespace_url(&self, id: NodeId) -> &str {
+        self.nodes[id]
+            .namespace
+            .map_or("", |ns| self.namespaces[ns].url.as_str())
+    }
+
     /// The element name, or the attribute name; empty for other nodes.
     pub(crate) fn name(&self, id: NodeId) -> &str {
         match &self.nodes[id].kind {
@@ -126,76 +181,74 @@ impl Dom {
     }
 
     /// The node and its subtree as HTML (`TTreeNode.outerHTML`), or only its children
-    /// (`innerHTML`), serialized like internettools' `serializeNodes`
-    /// (internettools data/xquery__serialization_nodes.pas:386-700).
+    /// (`innerHTML`), serialized like internettools' `serializeNodes` with `html` set
+    /// (internettools data/xquery__serialization_nodes.pas:386-700): elements outside the HTML
+    /// namespaces as XML, and the first element with the namespace declarations in scope.
     pub(crate) fn html(&self, id: NodeId, outer: bool) -> String {
-        let mut out = String::new();
-        let first = match &self.nodes[id].kind {
-            NodeKind::Element(_) if outer => id,
-            NodeKind::Document | NodeKind::Element(_) => id + 1,
-            NodeKind::Text(text) => {
-                if outer {
-                    escape_text(text, &mut out);
-                }
-                return out;
-            }
-            NodeKind::Attribute { .. } => return out,
+        let mut serializer = Serializer {
+            dom: self,
+            out: String::new(),
+            known: None,
         };
-        // Walks the subtree in document order, without recursion: the open elements, with
-        // whether each makes its content raw text.
-        let mut open: Vec<(NodeId, &str, bool)> = Vec::new();
-        let mut raw = 0;
-        for i in first..=self.nodes[id].last {
-            while let Some(&(element, name, is_raw)) = open.last() {
-                if self.nodes[element].last >= i {
-                    break;
-                }
-                open.pop();
-                raw -= usize::from(is_raw);
-                close_tag(name, &mut out);
-            }
-            let node = &self.nodes[i];
-            match &node.kind {
-                NodeKind::Text(text) if raw > 0 => out.push_str(text),
-                NodeKind::Text(text) => escape_text(text, &mut out),
-                NodeKind::Element(name) => {
-                    self.start_tag(i, name, raw > 0, &mut out);
-                    if !(node.children.is_empty() && is_childless(name)) {
-                        let is_raw = is_raw_text(name);
-                        raw += usize::from(is_raw);
-                        open.push((i, name, is_raw));
-                    }
-                }
-                NodeKind::Document | NodeKind::Attribute { .. } => {}
-            }
+        match &self.nodes[id].kind {
+            NodeKind::Element(_) if outer => serializer.nodes(id, id, true),
+            // `inner(base, elementIsHTML(base))`; the document node has no namespace.
+            NodeKind::Element(_) => serializer.nodes(id, id + 1, self.is_html_namespace(id)),
+            // `outer` of the document is `inner(n, false)`.
+            NodeKind::Document => serializer.nodes(id, id + 1, !outer),
+            NodeKind::Text(text) if outer => escape_text(text, &mut serializer.out),
+            NodeKind::Text(_) | NodeKind::Attribute { .. } => {}
         }
-        while let Some((_, name, _)) = open.pop() {
-            close_tag(name, &mut out);
-        }
-        out
+        serializer.out
     }
 
-    /// `<name attributes>`; attribute values are raw inside raw text elements.
-    fn start_tag(&self, id: NodeId, name: &str, raw: bool, out: &mut String) {
-        out.push('<');
-        out.push_str(name);
-        for &a in &self.nodes[id].attributes {
-            if let NodeKind::Attribute { name: attr, value } = &self.nodes[a].kind {
-                out.push(' ');
-                out.push_str(attr);
-                if attr.eq_ignore_ascii_case(value) && is_boolean_attribute(name, attr) {
-                    continue;
-                }
-                out.push_str("=\"");
-                if raw {
-                    out.push_str(value);
-                } else {
-                    escape_attribute(value, out);
-                }
-                out.push('"');
-            }
+    /// `elementIsHTML`: no namespace, the empty one, or XHTML's (internettools
+    /// data/xquery__serialization_nodes.pas:397-402).
+    fn is_html_namespace(&self, id: NodeId) -> bool {
+        self.nodes[id].namespace.is_none_or(|ns| {
+            let url = &self.namespaces[ns].url;
+            url.is_empty() || url == XHTML_NAMESPACE
+        })
+    }
+
+    /// The element's own namespaces (`TTreeNode.getOwnNamespaces`, internettools
+    /// data/simplehtmltreeparser.pas:1562-1580): its declarations, its namespace, and its
+    /// attributes'.
+    fn own_namespaces<'a>(&'a self, id: NodeId, list: &mut Vec<(&'a str, &'a str)>) {
+        let node = &self.nodes[id];
+        let attributes = node
+            .attributes
+            .iter()
+            .filter_map(|&a| self.nodes[a].namespace);
+        for ns in node
+            .declarations
+            .iter()
+            .copied()
+            .chain(node.namespace)
+            .chain(attributes)
+        {
+            let ns = &self.namespaces[ns];
+            add_if_new_prefix_url(list, (&ns.prefix, &ns.url));
         }
-        out.push('>');
+    }
+
+    /// The namespaces in scope at the element (`TTreeNode.getAllNamespaces`, internettools
+    /// data/simplehtmltreeparser.pas:1582-1601): its own, then its ancestors' declarations of
+    /// prefixes not seen yet.
+    fn all_namespaces(&self, id: NodeId) -> Vec<(&str, &str)> {
+        let mut list = Vec::new();
+        self.own_namespaces(id, &mut list);
+        let mut ancestor = self.nodes[id].parent;
+        while let Some(a) = ancestor {
+            for &ns in &self.nodes[a].declarations {
+                let ns = &self.namespaces[ns];
+                if !is_reserved(&ns.url) && !list.iter().any(|(p, _)| *p == ns.prefix) {
+                    list.push((&ns.prefix, &ns.url));
+                }
+            }
+            ancestor = self.nodes[a].parent;
+        }
+        list
     }
 
     /// A human-readable text (`TTreeNode.innerText`, internettools
@@ -257,6 +310,224 @@ impl Dom {
         ];
         SKIPPED.iter().any(|s| s.eq_ignore_ascii_case(name))
             || self.attribute(id, "style").is_some_and(css_hides)
+    }
+}
+
+/// `addIfNewPrefixUrl` (internettools data/xquery.namespaces.pas:266-275): adds `ns` unless
+/// the last namespace with its prefix has its URL too.
+fn add_if_new_prefix_url<'a>(list: &mut Vec<(&'a str, &'a str)>, ns: (&'a str, &'a str)) {
+    if is_reserved(ns.1) {
+        return;
+    }
+    if list
+        .iter()
+        .rev()
+        .find(|(p, _)| *p == ns.0)
+        .is_none_or(|(_, url)| *url != ns.1)
+    {
+        list.push(ns);
+    }
+}
+
+/// The XML and XMLNS namespaces, which are never declared.
+fn is_reserved(url: &str) -> bool {
+    url == XML_NAMESPACE || url == XMLNS_NAMESPACE
+}
+
+/// One run of `serializeNodes`.
+struct Serializer<'a> {
+    dom: &'a Dom,
+    out: String,
+    /// The namespaces declared so far on the open elements (`known`); `None` until the first
+    /// element, which declares all those in scope.
+    known: Option<Vec<(&'a str, &'a str)>>,
+}
+
+/// An element being serialized.
+struct Open<'a> {
+    id: NodeId,
+    name: &'a str,
+    is_html: bool,
+    /// Whether it made its content raw text (`inCDATAElement`).
+    raw: bool,
+    /// How many namespaces were known before it.
+    known: usize,
+}
+
+impl<'a> Serializer<'a> {
+    /// Serializes the nodes `first..=last of base` in document order, without recursion;
+    /// `base_is_html` is whether their parent counts as an HTML element.
+    fn nodes(&mut self, base: NodeId, first: NodeId, base_is_html: bool) {
+        let dom = self.dom;
+        let mut open: Vec<Open<'a>> = Vec::new();
+        let mut raw = false;
+        for i in first..=dom.nodes[base].last {
+            while let Some(element) = open.last() {
+                if dom.nodes[element.id].last >= i {
+                    break;
+                }
+                self.close(element.name, element.known);
+                raw &= !element.raw;
+                open.pop();
+            }
+            let parent_is_html = open.last().map_or(base_is_html, |o| o.is_html);
+            match &dom.nodes[i].kind {
+                NodeKind::Text(text) if !parent_is_html => escape_xml(text, false, &mut self.out),
+                NodeKind::Text(text) if raw => self.out.push_str(text),
+                NodeKind::Text(text) => escape_text(text, &mut self.out),
+                NodeKind::Element(name) => {
+                    if let Some(element) = self.start_tag(i, name, parent_is_html, raw) {
+                        raw |= element.raw;
+                        open.push(element);
+                    }
+                }
+                NodeKind::Document | NodeKind::Attribute { .. } => {}
+            }
+        }
+        while let Some(element) = open.pop() {
+            self.close(element.name, element.known);
+        }
+    }
+
+    /// Writes the element's start tag, or the whole element when it has no children; returns
+    /// it when it stays open.
+    fn start_tag(
+        &mut self,
+        id: NodeId,
+        name: &'a str,
+        parent_is_html: bool,
+        raw: bool,
+    ) -> Option<Open<'a>> {
+        let dom = self.dom;
+        let node = &dom.nodes[id];
+        let same_namespace = node
+            .parent
+            .is_some_and(|p| dom.nodes[p].namespace == node.namespace);
+        let is_html = (parent_is_html && same_namespace) || dom.is_html_namespace(id);
+        let known = match &mut self.known {
+            Some(known) => {
+                let before = known.len();
+                dom.own_namespaces(id, known);
+                before
+            }
+            None => {
+                self.known = Some(dom.all_namespaces(id));
+                0
+            }
+        };
+        let list = self.known.get_or_insert_with(Vec::new);
+        self.out.push('<');
+        self.out.push_str(name);
+        for k in known..list.len() {
+            let (prefix, url) = list[k];
+            let undeclares = list[..known].iter().any(|(p, _)| *p == prefix);
+            if !url.is_empty() || undeclares {
+                declaration(prefix, url, &mut self.out);
+            }
+        }
+        // `requireNamespace`, or `xmlns=""` for an element without a namespace inside a default
+        // one (internettools data/xquery__serialization_nodes.pas:584-591).
+        match node.namespace {
+            // Already declared above.
+            Some(_) => {}
+            None => {
+                if list
+                    .iter()
+                    .rev()
+                    .find(|(p, _)| p.is_empty())
+                    .is_some_and(|(_, url)| !url.is_empty())
+                {
+                    list.push(("", ""));
+                    self.out.push_str(" xmlns=\"\"");
+                }
+            }
+        }
+        for &a in &node.attributes {
+            let NodeKind::Attribute { name: attr, value } = &dom.nodes[a].kind else {
+                continue;
+            };
+            if is_declaration(attr) {
+                continue;
+            }
+            self.out.push(' ');
+            self.out.push_str(attr);
+            if is_html && attr.eq_ignore_ascii_case(value) && is_boolean_attribute(name, attr) {
+                continue;
+            }
+            self.out.push_str("=\"");
+            if raw {
+                self.out.push_str(value);
+            } else if is_html {
+                escape_attribute(value, &mut self.out);
+            } else {
+                escape_xml(value, true, &mut self.out);
+            }
+            self.out.push('"');
+        }
+        if node.children.is_empty() {
+            if !is_html {
+                self.out.push_str("/>");
+            } else if is_childless(name) {
+                self.out.push('>');
+            } else {
+                self.out.push_str("></");
+                self.out.push_str(name);
+                self.out.push('>');
+            }
+            list.truncate(known);
+            return None;
+        }
+        self.out.push('>');
+        Some(Open {
+            id,
+            name,
+            is_html,
+            raw: !raw && is_html && is_raw_text(name),
+            known,
+        })
+    }
+
+    /// Writes an end tag and forgets the element's namespaces.
+    fn close(&mut self, name: &str, known: usize) {
+        close_tag(name, &mut self.out);
+        if let Some(list) = &mut self.known {
+            list.truncate(known);
+        }
+    }
+}
+
+/// ` xmlns="url"` or ` xmlns:prefix="url"` (`TNamespace.serialize`, internettools
+/// data/xquery.namespaces.pas:451-455).
+fn declaration(prefix: &str, url: &str, out: &mut String) {
+    out.push_str(" xmlns");
+    if !prefix.is_empty() {
+        out.push(':');
+        out.push_str(prefix);
+    }
+    out.push_str("=\"");
+    escape_xml(url, true, out);
+    out.push('"');
+}
+
+/// `appendXMLText` and, with `attribute`, `appendXMLAttrib` (internettools
+/// data/xquery.internals.common.pas:1528-1587).
+fn escape_xml(text: &str, attribute: bool, out: &mut String) {
+    for c in text.chars() {
+        match c {
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '&' => out.push_str("&amp;"),
+            '\'' => out.push_str("&apos;"),
+            '"' => out.push_str("&quot;"),
+            '\r' => out.push_str("&#xD;"),
+            '\n' if attribute => out.push_str("&#xA;"),
+            '\t' if attribute => out.push_str("&#x9;"),
+            '\n' | '\t' => out.push(c),
+            '\0'..='\x1f' | '\x7f'..='\u{9f}' | '\u{2028}' => {
+                out.push_str(&format!("&#x{:X};", u32::from(c)));
+            }
+            c => out.push(c),
+        }
     }
 }
 
@@ -514,7 +785,10 @@ impl Sink {
 
     fn into_dom(self) -> Dom {
         let nodes = self.nodes.into_inner();
-        let mut dom = Dom { nodes: Vec::new() };
+        let mut dom = Dom {
+            nodes: Vec::new(),
+            namespaces: Vec::new(),
+        };
         freeze(&nodes, &mut dom);
         dom
     }
@@ -538,29 +812,18 @@ fn freeze(nodes: &[SinkNode], dom: &mut Dom) {
             SinkData::Dropped => continue,
         };
         let new = dom.nodes.len();
-        dom.nodes.push(Node {
-            kind,
-            parent,
-            attributes: Vec::new(),
-            children: Vec::new(),
-            last: new,
-        });
+        dom.nodes.push(Node::new(kind, parent, new));
         if let Some(parent) = parent {
             dom.nodes[parent].children.push(new);
         }
         if let SinkData::Element { attrs, .. } = &nodes[id].data {
             for attr in attrs {
                 let a = dom.nodes.len();
-                dom.nodes.push(Node {
-                    kind: NodeKind::Attribute {
-                        name: qualified(&attr.name),
-                        value: attr.value.to_string(),
-                    },
-                    parent: Some(new),
-                    attributes: Vec::new(),
-                    children: Vec::new(),
-                    last: a,
-                });
+                let kind = NodeKind::Attribute {
+                    name: qualified(&attr.name),
+                    value: attr.value.to_string(),
+                };
+                dom.nodes.push(Node::new(kind, Some(new), a));
                 dom.nodes[new].attributes.push(a);
             }
         }
@@ -576,13 +839,132 @@ fn freeze(nodes: &[SinkNode], dom: &mut Dom) {
         };
         dom.nodes[id].last = last;
     }
+    resolve_namespaces(dom);
+}
+
+/// Gives elements and attributes their namespaces as internettools' HTML parser does
+/// (`TTreeParser.enterTagCommon`, internettools data/simplehtmltreeparser.pas:2436-2479):
+/// `xmlns` and `xmlns:p` attributes declare namespaces for the element and its descendants,
+/// an unprefixed element is in the default namespace in scope, and a prefixed name is in its
+/// prefix's namespace, or, when the prefix isn't declared, loses the prefix and is in none.
+fn resolve_namespaces(dom: &mut Dom) {
+    // Parents come before their children.
+    for id in 0..dom.nodes.len() {
+        if !matches!(dom.nodes[id].kind, NodeKind::Element(_)) {
+            continue;
+        }
+        let mut default = dom.nodes[id]
+            .parent
+            .and_then(|p| dom.nodes[p].default_namespace);
+        for a in dom.nodes[id].attributes.clone() {
+            let NodeKind::Attribute { name, value } = &dom.nodes[a].kind else {
+                continue;
+            };
+            let prefix = match name.strip_prefix("xmlns") {
+                Some("") => "",
+                Some(rest) => match rest.strip_prefix(':') {
+                    Some(prefix) => prefix,
+                    None => continue,
+                },
+                None => continue,
+            };
+            let declared = Ns {
+                prefix: prefix.to_owned(),
+                url: collapse_whitespace(value),
+            };
+            let ns = dom.namespaces.len();
+            let is_default = declared.prefix.is_empty();
+            dom.namespaces.push(declared);
+            dom.nodes[id].declarations.push(ns);
+            if is_default {
+                default = Some(ns);
+            }
+            dom.nodes[a].namespace = Some(xmlns_namespace(dom));
+        }
+        dom.nodes[id].default_namespace = default;
+        dom.nodes[id].namespace = default;
+        resolve_prefix(dom, id, id);
+        for a in dom.nodes[id].attributes.clone() {
+            if !is_declaration(dom.name(a)) {
+                resolve_prefix(dom, id, a);
+            }
+        }
+    }
+}
+
+/// Puts the node `id` with a prefixed name in the namespace its prefix names at the element
+/// `scope` (`TTreeParser.findNamespace`, internettools data/simplehtmltreeparser.pas:
+/// 2736-2747). An unknown prefix is dropped from the name, leaving it in no namespace.
+fn resolve_prefix(dom: &mut Dom, scope: NodeId, id: NodeId) {
+    let Some((prefix, local)) = dom.name(id).split_once(':') else {
+        return;
+    };
+    let (prefix, local) = (prefix.to_owned(), local.to_owned());
+    let namespace = find_namespace(dom, scope, &prefix);
+    if namespace.is_none() {
+        match &mut dom.nodes[id].kind {
+            NodeKind::Element(name) | NodeKind::Attribute { name, .. } => *name = local,
+            NodeKind::Document | NodeKind::Text(_) => {}
+        }
+    }
+    dom.nodes[id].namespace = namespace;
+}
+
+/// The namespace `prefix` names at the element `scope`: the innermost declaration on it or
+/// its ancestors; `xml` needs none (internettools data/simplehtmltreeparser.pas:2736-2747).
+fn find_namespace(dom: &mut Dom, scope: NodeId, prefix: &str) -> Option<NsId> {
+    let mut element = Some(scope);
+    while let Some(e) = element {
+        let node = &dom.nodes[e];
+        if let Some(&ns) = node
+            .declarations
+            .iter()
+            .rev()
+            .find(|&&ns| dom.namespaces[ns].prefix == prefix)
+        {
+            return Some(ns);
+        }
+        element = node.parent;
+    }
+    if prefix == "xml" {
+        return Some(reserved_namespace(dom, "xml", XML_NAMESPACE));
+    }
+    None
+}
+
+/// The namespace of namespace declarations.
+fn xmlns_namespace(dom: &mut Dom) -> NsId {
+    reserved_namespace(dom, "xmlns", XMLNS_NAMESPACE)
+}
+
+/// The one namespace object for a reserved URL.
+fn reserved_namespace(dom: &mut Dom, prefix: &str, url: &str) -> NsId {
+    if let Some(ns) = dom.namespaces.iter().position(|ns| ns.url == url) {
+        return ns;
+    }
+    dom.namespaces.push(Ns {
+        prefix: prefix.to_owned(),
+        url: url.to_owned(),
+    });
+    dom.namespaces.len() - 1
+}
+
+/// `xmlStrWhitespaceCollapse`, which a declared URL goes through (internettools
+/// data/simplehtmltreeparser.pas:2453): trimmed, runs of whitespace as one space.
+fn collapse_whitespace(s: &str) -> String {
+    s.split([' ', '\t', '\n', '\r'])
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// `prefix:local`, as internettools names nodes from the source.
 fn qualified(name: &QualName) -> String {
     match &name.prefix {
-        Some(prefix) => format!("{prefix}:{}", name.local),
-        None => name.local.to_string(),
+        // html5ever gives a foreign element's `xmlns` the empty prefix; internettools keeps the
+        // name as written (data/simplehtmltreeparser.pas:2451-2457).
+        Some(prefix) if !prefix.is_empty() => format!("{prefix}:{}", name.local),
+        _ => name.local.to_string(),
     }
 }
 

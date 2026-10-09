@@ -16,11 +16,15 @@ mod strings;
 pub mod xquery;
 
 use std::path::PathBuf;
+use std::rc::Rc;
+
+use fmd_xpath::XPathEngine;
 
 pub use class::LuaClass;
 pub use duktape::JsLimits;
 pub use fmd_http::TerminateToken;
 pub use fmd_xpath::Backend as XPathBackend;
+pub use fmd_xpath::corpus::CorpusWriter as XPathCorpusWriter;
 pub use globals::Globals;
 pub use http::{
     HttpModule, LuaHttp, ModuleHttpOverrides, ModuleHttpSettings, ProxyOverride, create_http,
@@ -90,6 +94,14 @@ pub struct Runtime {
     lua: mlua::Lua,
 }
 
+/// The default XPath backend's engine: `native` (the `xpath.backend` setting's default), or `fpc`
+/// when this build has no `native`; `None` with neither built in.
+pub(crate) fn default_xpath_engine() -> Option<Rc<dyn XPathEngine>> {
+    XPathBackend::default()
+        .engine()
+        .or_else(|| XPathBackend::Fpc.engine())
+}
+
 impl Runtime {
     /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
     /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with the `fmd.*` Host API libraries
@@ -109,13 +121,9 @@ impl Runtime {
         lua.set_app_data(duktape::JsSettings::default());
         duktape::register(&lua)?;
         libs::register(&lua)?;
-        // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) over the default backend, `fpc`
-        // (the `xpath.backend` setting's default), or `native` when this build has no `fpc`;
-        // with neither built in, the global is missing.
-        let engine = XPathBackend::Fpc
-            .engine()
-            .or_else(|| XPathBackend::Native.engine());
-        if let Some(engine) = engine {
+        // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) over the default backend; with
+        // none built in, the global is missing.
+        if let Some(engine) = default_xpath_engine() {
             xquery::register(&lua, engine)?;
         }
         Ok(Runtime { lua })
@@ -127,6 +135,12 @@ impl Runtime {
         let engine = backend
             .engine()
             .ok_or(Error::MissingXPathBackend(backend))?;
+        xquery::register(&self.lua, engine)
+    }
+
+    /// Reinstalls `CreateTXQuery` over `engine`, e.g. a backend wrapped in a
+    /// [`LoggingEngine`](fmd_xpath::LoggingEngine). TXQuery objects made before keep theirs.
+    pub fn set_xpath_engine(&self, engine: Rc<dyn XPathEngine>) -> Result<()> {
         xquery::register(&self.lua, engine)
     }
 

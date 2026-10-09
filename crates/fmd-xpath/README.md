@@ -9,7 +9,15 @@ The `XPathEngine` trait FMD2r's Lua bindings (`CreateTXQuery`, `IXQValue`) run o
 
 `fmd_xpath::Backend` names them; `Backend::engine()` returns `None` for a backend the build leaves out. `fmd-lua`'s
 `Runtime::set_xpath_backend` installs `CreateTXQuery` over one, and the `xpath.backend` setting (`fpc` | `native`,
-default `fpc`) picks it. T35 switches the default once the differential corpus shows parity.
+default `native`) picks it. `native` became the default once the differential corpus showed parity (T35).
+
+## Differential corpus
+
+`LoggingEngine` wraps a backend and reports every evaluation, with where its context value came from, to a hook;
+`corpus::CorpusWriter` records those into a corpus directory and `corpus::Corpus` reads one back (format in
+`fixtures/README.md`). `diff()` evaluates every entry on two backends and returns the entries whose `Normalized`
+results (item count and kinds, string values, serialized nodes) differ; `Report::render()` groups them by expression
+feature. `fmd2r xpath diff` runs it on `fpc` and `native`.
 
 ## Tests
 
@@ -20,6 +28,7 @@ first, then `native` must match.
 ```sh
 cargo test -p fmd-xpath                     # native only
 cargo test -p fmd-xpath --features fpc      # both backends
+cargo test -p fmd-xpath --features diff     # both backends, plus the differential corpus (tests/corpus.rs)
 ```
 
 `fmd-lua`'s XQuery suite (`crates/fmd-lua/tests/xquery/`) does the same through Lua snippets.
@@ -46,7 +55,7 @@ pinned revision `crates/xpath-fpc/build.sh` downloads (FMD2's checkout doesn't c
 
 ## Known differences of the `native` backend
 
-None of these show in the shared suite; they are what the T35 differential corpus is for.
+None of these show in the shared suite or on the differential corpus (`fixtures/xpath-corpus`).
 
 - **HTML tree repair** follows HTML5 (html5ever), which internettools' `pmHTML` repair only approximates. Pages
   that are valid HTML parse the same; malformed markup may not. Seen so far:
@@ -63,6 +72,9 @@ None of these show in the shared suite; they are what the T35 differential corpu
   - `<![CDATA[...]]>` outside SVG and MathML is a comment, so dropped.
 - **Names** are lowercased (HTML5), where internettools keeps the source's case for `name()` and serialization
   (`<DIV>`). Name tests are case-insensitive in both, so paths match the same nodes.
+- **Namespaces** follow the tree, where internettools scopes `xmlns` declarations while parsing: they differ only
+  where repair moves an element out of the element that declared its namespace. A `prefix:*` name test matches any
+  element, and an unprefixed one never matches a prefixed element.
 - **`resolve-uri` without a base URI** returns the relative URI unchanged; FMD2 resolves it against its own
   working directory (`file:///...`).
 - **Decimals** have 28 significant digits (`rust_decimal`) instead of arbitrary precision.

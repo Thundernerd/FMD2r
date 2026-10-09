@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>frantic :: Seinagi Online</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<link href="https://online.seinagi.org.es/content/themes/default/style.css?v=0.8.19" rel="stylesheet" type="text/css" />        
+		<link rel="sitemap" type="application/xml" title="Sitemap" href="https://online.seinagi.org.es/sitemap.xml" />
+		<link rel="alternate" type="application/rss+xml" title="RSS" href="https://online.seinagi.org.es/rss.xml" />
+		<link rel="alternate" type="application/atom+xml" title="Atom" href="https://online.seinagi.org.es/atom.xml" />
+		<link rel='index' title='Seinagi Online' href='https://online.seinagi.org.es/' />
+        <link rel='stylesheet' id='colorcss'  href='https://online.seinagi.org.es/content/themes/default/style-1.css' type='text/css' media='all' />
+		<meta name="generator" content="FoOlSlide 0.8.19" />
+		<script src="https://online.seinagi.org.es/assets/js/jquery.js?v=0.8.19"></script>
+		<script src="https://online.seinagi.org.es/assets/js/jquery.plugins.js?v=0.8.19"></script>
+				        <style type="text/css">
+					.bloque_banner {
+				position:absolute;
+				z-index:100;
+			}
+			.bloque_adsbanner{
+				position:fixed;
+				top:50%;
+				left:50%;
+				margin-left: -364px;	
+				margin-bottom: -45px;
+				width:728px;
+				height:90px;
+				background:#000000;
+				border:1px solid #2f2f2f;
+			}
+			.exit_bloque_adsbanner,	.exit_bloque_adsbanner2{
+				position:absolute;
+				width:24px;
+				height:24px;
+				background:url(//static.seinagi.org.es/image/close.png) no-repeat;
+				cursor:pointer;
+				border-radius:4px;
+			}
+			.exit_bloque_adsbanner{
+				top:15px;
+				left:15px;
+			}
+			.exit_bloque_adsbanner2{
+				top:15px;
+				left:15px;
+			}
+			.bloque_adsbanner_no{
+			}
+        </style>
+        
+	<script language="javascript">
+		clickHandler = function(event){			
+			var date = new Date();						
+			date.setTime(date.getTime() + (24*60*60*1000));						
+			var expires = "expires="+date.toGMTString();				
+			document.cookie="popupglobal1008=1791489718; domain=.seinagi.org.es; path=/; "+expires;
+			document.cookie="popup11008=1791489958; domain=.seinagi.org.es; path=/; "+expires;
+			document.cookie="popup1n1008=1; domain=.seinagi.org.es; path=/; "+expires;
+			self.removeEventListener('click',clickHandler);
+		}
+		self.addEventListener('click',clickHandler);	
+	</script>        <script language="javascript">
+			function _color(csscolor){			
+				document.getElementById("colorcss").href="https://online.seinagi.org.es/content/themes/default/style-"+csscolor+".css";
+				if(csscolor==1 || csscolor==3) {
+					document.body.style["background"]="#000";
+		
+				}
+				if(csscolor==2 || csscolor==4) {
+					document.body.style["background-image"]="url(//static.seinagi.org.es/img/fondo/fondo4.jpg)";
+					document.body.style["background-attachment"]="fixed";
+					document.body.style["background-position"]="top center";
+					document.body.style["background-repeat"]="no-repeat";
+				}
+				var date = new Date();	
+				date.setTime(date.getTime() + (74649600000));	
+				var expires = "expires="+date.toGMTString();	
+				document.cookie="color="+csscolor+"; domain=.seinagi.org.es; path=/; "+expires;
+			}
+			
+			// mostrar / ocultar publcidad
+			function _switch_ads(exeption)	{
+				// obtener elementos
+				var top = document.getElementById("ads_top_minbanner");
+				var bottom = document.getElementById("ads_bottom_banner");			
+
+				// calcular estado
+				var status;
+				if(exeption != null){
+					status = (exeption) ? 'block' : 'none';
+				} else {
+					status = (bottom.style.display == 'none') ? 'block' : 'none';
+				}			
+
+				// incluir estilos
+				top.style.display = status;
+				bottom.style.display = status;
+			}	
+
+			function _ads_autoHide(seconds)	{
+				var timeOutPeriod = seconds * 1000;
+				setTimeout(function(){
+					// ocultar publicidad
+					_switch_ads(false);
+				}, timeOutPeriod);
+			}	
+		</script>
+        <script language="javascript">
+			$(function(){
+				$(".exit_bloque_adsbanner").mouseover(
+					function(){
+						$(".exit_bloque_adsbanner").css("display","none");
+						$(".exit_bloque_adsbanner2").css("display","");
+					}
+				);
+				$(".exit_bloque_adsbanner2").click(
+					function(){			
+						$(".exit_bloque_adsbanner2").remove();
+						document.getElementById("ads_top_banner").className="ads1 iframe banner";
+						document.getElementById("quitarcss").className="bloque_adsbanner_no";
+					}
+				);
+			});
+			!function(a){function d(){a(b).each(function(){e(a(this)).removeClass("open")})}function e(b){var c=b.attr("data-target"),d;return c||(c=b.attr("href"),c=c&&/#/.test(c)&&c.replace(/.*(?=#[^\s]*$)/,"")),d=a(c),d.length||(d=b.parent()),d}var b="[data-toggle=dropdown]",c=function(b){var c=a(b).on("click.dropdown.data-api",this.toggle);a("html").on("click.dropdown.data-api",function(){c.parent().removeClass("open")})};c.prototype={constructor:c,toggle:function(b){var c=a(this),f,g;if(c.is(".disabled, :disabled"))return;return f=e(c),g=f.hasClass("open"),d(),g||f.toggleClass("open"),c.focus(),!1},keydown:function(b){var c,d,f,g,h,i;if(!/(38|40|27)/.test(b.keyCode))return;c=a(this),b.preventDefault(),b.stopPropagation();if(c.is(".disabled, :disabled"))return;g=e(c),h=g.hasClass("open");if(!h||h&&b.keyCode==27)return c.click();d=a("[role=menu] li:not(.divider):visible a",g);if(!d.length)return;i=d.index(d.filter(":focus")),b.keyCode==38&&i>0&&i--,b.keyCode==40&&i<d.length-1&&i++,~i||(i=0),d.eq(i).focus()}};var f=a.fn.dropdown;a.fn.dropdown=function(b){return this.each(function(){var d=a(this),e=d.data("dropdown");e||d.data("dropdown",e=new c(this)),typeof b=="string"&&e[b].call(d)})},a.fn.dropdown.Constructor=c,a.fn.dropdown.noConflict=function(){return a.fn.dropdown=f,this},a(document).on("click.dropdown.data-api touchstart.dropdown.data-api",d).on("click.dropdown touchstart.dropdown.data-api",".dropdown form",function(a){a.stopPropagation()}).on("touchstart.dropdown.data-api",".dropdown-menu",function(a){a.stopPropagation()}).on("click.dropdown.data-api touchstart.dropdown.data-api",b,c.prototype.toggle).on("keydown.dropdown.data-api touchstart.dropdown.data-api",b+", [role=menu]",c.prototype.keydown)}(window.jQuery)// JavaScript Document
+		</script>
+	</head>
+	<body id="fondo" class="">
+		<div id="wrapper">
+						<div id="header">
+				                <div class="clearer">   
+                    <a alt="frantic :: Seinagi Online" title="frantic :: Seinagi Online" href="https://online.seinagi.org.es/"><div class="top" style="background-image:url(//static.seinagi.org.es/img/logos/logo1.jpg); width:1140px; height:193px;"></div></a>
+                    <div class="flag">
+                        <div class="template">
+                            <span>Color Theme</span><br />
+                            <a href="#" onClick="_color(1);"><div class="color color1"></div></a>
+                            <a href="#" onClick="_color(2);"><div class="color color2"></div></a>
+                            <a href="#" onClick="_color(3);"><div class="color color3"></div></a>
+                            <a href="#" onClick="_color(4);"><div class="color color4"></div></a>
+                            <div style="clear:both;"></div>
+                        </div>
+                    </div>
+                    <div class="urlsocial">    
+                        <a title="Hazte Fan!" href="https://www.facebook.com/SeinagiScanlations" target="_blank">                
+                            <img src="https://online.seinagi.org.es/content/themes/default/images/facebook.png" /> Facebook                    
+                        </a>            
+                    </div>
+                </div>
+				<div role="navigation" id="navig">
+					<ul>
+						<li>
+							<a href="https://online.seinagi.org.es/">Últimas publicaciones</a>
+						</li>
+						<li>
+							<a href="https://online.seinagi.org.es/directory/">Lista de series</a>
+						</li>
+                        <li>
+							<a href="https://online.seinagi.org.es/account/auth/login/">Cuentas</a>
+						</li>
+						<li style="">
+							<form action="https://online.seinagi.org.es/search/" method="post" accept-charset="utf-8"><input type="text" name="search" value="" placeholder="Para buscar series, escribe y pulsa enter" id="searchbox" class="fright"  /></form>						</li>
+						<li>
+							<a style="padding:0;" href="https://online.seinagi.org.es/feeds/rss/"><img height="28" width="28" style="position:relative; top:1px;" src="https://online.seinagi.org.es/content/themes/default/images/feed-icon-28x28.png" /></a>
+						</li>
+					</ul>
+				</div>
+
+				<a href="https://online.seinagi.org.es/"><div id="title">Seinagi Online</div></a>
+				<div class="home_url"><a href="https://seinagi.org.es">Volver al sitio &crarr;</a></div>				<div class="clearer"></div>
+			</div>
+
+			<article id="content">
+
+				<div class="panel">
+    <div class="large comic">
+		<h1 class="title">
+			frantic		</h1>
+				<div class="info">
+			<ul>
+				<li><b>Título</b>: frantic</li>
+                <li><b>Author</b>: KIGITSU Katsuhisa<br></li>
+                <li><b>Artist</b>: KIGITSU Katsuhisa<br></li>
+				<li><b>Descripción</b>: la secuela de franke fran</li>
+                <li><b>Lecturas</b>: 89646</li>
+			</ul>
+		</div>
+	</div>
+
+	<div class="list">
+		<div class="title">Capítulos</div><div class="group"><div class="element"><div class="icon_wrapper fleft small"><a href="//revive.miocio.org/short/?t=1&s=https://online.seinagi.org.es/download/frantic/es/0/3/"><img class="icon off" src="https://online.seinagi.org.es/assets/glyphish/off/50.png" /><img class="icon on" src="https://online.seinagi.org.es/assets/glyphish/on/50.png" /></a></div>
+					<div class="title"><a href="https://online.seinagi.org.es/read/frantic/es/0/3/" title="Capítulo 3">Capítulo 3</a></div>
+					<div class="meta_r">por <a href="https://online.seinagi.org.es/team/seinagi/" title="Seinagi" >Seinagi</a>, 2019.11.17 </div>
+					<div style="float:right; width:120px;">Lecturas: 29431</div>
+				</div><div class="element"><div class="icon_wrapper fleft small"><a href="//revive.miocio.org/short/?t=1&s=https://online.seinagi.org.es/download/frantic/es/0/2/"><img class="icon off" src="https://online.seinagi.org.es/assets/glyphish/off/50.png" /><img class="icon on" src="https://online.seinagi.org.es/assets/glyphish/on/50.png" /></a></div>
+					<div class="title"><a href="https://online.seinagi.org.es/read/frantic/es/0/2/" title="Capítulo 2">Capítulo 2</a></div>
+					<div class="meta_r">por <a href="https://online.seinagi.org.es/team/seinagi/" title="Seinagi" >Seinagi</a>, 2019.11.17 </div>
+					<div style="float:right; width:120px;">Lecturas: 29447</div>
+				</div><div class="element"><div class="icon_wrapper fleft small"><a href="//revive.miocio.org/short/?t=1&s=https://online.seinagi.org.es/download/frantic/es/0/1/"><img class="icon off" src="https://online.seinagi.org.es/assets/glyphish/off/50.png" /><img class="icon on" src="https://online.seinagi.org.es/assets/glyphish/on/50.png" /></a></div>
+					<div class="title"><a href="https://online.seinagi.org.es/read/frantic/es/0/1/" title="Capítulo 1">Capítulo 1</a></div>
+					<div class="meta_r">por <a href="https://online.seinagi.org.es/team/seinagi/" title="Seinagi" >Seinagi</a>, 2019.11.17 </div>
+					<div style="float:right; width:120px;">Lecturas: 30765</div>
+				</div></div>	</div>
+</div>
+			</article>
+
+		</div>
+		<div id="footer">			
+			<!-- Add a placeholder for the Twitch embed -->
+			<div id="twitch-embed"></div>
+			<div class="text">
+				<div>
+					Todos los manga que aparece en esta Web son propiedad de sus editores.<br/> 
+Las traducciones son por Fans y pretende ser una vista previa del material para los países de habla hispana.<br/>
+No trate de sacar provecho de este material.<br/> Si te ha gustado alguno de los manga que obtuvo aquí, considerar la compra de las versiones en japonés, o la traducción local, donde esté disponible. Gracias por su apoyo.				</div>
+				<div class="cp_link">
+					<a href="http://www.foolz.us/info/foolslide/" target="_blank"><img src="https://online.seinagi.org.es/content/themes/default/images/logo_footer.png" /></a>
+				</div>
+			</div>
+		</div>
+
+		<div id="messages">
+		</div>
+		<!-- Load the Twitch embed script -->
+		<script src="https://player.twitch.tv/js/embed/v1.js"></script>
+
+		<!-- Create a Twitch.Player object. This will render within the placeholder div -->
+		<script type="text/javascript">
+		  new Twitch.Player("twitch-embed", {
+			  width: "100%",
+			  height: 500,
+			  channel: "djscusa"
+		  });
+		</script>
+        <!--<iframe frameborder="0" height="0" width="0" allowtransparency="true" scrolling="no" marginheight="0" marginwidth="0" src="//seinagi.org.es/blog/geo.php?http=http://online.seinagi.org.es/series/frantic/&referer="></iframe>-->
+	</body>
+	</html>

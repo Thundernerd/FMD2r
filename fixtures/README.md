@@ -82,4 +82,41 @@ timestamp in the URL). Review `git diff fixtures/smoke` before committing: a rec
 copy of the site's responses and is committed as is. Some sites echo the client's IP address
 back (e.g. MangaLib's DDoS-Guard `__ddg9_` cookie): find it with `grep -rF "$(curl -s
 https://ifconfig.me)" fixtures/smoke` and replace it with `0.0.0.0`, then check the entry still
-replays (`target/debug/fmd-smoke run <name>`).
+replays (`target/debug/fmd-smoke run <name>`). Then rebuild the XPath corpus (below).
+
+## `xpath-corpus/`: the XPath differential corpus
+
+Every XPath expression and CSS selector the smoke list's modules evaluate during the replay, with
+the documents they ran against: the evidence that the `native` XPath backend gives FMD2's own
+engine's (`fpc`) results on real module traffic (T35).
+
+```
+xpath-corpus/
+  entries.jsonl         one evaluation per line, each once
+  documents/<hash>.html each document body once, named by its 64-bit FNV-1a hash in hex
+```
+
+An entry names its document and expression, `css: true` for a selector, and, when it ran
+against a value of an earlier evaluation (`x.XPath(expr, v)`), that value's `context`: the
+evaluation it came from and the `path` of `item`s (1-based) and `property`s taken from it.
+
+```json
+{"document":"62269cfe15173811","expression":"a/@href","context":{"document":"62269cfe15173811","expression":"//li","path":[{"item":2}]}}
+```
+
+`fmd2r module info|pages --xpath-corpus DIR` records into a corpus (adding to what is there);
+`fmd-smoke run --xpath-corpus DIR` passes it on to every run. `fmd2r xpath diff [--corpus DIR]`
+evaluates every entry on both backends and reports the entries whose results differ (item count
+and kinds, string values, serialized nodes) as Markdown, grouped by expression feature; it needs
+a build with both backends (`--features xpath-fpc`). `cargo test -p fmd-xpath --features diff`
+runs the same comparison on the committed corpus in CI. The nightly smoke workflow records a
+corpus from its live and replay runs and diffs it too.
+
+Rebuild the corpus after re-recording smoke entries, and commit it with them:
+
+```sh
+scripts/xpath-corpus.sh
+```
+
+`fmd2r xpath eval [--backend fpc|native] [--css] FILE EXPR` prints one evaluation in the same
+normalized form, for debugging a mismatch.

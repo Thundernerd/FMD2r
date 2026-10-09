@@ -89,7 +89,7 @@ export const defaultSettings = (): Settings => ({
 	},
 	covers: { revalidate_after_hours: 168, cache_size_mb: 256 },
 	server: { bind: '0.0.0.0:8080', auth_token: null },
-	xpath: { backend: 'fpc' }
+	xpath: { backend: 'native' }
 });
 
 /** A module as the mock knows it: what it declares. Values live in the module's overrides. */

@@ -228,7 +228,7 @@ const seedAbout = (): About => ({
 			inbox_id: 'batoto-host-api'
 		}
 	],
-	xpath_backend: 'fpc',
+	xpath_backend: 'native',
 	data_dir: '/data',
 	databases: [
 		{ name: 'app.db', bytes: 2_412_544 },

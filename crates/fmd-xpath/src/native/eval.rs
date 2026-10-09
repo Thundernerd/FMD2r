@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use rust_decimal::Decimal;
 
-use super::dom::NodeKind;
+use super::dom::{self, NodeKind};
 use super::functions;
 use super::syntax::{Axis, BinOp, CmpOp, Expr, Key, NodeTest, SeqType};
 use super::value::{
@@ -595,7 +595,9 @@ fn step(item: &Item, axis: Axis, test: &NodeTest) -> XResult<Seq> {
             .map(|id| Item::Node(node.with_id(id)))
             .collect()),
         Item::Object(_) | Item::Array(_) => match test {
-            NodeTest::Name(_) | NodeTest::AnyName | NodeTest::Node => json_step(item, axis, test),
+            NodeTest::Name(_) | NodeTest::LocalName(_) | NodeTest::AnyName | NodeTest::Node => {
+                json_step(item, axis, test)
+            }
             _ => err("XPTY0020: a kind test on a JSON value"),
         },
         _ => err("XPTY0020: an axis step on a value that is not a node"),
@@ -610,7 +612,14 @@ fn axis_nodes(node: &NodeRef, axis: Axis) -> Vec<usize> {
     let is_attr = |i: usize| matches!(dom.node(i).kind, NodeKind::Attribute { .. });
     match axis {
         Axis::Child => n.children.clone(),
-        Axis::Attribute => n.attributes.clone(),
+        // Namespace declarations aren't attributes (`isNamespaceNode`, internettools
+        // data/simplehtmltreeparser.pas:742-745).
+        Axis::Attribute => n
+            .attributes
+            .iter()
+            .copied()
+            .filter(|&a| !dom::is_declaration(dom.name(a)))
+            .collect(),
         Axis::SelfNode => vec![id],
         Axis::Descendant => (id + 1..=n.last).filter(|&i| !is_attr(i)).collect(),
         Axis::DescendantOrSelf => std::iter::once(id)
@@ -691,6 +700,14 @@ fn matches_test(node: &NodeRef, id: usize, axis: Axis, test: &NodeTest) -> bool 
     let name_is = |name: &str| node.dom.name(id).eq_ignore_ascii_case(name);
     match test {
         NodeTest::Name(name) => principal(kind) && name_is(name),
+        NodeTest::LocalName(local) => {
+            let name = node.dom.name(id);
+            principal(kind)
+                && name
+                    .rsplit_once(':')
+                    .map_or(name, |(_, l)| l)
+                    .eq_ignore_ascii_case(local)
+        }
         NodeTest::AnyName => principal(kind),
         NodeTest::Node => true,
         NodeTest::Text => matches!(kind, NodeKind::Text(_)),
@@ -728,7 +745,7 @@ fn json_step(item: &Item, axis: Axis, test: &NodeTest) -> XResult<Seq> {
 
 fn key_matches(test: &NodeTest, key: &str) -> bool {
     match test {
-        NodeTest::Name(name) => name == key,
+        NodeTest::Name(name) | NodeTest::LocalName(name) => name == key,
         _ => true,
     }
 }

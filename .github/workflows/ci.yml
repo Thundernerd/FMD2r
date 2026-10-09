@@ -26,7 +26,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       # Includes the smoke list's offline replay (crates/fmd2r/tests/smoke.rs): every entry's
-      # recorded HTTP traffic, compared with its info and pages snapshots in fixtures/smoke.
+      # recorded HTTP traffic, compared with its info and pages snapshots in fixtures/smoke. The
+      # crates build only the native XPath backend, the default; the xpath-fpc job below keeps
+      # the fpc backend as its parity guard.
       - name: Test
         run: cargo test --workspace
       # Prints how many upstream modules pass `Init` (the test itself fails on any failure).
@@ -34,6 +36,8 @@ jobs:
         run: cargo test -p fmd-lua --test module_corpus -- --nocapture
 
   # crates/xpath-fpc is outside the root workspace: it needs fpc, which the check job doesn't install.
+  # It is also the native backend's parity guard: both backends on the shared suites, and on the
+  # differential corpus (fixtures/xpath-corpus).
   xpath-fpc:
     runs-on: ubuntu-latest
     defaults:
@@ -58,10 +62,14 @@ jobs:
       # The root workspace's crates with the fpc XPath backend on (the check job builds them without it).
       - name: Clippy (fpc backend)
         working-directory: .
-        run: cargo clippy -p fmd-xpath -p fmd-lua --all-targets --features fmd-xpath/fpc,fmd-lua/xpath-fpc -- -D warnings
+        run: cargo clippy -p fmd-xpath -p fmd-lua -p fmd2r --all-targets --features fmd-xpath/diff,fmd-lua/xpath-fpc,fmd2r/xpath-fpc -- -D warnings
+      # `fmd-xpath/diff` runs the differential corpus on both backends (tests/corpus.rs).
       - name: Test (fpc backend)
         working-directory: .
-        run: cargo test -p fmd-xpath -p fmd-lua --features fmd-xpath/fpc,fmd-lua/xpath-fpc
+        run: cargo test -p fmd-xpath -p fmd-lua --features fmd-xpath/diff,fmd-lua/xpath-fpc
+      - name: Test fmd2r xpath (fpc backend)
+        working-directory: .
+        run: cargo test -p fmd2r --features xpath-fpc --test xpath
       - name: Build libfmdxpath.so
         run: ./build.sh build
       - uses: actions/upload-artifact@v4

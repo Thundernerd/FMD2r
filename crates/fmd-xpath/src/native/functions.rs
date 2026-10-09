@@ -370,6 +370,8 @@ pub(crate) fn call(ev: &mut Evaluator, name: &str, args: Vec<Seq>, focus: &Focus
             node_name(local, focus.item.as_ref().and_then(Item::as_node))
         }
         ("name" | "local-name", [a]) => node_name(local, node_arg(a)?.as_ref()),
+        ("namespace-uri", []) => namespace_uri(focus.item.as_ref().and_then(Item::as_node)),
+        ("namespace-uri", [a]) => namespace_uri(node_arg(a)?.as_ref()),
         ("root", []) => root(&context(focus)?),
         ("root", [a]) => root(a),
         // `deep-text($separator)` of the context node (internettools
@@ -808,6 +810,12 @@ fn node_name(which: &str, node: Option<&NodeRef>) -> XResult<Seq> {
         "local-name" => name.rsplit(':').next().unwrap_or(name),
         _ => name,
     })
+}
+
+/// `fn:namespace-uri`: the URL of the node's namespace, empty when it has none (internettools
+/// data/xquery__functions.pas:3290).
+fn namespace_uri(node: Option<&NodeRef>) -> XResult<Seq> {
+    string(node.map_or("", |node| node.dom.namespace_url(node.id)))
 }
 
 /// `fn:root` of the first node.
