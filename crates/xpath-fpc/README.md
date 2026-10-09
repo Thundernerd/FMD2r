@@ -29,7 +29,7 @@ running other crates' tests and binaries, so set it yourself); `xpath_fpc::LIB_D
 cd crates/xpath-fpc && cargo test
 ```
 
-CI (`xpath-fpc` job) installs `fpc`, runs fmt, clippy and the tests, then clippy and the tests of `fmd-xpath` and
+CI (`.github/workflows/xpath-fpc.yml`) installs `fpc`, runs fmt, clippy and the tests, then clippy and the tests of `fmd-xpath` and
 `fmd-lua` with the backend on, and uploads `libfmdxpath.so` as the `libfmdxpath-linux-x86_64` artifact.
 
 ## Pinned internettools revision
