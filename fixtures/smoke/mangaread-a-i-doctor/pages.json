@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "c01aa037f7f1459984e7cd8676fe9658",
   "page_container_links": [],
   "page_links": [
@@ -21,5 +23,6 @@
     "https://www.mangaread.org/wp-content/uploads/WP-manga/data/manga_6086819269493/991bd779041895419ac2fa9802294adc/19.jpeg",
     "https://www.mangaread.org/wp-content/uploads/WP-manga/data/manga_6086819269493/991bd779041895419ac2fa9802294adc/20.jpeg"
   ],
-  "page_number": 18
+  "page_number": 18,
+  "task_start": null
 }

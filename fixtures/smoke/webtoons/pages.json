@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "18f636ec7fdf47fabe95d940ad0b548f",
   "page_container_links": [],
   "page_links": [
@@ -158,5 +160,6 @@
     "https://webtoon-phinf.pstatic.net/20240905_275/1725469785736KtCuI_PNG/1725469785651757_6_04.png?type=opti",
     "https://webtoon-phinf.pstatic.net/20240905_192/1725469785951dlPS5_PNG/17254697859168574_6_05.png?type=opti"
   ],
-  "page_number": 155
+  "page_number": 155,
+  "task_start": null
 }

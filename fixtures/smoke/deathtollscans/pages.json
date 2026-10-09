@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "613368d384af4edf8036b869c85e2967",
   "page_container_links": [],
   "page_links": [
@@ -28,5 +30,6 @@
     "https://reader.deathtollscans.net/content/comics/a_gentle_time_61b01d67b24a8/0_0_oneshot_61b0253b286a8/A Gentle Time One-shot by Death Toll Scanlations page 24.png",
     "https://reader.deathtollscans.net/content/comics/a_gentle_time_61b01d67b24a8/0_0_oneshot_61b0253b286a8/A Gentle Time One-shot by Death Toll Scanlations page 25.png"
   ],
-  "page_number": 25
+  "page_number": 25,
+  "task_start": null
 }

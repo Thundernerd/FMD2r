@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "e658998df5b9454abe469d181f51e6c8",
   "page_container_links": [],
   "page_links": [
@@ -35,5 +37,6 @@
     "https://a12sm.rmr.rocks/auto/09/70/44/31_res.webp?t=1791532732&u=0&h=cFD4zl1kgU_exvNNvbwy8A",
     "https://a12sm.rmr.rocks/auto/09/70/44/32_res.webp?t=1791532732&u=0&h=bXVDRrer5YD67B59HgAF2g"
   ],
-  "page_number": 32
+  "page_number": 32,
+  "task_start": null
 }

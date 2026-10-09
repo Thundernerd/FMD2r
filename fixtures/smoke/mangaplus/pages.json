@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "f239e87c7a1248d29cdd2ea8a77df36c",
   "page_container_links": [],
   "page_links": [
@@ -74,5 +76,6 @@
     "https://jumpg-assets.tokyo-cdn.com/secure/title/100056/chapter/1001834/manga_page/super_high/70.jpg?hash=WuYbn-4AxeAZFl0-iydqhA&expires=1791493200↣74f52d226f4204f284f6fb1a7994178bea37719f60064435df277fbdcf87e1774a6d162d68b9b1202954a6f234a3994543d641f2191080385d6663ab913c16de",
     "https://jumpg-assets.tokyo-cdn.com/secure/title/100056/chapter/1001834/manga_page/super_high/71.jpg?hash=o5H3KfFP4uFKsqIV6Nj5Ig&expires=1791493200↣74f52d226f4204f284f6fb1a7994178bea37719f60064435df277fbdcf87e1774a6d162d68b9b1202954a6f234a3994543d641f2191080385d6663ab913c16de"
   ],
-  "page_number": 71
+  "page_number": 71,
+  "task_start": null
 }

@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "a964861afd0f410cb5122df5f50d3e1a",
   "page_container_links": [],
   "page_links": [
@@ -38,5 +40,6 @@
     "https://cdn.manhuaplus.com/2023/06/24/50Bnw.jpg",
     "https://cdn.manhuaplus.com/2023/06/24/50NuT.jpg"
   ],
-  "page_number": 35
+  "page_number": 35,
+  "task_start": null
 }

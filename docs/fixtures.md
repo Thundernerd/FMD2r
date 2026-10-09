@@ -132,7 +132,11 @@ recorded; the module goes on without them, as when the process writes none.
 `module info` prints the `OnGetInfo` status and `MANGAINFO` fields as the callback left them, as
 JSON. FMD2's later cleanup of those fields (`GetInfoFromURL`, `baseunits/uData.pas:111-206`) is
 not applied. `module pages` prints the page number, page links and page container links after
-`OnTaskStart`, `OnGetPageNumber` and `OnGetImageURL`, as JSON. `module init --json` lists the
-modules sorted by ID and the load failures sorted by file. The output contains no timestamps
-or other run-dependent values, so a replayed run prints exactly what the recorded run printed
-and the output can be used in snapshot tests.
+`OnTaskStart`, `OnGetPageNumber` and `OnGetImageURL`, as JSON, with each callback's result
+(`task_start` and `get_page_number`, `null` when it did not run; `get_image_url`, one per call).
+It exits non-zero after printing when no page link resolved (every link is FMD2's unresolved `W`,
+or a `DynamicPageLink` module found no pages). A `false` from `OnGetPageNumber` alone is not a
+failure: FMD2 ignores it, and modules such as MangaDex return it on chapters that work.
+`module init --json` lists the modules sorted by ID and the load failures sorted by file. The
+output contains no timestamps or other run-dependent values, so a replayed run prints exactly
+what the recorded run printed and the output can be used in snapshot tests.

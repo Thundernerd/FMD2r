@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "c280ce32f36843fbba73dcc891e979af",
   "page_container_links": [],
   "page_links": [
@@ -53,5 +55,6 @@
     "https://media.philiascans.org/api/media/chapters/651/34f7a25b7c20e534_s.webp?token=591a24758a73f41d98b3c55a5ccb0b4d25c4aa4963c558fbef428a3c3ae21415&expires=1791576000&v=2#1;image/webp;irAh7xWf6cRzM1zo7rOqP1SdZ4KV6zXe/bjMMurdD6o=;4;zFd3ZPYY/RYsJxzBKSlJIyPEoycUJ2FPuBOkqqKfVRc=;null;48",
     "https://media.philiascans.org/api/media/chapters/651/afa467661cb470da_s.webp?token=815eaa7ddc7376f35c9c343c9ac2a16faa2102be2d4e9aac1a56dfd36480f764&expires=1791576000&v=2#1;image/webp;irAh7xWf6cRzM1zo7rOqP1SdZ4KV6zXe/bjMMurdD6o=;4;zFd3ZPYY/RYsJxzBKSlJIyPEoycUJ2FPuBOkqqKfVRc=;null;49"
   ],
-  "page_number": 50
+  "page_number": 50,
+  "task_start": null
 }

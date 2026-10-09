@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "7bda2905b61c49d1976777e9f2356361",
   "page_container_links": [],
   "page_links": [
@@ -84,5 +86,6 @@
     "https://3asq.online/wp-content/uploads/WP-manga/data/manga_6ab80c2451179/61712dcb5d58eb148c92a69be8b60f55/080.jpg",
     "https://3asq.online/wp-content/uploads/WP-manga/data/manga_6ab80c2451179/61712dcb5d58eb148c92a69be8b60f55/081.jpg"
   ],
-  "page_number": 81
+  "page_number": 81,
+  "task_start": null
 }

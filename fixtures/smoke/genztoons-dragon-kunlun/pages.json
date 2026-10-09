@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "ef9347dbab424553b9909332c8739f32",
   "page_container_links": [],
   "page_links": [
@@ -31,5 +33,6 @@
     "https://cdn.meowing.org/uploads/6575c8a989b.avif",
     "https://cdn.meowing.org/uploads/6575c8aae16.avif"
   ],
-  "page_number": 28
+  "page_number": 28,
+  "task_start": null
 }

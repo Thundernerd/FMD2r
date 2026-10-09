@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "437660e89f824183901cf05c24e35eae",
   "page_container_links": [],
   "page_links": [
@@ -57,5 +59,6 @@
     "https://s2.ihlv1.xyz/images3/20251213/e27e800c50b3d9f788d96883266cda8853.jpg",
     "https://s2.ihlv1.xyz/images3/20251213/b378e5a77d193f598a3a656b79f0473a54.jpg"
   ],
-  "page_number": 54
+  "page_number": 54,
+  "task_start": null
 }

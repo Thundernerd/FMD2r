@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "df365d3d22f141ad8b9224cc1413ca02",
   "page_container_links": [],
   "page_links": [
@@ -20,5 +22,6 @@
     "https://img2.imglib.info/manga/the-flash/chapters/4314746/0576c6d8-c205-43f1-ba92-448c9ee74d0d.jpg",
     "https://img2.imglib.info/manga/the-flash/chapters/4314746/93089036-c084-48a5-af85-74b8c96cd065.jpg"
   ],
-  "page_number": 17
+  "page_number": 17,
+  "task_start": null
 }

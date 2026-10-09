@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "4c5e7c7582f6402b9bab2b019c8c4429",
   "page_container_links": [],
   "page_links": [
@@ -28,5 +30,6 @@
     "https://online.seinagi.org.es/content/comics/frantic_5dd1b34f254a2/01_0__5dd1b3d0e7135/x23.jpg",
     "https://online.seinagi.org.es/content/comics/frantic_5dd1b34f254a2/01_0__5dd1b3d0e7135/x24.jpg"
   ],
-  "page_number": 25
+  "page_number": 25,
+  "task_start": null
 }
