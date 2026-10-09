@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ModuleSettingsView, ModuleSummary } from '#lib/api/types.ts';
 	import type { Draft } from '#lib/settings/draft.svelte.ts';
+	import { moduleHost, moduleKey, repeatedNames } from '#lib/modules.ts';
 	import { optionFields, type Field } from '#lib/settings/fields.ts';
 	import SettingField from './SettingField.svelte';
 
@@ -29,6 +30,7 @@
 			? modules.filter((m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
 			: modules;
 	});
+	const repeated = $derived(repeatedNames(modules));
 
 	const options = $derived(view ? optionFields(view.options) : []);
 	const enabled = $derived(draft?.get('enabled') === true);
@@ -102,7 +104,7 @@
 			bind:value={query}
 		/>
 		<ul class="list" aria-label="Modules">
-			{#each matches as m (m.id)}
+			{#each matches as m (moduleKey(m))}
 				<li>
 					<button
 						type="button"
@@ -110,7 +112,12 @@
 						aria-pressed={m.id === selected}
 						onclick={() => onselect(m.id)}
 					>
-						<span>{m.name}</span>
+						<span>
+							{m.name}
+							{#if repeated.has(m.name)}
+								<span class="host small muted">{moduleHost(m)}</span>
+							{/if}
+						</span>
 						{#if m.option_count}
 							<span class="count small muted"
 								>{m.option_count}
@@ -229,6 +236,9 @@
 		padding: var(--sp-2) var(--sp-3);
 		text-align: left;
 		color: var(--fg);
+	}
+	.host {
+		font-weight: 400;
 	}
 	.pick:hover {
 		background: var(--surface-2);

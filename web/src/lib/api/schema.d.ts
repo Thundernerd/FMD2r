@@ -499,7 +499,7 @@ export interface paths {
 			path?: never;
 			cookie?: never;
 		};
-		/** Every loaded module, sorted by ID. */
+		/** Every loaded module, sorted by ID; modules sharing an ID are all listed. */
 		get: operations['listModules'];
 		put?: never;
 		post?: never;
@@ -1608,7 +1608,14 @@ export interface components {
 			/** @description The options the module declares with `AddOption*`, in declaration order. */
 			options: components['schemas']['ModuleOptionSetting'][];
 		};
-		/** @description A loaded module, for the module pickers. */
+		/**
+		 * @description A loaded module, for the module pickers.
+		 *
+		 *     IDs can repeat: FMD2's loader keeps every module a file's `Init` creates without checking
+		 *     IDs (baseunits/lua/LuaWebsiteModules.pas:523-589), and upstream `lua/modules/Manga1001.lua:18-19`
+		 *     registers two websites under one ID. `root_url` tells such entries apart; they share the
+		 *     ID's settings, which FMD2 keys by ID (baseunits/WebsiteModules.pas:545-700).
+		 */
 		ModuleSummary: {
 			capabilities: components['schemas']['ModuleCapabilities'];
 			category: string;
@@ -1625,6 +1632,8 @@ export interface components {
 			name: string;
 			/** @description How many options the module declares. */
 			option_count: number;
+			/** @description The website's root URL, lowercased as the loader leaves it. */
+			root_url: string;
 		};
 		/**
 		 * @description Lua module sync from GitHub. The repo defaults are FMD2's `GitHub` section

@@ -10,7 +10,8 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use fmd_http::{HttpClient, HttpError, HttpSession, TerminateToken};
 use fmd_lua::{
-    Invalidate, MemorySettingsStore, Module, ModuleRegistry, ModuleSettingsStore, WorkerPool,
+    Invalidate, LoadFailure, MemorySettingsStore, Module, ModuleRegistry, ModuleSettingsStore,
+    WorkerPool,
 };
 use fmd_store::{AppDb, EventSeverity, ModuleFile, NewEvent, StoreError};
 use serde::{Deserialize, Serialize};
@@ -173,6 +174,10 @@ pub enum UpdateError {
     /// The tree names a path that is absolute or climbs out of the Lua dir.
     #[error("unsafe path in the tree: {0}")]
     UnsafePath(String),
+    /// A file next to the staged module `0` failed to download, so the module is not checked
+    /// against a stale copy of it; both are retried next run.
+    #[error("{0}: a file next to it failed to download")]
+    SiblingNotDownloaded(String),
     #[error(transparent)]
     Store(#[from] StoreError),
     #[error("{path}: {source}")]
@@ -215,7 +220,13 @@ struct RepoState {
 /// earlier registry keep it until they let go.
 pub struct LiveModules {
     settings: Arc<dyn ModuleSettingsStore>,
-    current: RwLock<Arc<ModuleRegistry>>,
+    current: RwLock<LoadedModules>,
+}
+
+/// A registry and the module files that failed to load into it.
+struct LoadedModules {
+    registry: Arc<ModuleRegistry>,
+    failures: Arc<Vec<LoadFailure>>,
 }
 
 impl LiveModules {
@@ -228,7 +239,10 @@ impl LiveModules {
         }
         LiveModules {
             settings,
-            current: RwLock::new(Arc::new(report.registry)),
+            current: RwLock::new(LoadedModules {
+                registry: Arc::new(report.registry),
+                failures: Arc::new(report.failures),
+            }),
         }
     }
 
@@ -237,12 +251,33 @@ impl LiveModules {
         self.current
             .read()
             .unwrap_or_else(PoisonError::into_inner)
+            .registry
             .clone()
     }
 
-    fn swap(&self, registry: ModuleRegistry) {
-        *self.current.write().unwrap_or_else(PoisonError::into_inner) = Arc::new(registry);
+    /// The module files that failed to load into [`current`](LiveModules::current), sorted by
+    /// path: left out of it, or kept at their earlier version.
+    pub fn failures(&self) -> Arc<Vec<LoadFailure>> {
+        self.current
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .failures
+            .clone()
     }
+
+    fn swap(&self, registry: ModuleRegistry, failures: Vec<LoadFailure>) {
+        *self.current.write().unwrap_or_else(PoisonError::into_inner) = LoadedModules {
+            registry: Arc::new(registry),
+            failures: Arc::new(failures),
+        };
+    }
+}
+
+/// The upstream commit the Lua tree in `db`'s updater state was last fully synced to; empty
+/// before the first sync (`ModuleUpdater::synced_commit` without an updater).
+pub fn synced_commit(db: &AppDb) -> Result<String, UpdateError> {
+    let state: Option<RepoState> = db.settings().get(STATE_KEY)?;
+    Ok(state.map(|s| s.last_commit_sha).unwrap_or_default())
 }
 
 /// What [`ModuleUpdater::with_after_sync`] calls.
@@ -338,8 +373,7 @@ impl ModuleUpdater {
 
     /// The upstream commit the Lua tree was last fully synced to; empty before the first sync.
     pub fn synced_commit(&self) -> Result<String, UpdateError> {
-        let state: Option<RepoState> = self.db.settings().get(STATE_KEY)?;
-        Ok(state.map(|s| s.last_commit_sha).unwrap_or_default())
+        synced_commit(&self.db)
     }
 
     /// The followed ref, e.g. `master`.
@@ -405,12 +439,16 @@ impl ModuleUpdater {
             report.deleted.push(path.clone());
         }
         let to_stage = self.to_stage(&plan.download);
-        let results = self.download_all(&commit, &plan.download, &to_stage);
-        let rejected = self.validate(
-            results
-                .iter()
-                .filter_map(|r| r.as_ref().ok()?.staged.clone()),
+        let results = self.hold_back_without_siblings(
+            &plan.download,
+            self.download_all(&commit, &plan.download, &to_stage),
         );
+        let staged: Vec<PathBuf> = results
+            .iter()
+            .filter_map(|r| r.as_ref().ok()?.staged.clone())
+            .collect();
+        self.stage_siblings(&staged);
+        let rejected = self.validate(staged.into_iter());
         let mut kept_out = BTreeMap::new();
         for (file, result) in plan.download.iter().zip(results) {
             let committed = result.and_then(|downloaded| match &downloaded.staged {
@@ -576,7 +614,26 @@ impl ModuleUpdater {
             .filter(|def| reloaded(&def.file))
             .map(|def| def.id)
             .collect();
-        self.modules.swap(ModuleRegistry::from_modules(modules));
+        // The failures of files this reload left alone stand; the rest are this load's. The
+        // module directory was read, so its own failure is gone.
+        let modules_dir = lua_dir.join("modules");
+        let mut live_failures: BTreeMap<PathBuf, String> = self
+            .modules
+            .failures()
+            .iter()
+            .filter(|f| !reloaded(&f.file) && f.file != modules_dir)
+            .map(|f| (f.file.clone(), f.error.clone()))
+            .collect();
+        live_failures.extend(failed);
+        for (path, kept) in kept_out {
+            live_failures.insert(lua_dir.join(path), kept.error.clone());
+        }
+        let live_failures = live_failures
+            .into_iter()
+            .map(|(file, error)| LoadFailure { file, error })
+            .collect();
+        self.modules
+            .swap(ModuleRegistry::from_modules(modules), live_failures);
         if let Some(pool) = &self.pool {
             // A changed `require`d file also drops the pool's cache of them
             // (`LuaPackage.ClearCache`, baseunits/lua/LuaPackage.pas:141-144).
@@ -835,6 +892,83 @@ impl ModuleUpdater {
             .collect()
     }
 
+    /// `results` of downloading `files`, with each staged module whose directory had a file that
+    /// is not a module fail to download turned into a failure: it would be checked against the
+    /// old copy of that file, and the commit is retried next run anyway.
+    fn hold_back_without_siblings(
+        &self,
+        files: &[Wanted],
+        results: Vec<Result<Downloaded, UpdateError>>,
+    ) -> Vec<Result<Downloaded, UpdateError>> {
+        let lua_dir = &self.config.lua_dir;
+        let failed_dirs: BTreeSet<PathBuf> = files
+            .iter()
+            .zip(&results)
+            .filter(|(file, result)| result.is_err() && !is_module_file(&file.path))
+            .filter_map(|(file, _)| lua_dir.join(&file.path).parent().map(Path::to_path_buf))
+            .collect();
+        files
+            .iter()
+            .zip(results)
+            .map(|(file, result)| match result {
+                Ok(Downloaded {
+                    staged: Some(_), ..
+                }) if lua_dir
+                    .join(&file.path)
+                    .parent()
+                    .is_some_and(|dir| failed_dirs.contains(dir)) =>
+                {
+                    Err(UpdateError::SiblingNotDownloaded(file.path.clone()))
+                }
+                result => result,
+            })
+            .collect()
+    }
+
+    /// Copies the files next to each `staged` module in the Lua dir that are not module files
+    /// into the staging dir beside it, so a module reading one of them when it loads (MangaPlus.lua
+    /// reads `MangaPlus.proto` from its own directory, lua/modules/MangaPlus.lua:98-110) finds it
+    /// there, as `DoInit` would in the Lua dir (baseunits/lua/LuaWebsiteModules.pas:473-500).
+    /// The other files of this sync that downloaded are already in the Lua dir, so each copy is
+    /// the version the module will run with (a module whose sibling failed to download is held
+    /// back before this). A sibling that fails to copy is logged; validation then reports the
+    /// module that needed it.
+    fn stage_siblings(&self, staged: &[PathBuf]) {
+        let lua_dir = &self.config.lua_dir;
+        let staging = lua_dir.join(STAGING_DIR);
+        let dirs: BTreeSet<&Path> = staged.iter().filter_map(|f| f.parent()).collect();
+        for dir in dirs {
+            let Ok(live_dir) = dir.strip_prefix(&staging).map(|d| lua_dir.join(d)) else {
+                continue;
+            };
+            let entries = match std::fs::read_dir(&live_dir) {
+                Ok(entries) => entries,
+                Err(e) => {
+                    tracing::warn!(target: "fmd_core", "module updater: {}: {e}", live_dir.display());
+                    continue;
+                }
+            };
+            for entry in entries {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(e) => {
+                        tracing::warn!(target: "fmd_core", "module updater: {}: {e}", live_dir.display());
+                        continue;
+                    }
+                };
+                let live = entry.path();
+                let sibling = relative(lua_dir, &live);
+                let copy = dir.join(entry.file_name());
+                if is_module_file(&sibling) || !live.is_file() || copy.exists() {
+                    continue;
+                }
+                if let Err(e) = std::fs::copy(&live, &copy) {
+                    tracing::warn!(target: "fmd_core", "module updater: {sibling}: {e}");
+                }
+            }
+        }
+    }
+
     /// Loads each staged module file as the scan would from the Lua dir (`DoInit`,
     /// baseunits/lua/LuaWebsiteModules.pas:473-500), in scratch states. Returns the ones that
     /// fail, with their errors naming the file they would replace.
@@ -851,10 +985,17 @@ impl ModuleUpdater {
             .into_iter()
             .map(|failure| {
                 let live = lua_dir.join(relative(&staging, &failure.file));
-                let error = failure.error.replace(
-                    &failure.file.display().to_string(),
-                    &live.display().to_string(),
-                );
+                // A sibling staged next to the module is named by its live path too.
+                let error = failure
+                    .error
+                    .replace(
+                        &failure.file.display().to_string(),
+                        &live.display().to_string(),
+                    )
+                    .replace(
+                        &staging.display().to_string(),
+                        &lua_dir.display().to_string(),
+                    );
                 (failure.file, error)
             })
             .collect()

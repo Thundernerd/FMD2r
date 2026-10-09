@@ -101,7 +101,7 @@ export const defaultSettings = (): Settings => ({
 
 /** A module as the mock knows it: what it declares. Values live in the module's overrides. */
 interface MockModule {
-	summary: Pick<ModuleSummary, 'id' | 'name' | 'category'>;
+	summary: Pick<ModuleSummary, 'id' | 'name' | 'root_url' | 'category'>;
 	limits: ModuleSettingsView['module_limits'];
 	options: ModuleOptionSetting[];
 }
@@ -110,12 +110,12 @@ const LANGUAGES = ['All', 'English', 'Japanese', 'Spanish (LATAM)', 'Indonesian'
 
 const MODULES: MockModule[] = [
 	{
-		summary: { id: 'batoto', name: 'Bato.to', category: 'English' },
+		summary: { id: 'batoto', name: 'Bato.to', root_url: 'https://bato.to', category: 'English' },
 		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
 		options: []
 	},
 	{
-		summary: { id: 'comick', name: 'ComicK', category: 'English' },
+		summary: { id: 'comick', name: 'ComicK', root_url: 'https://comick.io', category: 'English' },
 		limits: { max_task_limit: 1, max_thread_per_task_limit: 2, max_connection_limit: 2 },
 		options: [
 			{
@@ -128,7 +128,12 @@ const MODULES: MockModule[] = [
 		]
 	},
 	{
-		summary: { id: 'mangadex', name: 'MangaDex', category: 'English' },
+		summary: {
+			id: 'mangadex',
+			name: 'MangaDex',
+			root_url: 'https://mangadex.org',
+			category: 'English'
+		},
 		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 4 },
 		// lua/modules/MangaDex.lua:45-53.
 		options: [
@@ -173,24 +178,58 @@ const MODULES: MockModule[] = [
 		]
 	},
 	{
-		summary: { id: 'webtoons', name: 'Webtoons', category: 'English' },
+		summary: {
+			id: 'webtoons',
+			name: 'Webtoons',
+			root_url: 'https://www.webtoons.com',
+			category: 'English'
+		},
 		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
 		options: []
 	},
 	{
-		summary: { id: 'rawkuma', name: 'Rawkuma', category: 'Raw' },
+		summary: { id: 'rawkuma', name: 'Rawkuma', root_url: 'https://rawkuma.com', category: 'Raw' },
 		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
 		options: []
 	},
 	{
-		summary: { id: 'tmo', name: 'TuMangaOnline', category: 'Spanish' },
+		// Two websites under one ID, as upstream lua/modules/Manga1001.lua:18-19 registers them.
+		summary: {
+			id: '1d09f3bea8f148fa9e9215fc578fedcd',
+			name: 'HachiRaw',
+			root_url: 'https://manga1001.win',
+			category: 'Raw'
+		},
+		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
+		options: []
+	},
+	{
+		summary: {
+			id: '1d09f3bea8f148fa9e9215fc578fedcd',
+			name: 'HachiRaw',
+			root_url: 'https://hachiraw.win',
+			category: 'Raw'
+		},
+		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
+		options: []
+	},
+	{
+		summary: {
+			id: 'tmo',
+			name: 'TuMangaOnline',
+			root_url: 'https://lectortmo.com',
+			category: 'Spanish'
+		},
 		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
 		options: []
 	}
 ];
 
 /** What the settings know of a module for `GET /api/modules`; the list fields come from the lists mock. */
-export type ModuleBasics = Pick<ModuleSummary, 'id' | 'name' | 'category' | 'option_count'>;
+export type ModuleBasics = Pick<
+	ModuleSummary,
+	'id' | 'name' | 'root_url' | 'category' | 'option_count'
+>;
 
 type Overrides = Pick<ModuleSettingsView, 'enabled' | 'limits' | 'http'> & {
 	options: Record<string, unknown>;

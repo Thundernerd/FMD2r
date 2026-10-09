@@ -57,11 +57,16 @@ struct Harness {
 }
 
 fn harness() -> Harness {
+    harness_with(FIXTURE)
+}
+
+/// A harness whose only module file is `Fixture.lua` holding `source`.
+fn harness_with(source: &str) -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let db = AppDb::open(dir.path().join("app.db")).unwrap();
     let lua = dir.path().join("lua");
     std::fs::create_dir_all(lua.join("modules")).unwrap();
-    std::fs::write(lua.join("modules/Fixture.lua"), FIXTURE).unwrap();
+    std::fs::write(lua.join("modules/Fixture.lua"), source).unwrap();
     let cipher = Arc::new(KeyFileCipher::open_or_create(dir.path().join("accounts.key")).unwrap());
     let report =
         ModuleRegistry::load_dir_with(&lua, Arc::new(StoreModuleSettings::new(db.clone(), cipher)));
@@ -340,6 +345,7 @@ async fn modules_are_listed_for_the_picker() {
         json!([{
             "id": "fixture",
             "name": "Fixture",
+            "root_url": "https://fixture.example",
             "category": "",
             "option_count": 4,
             "capabilities": { "update_list": false, "info": false, "download": false, "account": false },
@@ -347,5 +353,41 @@ async fn modules_are_listed_for_the_picker() {
             "list_updated": null,
             "list_job_running": false,
         }])
+    );
+}
+
+/// Two websites under one ID, as upstream `lua/modules/Manga1001.lua:18-19` registers: FMD2's
+/// loader keeps every module `Init` creates without checking IDs
+/// (baseunits/lua/LuaWebsiteModules.pas:523-589), so both are listed, told apart by root URL.
+const SHARED_ID: &str = r#"
+function Init()
+  local function add(url)
+    local m = NewWebsiteModule()
+    m.ID = 'shared'
+    m.Name = 'Shared'
+    m.RootURL = url
+    m.Category = 'Raw'
+  end
+  add('https://one.example')
+  add('https://two.example')
+end
+"#;
+
+#[tokio::test]
+async fn modules_sharing_an_id_are_both_listed_with_their_root_urls() {
+    let h = harness_with(SHARED_ID);
+    let body = body_json(send(&h.state, get("/api/modules")).await).await;
+    let entries: Vec<_> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| (m["id"].as_str().unwrap(), m["root_url"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        entries,
+        [
+            ("shared", "https://one.example"),
+            ("shared", "https://two.example")
+        ]
     );
 }
