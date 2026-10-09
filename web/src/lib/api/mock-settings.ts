@@ -24,7 +24,8 @@ export const defaultSettings = (): Settings => ({
 		lua_dir: 'lua',
 		language: 'en',
 		add_as_stopped: false,
-		load_covers: true
+		load_covers: true,
+		selected_websites: []
 	},
 	connections: {
 		max_parallel_tasks: 1,
@@ -344,7 +345,11 @@ function load(): Stored {
 	} catch {
 		// No storage (tests, private mode): start from the defaults.
 	}
-	return { settings: defaultSettings(), modules: {} };
+	// Like an install upgraded to website selection: every module is selected, so Discover lists
+	// them all.
+	const settings = defaultSettings();
+	settings.general.selected_websites = [...new Set(MODULES.map((m) => m.summary.id))];
+	return { settings, modules: {} };
 }
 
 /** Rough `CustomRename`: substitutes the tokens, no padding or symbol rules. */

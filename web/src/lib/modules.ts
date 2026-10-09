@@ -24,6 +24,10 @@ export function repeatedNames(modules: ModuleSummary[]): Set<string> {
 	return repeated;
 }
 
+/** How `m` is listed among `repeated` names: by name, with its host when another module has that name too. */
+export const moduleLabel = (m: ModuleSummary, repeated: Set<string>): string =>
+	repeated.has(m.name) ? `${m.name} (${moduleHost(m)})` : m.name;
+
 /** A category of modules, as the pickers list them. */
 export interface ModuleGroup {
 	category: string;

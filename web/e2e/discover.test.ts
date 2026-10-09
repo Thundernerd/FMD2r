@@ -94,3 +94,40 @@ test('on a phone the filters open in a drawer', async ({ page }, info) => {
 		'90 titles'
 	);
 });
+
+test('Discover lists only the websites selected in Settings', async ({ page }, info) => {
+	await page.goto('/settings#section-websites');
+	const websites = page.getByRole('region', { name: 'Websites', exact: true });
+	await websites.getByRole('button', { name: 'Select none' }).click();
+	await expect(websites.getByRole('status')).toHaveText(/^0 of \d+ websites selected$/);
+	await websites.getByRole('checkbox', { name: 'MangaDex' }).check();
+	await websites.getByRole('checkbox', { name: 'Webtoons' }).check();
+	const bar = page.getByRole('region', { name: 'Save changes' });
+	await bar.getByRole('button', { name: 'Save' }).click();
+	await expect(bar).toContainText('Saved');
+
+	await page.goto('/discover');
+	// On a phone the picker is in the filters drawer.
+	if (info.project.name === 'phone') await page.getByRole('button', { name: 'Filters' }).click();
+	const picker = page.getByRole('combobox', { name: 'Website' });
+	await expect(picker.getByRole('option')).toHaveText(['All websites', 'MangaDex', 'Webtoons']);
+	// Searching every selected website covers only their lists (140 and 48 titles).
+	await expect(page.getByRole('region', { name: 'Results' }).getByRole('status')).toHaveText(
+		'188 titles'
+	);
+});
+
+test('with no website selected Discover links to the selection', async ({ page }) => {
+	await page.goto('/settings#section-websites');
+	const websites = page.getByRole('region', { name: 'Websites', exact: true });
+	await websites.getByRole('button', { name: 'Select none' }).click();
+	const bar = page.getByRole('region', { name: 'Save changes' });
+	await bar.getByRole('button', { name: 'Save' }).click();
+	await expect(bar).toContainText('Saved');
+
+	await page.goto('/discover');
+	await expect(page.getByText('No websites are selected.')).toBeVisible();
+	await page.getByRole('link', { name: 'Choose websites' }).click();
+	await expect(page).toHaveURL(/\/settings#section-websites$/);
+	await expect(websites).toBeInViewport();
+});

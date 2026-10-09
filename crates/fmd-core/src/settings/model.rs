@@ -46,6 +46,13 @@ pub struct GeneralSettings {
     pub add_as_stopped: bool,
     /// Load manga covers (`view/LoadMangaCover`, mangadownloader/forms/frmMain.pas:5831).
     pub load_covers: bool,
+    /// The websites Discover lists and searches, by module ID (`general/MangaListSelect`,
+    /// comma-separated, mangadownloader/forms/frmMain.pas:5990-6004). IDs of modules that are
+    /// not loaded are kept but ignored, so a module that comes back is still selected; FMD2
+    /// drops them on load (mangadownloader/forms/frmMain.pas:6464-6470). Empty on a fresh
+    /// install: FMD2 defaults to `config.json`'s `default_selected_websites`
+    /// (baseunits/FMDOptions.pas:94, :250), which FMD2r does not ship.
+    pub selected_websites: Vec<String>,
 }
 
 impl Default for GeneralSettings {
@@ -56,6 +63,7 @@ impl Default for GeneralSettings {
             language: "en".into(),
             add_as_stopped: false,
             load_covers: true,
+            selected_websites: Vec::new(),
         }
     }
 }

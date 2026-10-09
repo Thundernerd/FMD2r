@@ -3,39 +3,48 @@
 	import {
 		groupModules,
 		matchesSearch,
-		moduleHost,
 		moduleKey,
+		moduleLabel,
 		repeatedNames
 	} from '#lib/modules.ts';
 
 	let {
 		modules,
+		websites,
 		selected = $bindable()
 	}: {
 		modules: ModuleSummary[];
-		/** Module ID; empty for every website. */
+		/** The IDs of the websites to list (`general.selected_websites`). */
+		websites: string[];
+		/** Module ID; empty for every selected website. */
 		selected: string;
 	} = $props();
 
 	let search = $state('');
 
 	const repeated = $derived(repeatedNames(modules));
-	/** How a module is listed: by name, with its host when another module has that name too. */
-	const label = (m: ModuleSummary) =>
-		repeated.has(m.name) ? `${m.name} (${moduleHost(m)})` : m.name;
+	const label = (m: ModuleSummary) => moduleLabel(m, repeated);
 
-	/** The modules matching the search, grouped by category, groups and modules by name. */
+	/** The selected websites matching the search, grouped by category. The picked one stays
+	 * listed while the search hides it, so the select keeps showing it. */
 	const groups = $derived.by(() => {
-		// The selected module stays listed so the select keeps showing it.
+		const listed = new Set(websites);
 		return groupModules(
-			modules.filter((m) => m.id === selected || matchesSearch(`${m.name} ${m.category}`, search))
+			modules.filter(
+				(m) =>
+					m.id === selected ||
+					(listed.has(m.id) && matchesSearch(`${m.name} ${m.category}`, search))
+			)
 		);
 	});
 	const shown = $derived(groups.reduce((n, g) => n + g.modules.length, 0));
 </script>
 
 <div class="picker">
-	<label class="label" for="website">Website</label>
+	<div class="head">
+		<label class="label" for="website">Website</label>
+		<a class="small" href="/settings#section-websites">Manage websites</a>
+	</div>
 	<input
 		class="input"
 		type="search"
@@ -63,6 +72,12 @@
 	.picker {
 		display: flex;
 		flex-direction: column;
+		gap: var(--sp-2);
+	}
+	.head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
 		gap: var(--sp-2);
 	}
 	p {

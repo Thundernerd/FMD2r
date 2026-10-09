@@ -1012,7 +1012,7 @@
           {
             "name": "module",
             "in": "query",
-            "description": "Only this module's list; every module's when absent.",
+            "description": "Only this module's list; the selected websites' (`general.selected_websites`) when\nabsent.",
             "required": false,
             "schema": {
               "type": "string"
@@ -1063,7 +1063,7 @@
           {
             "name": "module",
             "in": "query",
-            "description": "Only this module's list; every module's when absent.",
+            "description": "Only this module's list; the selected websites' (`general.selected_websites`) when\nabsent.",
             "required": false,
             "schema": {
               "type": "string"
@@ -3158,6 +3158,14 @@
             "type": "string",
             "description": "Folder holding the Lua tree (`LUA_REPO_FOLDER`, baseunits/FMDOptions.pas:297).",
             "default": "lua"
+          },
+          "selected_websites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The websites Discover lists and searches, by module ID (`general/MangaListSelect`,\ncomma-separated, mangadownloader/forms/frmMain.pas:5990-6004). IDs of modules that are\nnot loaded are kept but ignored, so a module that comes back is still selected; FMD2\ndrops them on load (mangadownloader/forms/frmMain.pas:6464-6470). Empty on a fresh\ninstall: FMD2 defaults to `config.json`'s `default_selected_websites`\n(baseunits/FMDOptions.pas:94, :250), which FMD2r does not ship.",
+            "default": []
           }
         }
       },
@@ -3505,7 +3513,7 @@
               "string",
               "null"
             ],
-            "description": "Why it failed."
+            "description": "Why it failed: the technical details."
           },
           "job": {
             "$ref": "#/components/schemas/ListJobKind"
@@ -3515,6 +3523,17 @@
           },
           "module_id": {
             "type": "string"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ListFailureReason",
+                "description": "What kind of failure it was, to pick a message for `error` by."
+              }
+            ]
           },
           "status_text": {
             "type": "string",
@@ -3569,6 +3588,16 @@
             }
           }
         }
+      },
+      "ListFailureReason": {
+        "type": "string",
+        "description": "Why a list job failed, for the UI to pick its message from rather than parse\n[`ListEvent::error`].",
+        "enum": [
+          "no_dump",
+          "unreachable",
+          "bad_archive",
+          "failed"
+        ]
       },
       "ListItem": {
         "type": "object",
@@ -4831,7 +4860,8 @@
               "data_dir": "data",
               "language": "en",
               "load_covers": true,
-              "lua_dir": "lua"
+              "lua_dir": "lua",
+              "selected_websites": []
             }
           },
           "images": {

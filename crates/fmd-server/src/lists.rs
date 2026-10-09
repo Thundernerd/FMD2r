@@ -1,6 +1,8 @@
 //! Discover: searching every module's manga list (`/api/lists/search`, `/api/lists/facets`) and
 //! starting list updates and FMD2-DB imports (`/api/lists/{module}/...`).
 
+use std::collections::HashSet;
+
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -21,7 +23,8 @@ const MAX_PAGE_SIZE: u32 = 200;
 #[derive(Debug, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub(crate) struct SearchQuery {
-    /// Only this module's list; every module's when absent.
+    /// Only this module's list; the selected websites' (`general.selected_websites`) when
+    /// absent.
     module: Option<String>,
     /// Words that must each start a word of the title or an alternative title.
     q: Option<String>,
@@ -44,7 +47,8 @@ pub(crate) struct SearchQuery {
 #[derive(Debug, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub(crate) struct FacetsQuery {
-    /// Only this module's list; every module's when absent.
+    /// Only this module's list; the selected websites' (`general.selected_websites`) when
+    /// absent.
     module: Option<String>,
     /// As in `/api/lists/search`.
     q: Option<String>,
@@ -137,11 +141,24 @@ fn split_genres(genres: &str) -> Vec<String> {
         .collect()
 }
 
-fn filters(module: Option<String>) -> SearchFilters {
-    SearchFilters {
-        module_ids: module.into_iter().filter(|m| !m.is_empty()).collect(),
+/// The modules a search covers: `module` when given, otherwise the selected websites
+/// (`general.selected_websites`) that are loaded, as FMD2's "all websites" search covers only
+/// `SitesList` (baseunits/DBDataProcess.pas:649-683, :1459). `None` when that is no module.
+fn filters(state: &AppState, module: Option<String>) -> Option<SearchFilters> {
+    let module_ids: Vec<String> = match module.filter(|m| !m.is_empty()) {
+        Some(module) => vec![module],
+        None => {
+            let loaded: HashSet<String> =
+                state.modules.modules().into_iter().map(|m| m.id).collect();
+            let mut selected = state.settings.get().general.selected_websites.clone();
+            selected.retain(|id| loaded.contains(id));
+            selected
+        }
+    };
+    (!module_ids.is_empty()).then(|| SearchFilters {
+        module_ids,
         ..SearchFilters::default()
-    }
+    })
 }
 
 /// Search the manga lists.
@@ -161,6 +178,14 @@ pub(crate) async fn search(
         .page_size
         .unwrap_or(DEFAULT_PAGE_SIZE)
         .clamp(1, MAX_PAGE_SIZE);
+    let Some(filters) = filters(&state, query.module) else {
+        return Ok(Json(SearchPage {
+            items: Vec::new(),
+            total: 0,
+            page,
+            page_size,
+        }));
+    };
     let filters = SearchFilters {
         include_genres: query
             .genres_include
@@ -173,7 +198,7 @@ pub(crate) async fn search(
             .map(split_genres)
             .unwrap_or_default(),
         status: query.status.filter(|s| !s.is_empty()),
-        ..filters(query.module)
+        ..filters
     };
     let request = PageRequest {
         offset: (page - 1).saturating_mul(page_size),
@@ -201,7 +226,12 @@ pub(crate) async fn facets(
     ApiQuery(query): ApiQuery<FacetsQuery>,
 ) -> Result<Json<ListFacets>, ApiError> {
     let lists = state.lists()?;
-    let filters = filters(query.module);
+    let Some(filters) = filters(&state, query.module) else {
+        return Ok(Json(ListFacets {
+            genres: Vec::new(),
+            statuses: Vec::new(),
+        }));
+    };
     let q = query.q.unwrap_or_default();
     let facets = off_thread(move || lists.masterlist().facets(&q, &filters)).await??;
     Ok(Json(ListFacets {

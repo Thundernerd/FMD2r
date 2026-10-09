@@ -1220,6 +1220,16 @@ export interface components {
 			 * @default lua
 			 */
 			lua_dir: string;
+			/**
+			 * @description The websites Discover lists and searches, by module ID (`general/MangaListSelect`,
+			 *     comma-separated, mangadownloader/forms/frmMain.pas:5990-6004). IDs of modules that are
+			 *     not loaded are kept but ignored, so a module that comes back is still selected; FMD2
+			 *     drops them on load (mangadownloader/forms/frmMain.pas:6464-6470). Empty on a fresh
+			 *     install: FMD2 defaults to `config.json`'s `default_selected_websites`
+			 *     (baseunits/FMDOptions.pas:94, :250), which FMD2r does not ship.
+			 * @default []
+			 */
+			selected_websites: string[];
 		};
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
@@ -1394,11 +1404,12 @@ export interface components {
 			 * @description Work items of the current step done.
 			 */
 			done: number;
-			/** @description Why it failed. */
+			/** @description Why it failed: the technical details. */
 			error?: string | null;
 			job: components['schemas']['ListJobKind'];
 			kind: components['schemas']['ListEventKind'];
 			module_id: string;
+			reason?: null | components['schemas']['ListFailureReason'];
 			/** @description FMD2's status text, or the module's own. */
 			status_text: string;
 			/**
@@ -1422,6 +1433,12 @@ export interface components {
 			genres: components['schemas']['FacetValue'][];
 			statuses: components['schemas']['FacetValue'][];
 		};
+		/**
+		 * @description Why a list job failed, for the UI to pick its message from rather than parse
+		 *     [`ListEvent::error`].
+		 * @enum {string}
+		 */
+		ListFailureReason: 'no_dump' | 'unreachable' | 'bad_archive' | 'failed';
 		/** @description One title of a module's list. */
 		ListItem: {
 			/**
@@ -2033,7 +2050,8 @@ export interface components {
 			 *       "data_dir": "data",
 			 *       "language": "en",
 			 *       "load_covers": true,
-			 *       "lua_dir": "lua"
+			 *       "lua_dir": "lua",
+			 *       "selected_websites": []
 			 *     }
 			 */
 			general: components['schemas']['GeneralSettings'];
@@ -3171,7 +3189,10 @@ export interface operations {
 	listFacets: {
 		parameters: {
 			query?: {
-				/** @description Only this module's list; every module's when absent. */
+				/**
+				 * @description Only this module's list; the selected websites' (`general.selected_websites`) when
+				 *     absent.
+				 */
 				module?: string;
 				/** @description As in `/api/lists/search`. */
 				q?: string;
@@ -3205,7 +3226,10 @@ export interface operations {
 	searchLists: {
 		parameters: {
 			query?: {
-				/** @description Only this module's list; every module's when absent. */
+				/**
+				 * @description Only this module's list; the selected websites' (`general.selected_websites`) when
+				 *     absent.
+				 */
 				module?: string;
 				/** @description Words that must each start a word of the title or an alternative title. */
 				q?: string;
