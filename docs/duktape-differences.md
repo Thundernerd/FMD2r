@@ -25,7 +25,16 @@ through that build and compares the bytes that come back.
   Every `ExecJS` those modules make is compared.
 
 The reference handles dates like FMD2's Windows build, not like a Linux build (see
-`crates/fmd-duktape-ref/src/duktape_fmd2.c`).
+`crates/fmd-duktape-ref/src/duktape_fmd2.c`). Otherwise it uses Duktape's default configuration.
+FMD2's DLL looks like a default build: its `Duktape.env` string (`ll u nl p2 a8 x64 windows
+mingw`) is the default one for a MinGW x64 build, and it exports the default module loader. The
+non-standard options the table below relies on (`DUK_USE_NONSTD_*`) are default-on, but the DLL
+can't be checked for them directly.
+
+Any difference the heap setup could reproduce was reproduced, whether or not a module is known to
+reach it. Page scripts change with the sites, so "no current module reaches it" is not a reason
+to keep a difference that can be removed. The second table lists only what could not be
+reproduced.
 
 ## Reproduced on QuickJS
 
@@ -47,26 +56,34 @@ The heap setup (`crates/fmd-lua/src/duktape/`) makes QuickJS match Duktape in th
 
 ## Differences that remain
 
-`known_differences_from_duktape` in `duktape_reference.rs` pins each one that is deterministic.
-For each difference, "why no module observes it" refers to:
+These cannot be reproduced by setting up the heap. `known_differences_from_duktape` in
+`duktape_reference.rs` pins each one that is deterministic. For each difference, "no module
+script" means all of these:
 
-- the JS of the eight upstream call sites: `templates/Madara.lua`, `modules/FanFox.lua`,
-  `MangaGo.lua`, `ZeroScans.lua`, `DigitalTeam.lua`, `acqqcom.lua`, `ReadComicOnline.lua` and
-  `websitebypass/cloudflare.lua`;
+- the JS the eight upstream call sites write themselves: `templates/Madara.lua`,
+  `modules/FanFox.lua`, `MangaGo.lua`, `ZeroScans.lua`, `DigitalTeam.lua`, `acqqcom.lua`,
+  `ReadComicOnline.lua` and `websitebypass/cloudflare.lua`;
 - the JS files they `require` (`utils/crypto-js.min.js`, `utils/cryptojs-aes-format.js`);
-- the page scripts recorded for them.
+- the site scripts recorded for FanFox, ac.qq.com, ReadComicOnline and Cloudflare.
 
-None of these use the constructs below.
+Four modules also run JS their site serves, and none of it is recorded here:
+- ZeroScans: its `__ZEROSCANS__` state script;
+- DigitalTeam: its reader response;
+- Madara: the protector data;
+- MangaGo: its descrambling `js_body`.
+
+What those scripts do is only as known as the site. The usual content of each (an object
+literal, page variables, an AES call, string slicing) touches none of the rows below.
 
 | Difference | Why no module observes it |
 |---|---|
-| ES2015+ syntax (`let`, arrows, classes, template literals, destructuring, `for…of`, regex flags `y`/`u`/`s`, named groups) parses here; Duktape throws a SyntaxError | A script with it fails under FMD2, so no working module sends one. Here it runs instead of failing, which no module can depend on. |
+| ES2015+ syntax (`let`, arrows, classes, template literals, destructuring, `for…of`, regex flags `y`/`u`/`s`, named groups) parses here; Duktape throws a SyntaxError | Observable, but only one way. A site script with such syntax makes `ExecJS` return nothing under FMD2, so the module fails there. Here the module gets the script's result instead. No module relies on `ExecJS` failing. QuickJS cannot be made to reject this syntax. |
 | Error messages and `stack` text (`undefined_var is not defined` vs `identifier 'undefined_var' undefined`) | `ExecJS` returns no value on any error, whatever the message. No module script reads `e.message` or `e.stack`. |
 | `Array.prototype.sort` order of equal elements | Duktape sorts with a random pivot, so the order varies between runs in FMD2 itself. Any order QuickJS gives is one Duktape can give. `ReadComicOnline.lua` sorts candidate strings by length and takes the first; ties are already arbitrary in FMD2. |
 | Node.js `Buffer` | Browser page scripts don't use it. No module script references it. |
 | `Duktape.Pointer`, `Thread`, `act`, `fin`, `info`; `Duktape.enc`/`dec` formats `jx`/`jc`; `Error.prototype.fileName`/`lineNumber`; functions' own `fileName` | Duktape internals: only `cloudflare.lua`'s `Duktape.enc('base64')`/`dec('base64')` is used, and that is reproduced. |
 | Decimal literals beyond 2^53 (`9007199254740993` → `…992` here, `…994` on Duktape) | Duktape's conversion is off by one unit. Numbers past 2^53 lose precision in both engines anyway, and no module script has such literals. |
-| `String.fromCharCode(c)` with `c` above U+FFFF keeps the low 16 bits here; Duktape keeps the code point (`DUK_USE_NONSTD_STRING_FROMCHARCODE_32BIT`) | Every call in the module scripts masks its argument to 8 or 16 bits (`255 & …`, `& 65535`). |
+| `String.fromCharCode(c)` with `c` above U+FFFF keeps the low 16 bits here; Duktape keeps the code point (`DUK_USE_NONSTD_STRING_FROMCHARCODE_32BIT`) | Duktape makes it one character of length 1, which a UTF-16 engine cannot represent, so it can't be reproduced. Every call in the module scripts masks its argument to 8 or 16 bits (`255 & …`, `& 65535`), and a browser script relying on it would be broken in browsers. |
 | `/[/]/.source` is `[/]` here, `[\/]` on Duktape | No module script reads `source`. |
 | An anonymous function expression is named after its variable here (`var f = function () {}` → `f.name === 'f'`); Duktape leaves it unnamed, so `toString` differs too | No module script reads function names or prints functions. |
 | Own properties of instances: typed arrays' `length` and strict `arguments.caller` are own on Duktape, inherited or absent here; symbol-keyed built-in members | Seen only through `Object.getOwnPropertyNames`/`getOwnPropertySymbols` on such objects, which no module script calls. |

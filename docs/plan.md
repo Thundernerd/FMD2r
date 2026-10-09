@@ -19,7 +19,7 @@ Decisions taken:
 - Lua: `mlua` with vendored Lua 5.4. C modules are allowed, because `pb` is needed.
 - JavaScript (`fmd.duktape.ExecJS`): `rquickjs`, a C engine with a Rust API and an ES5 superset. Duktape via `cc` is the fallback if QuickJS behaves differently.
   - T12 kept QuickJS: the upstream snippets (packed `eval`, crypto-js `require`, JSON state) evaluate as under Duktape once scripts run as non-strict global code (rquickjs defaults to strict, which makes `eval("var x")` local). Each `ExecJS` is bounded by a time and memory limit and the worker's `TerminateToken`; Duktape has none.
-  - T50 verified it against a Duktape 2.3.0 build (`crates/fmd-duktape-ref`, test-only, with the date handling of FMD2's Windows build) on probe scripts and on real pages run through the modules (ac.qq.com, ReadComicOnline, FanFox, Cloudflare IUAM). Every heap now matches Duktape where a script can tell:
+  - T50 verified it against a Duktape 2.3.0 build (`crates/fmd-duktape-ref`, test-only, with the date handling of FMD2's Windows build) on probe scripts and on real pages run through the modules (ac.qq.com, ReadComicOnline, FanFox, Cloudflare IUAM). Every heap now reproduces Duktape 2.3 in:
     - results come back as CESU-8 (a non-BMP character is two 3-byte surrogates, as Duktape 2.3 returns it);
     - Duktape's `JSON.stringify` escapes;
     - the `Duktape` object (`enc`/`dec`, `modLoaded`/`modSearch`) and `TextEncoder`/`TextDecoder`, which cloudflare.lua's `btoa`/`atob` need;
@@ -27,7 +27,7 @@ Decisions taken:
     - its `Function.prototype.toString` placeholders;
     - its ISO-only date strings and parser.
 
-    What remains (ES2015+ syntax, error message text, sort order of equal elements, Node's `Buffer`, a few non-standard corners) is in `docs/duktape-differences.md`, each with why no module observes it.
+    What could not be reproduced in the heap setup (ES2015+ syntax, error message text, sort order of equal elements, Node's `Buffer`, a few non-standard corners) is listed in `docs/duktape-differences.md`, each with its reach.
 - Storage: `rusqlite`, with a fresh normalized schema. FMD2 data comes in through a one-time importer; FMD2's file layout is not reused.
 
 ## Architecture (Cargo workspace)

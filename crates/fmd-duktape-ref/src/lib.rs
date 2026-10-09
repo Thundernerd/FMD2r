@@ -23,9 +23,12 @@ pub enum DuktapeError {
     /// The script threw; the message is the error coerced by `duk_safe_to_string`.
     #[error("Duktape error: {}", String::from_utf8_lossy(.0))]
     Script(Vec<u8>),
-    /// The heap could not be created, or the library directory is not a C string.
+    /// The heap or the result buffer could not be allocated.
     #[error("Failed to create a Duktape heap.")]
     Heap,
+    /// The library directory holds a NUL, so it cannot be passed to C.
+    #[error("the library directory contains a NUL byte")]
+    LibDir,
 }
 
 /// `ExecJS(text)` (baseunits/Duktape.pas:77-104) with `lib_dir` as `DukLibDir`: the completion
@@ -33,7 +36,7 @@ pub enum DuktapeError {
 /// and `""` when that is `"undefined"`.
 pub fn exec_js(text: &[u8], lib_dir: &Path) -> Result<Vec<u8>, DuktapeError> {
     let lib_dir =
-        CString::new(lib_dir.as_os_str().as_encoded_bytes()).map_err(|_| DuktapeError::Heap)?;
+        CString::new(lib_dir.as_os_str().as_encoded_bytes()).map_err(|_| DuktapeError::LibDir)?;
     let mut out: *mut c_char = std::ptr::null_mut();
     let mut out_len = 0usize;
     // SAFETY: `text` and `lib_dir` outlive the call; on return `out` is null or a malloc'd buffer

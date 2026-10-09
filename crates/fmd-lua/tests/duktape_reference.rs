@@ -83,6 +83,11 @@ fn non_bmp_strings_round_trip_like_duktape() {
             same('String.fromCharCode(0xd83d, 0xde00)')
             same('"😀".split("").length')
             same('"x😀y".substring(1, 2)')
+            -- A result fed back into the next script, as modules/acqqcom.lua:24-28 does.
+            local back = require('fmd.duktape').ExecJS('"a😀"')
+            same('"' .. back .. '".length')
+            same('"' .. back .. '".charCodeAt(2)')
+            same('"' .. back .. '"')
             "#,
         )
         .unwrap();

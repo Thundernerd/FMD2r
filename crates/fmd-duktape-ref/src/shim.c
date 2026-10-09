@@ -62,8 +62,9 @@ static duk_ret_t native_mod_search(duk_context *ctx) {
 	return 1;
 }
 
-/* Runs `src` like ExecJS: 0 with the completion value's duk_safe_to_lstring in `*out`, or 1 with
- * the error's. `*out` is malloc'd and released with fmd_duk_free. */
+/* Runs `src` like ExecJS: 0 with the completion value's duk_safe_to_lstring in `*out`, 1 with
+ * the error's, or 2 when no heap or result buffer could be allocated. `*out` is malloc'd and
+ * released with fmd_duk_free. */
 int fmd_duk_exec(const char *src, size_t src_len, const char *lib_dir, char **out, size_t *out_len) {
 	duk_context *ctx = duk_create_heap_default();
 	const char *result;
@@ -90,7 +91,9 @@ int fmd_duk_exec(const char *src, size_t src_len, const char *lib_dir, char **ou
 	rc = duk_peval(ctx) != DUK_EXEC_SUCCESS;
 	result = duk_safe_to_lstring(ctx, -1, &len);
 	*out = malloc(len + 1);
-	if (*out != NULL) {
+	if (*out == NULL) {
+		rc = 2;
+	} else {
 		memcpy(*out, result, len);
 		*out_len = len;
 	}

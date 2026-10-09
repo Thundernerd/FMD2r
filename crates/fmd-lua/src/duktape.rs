@@ -193,11 +193,13 @@ fn cesu8(utf8: Vec<u8>) -> Vec<u8> {
     let mut i = 0;
     while i < utf8.len() {
         let b = utf8[i];
-        if b >= 0xf0 && i + 4 <= utf8.len() {
-            let c = (u32::from(b & 0x07) << 18)
+        let c = (i + 4 <= utf8.len()).then(|| {
+            (u32::from(b & 0x07) << 18)
                 | (u32::from(utf8[i + 1] & 0x3f) << 12)
                 | (u32::from(utf8[i + 2] & 0x3f) << 6)
-                | u32::from(utf8[i + 3] & 0x3f);
+                | u32::from(utf8[i + 3] & 0x3f)
+        });
+        if let Some(c) = c.filter(|c| b >= 0xf0 && *c >= 0x10000) {
             let c = c - 0x10000;
             for unit in [0xd800 | (c >> 10), 0xdc00 | (c & 0x3ff)] {
                 // A surrogate is U+D800..U+DFFF: 1110_1101 10xx_xxxx 10xx_xxxx.
