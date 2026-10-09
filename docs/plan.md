@@ -252,6 +252,13 @@ Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53
 | T63 | Keep settings secrets out of the API and encrypt them at rest (decided in T51) | — |
 | T64 | Make the Password and Listen address settings work (decided in T51) | T63 |
 | T65 | An exact new-chapter badge (decided in T51) | — |
+| T66 | Show one Settings section at a time | — |
+| T67 | A loading skeleton for the series page | — |
+| T68 | A clear message when FMD2-DB has no list for a website | — |
+| T69 | Choose which websites Discover lists (FMD2's Website selection) | — |
+| T70 | Cover thumbnails on Discover | T71 |
+| T71 | Research external metadata sources (MangaBaka, AniList, …) for list titles | — |
+| T72 | A clear, sorted list in Settings → Website modules | — |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:
