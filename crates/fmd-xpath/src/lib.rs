@@ -1,8 +1,7 @@
 //! `XPathEngine` trait and its backends: `fpc` (FFI to `libfmdxpath.so`) and `native` (pure Rust).
 //!
-//! The API is shaped after FMD2's `TXQueryEngineHTML` (baseunits/XQueryEngineHTML.pas) and the
-//! `IXQValue` operations its Lua binding exposes (baseunits/lua/LuaIXQValue.pas:37-160). It is
-//! object-safe, so callers hold a `dyn XPathEngine` and the backend is chosen once.
+//! Shaped after FMD2's `TXQueryEngineHTML` (baseunits/XQueryEngineHTML.pas) and the `IXQValue`
+//! Lua binding (baseunits/lua/LuaIXQValue.pas:37-160). Object-safe, so the backend is chosen once.
 
 use std::any::Any;
 use std::rc::Rc;
@@ -41,8 +40,7 @@ impl Backend {
 }
 
 impl Default for Backend {
-    /// `native`, since the differential corpus showed parity with `fpc` (T35,
-    /// fixtures/xpath-corpus).
+    /// `native`: the differential corpus showed parity with `fpc` (T35, fixtures/xpath-corpus).
     fn default() -> Self {
         Backend::Native
     }
@@ -57,7 +55,6 @@ pub enum Error {
     Parse(String),
 }
 
-/// Result type of the `fmd-xpath` crate.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// An XPath/XQuery engine configured like FMD2's `TXQueryEngineHTML.Create`
@@ -174,27 +171,24 @@ impl std::fmt::Display for Kind {
 pub struct Query<'a> {
     /// The expression or CSS selector.
     pub expression: &'a str,
-    /// Whether `expression` is a CSS selector.
     pub css: bool,
     /// [`document_hash`] of the document the expression ran against.
     pub document_hash: u64,
-    /// The document's bytes, as parsed.
     pub document: &'a [u8],
     /// Where the context value came from, when the expression ran against one.
     pub context: Option<&'a Origin>,
 }
 
-/// A stable hash of a document's bytes (64-bit FNV-1a), the same across runs, builds and
-/// platforms, so corpus entries can name the document they ran against.
+/// 64-bit FNV-1a of the document's bytes: stable across runs, builds and platforms, so corpus
+/// entries can name their document.
 pub fn document_hash(html: &[u8]) -> u64 {
     html.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| {
         (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
     })
 }
 
-/// Wraps an engine and reports every evaluation to a hook, without changing any result. Its
-/// values remember where they came from, so an evaluation against one can be reported with its
-/// context's [`Origin`].
+/// Wraps an engine and reports every evaluation to a hook. Its values remember their [`Origin`],
+/// so an evaluation against one can be reported with its context.
 pub struct LoggingEngine<E> {
     inner: E,
     hook: Rc<dyn Fn(&Query)>,
@@ -221,7 +215,6 @@ impl<E: XPathEngine> XPathEngine for LoggingEngine<E> {
     }
 }
 
-/// A document of a [`LoggingEngine`].
 struct LoggingDocument {
     inner: Box<dyn Document>,
     html: Rc<[u8]>,
@@ -231,8 +224,7 @@ struct LoggingDocument {
 
 impl Document for LoggingDocument {
     fn eval(&self, expr: &str, context: Option<&dyn XPathValue>, css: bool) -> Box<dyn XPathValue> {
-        // Our own values are unwrapped for the inner engine; any other value goes through as is,
-        // with no origin to report.
+        // Foreign values pass through as is, with no origin to report.
         let (context, origin) = match context {
             Some(value) => match value.as_any().downcast_ref::<LoggingValue>() {
                 Some(logged) => (Some(logged.inner.as_ref()), Some(&logged.origin)),
@@ -262,7 +254,6 @@ impl Document for LoggingDocument {
     }
 }
 
-/// A value of a [`LoggingEngine`]: the inner engine's value and where it came from.
 struct LoggingValue {
     inner: Box<dyn XPathValue>,
     origin: Rc<Origin>,

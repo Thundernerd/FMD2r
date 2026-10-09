@@ -1,7 +1,5 @@
 //! The `native` backend: a pure-Rust reimplementation of the parts of internettools FMD2's
-//! modules use. HTML is parsed with html5ever into the tree internettools would build
-//! (as close as practical, see README.md), and XPath is evaluated with internettools'
-//! semantics and extensions (docs/xpath-extensions.md).
+//! modules use, on html5ever (README.md, docs/xpath-extensions.md).
 
 mod css;
 mod dom;
@@ -36,7 +34,6 @@ impl XPathEngine for NativeEngine {
     }
 }
 
-/// A parsed document.
 struct NativeDocument {
     root: Option<NodeRef>,
 }

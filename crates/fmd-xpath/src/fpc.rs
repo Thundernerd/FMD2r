@@ -90,7 +90,7 @@ impl Document for FpcDocument {
             None => ptr::null_mut(),
             Some(value) => match value.as_any().downcast_ref::<FpcValue>() {
                 Some(value) => value.0.as_ptr(),
-                // A value of another backend: an error, which yields an empty value.
+                // A value of another backend.
                 None => return Box::new(EmptyValue),
             },
         };
@@ -192,8 +192,7 @@ impl Drop for FpcValue {
     }
 }
 
-/// Owns a value the library returned. The library never returns NULL barring out-of-memory
-/// (crates/xpath-fpc/fmdxpath.h); that case becomes an empty value.
+/// NULL only happens on out-of-memory (crates/xpath-fpc/fmdxpath.h); it becomes an empty value.
 fn wrap(value: *mut ffi::FxValue) -> Box<dyn XPathValue> {
     match NonNull::new(value) {
         Some(value) => Box::new(FpcValue(value)),

@@ -22,7 +22,6 @@ pub(crate) fn err<T>(message: impl Into<String>) -> XResult<T> {
     Err(XPathError(message.into()))
 }
 
-/// A sequence of items.
 pub(crate) type Seq = Vec<Item>;
 
 /// A node of a parsed document.
@@ -84,7 +83,6 @@ pub(crate) enum StrType {
 /// A JSON object: insertion-ordered properties.
 pub(crate) type Object = IndexMap<String, Seq>;
 
-/// One item.
 #[derive(Clone)]
 pub(crate) enum Item {
     Node(NodeRef),
