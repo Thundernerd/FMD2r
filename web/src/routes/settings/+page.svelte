@@ -38,11 +38,36 @@
 	let saved = $state(false);
 	const dirty = $derived(!!draft?.dirty || !!moduleDraft?.dirty);
 	/** An error is cleared by editing its field; until then there is nothing valid to save. */
-	const hasErrors = $derived(
-		Object.keys(draft?.errors ?? {}).length + Object.keys(moduleDraft?.errors ?? {}).length > 0
-	);
+	const hasModuleErrors = $derived(Object.keys(moduleDraft?.errors ?? {}).length > 0);
+	const hasErrors = $derived(Object.keys(draft?.errors ?? {}).length > 0 || hasModuleErrors);
 
-	let active = $state(TOC[0]?.id ?? '');
+	/**
+	 * The section on show, from the URL's `#section-<id>`: a link opens it and Back/Forward move
+	 * between sections. Without one, `?module=` opens the module settings, else the first section.
+	 */
+	const active = $derived.by(() => {
+		const id = page.url.hash.replace(/^#section-/, '');
+		if (TOC.some((entry) => entry.id === id)) return id;
+		return selected ? 'modules' : (TOC[0]?.id ?? '');
+	});
+	/** What a section holds that is out of view while another one shows: an error or an edit. */
+	type Pending = 'invalid' | 'dirty';
+	const PENDING_LABEL: Record<Pending, string> = {
+		invalid: 'Invalid settings',
+		dirty: 'Unsaved changes'
+	};
+	function pending(id: string): Pending | null {
+		const paths = SETTINGS_SECTIONS.find((s) => s.id === id)?.fields.map((f) => f.path);
+		if (paths) {
+			if (paths.some((p) => draft?.errors[p])) return 'invalid';
+			return paths.some((p) => draft?.isDirty(p)) ? 'dirty' : null;
+		}
+		if (id !== 'modules') return null;
+		if (hasModuleErrors) return 'invalid';
+		return moduleDraft?.dirty ? 'dirty' : null;
+	}
+
+	const section = $derived(SETTINGS_SECTIONS.find((s) => s.id === active));
 	let preview = $state<RenamePreview | null>(null);
 
 	$effect(() => {
@@ -141,7 +166,10 @@
 		if (changes && 'server' in changes) session.checkHealth(api).catch(() => {});
 	}
 
-	/** Shows a rejected save: every invalid field inline, the first one scrolled to. */
+	/**
+	 * Shows a rejected save: every invalid field inline, the first one's section on show and the
+	 * field scrolled to.
+	 */
 	async function reject(e: unknown, moduleId: string | undefined) {
 		if (!(e instanceof ValidationError)) {
 			saveError = 'Could not save the settings.';
@@ -150,6 +178,9 @@
 		const module = moduleId && moduleDraft ? { id: moduleId, draft: moduleDraft } : null;
 		const unplaced = showFieldErrors(e.fields, draft, module);
 		if (unplaced.length || !e.fields.length) saveError = unplaced.join('; ') || e.detail;
+		// A hidden section's fields are not in the page: show the first one with an error.
+		const invalid = TOC.find((entry) => pending(entry.id) === 'invalid');
+		if (invalid) await show(invalid.id);
 		await tick();
 		const first = document.querySelector<HTMLElement>('.field.invalid');
 		if (first) {
@@ -164,28 +195,21 @@
 		saveError = null;
 	}
 
-	function jump(id: string) {
-		active = id;
-		document.getElementById(`section-${id}`)?.scrollIntoView({ block: 'start' });
+	/** Shows section `id` alone; it keeps the unsaved edits of every section. */
+	async function show(id: string) {
+		if (id === active) return;
+		const { pathname, search } = page.url;
+		await goto(`${pathname}${search}#section-${id}`, { reset: false });
+		// A long section may have been scrolled; the new one starts at its top.
+		if (window.scrollY > 0) window.scrollTo({ top: 0 });
 	}
 
-	// Highlight the section being read in the table of contents.
-	$effect(() => {
-		if (!draft) return;
-		const observer = new IntersectionObserver(
-			(entries) => {
-				const visible = entries.filter((e) => e.isIntersecting);
-				const top = visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-				if (top) active = top.target.id.replace(/^section-/, '');
-			},
-			{ rootMargin: '-80px 0px -60% 0px' }
-		);
-		for (const { id } of TOC) {
-			const el = document.getElementById(`section-${id}`);
-			if (el) observer.observe(el);
-		}
-		return () => observer.disconnect();
-	});
+	/** Leaves a click that opens a new tab or window to the browser. */
+	function onTocClick(e: MouseEvent, id: string) {
+		if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		show(id);
+	}
 
 	function onBeforeUnload(event: BeforeUnloadEvent) {
 		if (dirty) event.preventDefault();
@@ -207,15 +231,16 @@
 			<nav class="toc" aria-label="Settings sections">
 				<ul class="toc-list">
 					{#each TOC as entry (entry.id)}
+						{@const mark = pending(entry.id)}
 						<li>
 							<a
 								href="#section-{entry.id}"
 								class:active={active === entry.id}
 								aria-current={active === entry.id ? 'location' : undefined}
-								onclick={(e) => {
-									e.preventDefault();
-									jump(entry.id);
-								}}>{entry.title}</a
+								class:invalid={mark === 'invalid'}
+								title={mark ? PENDING_LABEL[mark] : undefined}
+								onclick={(e) => onTocClick(e, entry.id)}
+								>{entry.title}{#if mark}<span class="mark" aria-hidden="true"></span>{/if}</a
 							>
 						</li>
 					{/each}
@@ -224,7 +249,7 @@
 					class="toc-select input"
 					aria-label="Jump to section"
 					value={active}
-					onchange={(e) => jump(e.currentTarget.value)}
+					onchange={(e) => show(e.currentTarget.value)}
 				>
 					{#each TOC as entry (entry.id)}
 						<option value={entry.id}>{entry.title}</option>
@@ -233,7 +258,28 @@
 			</nav>
 
 			<div class="sections">
-				{#each SETTINGS_SECTIONS as section (section.id)}
+				{#if active === 'modules'}
+					<section id="section-modules" class="card" aria-labelledby="heading-modules">
+						<h2 id="heading-modules">Website modules</h2>
+						<ModuleSettings
+							{modules}
+							{selected}
+							view={moduleView}
+							draft={moduleDraft}
+							loading={moduleLoading}
+							onselect={selectModule}
+						/>
+					</section>
+				{:else if active === 'accounts'}
+					<section id="section-accounts" class="card" aria-labelledby="heading-accounts">
+						<h2 id="heading-accounts">Accounts</h2>
+						<p class="small muted">
+							Logins for websites that support them. Changes save right away; passwords are stored
+							encrypted and never shown again.
+						</p>
+						<AccountsPanel />
+					</section>
+				{:else if section}
 					<section id="section-{section.id}" class="card" aria-labelledby="heading-{section.id}">
 						<h2 id="heading-{section.id}">{section.title}</h2>
 						{#each section.fields as field (field.path)}
@@ -246,28 +292,7 @@
 							</p>
 						{/if}
 					</section>
-				{/each}
-
-				<section id="section-modules" class="card" aria-labelledby="heading-modules">
-					<h2 id="heading-modules">Website modules</h2>
-					<ModuleSettings
-						{modules}
-						{selected}
-						view={moduleView}
-						draft={moduleDraft}
-						loading={moduleLoading}
-						onselect={selectModule}
-					/>
-				</section>
-
-				<section id="section-accounts" class="card" aria-labelledby="heading-accounts">
-					<h2 id="heading-accounts">Accounts</h2>
-					<p class="small muted">
-						Logins for websites that support them. Changes save right away; passwords are stored
-						encrypted and never shown again.
-					</p>
-					<AccountsPanel />
-				</section>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -324,6 +349,19 @@
 		border-left: 2px solid var(--line);
 		color: var(--muted);
 		text-decoration: none;
+	}
+	/* A dot for a section with edits or errors that are out of view. */
+	.mark {
+		display: inline-block;
+		width: 6px;
+		height: 6px;
+		margin-left: var(--sp-2);
+		vertical-align: middle;
+		border-radius: 50%;
+		background: var(--accent);
+	}
+	.toc-list a.invalid .mark {
+		background: var(--bad);
 	}
 	.toc-list a:hover {
 		color: var(--fg);

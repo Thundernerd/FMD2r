@@ -98,7 +98,7 @@
 			<span class="label">Format</span>
 			<span class="format">
 				<b>{format ? FORMATS[format] : '…'}</b>
-				<a class="small" href="/settings#output">Change</a>
+				<a class="small" href="/settings#section-output">Change</a>
 			</span>
 		</div>
 	</div>
