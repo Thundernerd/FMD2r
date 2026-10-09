@@ -3165,12 +3165,25 @@
         "type": "object",
         "required": [
           "status",
-          "auth"
+          "auth",
+          "loopback",
+          "overridden"
         ],
         "properties": {
           "auth": {
             "type": "boolean",
             "description": "Whether the API requires the password (as a bearer token or a login session)."
+          },
+          "loopback": {
+            "type": "boolean",
+            "description": "Whether the server listens on a loopback address only, out of other machines' reach."
+          },
+          "overridden": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The settings the command line or environment overrides (`--bind`, `--password`, …), as\ndotted paths such as `server.bind`."
           },
           "status": {
             "type": "string",
@@ -4904,7 +4917,7 @@
               }
             ],
             "default": {
-              "bind": "0.0.0.0:8080",
+              "bind": "127.0.0.1:8080",
               "has_auth_token": false,
               "session_idle_days": 7,
               "session_lifetime_days": 30

@@ -747,6 +747,14 @@ fn set_every_secret() -> Request<Body> {
     )
 }
 
+/// `req` with the server password [`set_every_secret`] sets as its bearer token: it applies at
+/// once.
+fn authed(mut req: Request<Body>) -> Request<Body> {
+    let bearer = axum::http::HeaderValue::from_static("Bearer server-secret");
+    req.headers_mut().insert("authorization", bearer);
+    req
+}
+
 /// Asserts that `body` holds none of the values [`set_every_secret`] stores.
 fn assert_no_secret(body: &serde_json::Value) {
     let text = body.to_string();
@@ -771,7 +779,7 @@ async fn settings_secrets_are_never_returned_only_whether_they_are_set() {
     assert_eq!(res.status(), StatusCode::OK);
     assert_no_secret(&body_json(res).await);
 
-    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    let body = body_json(send(&h.state, authed(get("/api/settings"))).await).await;
     assert_no_secret(&body);
     assert_eq!(body["connections"]["proxy"]["has_password"], true);
     assert_eq!(body["module_updater"]["has_github_token"], true);
@@ -784,9 +792,9 @@ async fn a_patch_without_a_secret_keeps_it_and_an_empty_one_clears_it() {
     send(&h.state, set_every_secret()).await;
 
     let patch = serde_json::json!({ "connections": { "proxy": { "host": "proxy.example" } } });
-    let res = send(&h.state, patch_json("/api/settings", patch)).await;
+    let res = send(&h.state, authed(patch_json("/api/settings", patch))).await;
     assert_eq!(res.status(), StatusCode::OK);
-    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    let body = body_json(send(&h.state, authed(get("/api/settings"))).await).await;
     assert_eq!(body["connections"]["proxy"]["has_password"], true);
     assert_eq!(body["module_updater"]["has_github_token"], true);
     assert_eq!(body["server"]["has_auth_token"], true);
@@ -796,7 +804,7 @@ async fn a_patch_without_a_secret_keeps_it_and_an_empty_one_clears_it() {
         "module_updater": { "github_token": "" },
         "server": { "auth_token": "" },
     });
-    let res = send(&h.state, patch_json("/api/settings", clear)).await;
+    let res = send(&h.state, authed(patch_json("/api/settings", clear))).await;
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(send(&h.state, get("/api/settings")).await).await;
     assert_eq!(body["connections"]["proxy"]["has_password"], false);

@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 struct Server {
     child: Child,
     addr: String,
+    /// What the server logged before it listened.
+    startup: Vec<String>,
     _dir: tempfile::TempDir,
 }
 
@@ -20,19 +22,29 @@ fn start() -> Server {
 
 /// [`start`] with extra arguments.
 fn start_with(args: &[&str]) -> Server {
-    let dir = tempfile::tempdir().unwrap();
+    let mut all = vec!["--bind", "127.0.0.1:0"];
+    all.extend_from_slice(args);
+    start_in(tempfile::tempdir().unwrap(), &all)
+}
+
+/// Starts `fmd2r serve` with `args` and the data dir `<dir>/data`, and no `FMD2R_*` variables
+/// from the test's environment, and waits for its "listening on" line.
+fn start_in(dir: tempfile::TempDir, args: &[&str]) -> Server {
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("fmd2r"))
-        .args(["serve", "--bind", "127.0.0.1:0", "--data-dir"])
+        .args(["serve", "--data-dir"])
         .arg(dir.path().join("data"))
         // Tests never reach the network: no module sync with GitHub.
         .arg("--no-module-updates")
         .args(args)
         .env("RUST_LOG", "info")
+        .env_remove("FMD2R_BIND")
+        .env_remove("FMD2R_PASSWORD")
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     let mut lines = BufReader::new(child.stderr.take().unwrap()).lines();
+    let mut startup = Vec::new();
     let addr = loop {
         let line = lines
             .next()
@@ -41,14 +53,36 @@ fn start_with(args: &[&str]) -> Server {
         if let Some(rest) = line.split("listening on ").nth(1) {
             break rest.split_whitespace().next().unwrap().to_string();
         }
+        startup.push(line);
     };
     // Keep draining stderr so the server never blocks on a full pipe.
     std::thread::spawn(move || lines.for_each(drop));
     Server {
         child,
         addr,
+        startup,
         _dir: dir,
     }
+}
+
+/// A temp dir whose `data/app.db` has the `server.bind` setting `bind`.
+fn dir_with_bind_setting(bind: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("data")).unwrap();
+    let db = fmd_store::AppDb::open(dir.path().join("data/app.db")).unwrap();
+    db.settings()
+        .set("server", &serde_json::json!({ "bind": bind }))
+        .unwrap();
+    dir
+}
+
+/// A port nothing listens on right now.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
 }
 
 fn request(addr: &str, path: &str) -> TcpStream {
@@ -158,5 +192,49 @@ fn a_flaresolverr_url_setting_change_rewrites_the_bypass_config_without_a_restar
         assert!(Instant::now() < deadline, "{written}");
         std::thread::sleep(Duration::from_millis(20));
     }
+    signal_and_wait(server, "TERM");
+}
+
+#[test]
+fn serve_listens_on_the_bind_setting_without_a_flag() {
+    let bind = format!("127.0.0.1:{}", free_port());
+    let server = start_in(dir_with_bind_setting(&bind), &[]);
+    assert_eq!(server.addr, bind);
+    signal_and_wait(server, "TERM");
+}
+
+#[test]
+fn the_bind_flag_wins_over_the_setting() {
+    let setting = format!("127.0.0.1:{}", free_port());
+    let flag = format!("127.0.0.1:{}", free_port());
+    let server = start_in(dir_with_bind_setting(&setting), &["--bind", &flag]);
+    assert_eq!(server.addr, flag);
+    signal_and_wait(server, "TERM");
+}
+
+/// Whether the server warned at startup that anyone who can reach it can use it.
+fn warned_open(server: &Server) -> bool {
+    server
+        .startup
+        .iter()
+        .any(|line| line.contains("WARN") && line.contains("no password"))
+}
+
+#[test]
+fn startup_warns_when_any_address_can_reach_an_open_server() {
+    let server = start_in(tempfile::tempdir().unwrap(), &["--bind", "0.0.0.0:0"]);
+    assert!(warned_open(&server), "{:?}", server.startup);
+    signal_and_wait(server, "TERM");
+}
+
+#[test]
+fn startup_does_not_warn_on_loopback_or_with_a_password() {
+    let server = start();
+    assert!(!warned_open(&server), "{:?}", server.startup);
+    signal_and_wait(server, "TERM");
+
+    let args = ["--bind", "0.0.0.0:0", "--password", "hunter2"];
+    let server = start_in(tempfile::tempdir().unwrap(), &args);
+    assert!(!warned_open(&server), "{:?}", server.startup);
     signal_and_wait(server, "TERM");
 }

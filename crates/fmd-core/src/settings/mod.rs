@@ -3,6 +3,7 @@
 
 mod model;
 mod module_overrides;
+mod password;
 mod secrets;
 mod service;
 mod validate;
@@ -14,6 +15,7 @@ pub use module_overrides::{
     EffectiveLimits, HttpOverrides, LimitOverrides, ModuleLimits, ModuleOverrides, ProxyOverride,
     ProxyOverrideType, StoredModuleHttpSettings, effective_limits,
 };
+pub use password::verify_password;
 pub use service::{FieldError, ModulePatch, SettingsError, SettingsService};
 pub(crate) use validate::normalize;
 pub use view::{

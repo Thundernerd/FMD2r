@@ -473,10 +473,11 @@ impl Default for ModuleUpdaterSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(default)]
 pub struct ServerSettings {
-    /// Socket address to listen on.
+    /// Socket address to listen on, from the next start. `--bind` / `FMD2R_BIND` overrides it.
     pub bind: String,
-    /// Password/bearer token clients must present; `None` disables auth. Stored encrypted; the
-    /// API only shows whether it is set.
+    /// A salted hash of the password/bearer token clients must present; `None` disables auth.
+    /// A patch sets it to a password, which is hashed before it is stored; the API only shows
+    /// whether it is set. `--password` / `FMD2R_PASSWORD` overrides it.
     pub auth_token: Option<String>,
     /// Days a login session may go unused before it ends; every authorized request restarts
     /// the count.
@@ -490,7 +491,7 @@ pub struct ServerSettings {
 impl Default for ServerSettings {
     fn default() -> Self {
         Self {
-            bind: "0.0.0.0:8080".into(),
+            bind: "127.0.0.1:8080".into(),
             auth_token: None,
             session_idle_days: 7,
             session_lifetime_days: 30,

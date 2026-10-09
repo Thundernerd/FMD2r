@@ -6,16 +6,16 @@
 	import AddByUrl from '#lib/components/AddByUrl.svelte';
 	import InboxPopover from '#lib/components/InboxPopover.svelte';
 	import LoginScreen from '#lib/components/LoginScreen.svelte';
+	import OpenServerBanner from '#lib/components/OpenServerBanner.svelte';
 	import QueueDock from '#lib/components/QueueDock.svelte';
 	import TopNav from '#lib/components/TopNav.svelte';
 
 	let { children }: { children: Snippet } = $props();
 
 	$effect(() => {
-		api
-			.health()
-			.then((health) => session.serverRequiresAuth(health.auth))
-			.catch(() => {});
+		// Again after logging in: the password may have changed meanwhile.
+		if (session.locked) return;
+		session.checkHealth(api).catch(() => {});
 	});
 
 	$effect(() => {
@@ -51,6 +51,7 @@
 	<LoginScreen {api} onlogin={() => session.loggedIn()} />
 {:else}
 	<div class="app" class:with-dock={showDock}>
+		<OpenServerBanner health={session.health} />
 		<TopNav>
 			<AddByUrl {api} />
 			<InboxPopover {api} store={events} />

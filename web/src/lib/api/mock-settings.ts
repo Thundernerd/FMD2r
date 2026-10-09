@@ -91,7 +91,7 @@ export const defaultSettings = (): Settings => ({
 	covers: { revalidate_after_hours: 168, cache_size_mb: 256 },
 	logs: { max_file_size_mb: 10, max_files: 5 },
 	server: {
-		bind: '0.0.0.0:8080',
+		bind: '127.0.0.1:8080',
 		has_auth_token: false,
 		session_idle_days: 7,
 		session_lifetime_days: 30

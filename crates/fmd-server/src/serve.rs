@@ -24,7 +24,9 @@ use crate::{AppState, CoverConfig, Idle, LogBuffer, LogRotation, SystemTools, bu
 
 /// What [`serve`] needs.
 pub struct ServeConfig {
-    pub bind: SocketAddr,
+    /// The address to listen on (`--bind` / `FMD2R_BIND`); `None` takes the `server.bind`
+    /// setting.
+    pub bind: Option<SocketAddr>,
     /// Holds `app.db`, `lists.db`, the Lua tree (`lua/`), the cover cache (`covers/`) and the log
     /// files (`logs/`); created when missing.
     pub data_dir: PathBuf,
@@ -54,6 +56,8 @@ pub enum ServeError {
     Store(#[from] fmd_store::StoreError),
     #[error("settings: {0}")]
     Settings(#[from] fmd_core::settings::SettingsError),
+    #[error("the server.bind setting {0:?} is not a socket address")]
+    BindSetting(String),
     #[error("bind {addr}: {source}")]
     Bind {
         addr: SocketAddr,
@@ -63,7 +67,8 @@ pub enum ServeError {
     Io(#[from] std::io::Error),
 }
 
-/// Opens the store in `config.data_dir`, then serves the app on `config.bind` until SIGINT or
+/// Opens the store in `config.data_dir`, then serves the app on `config.bind` (or the
+/// `server.bind` setting) until SIGINT or
 /// SIGTERM, letting in-flight requests finish and closing event streams.
 pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     std::fs::create_dir_all(&config.data_dir).map_err(|source| ServeError::DataDir {
@@ -105,10 +110,26 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         tracing::warn!(target: "fmd_server", "persisting logs: {e}");
     }
     let covers = CoverConfig::from_settings(data_dir.join("covers"), &settings.covers);
+    let bind = match config.bind {
+        Some(bind) => bind,
+        None => settings
+            .server
+            .bind
+            .parse()
+            .map_err(|_| ServeError::BindSetting(settings.server.bind.clone()))?,
+    };
+    let overridden = [
+        config.bind.map(|_| "server.bind"),
+        flaresolverr_override
+            .as_ref()
+            .map(|_| "connections.flaresolverr_url"),
+    ];
     let mut state = state
         .with_logs(config.logs)
         .with_data_dir(&data_dir)
-        .with_tools(SystemTools::new(bypass_config));
+        .with_tools(SystemTools::new(bypass_config))
+        .with_listen_addr(bind)
+        .with_overridden(overridden.into_iter().flatten());
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }
@@ -184,12 +205,15 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
             flaresolverr_url,
         ));
     }
-    let listener = TcpListener::bind(config.bind)
+    if !bind.ip().is_loopback() && state.secret().is_none() {
+        tracing::warn!(target: "fmd_server",
+            "{bind} is reachable from other machines and no password is set: anyone who can reach \
+             it can use the API. Set one in the settings (Server, Password) or with --password / \
+             FMD2R_PASSWORD");
+    }
+    let listener = TcpListener::bind(bind)
         .await
-        .map_err(|source| ServeError::Bind {
-            addr: config.bind,
-            source,
-        })?;
+        .map_err(|source| ServeError::Bind { addr: bind, source })?;
     let signal = shutdown_signal()?;
     let addr = listener.local_addr()?;
     tracing::info!(target: "fmd_server", "listening on {addr}");

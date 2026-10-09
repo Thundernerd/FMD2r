@@ -5,16 +5,28 @@
 	let {
 		field,
 		draft,
-		idPrefix = 'set'
-	}: { field: Field; draft: Draft<object>; idPrefix?: string } = $props();
+		idPrefix = 'set',
+		overridden = false
+	}: {
+		field: Field;
+		draft: Draft<object>;
+		idPrefix?: string;
+		/** The command line or environment overrides the setting. */
+		overridden?: boolean;
+	} = $props();
 
 	const id = $derived(`${idPrefix}-${field.path.replaceAll('.', '-')}`);
 	const value = $derived(draft.get(field.path));
 	const error = $derived(draft.errors[field.path]);
 	const dirty = $derived(draft.isDirty(field.path));
 	const describedBy = $derived(
-		[error ? `${id}-error` : '', field.help ? `${id}-help` : ''].filter(Boolean).join(' ') ||
-			undefined
+		[
+			error ? `${id}-error` : '',
+			field.help ? `${id}-help` : '',
+			overridden ? `${id}-overridden` : ''
+		]
+			.filter(Boolean)
+			.join(' ') || undefined
 	);
 
 	/** Whether the secret is set on the server; it never sends the value. */
@@ -136,6 +148,11 @@
 	{#if field.help}
 		<p id="{id}-help" class="help small muted">{field.help}</p>
 	{/if}
+	{#if overridden}
+		<p id="{id}-overridden" class="overridden small">
+			Overridden by the command line or environment; this value applies without it.
+		</p>
+	{/if}
 	{#if error}
 		<p id="{id}-error" class="field-error small" role="alert">{error}</p>
 	{/if}
@@ -180,6 +197,10 @@
 	}
 	.help {
 		margin: 0;
+	}
+	.overridden {
+		margin: 0;
+		color: var(--warn);
 	}
 	.field-error {
 		margin: 0;

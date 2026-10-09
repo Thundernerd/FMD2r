@@ -47,13 +47,14 @@ enum Command {
 
 #[derive(Args)]
 struct ServeArgs {
-    /// Address to listen on.
-    #[arg(long, env = "FMD2R_BIND", default_value = "127.0.0.1:8080")]
-    bind: SocketAddr,
+    /// Address to listen on; overrides the `server.bind` setting (127.0.0.1:8080 by default).
+    #[arg(long, env = "FMD2R_BIND")]
+    bind: Option<SocketAddr>,
     /// Directory holding the databases.
     #[arg(long, env = "FMD2R_DATA_DIR", default_value = "data")]
     data_dir: PathBuf,
-    /// Password/token required for the API; leave unset for no auth.
+    /// Password/token required for the API; overrides the `server.auth_token` setting. Without
+    /// either, the API is open.
     #[arg(long, env = "FMD2R_PASSWORD", hide_env_values = true)]
     password: Option<String>,
     /// FlareSolverr's URL (e.g. http://flaresolverr:8191) for Cloudflare-protected sites; overrides

@@ -77,7 +77,7 @@ COPY docker/entrypoint.sh /usr/local/bin/fmd2r-entrypoint
 ENV FMD2R_BIND=0.0.0.0:8080 \
     FMD2R_DATA_DIR=/data
 # Optional, read by `fmd2r serve`:
-#   FMD2R_PASSWORD          password/token the API requires (unset: no auth)
+#   FMD2R_PASSWORD          password/token the API requires (unset: the Password setting)
 #   FMD2R_FLARESOLVERR_URL  e.g. http://flaresolverr:8191 for Cloudflare-protected sites
 USER fmd2r
 WORKDIR /data
