@@ -31,23 +31,35 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The container image: compose.yaml validates, the image builds, and scripts/docker-smoke.sh
-  # checks the running container (health, SPA, bundled modules, python3/node/magick).
+  # The container image, per platform: compose.yaml validates, the image builds, and
+  # scripts/docker-smoke.sh checks the running container (health, SPA, bundled modules,
+  # python3/node/magick, no libfmdxpath.so). fmd2r cross-compiles for arm64; the arm64 image's
+  # runtime stage and smoke test run under QEMU.
   docker:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
       - name: Validate compose.yaml
+        if: matrix.arch == 'amd64'
         run: docker compose config -q && docker compose --env-file .env.example config -q
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.arch == 'arm64'
+        with:
+          platforms: arm64
       - uses: docker/setup-buildx-action@v3
       - name: Build the image
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/${{ matrix.arch }}
           load: true
           tags: fmd2r:smoke
           build-args: FMD2R_GIT_REVISION=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
       - name: Smoke test
         run: scripts/docker-smoke.sh fmd2r:smoke

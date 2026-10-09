@@ -19,8 +19,8 @@ cargo run -p fmd2r -- serve --flaresolverr-url http://localhost:8191
 ## Run with Docker
 
 The image (`ghcr.io/thundernerd/fmd2r`, built from `Dockerfile`) holds the `fmd2r` binary with the
-web UI embedded, `libfmdxpath.so`, and the tools upstream modules shell out to: `python3`, `node`
-and ImageMagick's `magick`. `compose.yaml` runs it with a FlareSolverr sidecar:
+web UI embedded and the tools upstream modules shell out to: `python3`, `node` and ImageMagick's
+`magick`. `compose.yaml` runs it with a FlareSolverr sidecar:
 
 ```sh
 cp .env.example .env    # optional: port, password, library directory, image tag
@@ -42,17 +42,19 @@ Then open <http://localhost:8080>. While the repository is private its GHCR pack
   `FMD2R_DATA_DIR` (`/data`), `FMD2R_PASSWORD` (unset: no auth) and `FMD2R_FLARESOLVERR_URL`
   (compose sets `http://flaresolverr:8191`).
 - **Health:** the image's `HEALTHCHECK` polls `GET /api/health`.
-- **Platforms:** linux/amd64 only. `libfmdxpath.so`'s float-environment code
-  (`crates/xpath-fpc/pascal/fxfpu.pas`) is x86 assembly, so FMD2's XPath engine doesn't build for
-  arm64.
+- **Platforms:** linux/amd64 and linux/arm64. `fmd2r` uses the native XPath backend only, so the
+  image has no `libfmdxpath.so` (the `fpc` backend's shim, whose float-environment code is x86
+  assembly). The Dockerfile cross-compiles `fmd2r` for the target platform:
+  `docker buildx build --platform linux/arm64 .` needs QEMU only for the runtime stage.
 
 ### Releases
 
-Pushing a version tag (`v1.2.3`, `v1.2.3-rc.1`) runs `.github/workflows/release.yml`: it builds and smoke-tests the image
-(`scripts/docker-smoke.sh`), pushes it to GHCR as `<version>`, `<major>.<minor>` and `latest`
-(pre-release tags skip `latest`), and creates a GitHub release with
-`fmd2r-<tag>-x86_64-linux-gnu.tar.gz` (the binary and `libfmdxpath.so`, built on Ubuntu 22.04 so
-it needs glibc 2.35 or newer) and its `SHA256SUMS`.
+Pushing a version tag (`v1.2.3`, `v1.2.3-rc.1`) runs `.github/workflows/release.yml`: it builds the
+image for linux/amd64 and linux/arm64, smoke-tests each (`scripts/docker-smoke.sh`, arm64 under
+QEMU), pushes it to GHCR as `<version>`, `<major>.<minor>` and `latest` (pre-release tags skip
+`latest`), and creates a GitHub release with `fmd2r-<tag>-x86_64-linux-gnu.tar.gz` and
+`fmd2r-<tag>-aarch64-linux-gnu.tar.gz` (the binary, built on Ubuntu 22.04 so it needs glibc 2.35
+or newer; each smoke-tested with `scripts/tarball-smoke.sh`) and their `SHA256SUMS`.
 
 ## CI
 
@@ -64,7 +66,7 @@ only when their inputs change.
 | --- | --- | --- |
 | `ci.yml` | every PR and push to `main` | fmt, clippy, `cargo test` (native XPath backend, smoke replay, module corpus), and the web UI |
 | `xpath-fpc.yml` | PRs and pushes to `main` that touch the fpc shim, `fmd-xpath`, `fmd-lua`'s XPath binding, `fmd2r xpath`, `fixtures/xpath-corpus` or the manifests; nightly; manual | the `fpc` backend's parity with the native one, and uploads `libfmdxpath.so` |
-| `docker.yml` | PRs and pushes to `main` that touch what the image is built from; manual | builds the image and runs `scripts/docker-smoke.sh` |
+| `docker.yml` | PRs and pushes to `main` that touch what the image is built from; manual | builds the image for amd64 and arm64 and runs `scripts/docker-smoke.sh` on each (arm64 under QEMU) |
 | `smoke-nightly.yml` | nightly; manual | the smoke list live and replayed, and a native/fpc diff on the day's pages |
 | `release.yml` | version tags | see [Releases](#releases) |
 
