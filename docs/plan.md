@@ -249,6 +249,9 @@ Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53
 | T60 | Decide how the series page shows chapters marked when added to the library (owner: maintainer) | — |
 | T61 | `fmd2r module pages` reports a failed `GetPageNumber` | — |
 | T62 | Series page: call the chapter mark "seen" (decided in T60) | — |
+| T63 | Keep settings secrets out of the API and encrypt them at rest (decided in T51) | — |
+| T64 | Make the Password and Listen address settings work (decided in T51) | T63 |
+| T65 | An exact new-chapter badge (decided in T51) | — |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:
