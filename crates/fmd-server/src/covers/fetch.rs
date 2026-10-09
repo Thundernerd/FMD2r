@@ -1,13 +1,13 @@
 //! Fetching a cover upstream through the owning module's HTTP session.
 
-use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use fmd_http::HttpError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use super::{CoverModules, CoverSession};
+use super::{CoverModules, CoverResolver, CoverSession};
 
 /// Redirects followed before giving up, like `THTTPSendThread.MaxRedirect`
 /// (baseunits/httpsendthread.pas:516).
@@ -51,6 +51,7 @@ pub(crate) enum FetchError {
 /// Blocks: run it on a thread outside the tokio runtime (see `fmd_http`'s threading contract).
 pub(crate) fn fetch(
     modules: &dyn CoverModules,
+    resolver: &dyn CoverResolver,
     module: &str,
     url: &Url,
     cached: Option<&Validators>,
@@ -67,7 +68,8 @@ pub(crate) fn fetch(
     session.set_follow_redirection(false);
     let mut url = url.clone();
     for _ in 0..=MAX_REDIRECTS {
-        guard(&url, root.as_ref())?;
+        let pin = guard(resolver, &url, root.as_ref())?;
+        session.set_connect_to(pin);
         session.reset();
         let headers = session.headers_mut();
         headers.set_value("Referer", &referer);
@@ -121,12 +123,17 @@ pub(crate) fn fetch(
 }
 
 /// The SSRF guard: only http(s), and no private-network target unless it is the module's own host
-/// (a module for a site on the LAN may fetch its covers there).
+/// (a module for a site on the LAN may fetch its covers there). Returns the checked address to
+/// connect to when the host is a name, so a DNS server that answers differently the second time
+/// (DNS rebinding) cannot send the request elsewhere, and the host is looked up once per request.
 ///
-/// The session resolves the host again when it connects, so a DNS server that answers
-/// differently the second time (DNS rebinding) can slip past; pinning the checked address needs
-/// support in `fmd_http`'s transport.
-fn guard(url: &Url, root: Option<&Url>) -> Result<(), FetchError> {
+/// With a proxy set on the module's session the proxy resolves and connects, so the guard then
+/// only checks where the proxy is asked to go, not where it ends up.
+fn guard(
+    resolver: &dyn CoverResolver,
+    url: &Url,
+    root: Option<&Url>,
+) -> Result<Option<SocketAddr>, FetchError> {
     if !matches!(url.scheme(), "http" | "https") {
         return Err(FetchError::Forbidden(format!("not an http(s) URL: {url}")));
     }
@@ -137,23 +144,29 @@ fn guard(url: &Url, root: Option<&Url>) -> Result<(), FetchError> {
         root.host() == Some(host.clone())
             && root.port_or_known_default() == url.port_or_known_default()
     }) {
-        return Ok(());
+        return Ok(None);
     }
-    let addrs: Vec<IpAddr> = match host {
-        url::Host::Ipv4(ip) => vec![IpAddr::V4(ip)],
-        url::Host::Ipv6(ip) => vec![IpAddr::V6(ip)],
-        url::Host::Domain(domain) => (domain, url.port_or_known_default().unwrap_or(80))
-            .to_socket_addrs()
-            .map_err(|e| FetchError::Upstream(format!("cannot resolve {domain}: {e}")))?
-            .map(|a| a.ip())
-            .collect(),
+    let port = url.port_or_known_default().unwrap_or(80);
+    let (addrs, pin) = match host {
+        url::Host::Ipv4(ip) => (vec![IpAddr::V4(ip)], None),
+        url::Host::Ipv6(ip) => (vec![IpAddr::V6(ip)], None),
+        url::Host::Domain(domain) => {
+            let addrs = resolver
+                .resolve(domain, port)
+                .map_err(|e| FetchError::Upstream(format!("cannot resolve {domain}: {e}")))?;
+            let Some(first) = addrs.first() else {
+                return Err(FetchError::Upstream(format!("{domain} has no address")));
+            };
+            let pin = SocketAddr::new(first.ip(), port);
+            (addrs.iter().map(SocketAddr::ip).collect(), Some(pin))
+        }
     };
     if addrs.iter().any(|ip| is_private(*ip)) {
         return Err(FetchError::Forbidden(format!(
             "{url} points into a private network"
         )));
     }
-    Ok(())
+    Ok(pin)
 }
 
 /// Loopback, private, link-local, shared (CGNAT), unspecified, broadcast or multicast addresses.

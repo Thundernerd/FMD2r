@@ -1,6 +1,7 @@
 //! The network [`Transport`], on reqwest.
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -28,12 +29,21 @@ impl ReqwestTransport {
         Self::default()
     }
 
-    fn client(
-        &self,
-        proxy: &Option<Proxy>,
-        timeout: Duration,
-    ) -> Result<reqwest::Client, TransportError> {
-        let key = (proxy.clone(), timeout);
+    /// The client for `request`: shared per proxy/timeout, or a fresh one when the request is
+    /// pinned to an address. A pinned client is not reused, since its connections (pooled by
+    /// host) must never serve the same host unpinned or pinned elsewhere.
+    fn client(&self, request: &WireRequest) -> Result<reqwest::Client, TransportError> {
+        let proxy = request.proxy.as_ref().filter(|p| !p.host.is_empty());
+        if let (Some(addr), None) = (request.connect_to, proxy) {
+            let url = reqwest::Url::parse(&request.url)
+                .map_err(|e| TransportError(format!("bad URL: {e}")))?;
+            let host = url
+                .host_str()
+                .ok_or_else(|| TransportError(format!("no host in {url}")))?;
+            // reqwest connects to `addr`'s IP on the URL's port.
+            return build(proxy, request.timeout, Some((host, addr)));
+        }
+        let key = (request.proxy.clone(), request.timeout);
         let mut clients = self
             .clients
             .lock()
@@ -41,20 +51,32 @@ impl ReqwestTransport {
         if let Some(client) = clients.get(&key) {
             return Ok(client.clone());
         }
-        let mut builder = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .http1_only()
-            .http1_title_case_headers()
-            .connect_timeout(timeout)
-            .read_timeout(timeout)
-            .no_proxy();
-        if let Some(proxy) = proxy.as_ref().filter(|p| !p.host.is_empty()) {
-            builder = builder.proxy(reqwest_proxy(proxy)?);
-        }
-        let client = builder.build().map_err(|e| TransportError(e.to_string()))?;
+        let client = build(proxy, request.timeout, None)?;
         clients.insert(key, client.clone());
         Ok(client)
     }
+}
+
+/// A reqwest client with `proxy` and `timeout`, resolving `pin`'s host to its address.
+fn build(
+    proxy: Option<&Proxy>,
+    timeout: Duration,
+    pin: Option<(&str, SocketAddr)>,
+) -> Result<reqwest::Client, TransportError> {
+    let mut builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .http1_only()
+        .http1_title_case_headers()
+        .connect_timeout(timeout)
+        .read_timeout(timeout)
+        .no_proxy();
+    if let Some(proxy) = proxy {
+        builder = builder.proxy(reqwest_proxy(proxy)?);
+    }
+    if let Some((host, addr)) = pin {
+        builder = builder.resolve(host, addr);
+    }
+    builder.build().map_err(|e| TransportError(e.to_string()))
 }
 
 /// Maps `SetProxy` settings onto reqwest. Synapse resolves host names through a
@@ -85,7 +107,7 @@ impl Transport for ReqwestTransport {
         &self,
         request: WireRequest,
     ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
-        let client = self.client(&request.proxy, request.timeout);
+        let client = self.client(&request);
         Box::pin(async move {
             let client = client?;
             let method = reqwest::Method::from_bytes(request.method.as_bytes())

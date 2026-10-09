@@ -6,6 +6,7 @@ mod fetch;
 mod thumbnail;
 
 use std::collections::HashMap;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -28,7 +29,7 @@ use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
 /// How the cover cache behaves.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CoverConfig {
     /// Where cached covers live, e.g. `<data dir>/covers`.
     pub dir: PathBuf,
@@ -36,6 +37,33 @@ pub struct CoverConfig {
     pub revalidate_after: Duration,
     /// Size cap of the cache directory; least recently used covers are evicted past it.
     pub max_bytes: u64,
+    /// Looks up cover hosts for the SSRF guard; the fetch connects to the address it checked.
+    pub resolver: Arc<dyn CoverResolver>,
+}
+
+impl std::fmt::Debug for CoverConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoverConfig")
+            .field("dir", &self.dir)
+            .field("revalidate_after", &self.revalidate_after)
+            .field("max_bytes", &self.max_bytes)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Resolves host names for the cover proxy's SSRF guard.
+pub trait CoverResolver: Send + Sync + 'static {
+    /// The addresses of `host`, each with `port`. May block.
+    fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>>;
+}
+
+/// The operating system's resolver.
+pub struct SystemResolver;
+
+impl CoverResolver for SystemResolver {
+    fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
+        Ok((host, port).to_socket_addrs()?.collect())
+    }
 }
 
 impl CoverConfig {
@@ -52,6 +80,7 @@ impl CoverConfig {
                 u64::from(settings.revalidate_after_hours) * 3600,
             ),
             max_bytes: u64::from(settings.cache_size_mb) * 1024 * 1024,
+            resolver: Arc::new(SystemResolver),
         }
     }
 }
@@ -87,6 +116,7 @@ pub fn cover_url(module: &str, url: &str) -> String {
 pub(crate) struct Covers {
     cache: Arc<DiskCache>,
     modules: Arc<dyn CoverModules>,
+    resolver: Arc<dyn CoverResolver>,
     revalidate_after: Duration,
     /// One lock per cover being resolved, so concurrent requests make one upstream fetch.
     inflight: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
@@ -97,6 +127,7 @@ impl Covers {
         Self {
             cache: Arc::new(DiskCache::new(config.dir, config.max_bytes)),
             modules,
+            resolver: config.resolver,
             revalidate_after: config.revalidate_after,
             inflight: Mutex::default(),
         }
@@ -171,10 +202,16 @@ impl Covers {
             return Ok(entry.clone());
         }
         let validators = cached.as_ref().map(|e| e.meta.upstream.clone());
-        let modules = self.modules.clone();
+        let (modules, resolver) = (self.modules.clone(), self.resolver.clone());
         let (module, target) = (module.to_owned(), url.clone());
         let fetched = on_fetch_thread(move || {
-            fetch::fetch(modules.as_ref(), &module, &target, validators.as_ref())
+            fetch::fetch(
+                modules.as_ref(),
+                resolver.as_ref(),
+                &module,
+                &target,
+                validators.as_ref(),
+            )
         })
         .await?;
         let cache = self.cache.clone();

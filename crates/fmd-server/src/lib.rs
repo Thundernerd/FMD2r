@@ -35,7 +35,9 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange};
-pub use covers::{CoverConfig, CoverModules, CoverSession, cover_url};
+pub use covers::{
+    CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
+};
 pub use error::{ApiError, Problem};
 pub use events::{
     EventBus, JobState, ServerEvent, TaskProgress, TaskRemoved, TaskState, TaskStatusChange,

@@ -1,6 +1,7 @@
 //! The wire-level seam: one HTTP exchange, no redirects, retries or decoding.
 
 use std::future::Future;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -18,6 +19,8 @@ pub struct WireRequest {
     /// Socket timeout (connect and per read), like Synapse's `Sock.SetTimeout`.
     pub timeout: Duration,
     pub proxy: Option<Proxy>,
+    /// Connect here instead of resolving the URL's host (unused with a proxy).
+    pub connect_to: Option<SocketAddr>,
 }
 
 /// One response as it came off the wire. The body is still content-encoded.

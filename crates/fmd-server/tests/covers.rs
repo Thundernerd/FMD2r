@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::panic)]
 
 use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
@@ -13,8 +14,12 @@ use axum::extract::State;
 use axum::http::{HeaderMap, Request, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use fmd_http::{HttpClient, ModuleHttp};
-use fmd_server::{AppState, CoverConfig, CoverModules, CoverSession, build_router, cover_url};
+use fmd_http::{
+    BoxFuture, HttpClient, ModuleHttp, Transport, TransportError, WireRequest, WireResponse,
+};
+use fmd_server::{
+    AppState, CoverConfig, CoverModules, CoverResolver, CoverSession, build_router, cover_url,
+};
 use fmd_store::AppDb;
 use http_body_util::BodyExt;
 use tempfile::TempDir;
@@ -409,4 +414,176 @@ async fn a_stale_cover_is_served_when_upstream_fails() {
     assert_eq!(res.status(), StatusCode::OK);
     assert_eq!(body(res).await, png());
     assert_eq!(up.hits(), 2);
+}
+
+/// A DNS server that rebinds: each host answers its public address on the first lookup and
+/// `127.0.0.1` on every later one.
+#[derive(Default)]
+struct RebindingDns {
+    public: HashMap<String, IpAddr>,
+    lookups: Mutex<Vec<String>>,
+}
+
+impl RebindingDns {
+    fn new(hosts: &[(&str, [u8; 4])]) -> Arc<Self> {
+        Arc::new(Self {
+            public: hosts
+                .iter()
+                .map(|(h, ip)| (h.to_string(), IpAddr::from(*ip)))
+                .collect(),
+            lookups: Mutex::default(),
+        })
+    }
+
+    fn lookup(&self, host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
+        let mut lookups = self.lookups.lock().unwrap();
+        let first = !lookups.iter().any(|h| h == host);
+        lookups.push(host.to_owned());
+        let ip = match self.public.get(host) {
+            Some(ip) if first => *ip,
+            Some(_) => IpAddr::from([127, 0, 0, 1]),
+            None => return Err(std::io::Error::other(format!("no such host {host}"))),
+        };
+        Ok(vec![SocketAddr::new(ip, port)])
+    }
+
+    fn lookups(&self) -> usize {
+        self.lookups.lock().unwrap().len()
+    }
+}
+
+impl CoverResolver for RebindingDns {
+    fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
+        self.lookup(host, port)
+    }
+}
+
+/// A network that records where each request connected: to the request's pinned address, or
+/// else wherever the DNS answers now. It serves `redirects` (path → location), then the cover.
+struct Network {
+    dns: Arc<RebindingDns>,
+    redirects: HashMap<String, String>,
+    connected: Mutex<Vec<(String, SocketAddr)>>,
+}
+
+impl Transport for Network {
+    fn send(
+        &self,
+        request: WireRequest,
+    ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
+        let url = url::Url::parse(&request.url).unwrap();
+        let addr = match request.connect_to {
+            Some(addr) => addr,
+            None => self
+                .dns
+                .lookup(
+                    url.host_str().unwrap(),
+                    url.port_or_known_default().unwrap(),
+                )
+                .unwrap()[0],
+        };
+        self.connected
+            .lock()
+            .unwrap()
+            .push((request.url.clone(), addr));
+        let response = match self.redirects.get(url.path()) {
+            Some(location) => WireResponse {
+                status: 302,
+                reason: String::new(),
+                headers: vec![("Location".into(), location.clone())],
+                body: Vec::new(),
+            },
+            None => WireResponse {
+                status: 200,
+                reason: String::new(),
+                headers: vec![("Content-Type".into(), "image/png".into())],
+                body: png(),
+            },
+        };
+        Box::pin(async move { Ok(response) })
+    }
+}
+
+/// One module `site` on `http://site.test`, fetching over `network` and resolving with `dns`.
+fn rebinding_harness(cache: &Path, network: Arc<Network>) -> Harness {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let mut cfg = CoverConfig::new(cache);
+    cfg.resolver = network.dns.clone();
+    let client = HttpClient::with_transport(network).unwrap();
+    let http = client.module("site");
+    let modules = Modules {
+        client,
+        modules: HashMap::from([("site".into(), ("http://site.test".into(), http))]),
+    };
+    Harness {
+        _dir: dir,
+        state: AppState::new(db).unwrap().with_covers(cfg, modules),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rebinding_host_is_fetched_from_the_checked_address() {
+    let dns = RebindingDns::new(&[("rebind.test", [93, 184, 216, 34])]);
+    let network = Arc::new(Network {
+        dns: dns.clone(),
+        redirects: HashMap::new(),
+        connected: Mutex::default(),
+    });
+    let cache = tempfile::tempdir().unwrap();
+    let h = rebinding_harness(cache.path(), network.clone());
+
+    let res = send(
+        &h.state,
+        get_req(&cover_url("site", "http://rebind.test/a.png")),
+    )
+    .await;
+
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        *network.connected.lock().unwrap(),
+        [(
+            "http://rebind.test/a.png".to_owned(),
+            "93.184.216.34:80".parse().unwrap()
+        )]
+    );
+    assert_eq!(dns.lookups(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn every_redirect_hop_is_fetched_from_its_checked_address() {
+    let dns = RebindingDns::new(&[
+        ("rebind.test", [93, 184, 216, 34]),
+        ("cdn.test", [93, 184, 216, 35]),
+        ("site.test", [203, 0, 113, 10]),
+    ]);
+    let network = Arc::new(Network {
+        dns: dns.clone(),
+        redirects: HashMap::from([
+            ("/a.png".into(), "http://cdn.test/b.png".into()),
+            // The module's own host is trusted, so it is resolved when connecting, unpinned.
+            ("/b.png".into(), "http://site.test/c.png".into()),
+        ]),
+        connected: Mutex::default(),
+    });
+    let cache = tempfile::tempdir().unwrap();
+    let h = rebinding_harness(cache.path(), network.clone());
+
+    let res = send(
+        &h.state,
+        get_req(&cover_url("site", "http://rebind.test/a.png")),
+    )
+    .await;
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let connected: Vec<(String, SocketAddr)> = [
+        ("http://rebind.test/a.png", "93.184.216.34:80"),
+        ("http://cdn.test/b.png", "93.184.216.35:80"),
+        ("http://site.test/c.png", "203.0.113.10:80"),
+    ]
+    .into_iter()
+    .map(|(u, a)| (u.to_owned(), a.parse().unwrap()))
+    .collect();
+    assert_eq!(*network.connected.lock().unwrap(), connected);
+    assert_eq!(dns.lookups(), 3);
 }

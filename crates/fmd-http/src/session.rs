@@ -1,5 +1,6 @@
 //! One `THTTPSendThread`: request state plus the request algorithm.
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -44,6 +45,7 @@ pub struct HttpSession {
     retry_count: Setting<i32>,
     timeout_ms: Setting<u32>,
     proxy: Setting<Option<Proxy>>,
+    connect_to: Option<SocketAddr>,
     compress: bool,
     follow_redirection: bool,
     max_redirect: u32,
@@ -78,6 +80,7 @@ impl HttpSession {
             retry_count: defaults.retry_count,
             timeout_ms: defaults.timeout_ms,
             proxy: defaults.proxy,
+            connect_to: None,
             compress: true,
             follow_redirection: true,
             max_redirect: 5,
@@ -390,6 +393,7 @@ impl HttpSession {
             body: self.document.clone(),
             timeout: Duration::from_millis(u64::from(self.timeout())),
             proxy: self.proxy(),
+            connect_to: self.connect_to,
         }
     }
 
@@ -627,6 +631,14 @@ impl HttpSession {
     /// (baseunits/httpsendthread.pas:909-912).
     pub fn set_proxy_server(&mut self, proxy: Option<Proxy>) {
         self.proxy = self.stamp(proxy);
+    }
+
+    /// Sends every request to `addr` instead of resolving the URL's host, which still names the
+    /// server for TLS (SNI and certificate checks) and the `Host` header; `None` resolves again.
+    /// No FMD2 counterpart: it lets a caller connect to the address it checked (the cover
+    /// proxy's SSRF guard). With a proxy the proxy connects to the host, so `addr` is unused.
+    pub fn set_connect_to(&mut self, addr: Option<SocketAddr>) {
+        self.connect_to = addr;
     }
 
     /// `GetProxy` (baseunits/httpsendthread.pas:876-907); `None` without a proxy host.
