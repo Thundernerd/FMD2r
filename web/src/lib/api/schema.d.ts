@@ -1343,7 +1343,7 @@ export interface components {
 		};
 		/** @description One inbox item (a row of the `events` table). */
 		InboxItem: {
-			/** @description The event body: a string as-is, anything else as JSON text. */
+			/** @description The event body as plain text, never JSON; it may span several lines. */
 			body: string;
 			/** @description RFC 3339 timestamp. */
 			created_at: string;

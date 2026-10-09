@@ -147,6 +147,60 @@ async fn inbox_lists_stored_events_and_marks_them_read() {
 }
 
 #[tokio::test]
+async fn inbox_shows_module_updater_reports_as_plain_text() {
+    let h = harness();
+    let report = |severity, title: &str, body| NewEvent {
+        kind: "module_update".into(),
+        severity,
+        module_id: None,
+        task_id: None,
+        title: title.into(),
+        body,
+    };
+    h.db.events()
+        .push(&report(
+            EventSeverity::Warning,
+            "module OrckuMangas.lua uses unknown Host API names",
+            serde_json::json!({
+                "file": "modules/OrckuMangas.lua",
+                "names": ["MANGAINFO.Artist", "MANGAINFO.Foo"],
+            }),
+        ))
+        .unwrap();
+    h.db.events()
+        .push(&report(
+            EventSeverity::Error,
+            "module Broken.lua failed Init",
+            serde_json::json!({
+                "file": "modules/Broken.lua",
+                "error": "modules/Broken.lua:3: boom\nstack traceback:\n\t[C]: in ?",
+            }),
+        ))
+        .unwrap();
+
+    let items = body_json(send(&h.state, get("/api/inbox")).await).await;
+    let body = |title: &str| {
+        items
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["title"] == title)
+            .unwrap()["body"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    assert_eq!(
+        body("module OrckuMangas.lua uses unknown Host API names"),
+        "Unknown Host API names: MANGAINFO.Artist, MANGAINFO.Foo"
+    );
+    assert_eq!(
+        body("module Broken.lua failed Init"),
+        "modules/Broken.lua:3: boom\nstack traceback:\n\t[C]: in ?"
+    );
+}
+
+#[tokio::test]
 async fn marking_an_unknown_inbox_item_read_is_a_404() {
     let h = harness();
     let res = send(&h.state, post("/api/inbox/42/read")).await;
