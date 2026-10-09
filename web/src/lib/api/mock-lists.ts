@@ -202,16 +202,6 @@ export function createMockLists(): MockLists {
 				emit(event(module, job, 'progress'));
 				if (job.done < job.total) continue;
 				jobs.delete(module);
-				// FMD2-DB only has dumps of the modules that start with a list.
-				if (job.kind === 'import_db' && !(module in LIST_SIZES)) {
-					const url = `https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/${module}.7z`;
-					emit({
-						...event(module, job, 'failed'),
-						error: `${module}: downloading ${url} failed with HTTP status 404`,
-						reason: 'no_dump'
-					});
-					continue;
-				}
 				const current = lists.get(module) ?? [];
 				const added =
 					job.kind === 'update' ? list(module, 5, current.length) : list(module, DB_SIZE);
