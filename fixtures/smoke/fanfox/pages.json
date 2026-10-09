@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "0d3653a8d9b747a381374f32e0a1641e",
   "page_container_links": [],
   "page_links": [
@@ -47,5 +49,6 @@
     "//zjcdn.mangafox.me/store/manga/26553/02-004.0/compressed/n043.jpg?token=faa9708c252ee66045360650177fb4467b0c0b34&ttl=1791561600",
     "//zjcdn.mangafox.me/store/manga/26553/02-004.0/compressed/2043.jpg?token=9adf39780c8ce9c8edfd74991d3ddf70d79143b7&ttl=1791561600"
   ],
-  "page_number": 44
+  "page_number": 44,
+  "task_start": null
 }

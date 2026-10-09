@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "d96acafbe22849349b9bb6a62a42aaf5",
   "page_container_links": [],
   "page_links": [
@@ -22,5 +24,6 @@
     "https://en-thunderscans.com/wp-content/uploads/manga/ee94249f/18.webp",
     "https://en-thunderscans.com/wp-content/uploads/manga/ee94249f/19.webp"
   ],
-  "page_number": 19
+  "page_number": 19,
+  "task_start": null
 }

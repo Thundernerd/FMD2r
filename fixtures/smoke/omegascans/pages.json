@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "752cda75b5e24f6ab4256079c564eba2",
   "page_container_links": [],
   "page_links": [
@@ -17,5 +19,6 @@
     "https://media.omegascans.org/file/zFSsXt/uploads/series/a-theme-for-every-building/89c59f0a-2be6-485e-9072-a4c542741ea1/13.jpg",
     "https://media.omegascans.org/file/zFSsXt/uploads/series/a-theme-for-every-building/89c59f0a-2be6-485e-9072-a4c542741ea1/14.jpg"
   ],
-  "page_number": 14
+  "page_number": 14,
+  "task_start": null
 }

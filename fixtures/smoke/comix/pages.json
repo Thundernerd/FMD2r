@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "88a001d7619244ef98d13ecd869b8e64",
   "page_container_links": [],
   "page_links": [
@@ -101,5 +103,6 @@
     "https://8pl.everydayessentialsco.site/hi/bEqPbYfoOT0Gm03lAlqfoAJMzr0RbvKi3R0VvpLI6y4klS5FIHyE",
     "https://8pl.alyssablog.site/hi/bEqPbYfoOT0Gm03lAlqfoAJMzr0RbvKi3R0VvpLI6y4kqS5FIHyE"
   ],
-  "page_number": 98
+  "page_number": 98,
+  "task_start": null
 }

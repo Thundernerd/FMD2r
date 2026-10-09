@@ -311,23 +311,50 @@ const UNRESOLVED_PAGE: &str = "W";
 /// it left no page links, `DoGetPageNumber` (:829-881); then, unless the module sets
 /// `DynamicPageLink`, `OnGetImageURL` for every page still unresolved (`DoPageLink`, :421-433,
 /// with `GetLinkPageFromURL`, :327-333). All run on one worker, in order, each with a fresh
-/// `HTTP` session.
+/// `HTTP` session. Prints each callback's result too, and fails after printing when no page link
+/// resolved, which FMD2's task thread does not check.
 fn pages(args: RunArgs) -> anyhow::Result<()> {
     let run = ModuleRun::start(&args)?;
     let result = prepare_chapter(&run);
-    let task = run.finish(result)?;
+    let prepared = run.finish(result)?;
+    let task = &prepared.task;
     let out = json!({
         "module": run.target.module.def().id,
+        "task_start": prepared.task_start,
+        "get_page_number": prepared.get_page_number,
+        "get_image_url": prepared.get_image_url,
         "page_number": task.page_number,
         "page_links": task.page_links,
         "page_container_links": task.page_container_links,
     });
     println!("{}", serde_json::to_string_pretty(&out)?);
+    if !prepared.resolved {
+        // Not on `GetPageNumber`'s result alone: modules return it false on chapters that work
+        // (MangaDex returns `no_error`, which `DoGetPageNumber` leaves nil,
+        // baseunits/lua/LuaWebsiteModules.pas:285-304), and FMD2 ignores it.
+        match prepared.get_page_number {
+            Some(false) => bail!("no page link resolved; GetPageNumber returned false"),
+            _ => bail!("no page link resolved"),
+        }
+    }
     Ok(())
 }
 
+/// What [`prepare_chapter`] left: the task, and each callback's result (`None` when it did not
+/// run).
+struct Prepared {
+    task: Task,
+    task_start: Option<bool>,
+    get_page_number: Option<bool>,
+    /// One per `OnGetImageURL` call, in order.
+    get_image_url: Vec<bool>,
+    /// Some page link is not `W`; for a `DynamicPageLink` module, which resolves them while
+    /// downloading, the module at least found how many pages there are.
+    resolved: bool,
+}
+
 /// The callbacks of [`pages`], returning the task as they left it.
-fn prepare_chapter(run: &ModuleRun) -> Result<Task, JobError> {
+fn prepare_chapter(run: &ModuleRun) -> Result<Prepared, JobError> {
     let def = run.target.module.def();
     let link = &run.target.link;
     let affinity = run.pool.affinity();
@@ -337,13 +364,20 @@ fn prepare_chapter(run: &ModuleRun) -> Result<Task, JobError> {
         chapter_names: vec![String::new()],
         ..Task::default()
     };
+    let mut task_start = None;
+    let mut get_page_number = None;
+    let mut get_image_url = Vec::new();
     if def.on_task_start.is_some() {
-        task = on_module().task_start(task).wait()?.value.task;
+        let reply = on_module().task_start(task).wait()?.value;
+        task_start = Some(reply.ok);
+        task = reply.task;
     }
     if task.page_links.is_empty() {
         task.page_number = 0;
         if def.on_get_page_number.is_some() {
-            task = on_module().get_page_number(task, link).wait()?.value.task;
+            let reply = on_module().get_page_number(task, link).wait()?.value;
+            get_page_number = Some(reply.ok);
+            task = reply.task;
         }
         // `TrimStrings` (baseunits/uBaseUnit.pas:1396-1410): FPC's `Trim`, dropping empty items.
         task.page_links = task
@@ -357,7 +391,8 @@ fn prepare_chapter(run: &ModuleRun) -> Result<Task, JobError> {
             task.page_links.push(UNRESOLVED_PAGE.to_owned());
         }
     }
-    if task.page_links.is_empty() {
+    let found_pages = !task.page_links.is_empty();
+    if !found_pages {
         task.page_links.push(UNRESOLVED_PAGE.to_owned());
     }
     task.page_number = i32::try_from(task.page_links.len()).unwrap_or(i32::MAX);
@@ -374,7 +409,9 @@ fn prepare_chapter(run: &ModuleRun) -> Result<Task, JobError> {
             while let Some(page) = task.page_links.get(work_id) {
                 if page == UNRESOLVED_PAGE {
                     let id = i32::try_from(work_id).unwrap_or(i32::MAX);
-                    task = on_module().get_image_url(task, id, link).wait()?.value.task;
+                    let reply = on_module().get_image_url(task, id, link).wait()?.value;
+                    get_image_url.push(reply.ok);
+                    task = reply.task;
                 }
                 work_id += 1;
             }
@@ -386,7 +423,18 @@ fn prepare_chapter(run: &ModuleRun) -> Result<Task, JobError> {
             }
         }
     }
-    Ok(task)
+    let resolved = if def.dynamic_page_link {
+        found_pages
+    } else {
+        task.page_links.iter().any(|l| l != UNRESOLVED_PAGE)
+    };
+    Ok(Prepared {
+        resolved,
+        task,
+        task_start,
+        get_page_number,
+        get_image_url,
+    })
 }
 
 /// FPC's `Trim`: strips characters up to `' '` at both ends.

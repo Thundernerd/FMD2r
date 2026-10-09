@@ -430,6 +430,9 @@ fn pages_runs_task_start_page_number_and_image_url_per_page() {
         out,
         json!({
             "module": "fixture",
+            "task_start": true,
+            "get_page_number": true,
+            "get_image_url": [true, true],
             "page_number": 2,
             "page_links": ["/img/a.jpg", "/img/b.jpg"],
             "page_container_links": ["started"],
@@ -539,4 +542,61 @@ end
     // `DoGetPageNumber` only runs without page links (baseunits/uDownloadsManager.pas:1181);
     // a page link a module left blank is unresolved again (:1236-1246).
     assert_eq!(out["page_links"], json!([" /a.jpg ", "W"]));
+}
+
+/// The fixture module with `GetPageNumber` replaced by `get_page_number`.
+fn fixture_with_get_page_number(root_url: &str, get_page_number: &str) -> String {
+    format!("{}\n{get_page_number}", fixture_module(root_url))
+}
+
+#[test]
+fn pages_fails_with_the_json_when_get_page_number_returns_false() {
+    let server = Server::start(site);
+    // Like MangaDex on a chapter it answers with a 404 JSON.
+    let module =
+        fixture_with_get_page_number(&server.url(""), "function GetPageNumber() return false end");
+    let lua = lua_dir(&[("Fixture.lua", &module)]);
+    let output = module_cmd(lua.path(), &["pages", &server.url("/chapter/404")])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let out: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(out["task_start"], json!(true));
+    assert_eq!(out["get_page_number"], json!(false));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("GetPageNumber returned false"), "{stderr}");
+}
+
+#[test]
+fn pages_succeeds_when_get_page_number_returns_false_but_found_the_pages() {
+    let server = Server::start(site);
+    // MangaDex returns `no_error`, nil in `GetPageNumber`, on a chapter that works; FMD2's
+    // `DoGetPageNumber` goes on with the pages it found (baseunits/uDownloadsManager.pas:829-881).
+    let module = fixture_with_get_page_number(
+        &server.url(""),
+        "function GetPageNumber() TASK.PageNumber = 1 return no_error end",
+    );
+    let lua = lua_dir(&[("Fixture.lua", &module)]);
+    let out = stdout_json(&mut module_cmd(
+        lua.path(),
+        &["pages", &server.url("/chapter/1")],
+    ));
+    assert_eq!(out["get_page_number"], json!(false));
+    assert_eq!(out["page_links"], json!(["/img/a.jpg"]));
+}
+
+#[test]
+fn pages_fails_with_the_json_when_no_page_link_resolves() {
+    let server = Server::start(site);
+    let lua = lua_dir(&[("Fixture.lua", &fixture_module(&server.url("")))]);
+    // The site answers "not found": no page, and no image on the one page FMD2 then assumes.
+    let output = module_cmd(lua.path(), &["pages", &server.url("/chapter/404")])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let out: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(out["get_page_number"], json!(true));
+    assert_eq!(out["page_links"], json!(["W"]));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("no page link resolved"), "{stderr}");
 }

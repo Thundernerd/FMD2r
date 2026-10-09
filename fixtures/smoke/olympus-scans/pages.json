@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "760d177b1f6d4763a08971c0c1b5572b",
   "page_container_links": [],
   "page_links": [
@@ -42,5 +44,6 @@
     "https://media.imagesolymp.xyz/comics/1711/129742/07_02.webp",
     "https://media.imagesolymp.xyz/comics/1711/129742/07_03.webp"
   ],
-  "page_number": 39
+  "page_number": 39,
+  "task_start": null
 }

@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "b8206e754d4541689c1d367f7e19fd64",
   "page_container_links": [],
   "page_links": [
@@ -75,5 +77,6 @@
     "https://cdn.voratoon.com/wp-content/img/A/Amphisbaena_no_Kuchizuke/001-JQ7W0RGYLZ/071-C16BA540B2827A683675A79858EE44EB.jpg",
     "https://cdn.voratoon.com/wp-content/img/A/Amphisbaena_no_Kuchizuke/001-JQ7W0RGYLZ/072-96FF823DFCB1208B54B3AC66F3F8F556.jpg"
   ],
-  "page_number": 72
+  "page_number": 72,
+  "task_start": null
 }

@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "a1f3c7d9e0b64a2c8d5f1e93b7a4c6d2",
   "page_container_links": [],
   "page_links": [
@@ -50,5 +52,6 @@
     "https://cdn.nexusscanlation.com/series/358b6b48-63b9-4e5d-ac71-01e8ae99d56e/c/30d61973-04cf-4002-9a46-dd68fcc162d8/046.jpg#seed=&cols=&rows=",
     "https://cdn.nexusscanlation.com/series/358b6b48-63b9-4e5d-ac71-01e8ae99d56e/c/30d61973-04cf-4002-9a46-dd68fcc162d8/047.jpg#seed=&cols=&rows="
   ],
-  "page_number": 47
+  "page_number": 47,
+  "task_start": null
 }

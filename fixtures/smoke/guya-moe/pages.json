@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "7d12ff8d54d44137adbdf8fbe6f49bee",
   "page_container_links": [],
   "page_links": [
@@ -13,5 +15,6 @@
     "https://guya.cubari.moe/media/manga/Original-Hinatazaka/chapters/0001_x5w805dw/9/09.png?v4",
     "https://guya.cubari.moe/media/manga/Original-Hinatazaka/chapters/0001_x5w805dw/9/10.png?v4"
   ],
-  "page_number": 10
+  "page_number": 10,
+  "task_start": null
 }

@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "f7ab487b6d29468e8280e8a3cbebbeb4",
   "page_container_links": [
     "https://e-hentai.org/s/bc9daf5d34/4239217-1",
@@ -18,5 +20,6 @@
     "G",
     "G"
   ],
-  "page_number": 7
+  "page_number": 7,
+  "task_start": null
 }

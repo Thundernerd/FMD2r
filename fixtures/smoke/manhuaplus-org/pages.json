@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": false,
   "module": "a97df15cb1224eb0a40eb15dfe6fd299",
   "page_container_links": [],
   "page_links": [
@@ -115,5 +117,6 @@
     "https://cdn.manhuaplus.cc/ch/31407/0110.webp",
     "https://cdn.manhuaplus.cc/ch/31407/0111.webp"
   ],
-  "page_number": 112
+  "page_number": 112,
+  "task_start": null
 }

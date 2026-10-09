@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": true,
   "module": "0b6ee312575e4f3583a89c62ce2ed18f",
   "page_container_links": [],
   "page_links": [
@@ -6,5 +8,6 @@
     "https://bulbasaur.poke-black-and-white.net/storage/6889f391e00aa4d41d07dfeb/0/0/mangabuddy/en/68cfed45b5bd46018066b668-002.webp",
     "https://bulbasaur.poke-black-and-white.net/storage/6889f391e00aa4d41d07dfeb/0/0/mangabuddy/en/68cfed45b5bd46018066b668-003.webp"
   ],
-  "page_number": 3
+  "page_number": 3,
+  "task_start": null
 }

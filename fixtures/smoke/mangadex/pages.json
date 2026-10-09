@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": false,
   "module": "d07c9c2425764da8ba056505f57cf40c",
   "page_container_links": [],
   "page_links": [
@@ -31,5 +33,6 @@
     "https://cmdxd98sb0x3yprd.mangadex.network/data/c401f0d4b0a8f38ca95c8ffc963785c7/27-ac33e45e395b40ccaa1c68029c686eb8a4067dd7a94a806ad5b8fb2fbd7aa37b.png",
     "https://cmdxd98sb0x3yprd.mangadex.network/data/c401f0d4b0a8f38ca95c8ffc963785c7/28-8d1d772fc00fb3450050fd29c106fa35f8971b92c10f4747fed01af90764391d.png"
   ],
-  "page_number": 28
+  "page_number": 28,
+  "task_start": null
 }

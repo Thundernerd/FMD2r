@@ -1,4 +1,6 @@
 {
+  "get_image_url": [],
+  "get_page_number": false,
   "module": "ae6218eafb5b42a0850ee0c348578ae6",
   "page_container_links": [],
   "page_links": [
@@ -31,5 +33,6 @@
     "https://xoxocomic.com/comic/357/full/252413/27.jpg",
     "https://xoxocomic.com/comic/357/full/252413/28.jpg"
   ],
-  "page_number": 28
+  "page_number": 28,
+  "task_start": null
 }
