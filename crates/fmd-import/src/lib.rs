@@ -6,7 +6,7 @@
 //! skipped and listed in the [`ImportReport`]. With [`ImportOptions::dry_run`] nothing is written
 //! and the report says what would be imported. Downloaded files are not copied.
 //!
-//! FMD2 stores dates as local time without a zone; they are imported as if they were UTC.
+//! FMD2 stores dates as local time without a zone; they are read in [`ImportOptions::timezone`].
 
 mod downloaded_chapters;
 mod downloads;
@@ -17,9 +17,11 @@ mod modules;
 mod paths;
 mod report;
 mod settings;
+mod timezone;
 
 use std::path::Path;
 
+use fmd_core::settings::SettingsService;
 use fmd_store::{AppDb, Cipher};
 
 use downloaded_chapters::KnownMangas;
@@ -27,6 +29,7 @@ use downloaded_chapters::KnownMangas;
 pub use error::ImportError;
 pub use paths::{PathMap, PathMapParseError};
 pub use report::{ImportReport, SkipReason, Skipped, SourceReport, Unmapped};
+pub use timezone::{TimeZone, UnknownTimeZone};
 
 /// How [`import`] runs.
 #[derive(Debug, Clone, Default)]
@@ -38,6 +41,8 @@ pub struct ImportOptions {
     pub resume_in_progress: bool,
     /// Rewrites save-to paths, e.g. FMD2's Windows paths to a Linux root.
     pub path_maps: Vec<PathMap>,
+    /// The zone FMD2 ran in, which its timestamps are local time of; this machine's by default.
+    pub timezone: TimeZone,
 }
 
 /// Imports the FMD2 `userdata` directory at `userdata` into `db`. Account credentials are
@@ -51,6 +56,35 @@ pub fn import(
     cipher: &dyn Cipher,
     opts: &ImportOptions,
 ) -> Result<ImportReport, ImportError> {
+    let settings = SettingsService::load(db.clone())?;
+    import_into(userdata, db, cipher, &settings, opts, |_| {})
+}
+
+/// How far [`import_into`] is: `done` of `total` sources read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImportProgress {
+    pub done: u64,
+    pub total: u64,
+}
+
+/// [`import`] into a running app: settings are applied through `settings`, the service the app
+/// reads them from, and `progress` hears after each source.
+pub fn import_into(
+    userdata: &Path,
+    db: &AppDb,
+    cipher: &dyn Cipher,
+    settings: &SettingsService,
+    opts: &ImportOptions,
+    mut progress: impl FnMut(ImportProgress),
+) -> Result<ImportReport, ImportError> {
+    const SOURCES: u64 = 5;
+    let mut step = |done| {
+        progress(ImportProgress {
+            done,
+            total: SOURCES,
+        })
+    };
+    step(0);
     let mut report = ImportReport {
         dry_run: opts.dry_run,
         ..ImportReport::default()
@@ -72,6 +106,7 @@ pub fn import(
     }
 
     downloads::import(&downloads_db, db, opts, &mut report)?;
+    step(1);
     // Before favorites, which merge their own downloaded lists into the same table.
     downloaded_chapters::import(
         &userdata.join("downloadedchapters.db"),
@@ -80,8 +115,12 @@ pub fn import(
         opts,
         &mut report,
     )?;
+    step(2);
     favorites::import(&favorites_db, db, opts, &mut report)?;
+    step(3);
     modules::import(modules.as_deref(), db, cipher, opts, &mut report)?;
-    settings::import(&userdata.join("settings.json"), db, opts, &mut report)?;
+    step(4);
+    settings::import(&userdata.join("settings.json"), settings, opts, &mut report)?;
+    step(SOURCES);
     Ok(report)
 }

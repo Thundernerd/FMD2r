@@ -22,6 +22,7 @@ pub use app::events::{Event, EventId, EventQuery, EventRepo, EventSeverity, NewE
 pub use app::favorites::{Favorite, FavoriteId, FavoriteRepo, ImportedFavorite, NewFavorite};
 pub use app::module_files::{ModuleFile, ModuleFileRepo};
 pub use app::module_settings::{ModuleSettings, ModuleSettingsRepo};
+pub use app::sessions::SessionRepo;
 pub use app::settings::SettingsRepo;
 pub use app::tasks::{
     ChapterStatus, ImportedChapter, ImportedTask, NewChapter, NewPage, NewTask, PageStatus, Task,

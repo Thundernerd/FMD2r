@@ -648,6 +648,130 @@
         }
       }
     },
+    "/api/import": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Import an FMD2 `userdata` folder, zipped, into this server.",
+        "operationId": "importFmd2",
+        "parameters": [
+          {
+            "name": "dry_run",
+            "in": "query",
+            "description": "Report what would be imported without writing anything.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "resume",
+            "in": "query",
+            "description": "Queue tasks FMD2 was running as waiting, so they resume, instead of stopped.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "map_path",
+            "in": "query",
+            "description": "`FROM=TO`: rewrite save-to paths under FROM to TO, e.g. `C:\\Manga=/data/manga`.\nRepeatable; the longest matching FROM wins.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "description": "The IANA time zone FMD2 ran in, e.g. `Europe/Amsterdam`: FMD2 stores local times without\na zone. The server's zone by default.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The FMD2 `userdata` folder (or its contents) as a zip",
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What was imported, or with `dry_run` what would be",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a zip, an entry outside the folder, or an unreadable FMD2 file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An import is already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The zip, or what it unpacks to, is over the size limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A bad `map_path` or `timezone`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server has no data directory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/inbox": {
       "get": {
         "tags": [
@@ -1232,6 +1356,20 @@
         }
       }
     },
+    "/api/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "End the session whose cookie comes with the request, and clear the cookie.",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Logged out; the session cookie is cleared (also without a live session)"
+          }
+        }
+      }
+    },
     "/api/logs": {
       "get": {
         "tags": [
@@ -1293,6 +1431,23 @@
                   }
                 }
               }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs/download": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Download the persisted log files (or, when the log isn't persisted, the buffered lines) as\none JSON-lines attachment, oldest line first.",
+        "operationId": "downloadLogs",
+        "responses": {
+          "200": {
+            "description": "One JSON log line per line",
+            "content": {
+              "application/x-ndjson": {}
             }
           }
         }
@@ -1484,13 +1639,13 @@
         "tags": [
           "settings"
         ],
-        "summary": "Preview the rename templates of a (possibly unsaved) `saveto` group on a sample series, the\nway downloads will name their folders and files.",
+        "summary": "Preview the naming settings of a (possibly unsaved) draft on a sample chapter: the names\nand path the download engine gives it.",
         "operationId": "previewRename",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveToSettings"
+                "$ref": "#/components/schemas/RenamePreviewRequest"
               }
             }
           },
@@ -1621,6 +1776,30 @@
         }
       }
     },
+    "/api/sessions/revoke-all": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "End every session, this one included. Bearer tokens keep working.",
+        "operationId": "revokeAllSessions",
+        "responses": {
+          "204": {
+            "description": "Every session ended; this client's cookie is cleared"
+          },
+          "401": {
+            "description": "Not authorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settings": {
       "get": {
         "tags": [
@@ -1684,6 +1863,67 @@
           },
           "422": {
             "description": "A value is invalid or a setting unknown; `field` names it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/all": {
+      "patch": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Update the settings and any modules' settings together, all or nothing. Nothing is stored\nunless every patch is valid, and everything is stored in one transaction.",
+        "operationId": "patchAllSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The updated settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No module with a given ID is loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Values are invalid or settings unknown; `fields` names each, prefixed `settings.` or `modules.<id>.`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2882,6 +3122,23 @@
           "failed"
         ]
       },
+      "FieldProblem": {
+        "type": "object",
+        "description": "One rejected value of a 422.",
+        "required": [
+          "field",
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string",
+            "description": "The setting as a dotted path, like [`Problem::field`]."
+          }
+        }
+      },
       "GeneralSettings": {
         "type": "object",
         "properties": {
@@ -2915,9 +3172,14 @@
       "Health": {
         "type": "object",
         "required": [
-          "status"
+          "status",
+          "auth"
         ],
         "properties": {
+          "auth": {
+            "type": "boolean",
+            "description": "Whether the API requires the password (as a bearer token or a login session)."
+          },
           "status": {
             "type": "string",
             "description": "Always `ok` while the server answers."
@@ -3029,6 +3291,65 @@
               }
             ],
             "default": "png"
+          }
+        }
+      },
+      "ImportReport": {
+        "type": "object",
+        "description": "The outcome of [`crate::import`], per source.",
+        "required": [
+          "dry_run",
+          "tasks",
+          "favorites",
+          "downloaded_chapters",
+          "module_settings",
+          "accounts",
+          "settings",
+          "unmapped",
+          "warnings"
+        ],
+        "properties": {
+          "accounts": {
+            "$ref": "#/components/schemas/SourceReport",
+            "description": "`modules.json` → accounts."
+          },
+          "downloaded_chapters": {
+            "$ref": "#/components/schemas/SourceReport",
+            "description": "`downloadedchapters.db` → downloaded chapters, counted per manga."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Nothing was written; the counts say what would have been imported."
+          },
+          "favorites": {
+            "$ref": "#/components/schemas/SourceReport",
+            "description": "`favorites.db` → favorites."
+          },
+          "module_settings": {
+            "$ref": "#/components/schemas/SourceReport",
+            "description": "`modules.json` → per-module settings, options and cookies."
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SourceReport",
+            "description": "`settings.json` → application settings, counted per key."
+          },
+          "tasks": {
+            "$ref": "#/components/schemas/SourceReport",
+            "description": "`downloads.db` → tasks."
+          },
+          "unmapped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Unmapped"
+            },
+            "description": "FMD2 data FMD2r has no place for."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Things that were imported but may need attention, such as Windows paths no path map\nrewrote."
           }
         }
       },
@@ -3403,6 +3724,28 @@
           "time": {
             "type": "string",
             "description": "RFC 3339 timestamp."
+          }
+        }
+      },
+      "LogSettings": {
+        "type": "object",
+        "description": "The log files in `<data dir>/logs/`. No FMD2 counterpart: FMD2 appends to one unbounded log\nfile through MultiLog (baseunits/uBaseUnit.pas).",
+        "properties": {
+          "max_file_size_mb": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Size in MiB a log file grows to before the next one is started. 1 to 1024.",
+            "default": 10,
+            "maximum": 1024,
+            "minimum": 1
+          },
+          "max_files": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Log files kept, the one being written included; the oldest is deleted past it. 1 to 100.",
+            "default": 5,
+            "maximum": 100,
+            "minimum": 1
           }
         }
       },
@@ -3888,7 +4231,14 @@
               "string",
               "null"
             ],
-            "description": "The setting a validation error (422) is about, as a dotted path such as\n`connections.timeout_secs` or `options.server`."
+            "description": "The setting a validation error (422) is about, as a dotted path such as\n`connections.timeout_secs` or `options.server`.\nKept for clients that read one field: the first of `fields`."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldProblem"
+            },
+            "description": "Every setting a validation error (422) is about, each with why it was rejected."
           },
           "status": {
             "type": "integer",
@@ -3999,11 +4349,13 @@
       },
       "RenamePreview": {
         "type": "object",
-        "description": "The names the rename templates of a draft produce for a sample series.",
+        "description": "The names a download of a sample chapter gets with a draft's settings.",
         "required": [
           "manga",
           "chapter",
-          "filename"
+          "filename",
+          "page",
+          "path"
         ],
         "properties": {
           "chapter": {
@@ -4016,7 +4368,74 @@
           },
           "manga": {
             "type": "string",
-            "description": "The manga folder name (`manga_rename`)."
+            "description": "The manga folder name (`manga_rename`), whether or not the folder is generated."
+          },
+          "page": {
+            "type": "string",
+            "description": "The first page's file name with the extension it ends up with."
+          },
+          "path": {
+            "type": "string",
+            "description": "Where the first page ends up: its file, or the chapter's archive when chapters are\npacked."
+          }
+        }
+      },
+      "RenamePreviewRequest": {
+        "type": "object",
+        "description": "The settings a rename preview reads, possibly unsaved; a missing group takes its defaults.",
+        "properties": {
+          "images": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ImageSettings"
+              }
+            ],
+            "default": {
+              "imagemagick": {
+                "compression": "None",
+                "enabled": false,
+                "quality": 75,
+                "save_as": "JPEG"
+              },
+              "jpeg_quality": 80,
+              "png_compression": "fastest",
+              "png_to_jpeg": false,
+              "webp_save_as": "png"
+            }
+          },
+          "output": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OutputSettings"
+              }
+            ],
+            "default": {
+              "format": "folder",
+              "pdf_quality": 100
+            }
+          },
+          "saveto": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SaveToSettings"
+              }
+            ],
+            "default": {
+              "chapter_rename": "%CHAPTER%",
+              "convert_digit_chapter": true,
+              "convert_digit_volume": true,
+              "default_dir": "downloads",
+              "digit_chapter_length": 3,
+              "digit_volume_length": 2,
+              "filename_rename": "%FILENAME%",
+              "generate_chapter_folder": true,
+              "generate_manga_folder": true,
+              "illegal_chars": "posix",
+              "manga_rename": "%MANGA%",
+              "remove_manga_name_from_chapter": false,
+              "replace_unicode": false,
+              "replace_unicode_with": "_"
+            }
           }
         }
       },
@@ -4115,6 +4534,29 @@
             "type": "string",
             "description": "Replacement for non-ASCII characters (`saveto/ChangeUnicodeCharacterStr`,\n`OptionChangeUnicodeCharacterStr` = `_`, baseunits/FMDOptions.pas:109).",
             "default": "_"
+          }
+        }
+      },
+      "SavedSettings": {
+        "type": "object",
+        "description": "What [`patch_all`] saved.",
+        "required": [
+          "settings",
+          "modules"
+        ],
+        "properties": {
+          "modules": {
+            "type": "object",
+            "description": "The settings of each patched module, by module ID.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ModuleSettingsView"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
           }
         }
       },
@@ -4265,6 +4707,22 @@
             "type": "string",
             "description": "Socket address to listen on.",
             "default": "0.0.0.0:8080"
+          },
+          "session_idle_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days a login session may go unused before it ends; every authorized request restarts\nthe count.",
+            "default": 7,
+            "maximum": 365,
+            "minimum": 1
+          },
+          "session_lifetime_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days a login session lasts at most, however often it is used.",
+            "default": 30,
+            "maximum": 3650,
+            "minimum": 1
           }
         }
       },
@@ -4357,6 +4815,17 @@
               "webp_save_as": "png"
             }
           },
+          "logs": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LogSettings"
+              }
+            ],
+            "default": {
+              "max_file_size_mb": 10,
+              "max_files": 5
+            }
+          },
           "module_updater": {
             "oneOf": [
               {
@@ -4416,7 +4885,9 @@
             ],
             "default": {
               "auth_token": null,
-              "bind": "0.0.0.0:8080"
+              "bind": "0.0.0.0:8080",
+              "session_idle_days": 7,
+              "session_lifetime_days": 30
             }
           },
           "update_lists": {
@@ -4442,6 +4913,122 @@
             ],
             "default": {
               "backend": "native"
+            }
+          }
+        }
+      },
+      "SettingsSave": {
+        "type": "object",
+        "description": "The body of [`patch_all`]; either part may be left out.",
+        "properties": {
+          "modules": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "A merge patch as for `PATCH /api/modules/{id}/settings`, by module ID.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "A merge patch as for `PATCH /api/settings`.",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SkipReason": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The store already holds it (from an earlier import or from FMD2r itself).",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "already_exists"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The FMD2 data could not be read or is not a valid FMD2r value.",
+            "required": [
+              "detail",
+              "kind"
+            ],
+            "properties": {
+              "detail": {
+                "type": "string",
+                "description": "The FMD2 data could not be read or is not a valid FMD2r value."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "invalid"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "Skipped": {
+        "type": "object",
+        "description": "An item that was not imported.",
+        "required": [
+          "item",
+          "reason"
+        ],
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Identifies the item, e.g. `<module id> <link>` or a settings key."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SkipReason"
+          }
+        }
+      },
+      "SourceReport": {
+        "type": "object",
+        "description": "What one source contributed.",
+        "required": [
+          "found",
+          "imported",
+          "skipped"
+        ],
+        "properties": {
+          "found": {
+            "type": "boolean",
+            "description": "The source file exists in the userdata directory."
+          },
+          "imported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Skipped"
             }
           }
         }
@@ -4859,6 +5446,29 @@
           "ok": {
             "type": "boolean",
             "description": "Whether the tool is usable."
+          }
+        }
+      },
+      "Unmapped": {
+        "type": "object",
+        "description": "FMD2 data with no FMD2r counterpart.",
+        "required": [
+          "source",
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The key or column, e.g. `general/OneInstanceOnly`."
+          },
+          "source": {
+            "type": "string",
+            "description": "The FMD2 file."
+          },
+          "value": {
+            "type": "string",
+            "description": "The value, as text."
           }
         }
       },

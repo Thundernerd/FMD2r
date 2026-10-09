@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::{MAIN_SEPARATOR, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mlua::prelude::LuaChunkMode as ChunkMode;
@@ -23,7 +24,29 @@ const HOST_LIBS_KEY: &str = "fmd.package.hostlibs";
 /// clone (FMD2's global `Package` cache, baseunits/lua/LuaPackage.pas:43, :147). Each file is
 /// read and compiled once, then every state loads the same bytecode.
 #[derive(Clone, Default)]
-pub struct PackageCache(Arc<Mutex<HashMap<PathBuf, Arc<[u8]>>>>);
+pub struct PackageCache(Arc<Cache>);
+
+struct Cache {
+    chunks: Mutex<HashMap<PathBuf, Arc<[u8]>>>,
+    /// Which read of the Lua tree the cache stands for: new when the cache is made or cleared,
+    /// and never the same for two caches.
+    generation: AtomicU64,
+}
+
+impl Default for Cache {
+    fn default() -> Self {
+        Cache {
+            chunks: Mutex::default(),
+            generation: AtomicU64::new(next_generation()),
+        }
+    }
+}
+
+/// A generation no cache has had yet.
+fn next_generation() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
 
 impl PackageCache {
     /// An empty cache.
@@ -32,14 +55,25 @@ impl PackageCache {
     }
 
     /// Drops every cached chunk, so the next `require` reads the files again
-    /// (`ClearCache`, baseunits/lua/LuaPackage.pas:141-144).
+    /// (`ClearCache`, baseunits/lua/LuaPackage.pas:141-144). Other files read from the tree
+    /// once and kept, like the anti-bot scripts, are read again too.
     pub fn clear(&self) {
-        self.lock().clear();
+        let mut chunks = self.lock();
+        chunks.clear();
+        self.0
+            .generation
+            .store(next_generation(), Ordering::Relaxed);
+    }
+
+    /// Changes whenever the cache is cleared; what was read from the Lua tree at an earlier
+    /// generation is out of date.
+    pub(crate) fn generation(&self) -> u64 {
+        self.0.generation.load(Ordering::Relaxed)
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<PathBuf, Arc<[u8]>>> {
         // A poisoned cache still holds valid compiled chunks.
-        self.0.lock().unwrap_or_else(|e| e.into_inner())
+        self.0.chunks.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// The bytecode of `path`, compiled in `lua` and cached on first use; `None` when the file

@@ -3,7 +3,7 @@
 //! (baseunits/WebsiteModulesSettings.pas:94-171). The JSON columns are opaque here; their shape
 //! belongs to the settings model (T18).
 
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::{Map, Value};
 
 use crate::db::Db;
@@ -113,6 +113,26 @@ impl<'a> ModuleSettingsRepo<'a> {
                 http,
                 limits,
                 settings.cookie_jar
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Stores the module's options and HTTP and limit overrides and its `enabled` flag, keeping
+    /// its cookie jar.
+    pub(crate) fn put_overrides(conn: &Connection, settings: &ModuleSettings) -> Result<()> {
+        conn.execute(
+            "INSERT INTO module_settings (module_id, enabled, options, http, limits)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (module_id) DO UPDATE SET
+                enabled = excluded.enabled, options = excluded.options, http = excluded.http,
+                limits = excluded.limits",
+            params![
+                settings.module_id,
+                settings.enabled,
+                serde_json::to_string(&settings.options)?,
+                serde_json::to_string(&settings.http)?,
+                serde_json::to_string(&settings.limits)?,
             ],
         )?;
         Ok(())

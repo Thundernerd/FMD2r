@@ -10,6 +10,7 @@ mod mangafoxwatermark;
 mod pb;
 mod pcre2;
 pub mod subprocess;
+mod subprocess_fixtures;
 
 use mlua::{AnyUserData, Function, Lua, Table, Value};
 

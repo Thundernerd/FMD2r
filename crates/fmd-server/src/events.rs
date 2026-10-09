@@ -290,6 +290,6 @@ pub(crate) async fn stream(
     let events = stream::iter(backlog)
         .chain(live)
         .filter_map(|event| async move { event.to_sse().map(Ok) })
-        .take_until(state.shutting_down());
+        .take_until(state.stream_ended());
     Ok(Sse::new(events).keep_alive(KeepAlive::new().interval(HEARTBEAT).text("heartbeat")))
 }

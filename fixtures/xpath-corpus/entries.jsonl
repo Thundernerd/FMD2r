@@ -1114,3 +1114,26 @@
 {"document":"751629fc2daea40b","expression":"teams?*?name","context":{"document":"751629fc2daea40b","expression":"branches?*[not(restricted_view) or restricted_view?is_open=true]","context":{"document":"751629fc2daea40b","expression":"json(*).data()","path":[{"item":72}]},"path":[{"item":1}]}}
 {"document":"c9b2051b77919636","expression":"json(*).data.imageServers()[id=\"main\" and site_ids=\"1\"].url"}
 {"document":"f3f71da0bad62ca6","expression":"json(*).data.pages()"}
+{"document":"ed9c986824509366","expression":"//script[@id=\"initial-data\"]"}
+{"document":"8765bb052ea749a6","expression":"json(*).links()"}
+{"document":"e9fb5a90f8b4a029","expression":"(//span[@itemprop=\"name\"])[3]"}
+{"document":"e9fb5a90f8b4a029","expression":"//nav[@aria-label=\"breadcrumb\"]//li[3]"}
+{"document":"e9fb5a90f8b4a029","expression":"//ul[contains(@class, \"manga-info\")]/li[contains(., \"Other names\")]/substring-after(., \":\")"}
+{"document":"e9fb5a90f8b4a029","expression":"(//img[contains(@class, \"thumbnail\")])[1]/@src"}
+{"document":"e9fb5a90f8b4a029","expression":"//ul[contains(@class, \"manga-info\")]/li[contains(., \"Author\") or contains(., \"Autor\")]//a|//span[@itemprop=\"author\"]/a"}
+{"document":"e9fb5a90f8b4a029","expression":"//ul[contains(@class, \"manga-info\")]/li[contains(., \"Genre\") or contains(., \"Género\")]//a|//span[@itemprop=\"genre\"]/a"}
+{"document":"e9fb5a90f8b4a029","expression":"//ul[contains(@class, \"manga-info\")]/li[contains(., \"Status\") or contains(., \"Estado\")]//a"}
+{"document":"e9fb5a90f8b4a029","expression":"string-join(//div[./h3=\"Description\"]/p/text()|//div[@class=\"summary-content\"]/p/text(), \"\r\n\")"}
+{"document":"e9fb5a90f8b4a029","expression":"//ul[contains(@class, \"list-chapters\")]/a"}
+{"document":"78412f2e3c312d0d","expression":"//a"}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":1}]}}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":2}]}}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":3}]}}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":4}]}}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":5}]}}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":6}]}}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":7}]}}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":8}]}}
+{"document":"78412f2e3c312d0d","expression":"li/div[1]","context":{"document":"78412f2e3c312d0d","expression":"//a","path":[{"item":9}]}}
+{"document":"057324b79938fe4f","expression":"(//input[@id=\"chapter\"])[1]/@value"}
+{"document":"e41b25d53ec57451","expression":"//img/@data-srcset"}

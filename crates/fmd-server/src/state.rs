@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use fmd_core::accounts::AccountService;
 use fmd_core::favorites::CheckerEvent;
@@ -16,6 +16,7 @@ use crate::ApiError;
 use crate::auth::Auth;
 use crate::covers::{CoverConfig, CoverModules, Covers};
 use crate::events::{EventBus, ServerEvent};
+use crate::import::{ImportJob, ImportLimits};
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
 use crate::series::InfoCache;
@@ -46,8 +47,14 @@ pub struct AppState {
     pub(crate) list_jobs: Option<ListJobs>,
     pub(crate) favorites: Option<Arc<dyn FavoritesJobs>>,
     pub(crate) data_dir: Option<PathBuf>,
+    pub(crate) import_limits: ImportLimits,
+    pub(crate) import_job: ImportJob,
     pub(crate) started: Instant,
+    pub(crate) clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
+    /// Bumped whenever login sessions are ended, so open event streams close and reconnect
+    /// through the auth check.
+    pub(crate) sessions_ended: Arc<watch::Sender<u64>>,
 }
 
 impl AppState {
@@ -69,8 +76,12 @@ impl AppState {
             list_jobs: None,
             favorites: None,
             data_dir: None,
+            import_limits: ImportLimits::default(),
+            import_job: ImportJob::default(),
             started: Instant::now(),
+            clock: Arc::new(SystemTime::now),
             shutdown: Arc::new(watch::channel(false).0),
+            sessions_ended: Arc::new(watch::channel(0).0),
             db,
             assets: Arc::new(EmbeddedAssets),
             auth: None,
@@ -89,6 +100,18 @@ impl AppState {
     pub fn with_auth(mut self, secret: impl Into<String>) -> Self {
         self.auth = Some(Auth::new(secret.into()));
         self
+    }
+
+    /// Reads the wall-clock time from `clock` instead of the system clock (login sessions
+    /// expire by it).
+    pub fn with_clock(mut self, clock: impl Fn() -> SystemTime + Send + Sync + 'static) -> Self {
+        self.clock = Arc::new(clock);
+        self
+    }
+
+    /// The current wall-clock time.
+    pub(crate) fn now(&self) -> SystemTime {
+        (self.clock)()
     }
 
     /// Serves `GET /api/logs` from `logs` (the buffer installed as a `tracing` layer) and streams
@@ -191,6 +214,12 @@ impl AppState {
         self
     }
 
+    /// Caps the size of `POST /api/import` uploads (instead of [`ImportLimits::default`]).
+    pub fn with_import_limits(mut self, limits: ImportLimits) -> Self {
+        self.import_limits = limits;
+        self
+    }
+
     /// The bus behind `GET /api/events`.
     pub fn events(&self) -> &EventBus {
         &self.events
@@ -207,6 +236,25 @@ impl AppState {
         async move {
             // An error means the sender is gone, which also means shutdown.
             let _ = rx.wait_for(|down| *down).await;
+        }
+    }
+
+    /// Closes every open event stream because login sessions ended; clients reconnect, and
+    /// those whose session is gone get a 401.
+    pub(crate) fn end_sessions(&self) {
+        self.sessions_ended.send_modify(|n| *n = n.wrapping_add(1));
+    }
+
+    /// Resolves once the server shuts down or [`AppState::end_sessions`] is called.
+    pub(crate) fn stream_ended(&self) -> impl Future<Output = ()> + Send + use<> {
+        let shutdown = self.shutting_down();
+        let mut ended = self.sessions_ended.subscribe();
+        async move {
+            let ended = async move {
+                // An error means the sender is gone, which also ends the stream.
+                let _ = ended.changed().await;
+            };
+            futures_util::future::select(Box::pin(shutdown), Box::pin(ended)).await;
         }
     }
 

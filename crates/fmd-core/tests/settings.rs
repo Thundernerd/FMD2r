@@ -83,20 +83,20 @@ fn invalid_update_is_rejected_and_nothing_is_persisted() {
             "general": { "language": "nl" },
         }))
         .unwrap_err();
-    assert!(matches!(err, SettingsError::Invalid { .. }), "{err:?}");
+    assert!(matches!(err, SettingsError::Invalid(_)), "{err:?}");
 
     // Zero threads deserialises but is out of range (MinValue 1,
     // mangadownloader/forms/frmMain.lfm:3703-3704).
     let err = service
         .update(json!({ "connections": { "threads_per_task": 0 } }))
         .unwrap_err();
-    assert!(matches!(err, SettingsError::Invalid { .. }), "{err:?}");
+    assert!(matches!(err, SettingsError::Invalid(_)), "{err:?}");
 
     // Not an output format (rgOptionCompress items, mangadownloader/forms/frmMain.lfm:3912-3918).
     let err = service
         .update(json!({ "output": { "format": "rar" } }))
         .unwrap_err();
-    assert!(matches!(err, SettingsError::Invalid { .. }), "{err:?}");
+    assert!(matches!(err, SettingsError::Invalid(_)), "{err:?}");
 
     assert_eq!(service.get().connections.threads_per_task, 1);
     assert_eq!(service.get().general.language, "en");
@@ -159,7 +159,7 @@ fn patch_null_resets_to_default_and_unknown_keys_are_rejected() {
         .update(json!({ "connections": { "max_threads": 2 } }))
         .unwrap_err();
     assert!(
-        matches!(&err, SettingsError::UnknownKey(k) if k == "connections.max_threads"),
+        matches!(&err, SettingsError::Invalid(e) if e[0].field == "connections.max_threads"),
         "{err:?}"
     );
 }

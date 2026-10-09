@@ -2,15 +2,25 @@
 	import '#lib/styles/app.css';
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
-	import { api, events } from '#lib/app.ts';
+	import { api, events, session } from '#lib/app.ts';
 	import AddByUrl from '#lib/components/AddByUrl.svelte';
 	import InboxPopover from '#lib/components/InboxPopover.svelte';
+	import LoginScreen from '#lib/components/LoginScreen.svelte';
 	import QueueDock from '#lib/components/QueueDock.svelte';
 	import TopNav from '#lib/components/TopNav.svelte';
 
 	let { children }: { children: Snippet } = $props();
 
 	$effect(() => {
+		api
+			.health()
+			.then((health) => session.serverRequiresAuth(health.auth))
+			.catch(() => {});
+	});
+
+	$effect(() => {
+		// Behind the login screen nothing can be fetched; logging in starts over.
+		if (session.locked) return;
 		events.start();
 		// Snapshot what happened before the stream connected. The queue also refetches on every
 		// connect, but should show even when the stream cannot connect.
@@ -30,20 +40,32 @@
 	// The Queue page shows the full queue, so the dock would only repeat it; the Settings page
 	// puts its save bar where the dock sits.
 	const showDock = $derived(!['/queue', '/settings'].includes(page.url.pathname));
+
+	async function logout() {
+		await api.logout().catch(() => {});
+		session.unauthorized();
+	}
 </script>
 
-<div class="app" class:with-dock={showDock}>
-	<TopNav>
-		<AddByUrl {api} />
-		<InboxPopover {api} store={events} />
-	</TopNav>
-	<main>
-		{@render children()}
-	</main>
-	{#if showDock}
-		<QueueDock queue={events.queue} />
-	{/if}
-</div>
+{#if session.locked}
+	<LoginScreen {api} onlogin={() => session.loggedIn()} />
+{:else}
+	<div class="app" class:with-dock={showDock}>
+		<TopNav>
+			<AddByUrl {api} />
+			<InboxPopover {api} store={events} />
+			{#if session.required}
+				<button class="btn ghost sm" type="button" onclick={logout}>Log out</button>
+			{/if}
+		</TopNav>
+		<main>
+			{@render children()}
+		</main>
+		{#if showDock}
+			<QueueDock queue={events.queue} />
+		{/if}
+	</div>
+{/if}
 
 <style>
 	/* Leave room for the bottom tab bar (phones) and the queue dock. */

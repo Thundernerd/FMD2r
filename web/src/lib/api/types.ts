@@ -1,4 +1,4 @@
-import type { components } from './schema';
+import type { components, paths } from './schema';
 
 type Schemas = components['schemas'];
 
@@ -14,10 +14,15 @@ export type ToolCheck = Schemas['ToolCheck'];
 export type Settings = Schemas['Settings'];
 export type SaveToSettings = Schemas['SaveToSettings'];
 export type RenamePreview = Schemas['RenamePreview'];
+export type RenamePreviewRequest = Schemas['RenamePreviewRequest'];
+export type SavedSettings = Schemas['SavedSettings'];
+export type SettingsSave = Schemas['SettingsSave'];
+export type FieldProblem = Schemas['FieldProblem'];
 export type ModuleSummary = Schemas['ModuleSummary'];
 export type ModuleSettingsView = Schemas['ModuleSettingsView'];
 export type ModuleOptionSetting = Schemas['ModuleOptionSetting'];
 export type Problem = Schemas['Problem'];
+export type Health = Schemas['Health'];
 export type SeriesInfo = Schemas['SeriesInfo'];
 export type ChapterInfo = Schemas['ChapterInfo'];
 export type SeriesStatus = Schemas['SeriesStatus'];
@@ -49,3 +54,6 @@ export type FavoriteView = Schemas['FavoriteView'];
 export type FavoritePatch = Schemas['FavoritePatch'];
 export type FavoritesEvent = Schemas['FavoritesEvent'];
 export type FavoritesEventKind = Schemas['FavoritesEventKind'];
+export type ImportReport = Schemas['ImportReport'];
+export type SourceReport = Schemas['SourceReport'];
+export type ImportOptions = NonNullable<paths['/api/import']['post']['parameters']['query']>;

@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use fmd_http::{HttpClient, HttpError, HttpSession, TerminateToken};
-use fmd_lua::{Invalidate, Module, ModuleRegistry, ModuleSettingsStore, WorkerPool};
+use fmd_lua::{
+    Invalidate, MemorySettingsStore, Module, ModuleRegistry, ModuleSettingsStore, WorkerPool,
+};
 use fmd_store::{AppDb, EventSeverity, ModuleFile, NewEvent, StoreError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -358,6 +360,8 @@ impl ModuleUpdater {
         let _running = lock(&self.running);
         let terminate = lock(&self.terminate).clone();
         let result = self.sync_with(&terminate);
+        // Whatever a sync staged is in place or rejected by now, even when it stopped early.
+        remove_staging(&self.config.lua_dir);
         // A cancel reaches the sync it was meant for, even one about to start, and no later one.
         *lock(&self.terminate) = TerminateToken::new();
         result
@@ -400,22 +404,48 @@ impl ModuleUpdater {
             self.delete(path)?;
             report.deleted.push(path.clone());
         }
-        let mut previous = BTreeMap::new();
-        let results = self.download_all(&commit, &plan.download);
+        let to_stage = self.to_stage(&plan.download);
+        let results = self.download_all(&commit, &plan.download, &to_stage);
+        let rejected = self.validate(
+            results
+                .iter()
+                .filter_map(|r| r.as_ref().ok()?.staged.clone()),
+        );
+        let mut kept_out = BTreeMap::new();
         for (file, result) in plan.download.iter().zip(results) {
-            match result {
-                Ok(downloaded) => {
+            let committed = result.and_then(|downloaded| match &downloaded.staged {
+                Some(staged) => match rejected.get(staged) {
+                    Some(error) => {
+                        kept_out.insert(
+                            file.path.clone(),
+                            KeptOut {
+                                sha: file.sha.clone(),
+                                error: error.clone(),
+                            },
+                        );
+                        Ok(None)
+                    }
+                    None => {
+                        let live = self.config.lua_dir.join(&file.path);
+                        std::fs::rename(staged, &live)
+                            .map(|()| Some(downloaded.size))
+                            .map_err(|source| UpdateError::Io { path: live, source })
+                    }
+                },
+                None => Ok(Some(downloaded.size)),
+            });
+            match committed {
+                Ok(Some(size)) => {
                     self.db.module_files().upsert(&ModuleFile {
                         path: file.path.clone(),
                         sha: file.sha.clone(),
                         last_modified: now_ms(),
-                        size: downloaded.size,
+                        size,
                     })?;
-                    if let Some(bytes) = downloaded.previous {
-                        previous.insert(file.path.clone(), (bytes, rows.get(&file.path).cloned()));
-                    }
                     report.downloaded.push(file.path.clone());
                 }
+                // Downloaded, but its new version stays out of the Lua dir.
+                Ok(None) => report.downloaded.push(file.path.clone()),
                 Err(e) => {
                     tracing::warn!(target: "fmd_core", "module updater: {}: {e}", file.path);
                     report.failed.push(file.path.clone());
@@ -426,10 +456,11 @@ impl ModuleUpdater {
             .downloaded
             .iter()
             .chain(&report.deleted)
+            .filter(|path| !kept_out.contains_key(*path))
             .cloned()
             .collect();
-        if !changed.is_empty() {
-            if let Err(e) = self.reload(&changed, &previous, &mut next, &mut report) {
+        if !changed.is_empty() || !kept_out.is_empty() {
+            if let Err(e) = self.reload(&changed, &kept_out, &mut next, &mut report) {
                 // Keep what was reported so far, and the old commit so the sync is retried.
                 let reported = RepoState {
                     failed_init: next.failed_init,
@@ -466,16 +497,15 @@ impl ModuleUpdater {
     /// changed file outside `modules/` may be `require`d by any module, so then every module
     /// loads again.
     ///
-    /// A file that fails to load is reported to the inbox once per version. With
-    /// keep-last-good, a module file this sync overwrote gets its previous content (and
-    /// `module_files` row) back and the modules it declared before stay loaded, so a rebuilt Lua
-    /// state runs the version that is loaded; it is downloaded again when upstream next changes.
-    /// A module that breaks because a file it `require`s changed has no earlier version on disk
-    /// to go back to, so it is dropped.
+    /// A file that fails to load is reported to the inbox once per version, and so is each of
+    /// `kept_out` (by path): module files whose update failed to load and never
+    /// replaced the version that is loaded, which stays, with its `module_files` row, until
+    /// upstream next changes it. A module that breaks because a file it `require`s changed has
+    /// no earlier version on disk to go back to, so it is dropped.
     fn reload(
         &self,
         changed: &[String],
-        previous: &BTreeMap<String, (Vec<u8>, Option<ModuleFile>)>,
+        kept_out: &BTreeMap<String, KeptOut>,
         state: &mut RepoState,
         report: &mut SyncReport,
     ) -> Result<(), UpdateError> {
@@ -506,51 +536,32 @@ impl ModuleUpdater {
             .into_iter()
             .map(|f| (f.file, f.error))
             .collect();
-        // Only a file whose previous content can go back on disk keeps its modules: workers
-        // rebuild states from the file, so a kept module must be what the file holds.
-        let keeps = |file: &Path| {
-            self.config.keep_last_good
-                && failed.contains_key(file)
-                && previous.contains_key(&relative(lua_dir, file))
-                && !from(file).is_empty()
-        };
         let mut modules: Vec<Arc<Module>> = old
             .modules()
             .iter()
             .filter(|m| !reloaded(&m.def().file))
             .cloned()
             .collect();
-        modules.extend(
-            load.registry
-                .modules()
-                .iter()
-                .filter(|m| !keeps(&m.def().file))
-                .cloned(),
-        );
+        modules.extend(load.registry.modules().iter().cloned());
+        let mut failures: BTreeMap<String, (String, &String)> = BTreeMap::new();
         for (file, error) in &failed {
             let path = relative(lua_dir, file);
-            let kept = from(file);
-            let sha = self.synced_sha(&path)?;
+            failures.insert(path.clone(), (self.synced_sha(&path)?, error));
+        }
+        for (path, kept) in kept_out {
+            failures.insert(path.clone(), (kept.sha.clone(), &kept.error));
+        }
+        for (path, (sha, error)) in failures {
             if state.failed_init.get(&path) != Some(&sha) {
-                self.report_failure(&path, kept.first(), error)?;
+                self.report_failure(&path, from(&lua_dir.join(&path)).first(), error)?;
                 state.failed_init.insert(path.clone(), sha);
-            }
-            if keeps(file)
-                && let Some((bytes, row)) = previous.get(&path)
-            {
-                write_atomically(file, bytes)?;
-                match row {
-                    Some(row) => self.db.module_files().upsert(row)?,
-                    None => self.db.module_files().delete(&path)?,
-                }
-                modules.extend(kept);
             }
             report.broken.push(path);
         }
         // A reloaded file that loads (or is gone) is reported again when it next breaks.
         state.failed_init.retain(|path, _| {
             let file = lua_dir.join(path);
-            !reloaded(&file) || failed.contains_key(&file)
+            !reloaded(&file) || failed.contains_key(&file) || kept_out.contains_key(path)
         });
         let loaded: Vec<&String> = changed
             .iter()
@@ -804,10 +815,61 @@ impl ModuleUpdater {
         Ok(())
     }
 
+    /// The paths of `files` that download into the staging dir instead of the Lua dir: with
+    /// keep-last-good, the module files on disk whose current version is loaded. Their new version
+    /// replaces it only once it loads, so no worker building a state from the file in between
+    /// ever runs a version that fails to load.
+    fn to_stage(&self, files: &[Wanted]) -> BTreeSet<String> {
+        if !self.config.keep_last_good {
+            return BTreeSet::new();
+        }
+        let loaded = self.modules.current();
+        files
+            .iter()
+            .filter(|f| is_module_file(&f.path))
+            .filter(|f| {
+                let file = self.config.lua_dir.join(&f.path);
+                file.is_file() && loaded.modules().iter().any(|m| m.def().file == file)
+            })
+            .map(|f| f.path.clone())
+            .collect()
+    }
+
+    /// Loads each staged module file as the scan would from the Lua dir (`DoInit`,
+    /// baseunits/lua/LuaWebsiteModules.pas:473-500), in scratch states. Returns the ones that
+    /// fail, with their errors naming the file they would replace.
+    fn validate(&self, staged: impl Iterator<Item = PathBuf>) -> BTreeMap<PathBuf, String> {
+        let staged: Vec<PathBuf> = staged.collect();
+        if staged.is_empty() {
+            return BTreeMap::new();
+        }
+        let lua_dir = &self.config.lua_dir;
+        let staging = lua_dir.join(STAGING_DIR);
+        let load =
+            ModuleRegistry::load_files_with(lua_dir, &staged, Arc::new(MemorySettingsStore::new()));
+        load.failures
+            .into_iter()
+            .map(|failure| {
+                let live = lua_dir.join(relative(&staging, &failure.file));
+                let error = failure.error.replace(
+                    &failure.file.display().to_string(),
+                    &live.display().to_string(),
+                );
+                (failure.file, error)
+            })
+            .collect()
+    }
+
     /// Downloads `files` on at most `downloads` threads at once (FMD2's `TDownloadThread`s,
-    /// bounded by `OptionMaxThreads`, mangadownloader/forms/frmLuaModulesUpdater.pas:714-737).
-    /// Results come back in `files` order: each file's size, or why it failed.
-    fn download_all(&self, commit: &str, files: &[Wanted]) -> Vec<Result<Downloaded, UpdateError>> {
+    /// bounded by `OptionMaxThreads`, mangadownloader/forms/frmLuaModulesUpdater.pas:714-737),
+    /// the ones in `to_stage` into the staging dir. Results come back in `files` order: each file's
+    /// size, or why it failed.
+    fn download_all(
+        &self,
+        commit: &str,
+        files: &[Wanted],
+        to_stage: &BTreeSet<String>,
+    ) -> Vec<Result<Downloaded, UpdateError>> {
         let next = AtomicUsize::new(0);
         let results = Mutex::new(Vec::with_capacity(files.len()));
         let threads = self.config.downloads.max(1).min(files.len());
@@ -817,7 +879,8 @@ impl ModuleUpdater {
                     loop {
                         let i = next.fetch_add(1, Ordering::SeqCst);
                         let Some(file) = files.get(i) else { break };
-                        let result = self.download(commit, &file.path);
+                        let result =
+                            self.download(commit, &file.path, to_stage.contains(&file.path));
                         lock(&results).push((i, result));
                     }
                 });
@@ -830,10 +893,14 @@ impl ModuleUpdater {
 
     /// `TDownloadThread.Execute` (mangadownloader/forms/frmLuaModulesUpdater.pas:395-440), but
     /// written to a temp file and renamed over the old one, so a failure never leaves a
-    /// half-written module. With keep-last-good, a module file's previous content comes back
-    /// too.
-    fn download(&self, commit: &str, path: &str) -> Result<Downloaded, UpdateError> {
-        let file = safe_join(&self.config.lua_dir, path)?;
+    /// half-written module; a `staged` file is written into the staging dir instead.
+    fn download(&self, commit: &str, path: &str, staged: bool) -> Result<Downloaded, UpdateError> {
+        let live = safe_join(&self.config.lua_dir, path)?;
+        let file = if staged {
+            self.config.lua_dir.join(STAGING_DIR).join(path)
+        } else {
+            live
+        };
         let url = self.config.repo.download_url(commit, path);
         let mut session = self.session();
         session.get(&url)?;
@@ -843,15 +910,10 @@ impl ModuleUpdater {
                 code: session.result_code(),
             });
         }
-        let previous = if self.config.keep_last_good && is_module_file(path) {
-            std::fs::read(&file).ok()
-        } else {
-            None
-        };
         write_atomically(&file, session.document())?;
         Ok(Downloaded {
             size: session.document().len() as u64,
-            previous,
+            staged: staged.then_some(file),
         })
     }
 }
@@ -972,11 +1034,19 @@ struct LastCommit {
     etag: String,
 }
 
+/// A module file whose downloaded update failed to load, so it never replaced the loaded one.
+struct KeptOut {
+    /// The blob SHA of the update.
+    sha: String,
+    /// Why it failed to load.
+    error: String,
+}
+
 /// A file written by a download.
 struct Downloaded {
     size: u64,
-    /// The content it replaced, kept for keep-last-good.
-    previous: Option<Vec<u8>>,
+    /// Where it was staged, when it was not written into place.
+    staged: Option<PathBuf>,
 }
 
 /// A file to download.
@@ -1071,6 +1141,18 @@ fn safe_join(root: &Path, path: &str) -> Result<PathBuf, UpdateError> {
         return Err(UpdateError::UnsafePath(path.to_owned()));
     }
     Ok(root.join(relative))
+}
+
+/// The directory of the Lua dir that module updates are staged in until they load.
+const STAGING_DIR: &str = ".fmd2r-staging";
+
+/// Removes the staging dir and whatever a sync left in it.
+fn remove_staging(lua_dir: &Path) {
+    match std::fs::remove_dir_all(lua_dir.join(STAGING_DIR)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => tracing::warn!(target: "fmd_core", "module updater: {STAGING_DIR}: {e}"),
+    }
 }
 
 /// Writes `bytes` to a temp file next to `file`, then renames it over `file`.

@@ -221,6 +221,26 @@ export const SETTINGS_SECTIONS: Section[] = [
 		]
 	},
 	{
+		id: 'logs',
+		title: 'Logs',
+		fields: [
+			number(
+				'logs.max_file_size_mb',
+				'Log file size (MiB)',
+				1,
+				1024,
+				'Takes effect after a restart.'
+			),
+			number(
+				'logs.max_files',
+				'Log files kept',
+				1,
+				100,
+				'The oldest is deleted past this. Takes effect after a restart.'
+			)
+		]
+	},
+	{
 		id: 'server',
 		title: 'Server',
 		fields: [
@@ -228,7 +248,15 @@ export const SETTINGS_SECTIONS: Section[] = [
 			text('server.auth_token', 'Password', 'Leave empty to disable authentication.', {
 				secret: true,
 				nullable: true
-			})
+			}),
+			number(
+				'server.session_idle_days',
+				'Log out after (days unused)',
+				1,
+				365,
+				'Each visit restarts the count.'
+			),
+			number('server.session_lifetime_days', 'Log out after (days)', 1, 3650, 'However often used.')
 		]
 	},
 	{

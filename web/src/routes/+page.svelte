@@ -12,6 +12,7 @@
 		type LibraryFilters
 	} from '#lib/library/filters.ts';
 	import { seriesHref } from '#lib/series/href.ts';
+	import ImportDialog from '#lib/components/library/ImportDialog.svelte';
 
 	/** The background job behind "Check now" (`GET /api/jobs/favorites`). */
 	const JOB = 'favorites';
@@ -32,6 +33,7 @@
 	let brokenCovers = $state<Record<number, boolean>>({});
 	let starting = $state(false);
 	let checkError = $state<string | null>(null);
+	let importing = $state(false);
 
 	const shown = $derived(filterFavorites(favorites, filters));
 	const counts = $derived(chipCounts(favorites));
@@ -127,10 +129,19 @@
 			{:else}
 				<button class="btn primary" type="button" onclick={checkNow}>Check now</button>
 			{/if}
+			<button class="btn" type="button" onclick={() => (importing = true)}>Import from FMD2</button>
 		</div>
 	</div>
 	{#if checkError}
 		<p class="bad" role="alert">{checkError}</p>
+	{/if}
+	{#if importing}
+		<ImportDialog
+			{api}
+			job={events.jobs['import']}
+			onimported={load}
+			onclose={() => (importing = false)}
+		/>
 	{/if}
 
 	<div class="toolbar">

@@ -345,7 +345,7 @@ fn patch(path: &str, value: Value) -> Value {
 
 pub(crate) fn import(
     path: &Path,
-    db: &AppDb,
+    live: &SettingsService,
     opts: &ImportOptions,
     report: &mut ImportReport,
 ) -> Result<(), ImportError> {
@@ -354,14 +354,14 @@ pub(crate) fn import(
     };
     report.settings.found = true;
 
+    let scratch;
     let service = if opts.dry_run {
         // Validate against a throwaway copy of the current settings.
-        let current = SettingsService::load(db.clone())?.get();
-        let scratch = SettingsService::load(AppDb::open(":memory:")?)?;
-        scratch.update(serde_json::to_value(&*current).map_err(SettingsError::from)?)?;
-        scratch
+        scratch = SettingsService::load(AppDb::open(":memory:")?)?;
+        scratch.update(serde_json::to_value(&*live.get()).map_err(SettingsError::from)?)?;
+        &scratch
     } else {
-        SettingsService::load(db.clone())?
+        live
     };
     let mut unmapped = Vec::new();
     for (section, keys) in &sections {
@@ -394,7 +394,7 @@ pub(crate) fn import(
                     report.settings.skip(item, SkipReason::AlreadyExists);
                 }
                 Ok(_) => report.settings.imported += 1,
-                Err(e @ (SettingsError::Invalid { .. } | SettingsError::UnknownKey(_))) => {
+                Err(e @ SettingsError::Invalid(_)) => {
                     report
                         .settings
                         .skip(item, SkipReason::Invalid(e.to_string()));

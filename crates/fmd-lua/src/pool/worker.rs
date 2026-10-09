@@ -77,8 +77,7 @@ struct Loaded {
     /// (e.g. `lua_toboolean(L.Handle, -1)`, baseunits/lua/LuaWebsiteModules.pas:165).
     /// Not modelled: FMD2's anti-bot bypass runs in the same state and clears its stack
     /// afterwards (`L.ClearStack`, baseunits/lua/LuaWebsiteBypass.pas:139), so there a
-    /// callback that went through the bypass and returns nothing reads `nil`. The bypass
-    /// arrives with T30.
+    /// callback that went through the bypass and returns nothing reads `nil`.
     top: Value,
     bottom: Option<Value>,
     runtime: Runtime,
@@ -152,7 +151,21 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
     let def = module.def();
     let runtime = Runtime::new().map_err(|e| plain(format!("new Lua state: {e}")))?;
     runtime.set_lua_dir(&shared.lua_dir);
+    // FMD2 runs in its own directory, the parent of `lua/` (`LUA_REPO_FOLDER`,
+    // baseunits/FMDOptions.pas:297), which upstream's relative paths assume, e.g.
+    // `lua\websitebypass\websitebypass_config.json` (lua/websitebypass/cloudflare.lua:272).
+    // A bare `lua` has an empty parent: the current directory, the default.
+    if let Some(dir) = shared
+        .lua_dir
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+    {
+        runtime.set_working_dir(dir);
+    }
     runtime.set_package_cache(shared.package.clone());
+    if let Some(spawner) = &shared.spawner {
+        runtime.set_spawner(spawner.clone());
+    }
     runtime
         .install_globals(Globals {
             module: Some(def.id.clone()),
@@ -161,8 +174,9 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
         .map_err(|e| plain(format!("new Lua state: {e}")))?;
     // The XPath backend of `CreateTXQuery`: the configured one, else the runtime's default;
     // wrapped to record into the differential corpus when one is set.
-    if shared.xpath_backend.is_some() || shared.xpath_corpus.is_some() {
-        let engine = match shared.xpath_backend {
+    let xpath_backend = *lock(&shared.xpath_backend);
+    if xpath_backend.is_some() || shared.xpath_corpus.is_some() {
+        let engine = match xpath_backend {
             Some(backend) => backend
                 .engine()
                 .ok_or(crate::Error::MissingXPathBackend(backend)),
@@ -295,24 +309,25 @@ impl Ctx<'_> {
 
     /// Sets the global `HTTP` (`L.LoadObject('HTTP', ...)`) over the job's session, or a new
     /// one for the module (`CreateHTTP` and `PrepareHTTP`, baseunits/WebsiteModules.pas:382-387, :353-380), tied to the
-    /// job's termination.
+    /// job's termination. Its requests run the module's anti-bot hook
+    /// (`WebsiteBypassHTTPRequest`, baseunits/WebsiteModules.pas:272-276).
     pub(super) fn set_http(&mut self) -> mlua::Result<()> {
+        let settings: Arc<dyn ModuleHttpSettings> = match &self.shared.http_settings {
+            Some(source) => source(self.module),
+            None => Arc::new(NoOverrides),
+        };
         let mut session = match self.http.take() {
             Some(session) => session,
             None => {
-                let settings: Arc<dyn ModuleHttpSettings> = match &self.shared.http_settings {
-                    Some(source) => source(self.module),
-                    None => Arc::new(NoOverrides),
-                };
                 let module = HttpModule {
                     http: self.module.http().clone(),
-                    settings,
+                    settings: settings.clone(),
                 };
                 create_http(&self.shared.http, Some(&module))
             }
         };
         session.set_terminate_token(self.terminate.clone());
-        let http = LuaHttp::new(session);
+        let http = LuaHttp::with_website_bypass(session, self.module.clone(), settings);
         self.lua().globals().set("HTTP", http.build(self.lua())?)?;
         self.lua_http = Some(http);
         Ok(())
