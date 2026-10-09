@@ -3,6 +3,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use fmd_core::module_updater;
 use fmd_store::{Event, EventId, EventQuery, EventSeverity};
 use serde::Serialize;
 use serde_json::Value;
@@ -54,14 +55,11 @@ impl From<Event> for InboxItem {
     }
 }
 
-/// The `events.kind` of the module updater's reports (fmd-core `module_updater`).
-const MODULE_UPDATE_KIND: &str = "module_update";
-
 /// Renders an event body as text a person can read: a string as-is, the module
 /// updater's `{file, names}` and `{file, error}` reports as a sentence and the
 /// raw error (line breaks intact), anything else as `key: value` lines.
 fn readable_body(kind: &str, body: &Value) -> String {
-    if kind == MODULE_UPDATE_KIND {
+    if kind == module_updater::EVENT_KIND {
         if let Some(Value::String(error)) = body.get("error") {
             return error.clone();
         }

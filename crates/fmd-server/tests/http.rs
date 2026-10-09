@@ -199,6 +199,7 @@ async fn inbox_shows_module_updater_reports_as_plain_text() {
         "modules/Broken.lua:3: boom\nstack traceback:\n\t[C]: in ?"
     );
 }
+
 #[tokio::test]
 async fn marking_an_unknown_inbox_item_read_is_a_404() {
     let h = harness();

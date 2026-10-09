@@ -78,7 +78,7 @@
 								<span class="small muted">{formatTime(item.created_at)}</span>
 							</div>
 							<div class="body small">
-								{#each item.body.split('\n') as line, i (i)}
+								{#each item.body.split(/\r?\n/) as line, i (i)}
 									<div class="line">{line}</div>
 								{/each}
 							</div>

@@ -28,7 +28,7 @@ const USER_AGENT: &str = "curl/7.70.0";
 const STATE_KEY: &str = "module_updater.repo";
 
 /// The inbox event kind of the updater's reports.
-const EVENT_KIND: &str = "module_update";
+pub const EVENT_KIND: &str = "module_update";
 
 /// Downloads running at once when the config does not say.
 const DEFAULT_DOWNLOADS: usize = 4;

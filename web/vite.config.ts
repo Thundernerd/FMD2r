@@ -1,5 +1,6 @@
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { defaultClientConditions } from 'vite';
 import { defineConfig } from 'vitest/config';
 
 // A mock-mode build (used by the Playwright smoke tests) must never land in `build/`, which T21 embeds.
@@ -17,7 +18,7 @@ export default defineConfig({
 		proxy: { '/api': process.env.FMD2R_URL ?? 'http://127.0.0.1:8080' }
 	},
 	// Component tests mount Svelte in jsdom, which needs Svelte's browser build, not its server one.
-	resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
+	resolve: process.env.VITEST ? { conditions: [...defaultClientConditions] } : undefined,
 	test: {
 		include: ['src/**/*.test.ts'],
 		environment: 'node'
