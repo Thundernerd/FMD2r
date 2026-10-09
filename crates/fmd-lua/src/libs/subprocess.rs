@@ -30,6 +30,10 @@ use mlua::{Lua, LuaString, Table, Value, Variadic};
 
 use super::{build_object, constructors, lib_table, to_string_arg};
 
+pub use super::subprocess_fixtures::{
+    RecordingSpawner, ReplaySpawner, SUBPROCESS_FILE, SUBPROCESS_FORMAT, SubprocessFixtureError,
+};
+
 /// One process to start: the translated executable, its arguments and its directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Command {
@@ -57,6 +61,12 @@ pub struct Output {
 pub trait Spawner {
     /// Runs `command` to completion. An error means it could not be started.
     fn run(&self, command: &Command) -> std::io::Result<Output>;
+}
+
+impl<S: Spawner + ?Sized> Spawner for std::sync::Arc<S> {
+    fn run(&self, command: &Command) -> std::io::Result<Output> {
+        (**self).run(command)
+    }
 }
 
 /// Runs commands as real child processes, stdin closed and both output pipes captured, like

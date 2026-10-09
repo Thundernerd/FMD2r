@@ -1,0 +1,121 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://love4u.net/manga-6433/moeko-to-hatake-to-otera-gohan-chapter-1.225122.html",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      ],
+      [
+        "Cookie",
+        "PHPSESSID=mkrtfve09rebtrjrgsibfosnuu"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br, zstd"
+      ],
+      [
+        "DNT",
+        "1"
+      ],
+      [
+        "Upgrade-Insecure-Requests",
+        "1"
+      ],
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      ],
+      [
+        "Accept-Language",
+        "en-US,en;q=0.5"
+      ],
+      [
+        "Accept-Charset",
+        "utf-8"
+      ],
+      [
+        "Referer",
+        "https://love4u.net/wlmr-moeko-to-hatake-to-otera-gohan-chapter-1.html"
+      ]
+    ],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "date",
+        "Fri, 09 Oct 2026 08:31:30 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=UTF-8"
+      ],
+      [
+        "transfer-encoding",
+        "chunked"
+      ],
+      [
+        "connection",
+        "keep-alive"
+      ],
+      [
+        "server",
+        "cloudflare"
+      ],
+      [
+        "nel",
+        "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+      ],
+      [
+        "vary",
+        "Accept-Encoding"
+      ],
+      [
+        "expires",
+        "Thu, 19 Nov 1981 08:52:00 GMT"
+      ],
+      [
+        "cache-control",
+        "no-store, no-cache, must-revalidate"
+      ],
+      [
+        "pragma",
+        "no-cache"
+      ],
+      [
+        "set-cookie",
+        "history=%7B%226433%22%3A%22225122%22%7D; expires=Sat, 09-Oct-2027 08:31:30 GMT; Max-Age=31536000; path=/"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000"
+      ],
+      [
+        "report-to",
+        "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=QJy5hDKnacoUVs74V9tuZAgu59lIDA5yWDo6GjLnoYH6rpplSB5jQSszSQ%2FH5MOMjRT%2BYnW8zD%2F0gjIPk0Gg%2BSPLWpf4jKXNBYOqi8b5MdDwv3NPDTWbZOmlYgfA\"}]}"
+      ],
+      [
+        "cf-cache-status",
+        "DYNAMIC"
+      ],
+      [
+        "content-encoding",
+        "zstd"
+      ],
+      [
+        "cf-ray",
+        "a47c078488b79ff7-AMS"
+      ],
+      [
+        "alt-svc",
+        "h3=\":443\"; ma=86400"
+      ]
+    ],
+    "body": "bodies/0002.response",
+    "decoded_from": "zstd"
+  }
+}

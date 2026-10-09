@@ -223,6 +223,7 @@ Found by reading every merged PR's notes after T35. Wiring first: T37 → T38 �
 | T49 | arm64 images now that the native XPath backend is the default | — |
 | T50 | Verify the JS engine against Duktape on the untested cases | — |
 | T51 | Sign off decisions flagged in the merged PRs (owner: maintainer) | — |
+| T52 | A numeric `fmd.env.Revision` (found by T42; MangaHub needs it) | — |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:

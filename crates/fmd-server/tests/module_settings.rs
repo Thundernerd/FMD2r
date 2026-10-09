@@ -232,6 +232,106 @@ async fn invalid_overrides_are_422s_naming_the_field() {
 }
 
 #[tokio::test]
+async fn every_invalid_override_of_a_patch_is_reported_in_one_422() {
+    let h = harness();
+    let patch = json!({
+        "limits": { "max_task_limit": -1 },
+        "options": { "server": 2, "hq": "yes", "lang": "de" },
+    });
+    let res = send(&h.state, patch_json("/api/modules/fixture/settings", patch)).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let problem = body_json(res).await;
+    let mut fields: Vec<&str> = problem["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["field"].as_str().unwrap())
+        .collect();
+    fields.sort_unstable();
+    assert_eq!(
+        fields,
+        ["limits.max_task_limit", "options.hq", "options.server"]
+    );
+
+    let body = body_json(send(&h.state, get("/api/modules/fixture/settings")).await).await;
+    assert_eq!(body["options"][1]["value"], "en");
+}
+
+#[tokio::test]
+async fn a_failing_module_patch_leaves_the_global_settings_unchanged() {
+    let h = harness();
+    let patch = json!({
+        "settings": { "general": { "language": "nl" } },
+        "modules": { "fixture": { "options": { "server": 5, "lang": "de" } } },
+    });
+    let res = send(&h.state, patch_json("/api/settings/all", patch)).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let problem = body_json(res).await;
+    assert_eq!(
+        problem["fields"][0]["field"],
+        "modules.fixture.options.server"
+    );
+    assert_eq!(problem["fields"].as_array().unwrap().len(), 1);
+
+    let settings = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(settings["general"]["language"], "en");
+    let module = body_json(send(&h.state, get("/api/modules/fixture/settings")).await).await;
+    assert_eq!(module["options"][1]["value"], "en");
+}
+
+#[tokio::test]
+async fn a_failing_global_patch_leaves_the_module_settings_unchanged() {
+    let h = harness();
+    let patch = json!({
+        "settings": { "connections": { "timeout_secs": 0 } },
+        "modules": { "fixture": { "options": { "lang": "de" }, "limits": { "max_task_limit": -1 } } },
+    });
+    let res = send(&h.state, patch_json("/api/settings/all", patch)).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let problem = body_json(res).await;
+    let mut fields: Vec<&str> = problem["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["field"].as_str().unwrap())
+        .collect();
+    fields.sort_unstable();
+    assert_eq!(
+        fields,
+        [
+            "modules.fixture.limits.max_task_limit",
+            "settings.connections.timeout_secs"
+        ]
+    );
+
+    let module = body_json(send(&h.state, get("/api/modules/fixture/settings")).await).await;
+    assert_eq!(module["options"][1]["value"], "en");
+}
+
+#[tokio::test]
+async fn global_and_module_settings_are_saved_together() {
+    let h = harness();
+    let patch = json!({
+        "settings": { "general": { "language": "nl" } },
+        "modules": { "fixture": { "options": { "lang": "de" } } },
+    });
+    let res = send(&h.state, patch_json("/api/settings/all", patch)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    assert_eq!(body["settings"]["general"]["language"], "nl");
+    assert_eq!(body["modules"]["fixture"]["options"][1]["value"], "de");
+
+    let settings = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(settings["general"]["language"], "nl");
+    let module = body_json(send(&h.state, get("/api/modules/fixture/settings")).await).await;
+    assert_eq!(module["options"][1]["value"], "de");
+
+    let patch = json!({ "modules": { "missing": {} } });
+    let res = send(&h.state, patch_json("/api/settings/all", patch)).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn modules_are_listed_for_the_picker() {
     let h = harness();
     let body = body_json(send(&h.state, get("/api/modules")).await).await;

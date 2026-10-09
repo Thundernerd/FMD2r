@@ -20,11 +20,11 @@ fn fresh_app_db_runs_all_migrations_and_reopen_is_a_noop() {
     let path = dir.path().join("app.db");
 
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 1);
+    assert_eq!(db.schema_version().unwrap(), 2);
     drop(db);
 
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 1);
+    assert_eq!(db.schema_version().unwrap(), 2);
     drop(db);
 
     let names = tables(&path);
@@ -39,6 +39,7 @@ fn fresh_app_db_runs_all_migrations_and_reopen_is_a_noop() {
         "settings",
         "events",
         "module_files",
+        "sessions",
     ] {
         assert!(names.iter().any(|n| n == t), "missing table {t}: {names:?}");
     }

@@ -189,18 +189,27 @@ fn clean_chapters(
         ))))
         .to_owned();
     }
-    if options.remove_manga_name_from_chapter && !title.is_empty() {
-        let prefix = title.to_ascii_lowercase();
+    if options.remove_manga_name_from_chapter {
         for chapter in &mut chapters {
-            if chapter.name.len() > prefix.len()
-                && chapter.name.to_ascii_lowercase().starts_with(&prefix)
-            {
-                let rest = trim(&chapter.name[prefix.len()..]);
-                chapter.name = rest.strip_prefix("- ").unwrap_or(rest).to_owned();
-            }
+            chapter.name = remove_manga_name(&chapter.name, title);
         }
     }
     chapters
+}
+
+/// `OptionRemoveMangaNameFromChapter` (baseunits/uData.pas:186-200): `name` without a leading
+/// `title` (ignoring case) and a `- ` after it, when it is longer than the title.
+pub(crate) fn remove_manga_name(name: &str, title: &str) -> String {
+    if !title.is_empty()
+        && name.len() > title.len()
+        && name.is_char_boundary(title.len())
+        && name[..title.len()].eq_ignore_ascii_case(title)
+    {
+        let rest = trim(&name[title.len()..]);
+        rest.strip_prefix("- ").unwrap_or(rest).to_owned()
+    } else {
+        name.to_owned()
+    }
 }
 
 /// `RemoveHostFromURL` (baseunits/uBaseUnit.pas:969-972): the path `SplitURL` finds.

@@ -36,7 +36,12 @@ jobs:
       - name: Build
         run: |
           cargo build -p fmd2r -p fmd-smoke --features fmd2r/xpath-fpc
-          echo "LD_LIBRARY_PATH=$(dirname "$(ls target/debug/build/xpath-fpc-*/out/libfmdxpath.so | head -n1)")" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$(realpath "$(dirname "$(ls target/debug/build/xpath-fpc-*/out/libfmdxpath.so | head -n1)")")" >> "$GITHUB_ENV"
+      # Modules that run node (utils.nodejs, e.g. comix) npm-install puppeteer in each run's
+      # working directory; its browser download is a postinstall script npm may skip.
+      - name: Install puppeteer's browser
+        continue-on-error: true
+        run: npx -y puppeteer browsers install
       - name: Replay
         continue-on-error: true
         run: target/debug/fmd-smoke run --xpath-corpus xpath-corpus --out smoke-replay.json
