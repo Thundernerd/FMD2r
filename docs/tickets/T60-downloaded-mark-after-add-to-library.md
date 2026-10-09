@@ -18,8 +18,11 @@ Out: changing which chapters get marked.
 None (decision).
 
 ## Acceptance criteria
-- [ ] Option chosen and recorded in `docs/plan.md`.
-- [ ] A ticket for the chosen option, if it needs code.
+- [x] Option chosen and recorded in `docs/plan.md`.
+- [x] A ticket for the chosen option, if it needs code.
+
+## Decision (2026-10-09)
+Option (a): the mark means "seen or downloaded", as in FMD2, and the UI calls it "seen". The data stays as it is. The rename is T62.
 
 ## FMD2 references
 - `mangadownloader/forms/frmMain.pas:2797-2846` (`btAddToFavoritesClick`)

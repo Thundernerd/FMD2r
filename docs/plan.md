@@ -140,7 +140,7 @@ The importer reads FMD2's schemas (documented from `DownloadsDB.pas`, `Favorites
 
 ## Web (SvelteKit SPA, variant B)
 - **Library:** cover grid of favorites with filter chips.
-- **Series page:** info, chapter list, download box.
+- **Series page:** info, chapter list, download box. A chapter in `downloaded_chapters` shows as "seen", not "downloaded": adding a series to the library marks its current chapters too, as FMD2 does (decided in T60; rename in T62).
 - **Discover:** website picker, facets, tri-state genre filter, search over FTS.
 - **Queue:** grouped by status, with history filter and speed graph.
 - **Settings:** single page with a table of contents.
@@ -248,6 +248,7 @@ Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53
 | T59 | Download observability: task lifecycle logs and the first progress frame | — |
 | T60 | Decide how the series page shows chapters marked when added to the library (owner: maintainer) | — |
 | T61 | `fmd2r module pages` reports a failed `GetPageNumber` | — |
+| T62 | Series page: call the chapter mark "seen" (decided in T60) | — |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:
