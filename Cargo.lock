@@ -860,6 +860,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "utoipa",
  "zip",
 ]

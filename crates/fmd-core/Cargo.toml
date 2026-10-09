@@ -26,6 +26,7 @@ fmd-lua = { path = "../fmd-lua", default-features = false }
 rusqlite = { version = "0.32", features = ["bundled"] }
 tempfile.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util", "time"] }
+tracing-subscriber.workspace = true
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [lints]

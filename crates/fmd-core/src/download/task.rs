@@ -14,7 +14,7 @@ use fmd_pack::{
 use fmd_store::{ChapterStatus, NewPage, PageStatus, TaskId, TaskPage, TaskStatus};
 
 use super::files::{find_image_file, remove_partial_images};
-use super::manager::{Inner, pack_format, rename_options};
+use super::manager::{Inner, log_task, pack_format, rename_options};
 use super::{EngineError, EngineEvent, Progress};
 use crate::settings::{SaveToSettings, Settings, StoredModuleHttpSettings};
 
@@ -89,7 +89,7 @@ pub(super) fn run(
 ) {
     let result = TaskRun::load(inner, id, module, terminate).and_then(|mut run| run.execute());
     if let Err(e) = result {
-        tracing::error!(target: "fmd_core", "task {}: {e}", id.0);
+        tracing::error!(target: "fmd_core", "task {}: failed: {e}", id.0);
         if !terminate.is_terminated()
             && let Err(e) = inner.set_status(id, TaskStatus::Failed, Some(&e.to_string()))
         {
@@ -375,6 +375,7 @@ impl<'a> TaskRun<'a> {
                 let error = format!("failed to create {}: {e}", self.working_dir.display());
                 self.inner
                     .set_status(self.id, TaskStatus::Failed, Some(&error))?;
+                self.log_failed(&error);
                 return Ok(());
             }
 
@@ -487,10 +488,30 @@ impl<'a> TaskRun<'a> {
         if self.first_failed_chapter().is_some() {
             self.chapter = 0;
             self.save_chapter_pointer()?;
-            self.set_status(TaskStatus::Failed)
+            self.set_status(TaskStatus::Failed)?;
+            let failed = self.failed_chapter_names().join(", ");
+            self.log_failed(&format!("chapters failed: {failed}"));
+            Ok(())
         } else {
-            self.set_status(TaskStatus::Finished)
+            self.set_status(TaskStatus::Finished)?;
+            log_task(self.id, &self.title, "finished");
+            Ok(())
         }
+    }
+
+    fn log_failed(&self, reason: &str) {
+        log_task(self.id, &self.title, format!("failed: {reason}"));
+    }
+
+    /// The names of the chapters that failed, quoted.
+    fn failed_chapter_names(&self) -> Vec<String> {
+        self.container()
+            .chapters_status
+            .iter()
+            .zip(&self.chapter_names)
+            .filter(|(status, _)| **status == ChapterStatus::Failed)
+            .map(|(_, name)| format!("{name:?}"))
+            .collect()
     }
 
     /// Records the chapter the task is at.
@@ -526,6 +547,9 @@ impl<'a> TaskRun<'a> {
             c.task.page_links.clear();
             c.task.page_container_links.clear();
             c.task.file_names.clear();
+            // The next chapter's first progress frame comes before `DoGetPageNumber` zeroes
+            // this (baseunits/uDownloadsManager.pas:835), so it must not show this chapter's.
+            c.task.page_number = 0;
         }
         let db = &self.inner.config.db;
         let chapter = u32::try_from(self.chapter).unwrap_or(u32::MAX);
@@ -537,6 +561,8 @@ impl<'a> TaskRun<'a> {
                 &self.manga_link,
                 &[self.chapter_link.as_str()],
             )?;
+            let name = &self.chapter_names[self.chapter];
+            log_task(self.id, &self.title, format!("chapter {name:?} downloaded"));
         }
         self.inner.emit(EngineEvent::Chapter {
             task: self.id,

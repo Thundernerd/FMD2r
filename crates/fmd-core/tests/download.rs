@@ -703,3 +703,206 @@ async fn without_chapter_folders_only_the_chapters_pages_are_packed() {
     assert_eq!(entries(&manga.join("One.cbz")), ["001.png", "002.png"]);
     assert!(manga.join("cover.png").exists());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chapters_first_progress_frame_does_not_carry_the_previous_chapters_page_total() {
+    let f = Fixture::new(&[("T.lua", T)], json!({}));
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/3", "One"), ("/c/2", "Two")]))
+        .await
+        .unwrap();
+
+    let mut first = None;
+    let wait = async {
+        loop {
+            match events.recv().await.unwrap() {
+                EngineEvent::Progress(p) if p.task == id && p.chapter == 1 => {
+                    first.get_or_insert(p);
+                }
+                EngineEvent::Status { task, status, .. }
+                    if task == id && status == TaskStatus::Finished =>
+                {
+                    return;
+                }
+                _ => {}
+            }
+        }
+    };
+    tokio::time::timeout(PATIENCE, wait).await.unwrap();
+    // `DoGetPageNumber` starts a chapter at `PageNumber := 0`
+    // (baseunits/uDownloadsManager.pas:835), so chapter 2 never shows chapter 1's 3 pages.
+    let first = first.unwrap();
+    assert!(
+        [0, 2].contains(&first.pages_total),
+        "first frame of chapter 2: {first:?}"
+    );
+}
+
+/// What the test binary logged at `info` and above.
+static LOGS: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+
+struct LogWriter;
+
+impl std::io::Write for LogWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        LOGS.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Captures what the engine logs at `info` and above from now on, as `RUST_LOG=info` does.
+fn capture_logs() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .with_ansi(false)
+            .without_time()
+            .with_writer(|| LogWriter)
+            .init();
+    });
+}
+
+/// The `fmd_core` lines logged about manga `title`. Tests run in parallel, so each logging
+/// test downloads a manga of its own.
+fn logged(title: &str) -> Vec<String> {
+    let logs = String::from_utf8(LOGS.lock().unwrap().clone()).unwrap();
+    logs.lines()
+        .filter(|l| l.contains(" fmd_core: ") && l.contains(&format!("\"{title}\"")))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The lines logged about manga `title`, once one of them holds `what`.
+async fn logged_once(title: &str, what: &str) -> Vec<String> {
+    eventually(what, || holding(&logged(title), what) > 0).await;
+    logged(title)
+}
+
+/// The lines of `lines` holding `what`.
+fn holding(lines: &[String], what: &str) -> usize {
+    lines.iter().filter(|l| l.contains(what)).count()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_download_logs_its_start_each_finished_chapter_and_its_end() {
+    capture_logs();
+    let f = Fixture::new(&[("T.lua", T)], json!({}));
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let download = NewDownload {
+        title: "Logged".into(),
+        ..f.download("t", &[("/c/2", "One"), ("/c/3", "Two")])
+    };
+    let id = manager.add_task(download).await.unwrap();
+    statuses(&mut events, id, &[TaskStatus::Finished, TaskStatus::Failed]).await;
+
+    let lines = logged_once("Logged", "finished").await;
+    assert!(lines.iter().all(|l| l.contains("INFO")), "{lines:#?}");
+    assert_eq!(holding(&lines, "started"), 1, "{lines:#?}");
+    assert_eq!(
+        holding(&lines, "chapter \"One\" downloaded"),
+        1,
+        "{lines:#?}"
+    );
+    assert_eq!(
+        holding(&lines, "chapter \"Two\" downloaded"),
+        1,
+        "{lines:#?}"
+    );
+    assert_eq!(holding(&lines, "finished"), 1, "{lines:#?}");
+    assert_eq!(lines.len(), 4, "{lines:#?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_task_restored_as_downloading_logs_that_it_resumed() {
+    capture_logs();
+    let f = Fixture::new(&[("T.lua", T)], json!({}));
+    f.transport.hold("/img/c/3/2");
+    let manager = f.manager().await;
+    let download = NewDownload {
+        title: "Resumed".into(),
+        ..f.download("t", &[("/c/3", "One")])
+    };
+    let id = manager.add_task(download).await.unwrap();
+    eventually("page 2 requested", || {
+        f.transport.count("https://t/img/c/3/2") == 1
+    })
+    .await;
+    drop(manager);
+    assert_eq!(
+        f.db.tasks().get(id).unwrap().unwrap().status,
+        TaskStatus::Downloading
+    );
+
+    f.transport.hold("");
+    let _manager = f.manager().await;
+    let lines = logged_once("Resumed", "finished").await;
+    assert_eq!(holding(&lines, "started"), 1, "{lines:#?}");
+    assert_eq!(holding(&lines, "resumed after a restart"), 1, "{lines:#?}");
+    assert_eq!(
+        holding(&lines, "chapter \"One\" downloaded"),
+        1,
+        "{lines:#?}"
+    );
+    assert_eq!(holding(&lines, "finished"), 1, "{lines:#?}");
+    assert_eq!(lines.len(), 4, "{lines:#?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_task_logs_that_it_failed_and_why() {
+    capture_logs();
+    let settings = json!({"connections": {"auto_retry_failed_tasks": 0}});
+    let f = Fixture::new(&[("T.lua", T)], settings);
+    f.transport.fail("https://t/img/c/3/3", 2);
+    let manager = f.manager().await;
+    let download = NewDownload {
+        title: "Failing".into(),
+        ..f.download("t", &[("/c/2", "One"), ("/c/3", "Two")])
+    };
+    manager.add_task(download).await.unwrap();
+
+    let lines = logged_once("Failing", "failed").await;
+    assert_eq!(holding(&lines, "started"), 1, "{lines:#?}");
+    assert_eq!(
+        holding(&lines, "chapter \"One\" downloaded"),
+        1,
+        "{lines:#?}"
+    );
+    // The failed chapter is the reason (baseunits/uDownloadsManager.pas:1346-1355).
+    let failed: Vec<_> = lines.iter().filter(|l| l.contains("failed")).collect();
+    assert_eq!(failed.len(), 1, "{lines:#?}");
+    assert!(failed[0].contains("\"Two\""), "{lines:#?}");
+    assert_eq!(holding(&lines, "finished"), 0, "{lines:#?}");
+    assert_eq!(lines.len(), 3, "{lines:#?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stopped_task_logs_that_it_stopped() {
+    capture_logs();
+    let f = Fixture::new(&[("T.lua", T)], json!({}));
+    f.transport.hold("/img/");
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let download = NewDownload {
+        title: "Stopped".into(),
+        ..f.download("t", &[("/c/3", "One")])
+    };
+    let id = manager.add_task(download).await.unwrap();
+    eventually("a page request", || {
+        f.transport.count("https://t/img/c/3/1") == 1
+    })
+    .await;
+    stop_promptly(&manager, &mut events, id).await;
+
+    let lines = logged_once("Stopped", "stopped").await;
+    assert_eq!(holding(&lines, "started"), 1, "{lines:#?}");
+    assert_eq!(holding(&lines, "stopped"), 1, "{lines:#?}");
+    assert_eq!(lines.len(), 2, "{lines:#?}");
+}
