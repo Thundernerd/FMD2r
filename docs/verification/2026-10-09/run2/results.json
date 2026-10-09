@@ -1,0 +1,429 @@
+{
+  "1-health-spa": {
+    "ok": true,
+    "health": {
+      "status": "ok",
+      "auth": false
+    },
+    "about": {
+      "version": "0.1.0",
+      "git_revision": null,
+      "upstream_ref": null,
+      "upstream_sha": null,
+      "module_count": 684,
+      "load_failures": [],
+      "xpath_backend": "native",
+      "data_dir": "/data",
+      "databases": [
+        {
+          "name": "app.db",
+          "bytes": 119488
+        },
+        {
+          "name": "lists.db",
+          "bytes": 53568
+        }
+      ],
+      "uptime_secs": 2,
+      "tools": [
+        {
+          "name": "python3",
+          "ok": true,
+          "detail": "Python 3.13.5"
+        },
+        {
+          "name": "node",
+          "ok": true,
+          "detail": "v20.19.2"
+        },
+        {
+          "name": "magick",
+          "ok": true,
+          "detail": "Version: ImageMagick 7.1.1-43 Q16 x86_64 22550 https://imagemagick.org"
+        },
+        {
+          "name": "FlareSolverr",
+          "ok": true,
+          "detail": "flaresolverr:8191"
+        }
+      ]
+    }
+  },
+  "2a-add-by-url": {
+    "ok": true,
+    "resolveStatus": 200,
+    "seriesUrl": "http://127.0.0.1:18080/series?module=d07c9c2425764da8ba056505f57cf40c&link=%2Ftitle%2F30c8bf1c-9063-4a22-a845-e2cead50adea",
+    "title": "Yume to Koi de wa Tsuriawanai",
+    "kicker": "MANGADEX Completed",
+    "facts": "AUTHOR Torii Shiduku CHAPTERS 12 · 0 downloaded",
+    "genres": "Romance Comedy Girls' Love School Life Safe",
+    "summary": "Kurata Hikaru has fallen in love with her classmate Kira Kairi at first sight. Now, she's too lovestruck to concentrate on her studies. Her plan? Get Kairi to r",
+    "coverSrc": "/api/covers?module=d07c9c2425764da8ba056505f57cf40c&url=https%3A%2F%2Fuploads.mangadex.org%2Fcovers%2F30c8bf1c-9063-4a22-a845-e2cead50adea%2F4b3ae0bf-cb81-494f-81e9-0d5236cc23f3.jpg.256.jpg",
+    "coverOk": true,
+    "chapterListHead": "0001 Vol. 1 Ch. 1 - I Love You, Please Reject Me! 0002 Vol. 1 Ch. 2 - I Thought of 156 Options 0003 Vol. 1 Ch. 3 - Please Forgive Me 0004 Vol. 1 Ch. 4 - Disgusting 0005 Vol. 1 Ch. 5 - Even Someone Like Me 0006 Vol. 1 Ch. 6 - I Want to Know 0007 Vol. 1 Ch. 7 - I Do Care 0008 Vol. 1 Ch. 8 - Together With You 0009 Vol. 1 Ch. 8.5 - Volume Extras 0010 Vol. 1 Ch. 8.6 - Valentine's Day Extra 0011 Vol. 1 Ch. 8.7 - New Years Illustration Extra 0012 Vol. 1 Ch. 8.8 - Author Birthday Fanart and Reprint Anno"
+  },
+  "2b-add-to-library": {
+    "ok": true,
+    "grid": "Yume to Koi de wa Tsuriawanai MangaDex · Completed",
+    "gridCover": {
+      "src": "/api/covers?module=d07c9c2425764da8ba056505f57cf40c&url=https%3A%2F%2Fuploads.mangadex.org%2Fcovers%2F30c8bf1c-9063-4a22-a845-e2cead50adea%2F4b3ae0bf-cb81-494f-81e9-0d5236cc23f3.jpg.256.jpg",
+      "ok": true
+    },
+    "favorites": [
+      {
+        "id": 1,
+        "module_id": "d07c9c2425764da8ba056505f57cf40c",
+        "website": "MangaDex",
+        "link": "/title/30c8bf1c-9063-4a22-a845-e2cead50adea",
+        "title": "Yume to Koi de wa Tsuriawanai",
+        "status": "completed",
+        "enabled": true,
+        "save_to": "downloads/Yume to Koi de wa Tsuriawanai",
+        "cover_url": "/api/covers?module=d07c9c2425764da8ba056505f57cf40c&url=https%3A%2F%2Fuploads.mangadex.org%2Fcovers%2F30c8bf1c-9063-4a22-a845-e2cead50adea%2F4b3ae0bf-cb81-494f-81e9-0d5236cc23f3.jpg.256.jpg",
+        "current_chapter": 12,
+        "new_chapters": 0,
+        "date_added": "2026-10-09T12:03:33.797Z",
+        "last_checked": null,
+        "last_updated": null
+      }
+    ]
+  },
+  "2c0-set-format-cbz": {
+    "ok": false,
+    "error": "Error: Settings page did not render (body: FMD2r Library Discover Queue Settings System Add Inbox 2 500 Internal Error); API fallback PATCH 200 -> format cbz\n    at /home/christiaan/orca/workspaces/FMD2r/fmd2r-e2e-verification/e2e-run/e2e3.js:134:10\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async step (/home/christiaan/orca/workspaces/FMD2r/fmd2r-e2e-verification/e2e-run/e2e3.js:24:35)\n    at async /home/christiaan/orca/workspaces/FMD2r/fmd2r-e2e-verification/e2e-run/e2e3.js:121:2"
+  },
+  "2c-queue-two-chapters": {
+    "ok": true,
+    "format": "CBZ",
+    "saveTo": "downloads",
+    "taskStatus": 201,
+    "task": {
+      "id": 1,
+      "module_id": "d07c9c2425764da8ba056505f57cf40c",
+      "link": "/title/30c8bf1c-9063-4a22-a845-e2cead50adea",
+      "title": "Yume to Koi de wa Tsuriawanai",
+      "save_to": "downloads/Yume to Koi de wa Tsuriawanai",
+      "status": "waiting",
+      "enabled": true,
+      "running": true,
+      "error": null,
+      "chapters": "Vol. 01 Ch. 001 - I Love You, Please Reject Me! (1/2)",
+      "chapter_count": 2,
+      "chapters_done": 0,
+      "current_chapter": 0,
+      "done": 0,
+      "total": 0,
+      "bytes_per_sec": 0,
+      "date_added": "2026-10-09T12:03:52.521Z",
+      "date_last_downloaded": null
+    },
+    "distinctPhoneDock": 1,
+    "distinctDeskSpeed": 2,
+    "distinctDeskRow": 3,
+    "last": {
+      "t": 60896,
+      "phase": "before-restart",
+      "api": {
+        "status": "downloading",
+        "running": true,
+        "chapter": 0,
+        "done": 13,
+        "total": 26,
+        "chapters_done": 0,
+        "bps": 176653
+      },
+      "phoneDock": "",
+      "deskSpeed": "179 kB/s 1 active · 0 waiting",
+      "deskRow": "Yume to Koi de wa Tsuriawanai Downloading Vol. 01 Ch. 001 - I Love You, Please Reject Me! (1/2) 0/2 chapters 21/26 pages 179 kB/s d07c9c2425764da8ba056505f57cf40c Stop Disable Open series Delete…"
+    }
+  },
+  "2d-restart-resume": {
+    "ok": true,
+    "restartOut": "Container fmd2r-e2e-fmd2r-1 Restarting Container fmd2r-e2e-fmd2r-1 Started",
+    "before": {
+      "id": 1,
+      "module_id": "d07c9c2425764da8ba056505f57cf40c",
+      "link": "/title/30c8bf1c-9063-4a22-a845-e2cead50adea",
+      "title": "Yume to Koi de wa Tsuriawanai",
+      "save_to": "downloads/Yume to Koi de wa Tsuriawanai",
+      "status": "downloading",
+      "enabled": true,
+      "running": true,
+      "error": null,
+      "chapters": "Vol. 01 Ch. 001 - I Love You, Please Reject Me! (1/2)",
+      "chapter_count": 2,
+      "chapters_done": 0,
+      "current_chapter": 0,
+      "done": 21,
+      "total": 26,
+      "bytes_per_sec": 179425,
+      "date_added": "2026-10-09T12:03:52.521Z",
+      "date_last_downloaded": null
+    },
+    "after": {
+      "id": 1,
+      "module_id": "d07c9c2425764da8ba056505f57cf40c",
+      "link": "/title/30c8bf1c-9063-4a22-a845-e2cead50adea",
+      "title": "Yume to Koi de wa Tsuriawanai",
+      "save_to": "downloads/Yume to Koi de wa Tsuriawanai",
+      "status": "downloading",
+      "enabled": true,
+      "running": true,
+      "error": null,
+      "chapters": "Vol. 01 Ch. 001 - I Love You, Please Reject Me! (1/2)",
+      "chapter_count": 2,
+      "chapters_done": 0,
+      "current_chapter": 0,
+      "done": 0,
+      "total": 26,
+      "bytes_per_sec": 0,
+      "date_added": "2026-10-09T12:03:52.521Z",
+      "date_last_downloaded": null
+    },
+    "healthyAfterMs": 329,
+    "final": {
+      "id": 1,
+      "module_id": "d07c9c2425764da8ba056505f57cf40c",
+      "link": "/title/30c8bf1c-9063-4a22-a845-e2cead50adea",
+      "title": "Yume to Koi de wa Tsuriawanai",
+      "save_to": "downloads/Yume to Koi de wa Tsuriawanai",
+      "status": "finished",
+      "enabled": true,
+      "running": false,
+      "error": null,
+      "chapters": "Vol. 01 Ch. 002 - I Thought of 156 Options (2/2)",
+      "chapter_count": 2,
+      "chapters_done": 2,
+      "current_chapter": 2,
+      "done": 0,
+      "total": 0,
+      "bytes_per_sec": 0,
+      "date_added": "2026-10-09T12:03:52.521Z",
+      "date_last_downloaded": "2026-10-09T12:05:31.029Z"
+    },
+    "detail": {
+      "task": {
+        "id": 1,
+        "module_id": "d07c9c2425764da8ba056505f57cf40c",
+        "link": "/title/30c8bf1c-9063-4a22-a845-e2cead50adea",
+        "title": "Yume to Koi de wa Tsuriawanai",
+        "save_to": "downloads/Yume to Koi de wa Tsuriawanai",
+        "status": "finished",
+        "enabled": true,
+        "running": false,
+        "error": null,
+        "chapters": "Vol. 01 Ch. 002 - I Thought of 156 Options (2/2)",
+        "chapter_count": 2,
+        "chapters_done": 2,
+        "current_chapter": 2,
+        "done": 0,
+        "total": 0,
+        "bytes_per_sec": 0,
+        "date_added": "2026-10-09T12:03:52.521Z",
+        "date_last_downloaded": "2026-10-09T12:05:31.029Z"
+      },
+      "chapters": [
+        {
+          "index": 0,
+          "name": "Vol. 01 Ch. 001 - I Love You, Please Reject Me!",
+          "link": "/e1023b89-908f-45df-9d47-8d6e1adc66ed",
+          "status": "downloaded",
+          "done": 0,
+          "total": 0
+        },
+        {
+          "index": 1,
+          "name": "Vol. 01 Ch. 002 - I Thought of 156 Options",
+          "link": "/14c8e4ed-adc4-4cf8-8546-4c1192c0592d",
+          "status": "downloaded",
+          "done": 0,
+          "total": 0
+        }
+      ]
+    },
+    "finishedNoReload": "Finished 1 Yume to Koi de wa Tsuriawanai Finished Vol. 01 Ch. 002 - I Thought of 156 Options (2/2) 2/2 chapters d07c9c2425764da8ba056505f57cf40c Get files Download again Disable Open series Delete…",
+    "phoneDockNoReload": ""
+  },
+  "2f-check-new-chapters": {
+    "ok": true,
+    "checkStatus": 202,
+    "checkBody": "(body unavailable)",
+    "alerts": [],
+    "jobs": [
+      {
+        "id": "lists",
+        "title": "Update lists",
+        "state": "idle",
+        "done": 0,
+        "total": 0,
+        "last_run": null,
+        "next_run": null,
+        "last_error": null
+      },
+      {
+        "id": "favorites",
+        "title": "Favorites check",
+        "state": "done",
+        "done": 1,
+        "total": 1,
+        "last_run": "2026-10-09T12:07:34.796Z",
+        "next_run": "2026-10-09T13:05:28.709Z",
+        "last_error": null
+      },
+      {
+        "id": "modules",
+        "title": "Module updater",
+        "state": "done",
+        "done": 0,
+        "total": 0,
+        "last_run": "2026-10-09T12:05:28.416Z",
+        "next_run": "2026-10-09T13:05:28.416Z",
+        "last_error": null
+      }
+    ],
+    "badge": "Inbox 2",
+    "popText": "module OrckuMangas.lua uses unknown Host API names 10/9/26, 2:03 PM {\"file\":\"modules/OrckuMangas.lua\",\"names\":[\"MANGAINFO.Artist\"]} Mark read module MangaPlus.lua failed Init 10/9/26, 2:03 PM {\"error\":\"lua_pcall: runtime error: /data/lua/modules/MangaPlus.lua:99: /data/lua/.fmd2r-staging/modules/MangaPlus.proto: No such file or directory\\nstack traceback:\\n\\t[C]: in ?\\n\\t[C]: in function 'assert'\\n\\t/data/lua/modules/MangaPlus.lua:99: in local 'ReadFile'\\n\\t/data/lua/modules/MangaPlus.lua:110: in main chunk\",\"file\":\"modules/MangaPlus.lua\"} Mark read",
+    "closedByEsc": true,
+    "closedByOutside": true,
+    "inbox": [
+      {
+        "id": "2",
+        "kind": "warn",
+        "title": "module OrckuMangas.lua uses unknown Host API names",
+        "body": "{\"file\":\"modules/OrckuMangas.lua\",\"names\":[\"MANGAINFO.Artist\"]}",
+        "created_at": "2026-10-09T12:03:26.948Z",
+        "read": false
+      },
+      {
+        "id": "1",
+        "kind": "error",
+        "title": "module MangaPlus.lua failed Init",
+        "body": "{\"error\":\"lua_pcall: runtime error: /data/lua/modules/MangaPlus.lua:99: /data/lua/.fmd2r-staging/modules/MangaPlus.proto: No such file or directory\\nstack traceback:\\n\\t[C]: in ?\\n\\t[C]: in function 'assert'\\n\\t/data/lua/modules/MangaPlus.lua:99: in local 'ReadFile'\\n\\t/data/lua/modules/MangaPlus.lua:110: in main chunk\",\"file\":\"modules/MangaPlus.lua\"}",
+        "created_at": "2026-10-09T12:03:26.94Z",
+        "read": false
+      }
+    ],
+    "favorites": [
+      {
+        "id": 1,
+        "module_id": "d07c9c2425764da8ba056505f57cf40c",
+        "website": "MangaDex",
+        "link": "/title/30c8bf1c-9063-4a22-a845-e2cead50adea",
+        "title": "Yume to Koi de wa Tsuriawanai",
+        "status": "completed",
+        "enabled": true,
+        "save_to": "downloads/Yume to Koi de wa Tsuriawanai",
+        "cover_url": "/api/covers?module=d07c9c2425764da8ba056505f57cf40c&url=https%3A%2F%2Fuploads.mangadex.org%2Fcovers%2F30c8bf1c-9063-4a22-a845-e2cead50adea%2F4b3ae0bf-cb81-494f-81e9-0d5236cc23f3.jpg.256.jpg",
+        "current_chapter": 12,
+        "new_chapters": 0,
+        "date_added": "2026-10-09T12:03:33.797Z",
+        "last_checked": "2026-10-09T12:07:35.103Z",
+        "last_updated": null
+      }
+    ]
+  },
+  "samples": [
+    {
+      "t": 2,
+      "phase": "before-restart",
+      "api": {
+        "status": "downloading",
+        "running": true,
+        "chapter": 0,
+        "done": 1,
+        "total": 26,
+        "chapters_done": 0,
+        "bps": 191297
+      },
+      "phoneDock": "",
+      "deskSpeed": "179 kB/s 1 active · 0 waiting",
+      "deskRow": "Yume to Koi de wa Tsuriawanai Downloading Vol. 01 Ch. 001 - I Love You, Please Reject Me! (1/2) 0/2 chapters 4/26 pages 179 kB/s d07c9c2425764da8ba056505f57cf40c Stop Disable Open series Delete…"
+    },
+    {
+      "t": 30407,
+      "phase": "before-restart",
+      "api": {
+        "status": "downloading",
+        "running": true,
+        "chapter": 0,
+        "done": 4,
+        "total": 26,
+        "chapters_done": 0,
+        "bps": 179229
+      },
+      "phoneDock": "",
+      "deskSpeed": "177 kB/s 1 active · 0 waiting",
+      "deskRow": "Yume to Koi de wa Tsuriawanai Downloading Vol. 01 Ch. 001 - I Love You, Please Reject Me! (1/2) 0/2 chapters 13/26 pages 177 kB/s d07c9c2425764da8ba056505f57cf40c Stop Disable Open series Delete…"
+    },
+    {
+      "t": 60896,
+      "phase": "before-restart",
+      "api": {
+        "status": "downloading",
+        "running": true,
+        "chapter": 0,
+        "done": 13,
+        "total": 26,
+        "chapters_done": 0,
+        "bps": 176653
+      },
+      "phoneDock": "",
+      "deskSpeed": "179 kB/s 1 active · 0 waiting",
+      "deskRow": "Yume to Koi de wa Tsuriawanai Downloading Vol. 01 Ch. 001 - I Love You, Please Reject Me! (1/2) 0/2 chapters 21/26 pages 179 kB/s d07c9c2425764da8ba056505f57cf40c Stop Disable Open series Delete…"
+    },
+    {
+      "t": 332,
+      "phase": "after-restart",
+      "api": {
+        "status": "downloading",
+        "running": true,
+        "chapter": 0,
+        "done": 0,
+        "total": 26,
+        "chapters_done": 0,
+        "bps": 0
+      },
+      "phoneDock": "",
+      "deskSpeed": "0 B/s 0 active · 0 waiting",
+      "deskRow": "Yume to Koi de wa Tsuriawanai Finished Vol. 01 Ch. 002 - I Thought of 156 Options (2/2) 2/2 chapters d07c9c2425764da8ba056505f57cf40c Get files Download again Disable Open series Delete…"
+    },
+    {
+      "t": 31339,
+      "phase": "after-restart",
+      "api": {
+        "status": "finished",
+        "running": false,
+        "chapter": 2,
+        "done": 0,
+        "total": 0,
+        "chapters_done": 2,
+        "bps": 0
+      },
+      "phoneDock": "",
+      "deskSpeed": "0 B/s 0 active · 0 waiting",
+      "deskRow": "Yume to Koi de wa Tsuriawanai Finished Vol. 01 Ch. 002 - I Thought of 156 Options (2/2) 2/2 chapters d07c9c2425764da8ba056505f57cf40c Get files Download again Disable Open series Delete…"
+    },
+    {
+      "t": 64349,
+      "phase": "settled",
+      "api": {
+        "status": "finished",
+        "running": false,
+        "chapter": 2,
+        "done": 0,
+        "total": 0,
+        "chapters_done": 2,
+        "bps": 0
+      },
+      "phoneDock": "",
+      "deskSpeed": "0 B/s 0 active · 0 waiting",
+      "deskRow": "Yume to Koi de wa Tsuriawanai Finished Vol. 01 Ch. 002 - I Thought of 156 Options (2/2) 2/2 chapters d07c9c2425764da8ba056505f57cf40c Get files Download again Disable Open series Delete…"
+    }
+  ],
+  "consoleErrors": [
+    "phone: Error: https://svelte.dev/e/each_key_duplicate\n    at Pe (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:2356)\n    at http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:2:4618\n    at Zn (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:21103)\n    at tr (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:22240)\n    at #v (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:9326)\n    at #_ (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:8551)\n    at e.flush (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:10454)\n    at Array.<anonymous> (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:11214)\n    at h (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:446)\n    at et (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:4167)",
+    "desktop: Error: https://svelte.dev/e/each_key_duplicate\n    at Pe (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:2356)\n    at http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:2:4618\n    at Zn (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:21103)\n    at tr (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:22240)\n    at #v (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:9326)\n    at #_ (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:8551)\n    at e.flush (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:10454)\n    at Array.<anonymous> (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:11214)\n    at h (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:446)\n    at et (http://127.0.0.1:18080/_app/immutable/chunks/cYvza6sx.js:1:4167)",
+    "phone: Failed to load resource: net::ERR_SOCKET_NOT_CONNECTED",
+    "desktop: Failed to load resource: net::ERR_SOCKET_NOT_CONNECTED"
+  ]
+}
