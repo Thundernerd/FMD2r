@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Destination } from '#lib/api/types.ts';
-	import { destinationAt } from '#lib/destinations/destinations.ts';
+	import { destinationAt, destinationLabel } from '#lib/destinations/destinations.ts';
 
 	let {
 		destinations,
@@ -49,7 +49,7 @@
 			<option value="inherit">{inherit}</option>
 		{/if}
 		{#each destinations as destination, i (i)}
-			<option value={String(i)}>{destination.name}{destination.default ? ' (default)' : ''}</option>
+			<option value={String(i)}>{destinationLabel(destination)}</option>
 		{/each}
 		<option value="custom">Custom folder…</option>
 	</select>

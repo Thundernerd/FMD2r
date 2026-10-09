@@ -54,6 +54,7 @@
 	// (`OverrideSaveTo`, mangadownloader/forms/frmMain.pas:5631-5643, after `FillSaveTo`).
 	$effect(() => {
 		const m = module;
+		saveTo = '';
 		const website = m
 			? api
 					.getModuleSettings(m)
@@ -64,7 +65,7 @@
 			.then(([settings, websiteDir]) => {
 				destinations = settings.saveto.destinations;
 				const fallback = defaultDestination(destinations)?.path ?? settings.saveto.default_dir;
-				saveTo ||= websiteDir.trim() || fallback;
+				saveTo = websiteDir.trim() || fallback;
 				format = settings.output.format;
 			})
 			.catch(() => {});

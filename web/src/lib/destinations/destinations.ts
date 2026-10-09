@@ -14,12 +14,8 @@ export const destinationAt = (destinations: Destination[], path: string) =>
 export const defaultDestination = (destinations: Destination[]) =>
 	destinations.find((d) => d.default) ?? destinations[0];
 
-/** The last component of `path`, e.g. the manga folder of a library series. */
-export const lastComponent = (path: string) => bare(path).split(/[\\/]/).pop() ?? '';
-
-/** `name` inside folder `dir`. */
-export const joinPath = (dir: string, name: string) =>
-	name ? `${bare(dir)}${bare(dir).endsWith('/') ? '' : '/'}${name}` : dir;
+/** How a picker lists a destination. */
+export const destinationLabel = (d: Destination) => `${d.name}${d.default ? ' (default)' : ''}`;
 
 /** `base`, or `base 2`, `base 3`, … when another destination has that name (ignoring case). */
 export function freeName(destinations: Destination[], base: string): string {

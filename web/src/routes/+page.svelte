@@ -35,8 +35,8 @@
 	let starting = $state(false);
 	let checkError = $state<string | null>(null);
 	let importing = $state(false);
-	/** The series whose download folder is being changed. */
-	let moving = $state<FavoriteView | null>(null);
+	/** The series whose download folder the dialog changes. */
+	let folderOf = $state<FavoriteView | null>(null);
 
 	const shown = $derived(filterFavorites(favorites, filters));
 	const counts = $derived(chipCounts(favorites));
@@ -138,14 +138,14 @@
 	{#if checkError}
 		<p class="bad" role="alert">{checkError}</p>
 	{/if}
-	{#if moving}
+	{#if folderOf}
 		<FolderDialog
 			{api}
-			favorite={moving}
+			favorite={folderOf}
 			onsaved={(updated) => {
 				favorites = favorites.map((f) => (f.id === updated.id ? updated : f));
 			}}
-			onclose={() => (moving = null)}
+			onclose={() => (folderOf = null)}
 		/>
 	{/if}
 	{#if importing}
@@ -254,7 +254,7 @@
 						type="button"
 						aria-label="Download folder of {favorite.title}"
 						title={favorite.save_to}
-						onclick={() => (moving = favorite)}>Folder…</button
+						onclick={() => (folderOf = favorite)}>Folder…</button
 					>
 				</li>
 			{/each}

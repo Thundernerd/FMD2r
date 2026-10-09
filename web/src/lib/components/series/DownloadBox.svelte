@@ -62,7 +62,10 @@
 			artists: series.artists,
 			save_to: saveTo
 		};
-		if (!saveTo.trim()) return;
+		if (!saveTo.trim()) {
+			folder = null;
+			return;
+		}
 		const timer = setTimeout(() => {
 			api
 				.saveFolder(request)

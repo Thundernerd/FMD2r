@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Destination, ModuleSettingsView, ModuleSummary } from '#lib/api/types.ts';
 	import DestinationPicker from '#lib/components/destinations/DestinationPicker.svelte';
-	import { defaultDestination } from '#lib/destinations/destinations.ts';
+	import { defaultDestination, destinationAt } from '#lib/destinations/destinations.ts';
 	import type { Draft } from '#lib/settings/draft.svelte.ts';
 	import {
 		groupModules,
@@ -90,6 +90,11 @@
 	});
 
 	const options = $derived(view ? optionFields(view.options) : []);
+	const websiteDir = $derived(
+		typeof draft?.get('save_to') === 'string' ? String(draft.get('save_to')).trim() : ''
+	);
+	/** A folder of its own that no destination has, e.g. after a destination was edited. */
+	const strayDir = $derived(websiteDir !== '' && !destinationAt(destinations, websiteDir));
 	const fallback = $derived(defaultDestination(destinations)?.name ?? 'the default destination');
 	const enabled = $derived(draft?.get('enabled') === true);
 
@@ -251,6 +256,12 @@
 					Where this website's downloads go unless another folder is picked on the series page.
 					Applies whether or not the overrides below are on.
 				</p>
+				{#if strayDir}
+					<p class="help small muted">
+						This folder is not one of the destinations (one may have been edited or removed);
+						downloads still go there until another is picked.
+					</p>
+				{/if}
 				{#if draft.errors['save_to']}
 					<p class="field-error small" role="alert">{draft.errors['save_to']}</p>
 				{/if}
