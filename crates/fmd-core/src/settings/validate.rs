@@ -97,6 +97,12 @@ pub(super) fn validate(s: &Settings) -> Result<(), SettingsError> {
         1..=u32::MAX,
     )?;
     check("covers.cache_size_mb", s.covers.cache_size_mb, 1..=u32::MAX)?;
+    check(
+        "logs.max_file_size_mb",
+        s.logs.max_file_size_mb,
+        1..=u32::MAX,
+    )?;
+    check("logs.max_files", s.logs.max_files, 1..=u32::MAX)?;
     if !c.flaresolverr_url.trim().is_empty()
         && super::websitebypass::flaresolverr_address(&c.flaresolverr_url).is_none()
     {

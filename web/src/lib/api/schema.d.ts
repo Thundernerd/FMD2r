@@ -438,6 +438,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/logs/download': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Download the persisted log files (or, when the log isn't persisted, the buffered lines) as
+		 *     one JSON-lines attachment, oldest line first.
+		 */
+		get: operations['downloadLogs'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/modules': {
 		parameters: {
 			query?: never;
@@ -1380,6 +1400,24 @@ export interface components {
 			/** @description RFC 3339 timestamp. */
 			time: string;
 		};
+		/**
+		 * @description The log files in `<data dir>/logs/`. No FMD2 counterpart: FMD2 appends to one unbounded log
+		 *     file through MultiLog (baseunits/uBaseUnit.pas).
+		 */
+		LogSettings: {
+			/**
+			 * Format: int32
+			 * @description Size in MiB a log file grows to before the next one is started. Minimum 1.
+			 * @default 10
+			 */
+			max_file_size_mb: number;
+			/**
+			 * Format: int32
+			 * @description Log files kept, the one being written included; the oldest is deleted past it. Minimum 1.
+			 * @default 5
+			 */
+			max_files: number;
+		};
 		Login: {
 			password: string;
 		};
@@ -1858,6 +1896,13 @@ export interface components {
 			 *     }
 			 */
 			images: components['schemas']['ImageSettings'];
+			/**
+			 * @default {
+			 *       "max_file_size_mb": 10,
+			 *       "max_files": 5
+			 *     }
+			 */
+			logs: components['schemas']['LogSettings'];
 			/**
 			 * @default {
 			 *       "auto_update": true,
@@ -3125,6 +3170,26 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['LogLine'][];
+				};
+			};
+		};
+	};
+	downloadLogs: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description One JSON log line per line */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/x-ndjson': unknown;
 				};
 			};
 		};

@@ -11,6 +11,7 @@ mod health;
 mod inbox;
 mod jobs;
 mod lists;
+mod log_files;
 mod logs;
 mod module_settings;
 mod module_updates;
@@ -46,6 +47,7 @@ pub use fmd_core::jobs::JobPhase;
 pub use fmd_core::lists::{ListEvent, ListEventKind};
 pub use inbox::{InboxItem, InboxKind};
 pub use lists::{FacetValue, ListFacets, ListItem, ListJobStarted, SearchPage};
+pub use log_files::{LogRotation, LogWriter};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
 pub use series::{ChapterInfo, ResolveRequest, SeriesInfo, SeriesRef, SeriesStatus};
@@ -96,6 +98,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(inbox::list))
         .routes(routes!(inbox::mark_read))
         .routes(routes!(logs::list))
+        .routes(routes!(logs::download))
         .routes(routes!(jobs::list))
         .routes(routes!(jobs::get))
         .routes(routes!(jobs::update_modules))

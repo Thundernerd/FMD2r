@@ -221,6 +221,26 @@ export const SETTINGS_SECTIONS: Section[] = [
 		]
 	},
 	{
+		id: 'logs',
+		title: 'Logs',
+		fields: [
+			number(
+				'logs.max_file_size_mb',
+				'Log file size (MiB)',
+				1,
+				U32_MAX,
+				'Takes effect after a restart.'
+			),
+			number(
+				'logs.max_files',
+				'Log files kept',
+				1,
+				U32_MAX,
+				'The oldest is deleted past this. Takes effect after a restart.'
+			)
+		]
+	},
+	{
 		id: 'server',
 		title: 'Server',
 		fields: [

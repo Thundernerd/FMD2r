@@ -298,6 +298,7 @@ export interface MockBackend {
 	eventSource: (url: string) => EventSourceLike;
 	/** A small fake archive for a task's "Get files" link (there is no server to link to). */
 	taskFilesUrl: (id: number) => string;
+	logsDownloadUrl: () => string;
 }
 
 export function createMockBackend(): MockBackend {
@@ -814,5 +815,10 @@ export function createMockBackend(): MockBackend {
 		return es;
 	};
 
-	return { fetch, eventSource, taskFilesUrl };
+	const logsDownloadUrl = () => {
+		const body = logs.map((line) => JSON.stringify(line)).join('\n') + '\n';
+		return URL.createObjectURL(new Blob([body], { type: 'application/x-ndjson' }));
+	};
+
+	return { fetch, eventSource, taskFilesUrl, logsDownloadUrl };
 }

@@ -1298,6 +1298,23 @@
         }
       }
     },
+    "/api/logs/download": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Download the persisted log files (or, when the log isn't persisted, the buffered lines) as\none JSON-lines attachment, oldest line first.",
+        "operationId": "downloadLogs",
+        "responses": {
+          "200": {
+            "description": "One JSON log line per line",
+            "content": {
+              "application/x-ndjson": {}
+            }
+          }
+        }
+      }
+    },
     "/api/modules": {
       "get": {
         "tags": [
@@ -3406,6 +3423,26 @@
           }
         }
       },
+      "LogSettings": {
+        "type": "object",
+        "description": "The log files in `<data dir>/logs/`. No FMD2 counterpart: FMD2 appends to one unbounded log\nfile through MultiLog (baseunits/uBaseUnit.pas).",
+        "properties": {
+          "max_file_size_mb": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Size in MiB a log file grows to before the next one is started. Minimum 1.",
+            "default": 10,
+            "minimum": 1
+          },
+          "max_files": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Log files kept, the one being written included; the oldest is deleted past it. Minimum 1.",
+            "default": 5,
+            "minimum": 1
+          }
+        }
+      },
       "Login": {
         "type": "object",
         "required": [
@@ -4355,6 +4392,17 @@
               "png_compression": "fastest",
               "png_to_jpeg": false,
               "webp_save_as": "png"
+            }
+          },
+          "logs": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LogSettings"
+              }
+            ],
+            "default": {
+              "max_file_size_mb": 10,
+              "max_files": 5
             }
           },
           "module_updater": {

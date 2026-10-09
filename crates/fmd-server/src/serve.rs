@@ -11,12 +11,13 @@ use thiserror::Error;
 use tokio::net::TcpListener;
 
 use crate::module_updates::{self, LuaRuntime};
-use crate::{AppState, CoverConfig, Idle, LogBuffer, SystemTools, build_router};
+use crate::{AppState, CoverConfig, Idle, LogBuffer, LogRotation, SystemTools, build_router};
 
 /// What [`serve`] needs.
 pub struct ServeConfig {
     pub bind: SocketAddr,
-    /// Holds `app.db`, `lists.db`, the Lua tree (`lua/`) and the cover cache (`covers/`); created when missing.
+    /// Holds `app.db`, `lists.db`, the Lua tree (`lua/`), the cover cache (`covers/`) and the log
+    /// files (`logs/`); created when missing.
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
     pub auth: Option<String>,
@@ -24,7 +25,7 @@ pub struct ServeConfig {
     /// `lua/websitebypass/websitebypass_config.json`; the setting itself is left as it is.
     pub flaresolverr_url: Option<String>,
     /// The buffer the `tracing` subscriber feeds; `GET /api/logs` reads it and `GET /api/events`
-    /// streams its bus.
+    /// streams its bus. It is persisted to `<data dir>/logs/` as the `logs` settings say.
     pub logs: LogBuffer,
     /// Keep the Lua modules in sync with upstream (the `modules` job and its schedule). Off, no
     /// module updater runs and nothing is fetched from GitHub; the modules already in
@@ -69,7 +70,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     })
     .await
     .map_err(std::io::Error::other)??;
-    // Read once: cover cache and FlareSolverr changes apply on the next start.
+    // Read once: cover cache, log rotation and FlareSolverr changes apply on the next start.
     let settings = state.settings.get();
     // Absolute, so `GET /api/about` shows where the data really is.
     let data_dir = std::fs::canonicalize(&config.data_dir).unwrap_or(config.data_dir);
@@ -83,6 +84,15 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         tracing::warn!(target: "fmd_server", "writing websitebypass_config.json: {e}");
     }
     let bypass_config = lua_dir.join("websitebypass/websitebypass_config.json");
+    // Loading the persisted log tail blocks.
+    let logs = config.logs.clone();
+    let logs_dir = data_dir.join("logs");
+    let rotation = LogRotation::from_settings(&settings.logs);
+    match tokio::task::spawn_blocking(move || logs.persist(&logs_dir, rotation)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => tracing::warn!(target: "fmd_server", "persisting logs: {e}"),
+        Err(e) => tracing::warn!(target: "fmd_server", "persisting logs: {e}"),
+    }
     let covers = CoverConfig::from_settings(data_dir.join("covers"), &settings.covers);
     let mut state = state
         .with_logs(config.logs)

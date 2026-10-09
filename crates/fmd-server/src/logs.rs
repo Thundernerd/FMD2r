@@ -1,11 +1,16 @@
-//! Log lines for the UI: an in-memory ring buffer fed by `tracing`, read via `GET /api/logs`.
+//! Log lines for the UI: an in-memory ring buffer fed by `tracing`, read via `GET /api/logs`, and
+//! optionally persisted to rotated files (`log_files`) so they survive a restart.
 
 use std::collections::VecDeque;
 use std::fmt::{self, Write};
+use std::io;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use axum::Json;
 use axum::extract::State;
+use axum::http::header;
+use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use tracing::field::{Field, Visit};
 use tracing::{Level, Subscriber};
@@ -13,9 +18,10 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::AppState;
 use crate::error::ApiQuery;
 use crate::events::{EventBus, ServerEvent};
+use crate::log_files::{self, LogRotation, LogWriter};
+use crate::{ApiError, AppState};
 
 /// Severity of a log line, most severe first. Serialized in upper case; `?level=` also takes
 /// lower case.
@@ -35,7 +41,7 @@ pub enum LogLevel {
 }
 
 /// One log line, as FMD2's log window shows it (mangadownloader/forms/frmLogger.pas).
-#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct LogLine {
     /// Monotonic sequence number; pass the last one seen as `GET /api/logs?since=`.
     pub seq: u64,
@@ -61,6 +67,16 @@ struct Ring {
     capacity: usize,
     next_seq: u64,
     lines: VecDeque<LogLine>,
+    writer: Option<LogWriter>,
+}
+
+impl Ring {
+    fn push(&mut self, line: LogLine) {
+        if self.lines.len() == self.capacity {
+            self.lines.pop_front();
+        }
+        self.lines.push_back(line);
+    }
 }
 
 impl LogBuffer {
@@ -71,9 +87,60 @@ impl LogBuffer {
                 capacity: capacity.max(1),
                 next_seq: 1,
                 lines: VecDeque::new(),
+                writer: None,
             })),
             bus,
         }
+    }
+
+    /// Writes every line to the files in `dir` from now on, rotated as `rotation` says, after
+    /// loading the newest lines already there (from before a restart) into the buffer. Sequence
+    /// numbers continue after the persisted ones, so `since` pages forward across the restart;
+    /// lines buffered before this call are renumbered after them and written too.
+    pub fn persist(&self, dir: &Path, rotation: LogRotation) -> io::Result<()> {
+        let mut writer = LogWriter::open(dir, rotation)?;
+        let Ok(mut ring) = self.inner.lock() else {
+            return Err(io::Error::other("log buffer lock poisoned"));
+        };
+        let pending: Vec<LogLine> = ring.lines.drain(..).collect();
+        let mut last_seq = 0;
+        log_files::read_lines(dir, |line| {
+            last_seq = last_seq.max(line.seq);
+            ring.push(line);
+        })?;
+        ring.next_seq = last_seq + 1;
+        for mut line in pending {
+            line.seq = ring.next_seq;
+            ring.next_seq += 1;
+            writer.write(&line)?;
+            ring.push(line);
+        }
+        ring.writer = Some(writer);
+        Ok(())
+    }
+
+    /// The persisted log files concatenated, oldest line first (JSON lines); the buffered lines
+    /// in the same format when the log isn't persisted.
+    pub fn export(&self) -> io::Result<Vec<u8>> {
+        let Ok(ring) = self.inner.lock() else {
+            return Err(io::Error::other("log buffer lock poisoned"));
+        };
+        let mut out = Vec::new();
+        match &ring.writer {
+            // Read under the lock so no rotation renames a file halfway through.
+            Some(writer) => {
+                for path in log_files::files(writer.dir())? {
+                    out.extend(std::fs::read(path)?);
+                }
+            }
+            None => {
+                for line in &ring.lines {
+                    serde_json::to_writer(&mut out, line).map_err(io::Error::other)?;
+                    out.push(b'\n');
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// The bus new lines are published on.
@@ -119,10 +186,11 @@ impl LogBuffer {
                 message,
             };
             ring.next_seq += 1;
-            if ring.lines.len() == ring.capacity {
-                ring.lines.pop_front();
+            if let Some(writer) = &mut ring.writer {
+                // Nowhere to report a failed write: logging it would come straight back here.
+                let _ = writer.write(&line);
             }
-            ring.lines.push_back(line.clone());
+            ring.push(line.clone());
             line
         };
         // Debug and trace lines stay in the buffer: streaming them could crowd task and inbox
@@ -219,4 +287,28 @@ pub(crate) async fn list(
     ApiQuery(filter): ApiQuery<LogFilter>,
 ) -> Json<Vec<LogLine>> {
     Json(state.logs.query(&filter))
+}
+
+/// Download the persisted log files (or, when the log isn't persisted, the buffered lines) as
+/// one JSON-lines attachment, oldest line first.
+#[utoipa::path(get, path = "/api/logs/download", tag = "system", operation_id = "downloadLogs",
+    responses(
+        (status = 200, description = "One JSON log line per line", content_type = "application/x-ndjson"),
+    ))]
+pub(crate) async fn download(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    let logs = state.logs.clone();
+    let body = tokio::task::spawn_blocking(move || logs.export())
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/x-ndjson"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"fmd2r-logs.jsonl\"",
+            ),
+        ],
+        body,
+    ))
 }
