@@ -65,3 +65,40 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run test:e2e
+
+  # The plan's end-to-end run (docs/plan.md, Verification) against the real composed server:
+  # web/e2e-real/serve.mjs runs the debug `fmd2r serve` with a fixture module and a local image
+  # site, so nothing reaches the network.
+  e2e:
+    runs-on: ubuntu-latest
+    # The run takes a few minutes; this stops a hang well before the default 6 hours.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Its own cache: this job builds only the `fmd2r` binary, not the test binaries.
+          key: e2e
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build fmd2r
+        run: cargo build -p fmd2r
+      - name: Install web dependencies
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      # Builds web/ and serves it with the binary built above.
+      - name: End-to-end tests
+        working-directory: web
+        run: npm run test:e2e:real
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-test-results
+          path: web/test-results
+          if-no-files-found: ignore
