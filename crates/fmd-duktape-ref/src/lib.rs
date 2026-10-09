@@ -32,7 +32,8 @@ pub enum DuktapeError {
 /// value as `duk_safe_to_string` bytes, read back as a Pascal string (so up to the first NUL),
 /// and `""` when that is `"undefined"`.
 pub fn exec_js(text: &[u8], lib_dir: &Path) -> Result<Vec<u8>, DuktapeError> {
-    let lib_dir = CString::new(lib_dir.as_os_str().as_encoded_bytes()).map_err(|_| DuktapeError::Heap)?;
+    let lib_dir =
+        CString::new(lib_dir.as_os_str().as_encoded_bytes()).map_err(|_| DuktapeError::Heap)?;
     let mut out: *mut c_char = std::ptr::null_mut();
     let mut out_len = 0usize;
     // SAFETY: `text` and `lib_dir` outlive the call; on return `out` is null or a malloc'd buffer

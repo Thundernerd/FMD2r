@@ -3,8 +3,9 @@
 //   the host's `log(text)`;
 // - CommonJS `require` as Duktape 2.3's module loader implements it (duk_module_duktape_init,
 //   baseunits/Duktape.Api.pas:1408; extras/module-duktape/duk_module_duktape.c in the Duktape
-//   sources), with `Duktape.modLoaded` and FMD2's `Duktape.modSearch` (baseunits/Duktape.pas:39-75),
-//   which calls the host's `modSearch(id)`: the module's source, or undefined when no file exists.
+//   sources), with `Duktape.modLoaded` and FMD2's `Duktape.modSearch`
+//   (baseunits/Duktape.pas:39-75), which calls the host's `modSearch(id)`: the module's source,
+//   or undefined when no file exists.
 (function (modSearch, log, native) {
   'use strict';
   var geval = eval;
@@ -79,7 +80,8 @@
       }
       var resolved = resolve(id, moduleId);
       var modLoaded = Duktape.modLoaded;
-      if (modLoaded === null || (typeof modLoaded !== 'object' && typeof modLoaded !== 'function')) {
+      if (modLoaded === null ||
+          (typeof modLoaded !== 'object' && typeof modLoaded !== 'function')) {
         throw new TypeError('object required');
       }
       var cached = modLoaded[resolved];
@@ -118,5 +120,9 @@
   globalThis.print = native({ print() {
     log(Array.prototype.map.call(arguments, String).join(' '));
   } }.print);
-  define(globalThis, 'require', { value: makeRequire(undefined), writable: true, configurable: true });
+  define(globalThis, 'require', {
+    value: makeRequire(undefined),
+    writable: true,
+    configurable: true
+  });
 })

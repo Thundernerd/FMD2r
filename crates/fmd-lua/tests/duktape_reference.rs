@@ -51,6 +51,12 @@ fn runtime_in(lua_dir: PathBuf) -> Runtime {
               assert(got == want, '\n' .. code .. '\n  QuickJS: ' .. show(got) .. '\n  Duktape: ' .. show(want))
               return got
             end
+            -- A known difference: `code` gives `quickjs` here and `duktape` on Duktape.
+            function differs(code, quickjs, duktape)
+              local got, want = ExecJS(code), DuktapeExecJS(code)
+              assert(got == quickjs, '\n' .. code .. '\n  QuickJS: ' .. show(got))
+              assert(want == duktape, '\n' .. code .. '\n  Duktape: ' .. show(want))
+            end
             "#,
         )
         .unwrap();
@@ -82,13 +88,15 @@ fn non_bmp_strings_round_trip_like_duktape() {
         .unwrap();
 }
 
-/// `fixtures/js`: the pages the module snippets run on.
-fn fixtures_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/js")
+/// `fixtures/<path>`.
+fn fixtures(path: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures")
+        .join(path)
 }
 
 /// A runtime set up to run a callback of the upstream module in `module_file` the way the
-/// worker does, with `HTTP` replaying the recording in `fixtures/js/<recording>` and every
+/// worker does, with `HTTP` replaying the recording in `fixtures/<recording>` and every
 /// `ExecJS` the module makes checked with `same`.
 fn module_runtime(module_file: &str, recording: &str) -> Runtime {
     let runtime = runtime();
@@ -97,8 +105,7 @@ fn module_runtime(module_file: &str, recording: &str) -> Runtime {
     assert!(report.failures.is_empty(), "{:?}", report.failures);
     runtime.set_module(&report.registry.modules()[0]).unwrap();
     runtime.install_globals(Globals::default()).unwrap();
-    let fixtures = fixtures_dir().join(recording);
-    let replay = ReplayTransport::open(fixtures, ReplayOptions::default()).unwrap();
+    let replay = ReplayTransport::open(fixtures(recording), ReplayOptions::default()).unwrap();
     let client = HttpClient::with_transport(Arc::new(replay)).unwrap();
     let http = LuaHttp::new(client.session()).build(runtime.lua()).unwrap();
     runtime.lua().globals().set("HTTP", http).unwrap();
@@ -123,7 +130,7 @@ fn module_runtime(module_file: &str, recording: &str) -> Runtime {
 /// the site's current spelling, so the packed script itself is compared too.
 #[test]
 fn acqqcom_chapter_scripts_evaluate_like_duktape() {
-    let runtime = module_runtime("acqqcom.lua", "acqqcom");
+    let runtime = module_runtime("acqqcom.lua", "js/acqqcom");
     runtime
         .exec(
             r#"
@@ -147,12 +154,30 @@ fn acqqcom_chapter_scripts_evaluate_like_duktape() {
         .unwrap();
 }
 
+/// modules/FanFox.lua:91-138 on the smoke list's recording (fixtures/smoke/fanfox): the packed
+/// page script and every `chapterfun.ashx` answer evaluate as on Duktape.
+#[test]
+fn fanfox_page_scripts_evaluate_like_duktape() {
+    let runtime = module_runtime("FanFox.lua", "smoke/fanfox/pages");
+    runtime
+        .exec(
+            r#"
+            sleep = function() end
+            URL = 'https://fanfox.net/manga/kimi_no_na_wa/v02/c004/'
+            assert(GetPageNumber() == true)
+            assert(#COMPARED == 23, #COMPARED)
+            assert(TASK.PageLinks.Count == 44, TASK.PageLinks.Count)
+            "#,
+        )
+        .unwrap();
+}
+
 /// modules/ReadComicOnline.lua:105-353 on a reader page archived by the Wayback Machine (the
 /// site no longer resolves): the module's link decoder runs over the page's scripts as on
 /// Duktape.
 #[test]
 fn readcomiconline_page_decoder_evaluates_like_duktape() {
-    let runtime = module_runtime("ReadComicOnline.lua", "readcomiconline");
+    let runtime = module_runtime("ReadComicOnline.lua", "js/readcomiconline");
     runtime
         .exec(
             r#"
@@ -173,7 +198,7 @@ fn readcomiconline_page_decoder_evaluates_like_duktape() {
 #[test]
 fn cloudflare_iuam_challenges_evaluate_like_duktape() {
     let runtime = runtime();
-    let pages = fixtures_dir().join("cloudflare");
+    let pages = fixtures("js/cloudflare");
     let lua = runtime.lua();
     for (name, expected) in [
         ("js_challenge-27-05-2020.html", "102.7365933239"),
@@ -385,15 +410,33 @@ fn builtin_members_match_duktape() {
 fn require_matches_duktape() {
     let dir = tempfile::tempdir().unwrap();
     for (path, source) in [
-        ("utils/a.js", "exports.name = 'a:' + require('./b').name + ':' + require.id;"),
+        (
+            "utils/a.js",
+            "exports.name = 'a:' + require('./b').name + ':' + require.id;",
+        ),
         ("utils/b.js", "exports.name = 'b' + require('../top.js').n;"),
         ("top.js", "module.exports = { n: 7 };"),
-        ("this.js", "exports.same = (this === exports); exports.callee = arguments.callee.name;"),
-        ("swap.js", "var first = exports; module.exports = { first: first === this };"),
-        ("cycle1.js", "exports.early = 1; exports.other = require('cycle2').seen;"),
+        (
+            "this.js",
+            "exports.same = (this === exports); exports.callee = arguments.callee.name;",
+        ),
+        (
+            "swap.js",
+            "var first = exports; module.exports = { first: first === this };",
+        ),
+        (
+            "cycle1.js",
+            "exports.early = 1; exports.other = require('cycle2').seen;",
+        ),
         ("cycle2.js", "exports.seen = require('cycle1').early;"),
-        ("throws.js", "var g = new Function('return this')(); g.tries = (g.tries || 0) + 1; throw new Error('no');"),
-        ("module.js", "exports.keys = Object.getOwnPropertyNames(module).sort().join(); exports.id = module.id;"),
+        (
+            "throws.js",
+            "var g = new Function('return this')(); g.tries = (g.tries || 0) + 1; throw new Error('no');",
+        ),
+        (
+            "module.js",
+            "exports.keys = Object.getOwnPropertyNames(module).sort().join(); exports.id = module.id;",
+        ),
         ("bare", "exports.ext = 'none';"),
     ] {
         let path = dir.path().join(path);
@@ -501,6 +544,41 @@ fn dates_match_duktape() {
             same('new Date({ valueOf: function () { return 5 }, toString: function () { return "2020-01-01" } }).getTime()')
             same('new Date({ toString: function () { return "2020-01-01" } }).getTime()')
             same('Date.parse({ toString: function () { return "2020-01-01" } })')
+            "#,
+        )
+        .unwrap();
+}
+
+/// The differences that remain, pinned on both engines; docs/duktape-differences.md says why
+/// no module observes them.
+#[test]
+fn known_differences_from_duktape() {
+    runtime()
+        .exec(
+            r#"
+            -- Node.js's Buffer binding.
+            differs('typeof Buffer', '', 'function')
+            -- Error messages and stack text.
+            differs('try { undefined_var } catch (e) { e.message }', 'undefined_var is not defined', "identifier 'undefined_var' undefined")
+            -- ES2015+ syntax parses here and fails on Duktape.
+            differs('let a = 1; a', '1', nil)
+            differs('(() => 3)()', '3', nil)
+            differs('/a/y.test("a")', 'true', nil)
+            -- Decimal literals past 2^53: Duktape's conversion is off by one unit.
+            differs('9007199254740993', '9007199254740992', '9007199254740994')
+            -- String.fromCharCode above U+FFFF: QuickJS keeps the low 16 bits, Duktape the code point.
+            differs('String.fromCharCode(0x1F600)', '\xef\x98\x80', '\xf0\x9f\x98\x80')
+            -- RegExp source: Duktape escapes "/" inside a class too.
+            differs('/[/]/.source', '[/]', '[\\/]')
+            -- Name inference (ES2015) for anonymous function expressions.
+            differs('var f = function () {}; f.name', 'f', '')
+            -- Own properties of instances.
+            differs('Object.getOwnPropertyNames(function f() {}).sort().join()', 'length,name,prototype', 'fileName,length,name,prototype')
+            differs('Object.getOwnPropertyNames(new Uint8Array(1)).join()', '0', '0,length')
+            differs('(function () { "use strict"; return Object.getOwnPropertyNames(arguments).sort().join() })()', 'callee,length', 'callee,caller,length')
+            -- Duktape passes the property name to getters (DUK_USE_NONSTD_GETTER_KEY_ARGUMENT);
+            -- "undefined" comes back as '' (baseunits/Duktape.pas:98-99).
+            differs('Object.defineProperty({}, "x", { get: function (k) { return typeof k } }).x', '', 'string')
             "#,
         )
         .unwrap();

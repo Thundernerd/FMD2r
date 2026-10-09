@@ -10,19 +10,44 @@
   'use strict';
   var global = globalThis;
   var members = {
-    'global': 'Array ArrayBuffer Boolean Buffer DataView Date Duktape Error EvalError Float32Array Float64Array Function Infinity Int16Array Int32Array Int8Array JSON Math NaN Number Object Proxy RangeError ReferenceError Reflect RegExp String SyntaxError TextDecoder TextEncoder TypeError URIError Uint16Array Uint32Array Uint8Array Uint8ClampedArray decodeURI decodeURIComponent encodeURI encodeURIComponent escape eval isFinite isNaN parseFloat parseInt performance print require undefined unescape',
+    'global':
+      'Array ArrayBuffer Boolean Buffer DataView Date Duktape Error EvalError Float32Array ' +
+      'Float64Array Function Infinity Int16Array Int32Array Int8Array JSON Math NaN Number ' +
+      'Object Proxy RangeError ReferenceError Reflect RegExp String SyntaxError TextDecoder ' +
+      'TextEncoder TypeError URIError Uint16Array Uint32Array Uint8Array Uint8ClampedArray ' +
+      'decodeURI decodeURIComponent encodeURI encodeURIComponent escape eval isFinite isNaN ' +
+      'parseFloat parseInt performance print require undefined unescape',
     'Array': 'isArray length name prototype',
-    'Array.prototype': 'concat constructor every filter forEach indexOf join lastIndexOf length map pop push reduce reduceRight reverse shift slice some sort splice toLocaleString toString unshift',
+    'Array.prototype':
+      'concat constructor every filter forEach indexOf join lastIndexOf length map pop push ' +
+      'reduce reduceRight reverse shift slice some sort splice toLocaleString toString unshift',
     'ArrayBuffer': 'isView length name prototype',
     'ArrayBuffer.prototype': 'byteLength constructor slice',
     'Boolean': 'length name prototype',
     'Boolean.prototype': 'constructor toString valueOf',
     'Buffer': 'byteLength compare concat isBuffer isEncoding length name prototype',
-    'Buffer.prototype': 'compare constructor copy equals fill readDoubleBE readDoubleLE readFloatBE readFloatLE readInt16BE readInt16LE readInt32BE readInt32LE readInt8 readIntBE readIntLE readUInt16BE readUInt16LE readUInt32BE readUInt32LE readUInt8 readUIntBE readUIntLE slice toJSON toString write writeDoubleBE writeDoubleLE writeFloatBE writeFloatLE writeInt16BE writeInt16LE writeInt32BE writeInt32LE writeInt8 writeIntBE writeIntLE writeUInt16BE writeUInt16LE writeUInt32BE writeUInt32LE writeUInt8 writeUIntBE writeUIntLE',
+    'Buffer.prototype':
+      'compare constructor copy equals fill readDoubleBE readDoubleLE readFloatBE readFloatLE ' +
+      'readInt16BE readInt16LE readInt32BE readInt32LE readInt8 readIntBE readIntLE ' +
+      'readUInt16BE readUInt16LE readUInt32BE readUInt32LE readUInt8 readUIntBE readUIntLE ' +
+      'slice toJSON toString write writeDoubleBE writeDoubleLE writeFloatBE writeFloatLE ' +
+      'writeInt16BE writeInt16LE writeInt32BE writeInt32LE writeInt8 writeIntBE writeIntLE ' +
+      'writeUInt16BE writeUInt16LE writeUInt32BE writeUInt32LE writeUInt8 writeUIntBE ' +
+      'writeUIntLE',
     'DataView': 'length name prototype',
-    'DataView.prototype': 'buffer byteLength byteOffset constructor getFloat32 getFloat64 getInt16 getInt32 getInt8 getUint16 getUint32 getUint8 setFloat32 setFloat64 setInt16 setInt32 setInt8 setUint16 setUint32 setUint8',
+    'DataView.prototype':
+      'buffer byteLength byteOffset constructor getFloat32 getFloat64 getInt16 getInt32 getInt8 ' +
+      'getUint16 getUint32 getUint8 setFloat32 setFloat64 setInt16 setInt32 setInt8 setUint16 ' +
+      'setUint32 setUint8',
     'Date': 'UTC length name now parse prototype',
-    'Date.prototype': 'constructor getDate getDay getFullYear getHours getMilliseconds getMinutes getMonth getSeconds getTime getTimezoneOffset getUTCDate getUTCDay getUTCFullYear getUTCHours getUTCMilliseconds getUTCMinutes getUTCMonth getUTCSeconds getYear setDate setFullYear setHours setMilliseconds setMinutes setMonth setSeconds setTime setUTCDate setUTCFullYear setUTCHours setUTCMilliseconds setUTCMinutes setUTCMonth setUTCSeconds setYear toDateString toGMTString toISOString toJSON toLocaleDateString toLocaleString toLocaleTimeString toString toTimeString toUTCString valueOf',
+    'Date.prototype':
+      'constructor getDate getDay getFullYear getHours getMilliseconds getMinutes getMonth ' +
+      'getSeconds getTime getTimezoneOffset getUTCDate getUTCDay getUTCFullYear getUTCHours ' +
+      'getUTCMilliseconds getUTCMinutes getUTCMonth getUTCSeconds getYear setDate setFullYear ' +
+      'setHours setMilliseconds setMinutes setMonth setSeconds setTime setUTCDate ' +
+      'setUTCFullYear setUTCHours setUTCMilliseconds setUTCMinutes setUTCMonth setUTCSeconds ' +
+      'setYear toDateString toGMTString toISOString toJSON toLocaleDateString toLocaleString ' +
+      'toLocaleTimeString toString toTimeString toUTCString valueOf',
     'Duktape': 'Pointer Thread act compact dec enc env fin gc info modLoaded modSearch version',
     'Error': 'length name prototype',
     'Error.prototype': 'constructor fileName lineNumber message name stack toString',
@@ -41,21 +66,39 @@
     'Int8Array': 'BYTES_PER_ELEMENT length name prototype',
     'Int8Array.prototype': 'BYTES_PER_ELEMENT constructor',
     'JSON': 'parse stringify',
-    'Math': 'E LN10 LN2 LOG10E LOG2E PI SQRT1_2 SQRT2 abs acos asin atan atan2 cbrt ceil clz32 cos exp floor hypot imul log log10 log2 max min pow random round sign sin sqrt tan trunc',
-    'Number': 'EPSILON MAX_SAFE_INTEGER MAX_VALUE MIN_SAFE_INTEGER MIN_VALUE NEGATIVE_INFINITY NaN POSITIVE_INFINITY isFinite isInteger isNaN isSafeInteger length name parseFloat parseInt prototype',
-    'Number.prototype': 'constructor toExponential toFixed toLocaleString toPrecision toString valueOf',
-    'Object': 'assign create defineProperties defineProperty freeze getOwnPropertyDescriptor getOwnPropertyNames getOwnPropertySymbols getPrototypeOf is isExtensible isFrozen isSealed keys length name preventExtensions prototype seal setPrototypeOf',
-    'Object.prototype': '__defineGetter__ __defineSetter__ __lookupGetter__ __lookupSetter__ __proto__ constructor hasOwnProperty isPrototypeOf propertyIsEnumerable toLocaleString toString valueOf',
+    'Math':
+      'E LN10 LN2 LOG10E LOG2E PI SQRT1_2 SQRT2 abs acos asin atan atan2 cbrt ceil clz32 cos ' +
+      'exp floor hypot imul log log10 log2 max min pow random round sign sin sqrt tan trunc',
+    'Number':
+      'EPSILON MAX_SAFE_INTEGER MAX_VALUE MIN_SAFE_INTEGER MIN_VALUE NEGATIVE_INFINITY NaN ' +
+      'POSITIVE_INFINITY isFinite isInteger isNaN isSafeInteger length name parseFloat parseInt ' +
+      'prototype',
+    'Number.prototype':
+      'constructor toExponential toFixed toLocaleString toPrecision toString valueOf',
+    'Object':
+      'assign create defineProperties defineProperty freeze getOwnPropertyDescriptor ' +
+      'getOwnPropertyNames getOwnPropertySymbols getPrototypeOf is isExtensible isFrozen ' +
+      'isSealed keys length name preventExtensions prototype seal setPrototypeOf',
+    'Object.prototype':
+      '__defineGetter__ __defineSetter__ __lookupGetter__ __lookupSetter__ __proto__ ' +
+      'constructor hasOwnProperty isPrototypeOf propertyIsEnumerable toLocaleString toString ' +
+      'valueOf',
     'Proxy': 'length name',
     'RangeError': 'length name prototype',
     'RangeError.prototype': 'constructor message name',
     'ReferenceError': 'length name prototype',
     'ReferenceError.prototype': 'constructor message name',
-    'Reflect': 'apply construct defineProperty deleteProperty get getOwnPropertyDescriptor getPrototypeOf has isExtensible ownKeys preventExtensions set setPrototypeOf',
+    'Reflect':
+      'apply construct defineProperty deleteProperty get getOwnPropertyDescriptor ' +
+      'getPrototypeOf has isExtensible ownKeys preventExtensions set setPrototypeOf',
     'RegExp': 'length name prototype',
-    'RegExp.prototype': 'constructor exec flags global ignoreCase lastIndex multiline source test toString',
+    'RegExp.prototype':
+      'constructor exec flags global ignoreCase lastIndex multiline source test toString',
     'String': 'fromCharCode fromCodePoint length name prototype',
-    'String.prototype': 'charAt charCodeAt codePointAt concat constructor endsWith includes indexOf lastIndexOf length localeCompare match repeat replace search slice split startsWith substr substring toLocaleLowerCase toLocaleUpperCase toLowerCase toString toUpperCase trim valueOf',
+    'String.prototype':
+      'charAt charCodeAt codePointAt concat constructor endsWith includes indexOf lastIndexOf ' +
+      'length localeCompare match repeat replace search slice split startsWith substr substring ' +
+      'toLocaleLowerCase toLocaleUpperCase toLowerCase toString toUpperCase trim valueOf',
     'SyntaxError': 'length name prototype',
     'SyntaxError.prototype': 'constructor message name',
     'TextDecoder': 'length name prototype',
@@ -99,7 +142,8 @@
   // '.prototype'.
   function resolve(path) {
     var parts = path.split('.');
-    var base = parts[0] === 'global' ? global : parts[0] === '%TypedArray%' ? typedArray : global[parts[0]];
+    var base = parts[0] === 'global' ? global
+      : parts[0] === '%TypedArray%' ? typedArray : global[parts[0]];
     if (parts.length > 1 && base) {
       base = base[parts[1]];
     }

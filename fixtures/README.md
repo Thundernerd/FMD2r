@@ -120,3 +120,8 @@ scripts/xpath-corpus.sh
 
 `fmd2r xpath eval [--backend fpc|native] [--css] FILE EXPR` prints one evaluation in the same
 normalized form, for debugging a mismatch.
+
+## `js/`: pages for the `ExecJS` comparison
+
+Real pages that upstream modules run through `fmd.duktape.ExecJS`, used to compare QuickJS with
+FMD2's Duktape (`docs/duktape-differences.md`). `js/README.md` says where each one comes from.
