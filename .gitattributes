@@ -1,2 +1,4 @@
 # Upstream FMD2 Lua snapshot: keep the bytes exactly as synced, and keep it out of language stats.
 /fixtures/lua/** -text linguist-vendored
+# Files a real FMD2 binary wrote: keep their bytes exactly.
+/fixtures/fmd2/** -text
