@@ -437,7 +437,6 @@ function previewRename(draft: RenamePreviewRequest): RenamePreview {
 	return { manga, chapter, filename, page, path: path.filter(Boolean).join('/') };
 }
 
-/** The mock's settings state and operations. */
 export function createMockSettings() {
 	const state = load();
 	const save = () => {

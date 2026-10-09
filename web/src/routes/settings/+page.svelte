@@ -187,10 +187,7 @@
 		if (changes && 'server' in changes) session.checkHealth(api).catch(() => {});
 	}
 
-	/**
-	 * Shows a rejected save: every invalid field inline, the first one's section on show and the
-	 * field scrolled to.
-	 */
+	/** Shows every invalid field inline and scrolls to the first. */
 	async function reject(e: unknown, moduleId: string | undefined) {
 		if (!(e instanceof ValidationError)) {
 			saveError = 'Could not save the settings.';

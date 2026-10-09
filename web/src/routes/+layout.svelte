@@ -22,8 +22,7 @@
 		// Behind the login screen nothing can be fetched; logging in starts over.
 		if (session.locked) return;
 		events.start();
-		// Snapshot what happened before the stream connected. The queue also refetches on every
-		// connect, but should show even when the stream cannot connect.
+		// The queue also refetches on connect, but must show even when the stream can't connect.
 		events.queue.resync();
 		api
 			.listInbox()

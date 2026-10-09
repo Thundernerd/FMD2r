@@ -28,7 +28,6 @@ export function repeatedNames(modules: ModuleSummary[]): Set<string> {
 export const moduleLabel = (m: ModuleSummary, repeated: Set<string>): string =>
 	repeated.has(m.name) ? `${m.name} (${moduleHost(m)})` : m.name;
 
-/** A category of modules, as the pickers list them. */
 export interface ModuleGroup {
 	category: string;
 	modules: ModuleSummary[];

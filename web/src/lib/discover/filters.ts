@@ -1,8 +1,6 @@
 import type { paths } from '#lib/api/schema.d.ts';
 
-/** The query of `GET /api/lists/search`. */
 export type SearchQuery = NonNullable<paths['/api/lists/search']['get']['parameters']['query']>;
-/** The query of `GET /api/lists/facets`. */
 export type FacetQuery = NonNullable<paths['/api/lists/facets']['get']['parameters']['query']>;
 
 /**
@@ -11,7 +9,6 @@ export type FacetQuery = NonNullable<paths['/api/lists/facets']['get']['paramete
  */
 export type Tri = 'ignore' | 'include' | 'exclude';
 
-/** What the Discover page searches for. */
 export interface Filters {
 	/** Module ID; empty for every module. */
 	module: string;

@@ -31,7 +31,6 @@ import { groupOf } from '#lib/queue.svelte.ts';
 type ResolveBody = paths['/api/resolve']['post']['requestBody']['content']['application/json'];
 
 // In-memory stand-in for fmd-server, used when VITE_API_MOCK=true (see README.md).
-// Data mirrors the approved layout prototype so the chrome has something realistic to show.
 
 const seedInbox = (): InboxItem[] => [
 	{

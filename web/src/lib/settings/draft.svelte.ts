@@ -49,7 +49,6 @@ export class Draft<T extends object = JsonObject> {
 		this.#current = structuredClone(copy);
 	}
 
-	/** The edited settings. */
 	get value(): T {
 		return this.#current as T;
 	}
