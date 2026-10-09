@@ -172,10 +172,8 @@ fn open_env(lua: &Lua) -> mlua::Result<Table> {
     env.raw_set("Directory", directory)?;
     env.raw_set("ExeName", exe_name)?;
     env.raw_set("Version", env!("CARGO_PKG_VERSION"))?;
-    env.raw_set(
-        "Revision",
-        option_env!("FMD2R_REVISION").unwrap_or_default(),
-    )?;
+    // `REVISION_NUMBER` (baseunits/lua/LuaFMD.pas:23): a decimal string, resolved by build.rs.
+    env.raw_set("Revision", env!("FMD_ENV_REVISION"))?;
     // `LUA_REPO_FOLDER` (baseunits/FMDOptions.pas:297) ends with a separator.
     env.raw_set(
         "LuaDirectory",

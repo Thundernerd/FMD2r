@@ -32,9 +32,8 @@
 #   the new host as FMD2 does (baseunits/httpsendthread.pas:640-668): the module, not the
 #   redirect, is out of date.
 # - MangaHub: every mirror goes through api.mghcdn.com, which answers with a Cloudflare
-#   challenge. The template's GetPageNumber also needs a numeric fmd.env.Revision of at least
-#   6920 (templates/MangaHub.lua:122), which FMD2r leaves empty unless FMD2R_REVISION is set
-#   at build time (T52).
+#   challenge. (The template's GetPageNumber also needs a numeric fmd.env.Revision of at least
+#   6920, templates/MangaHub.lua:122, which FMD2r sets since T52.)
 # - FMReader is covered for GetInfo only: every live module (Love4u, RawINU, MangaGun, WeLoMa)
 #   overrides GetPageNumber.
 #
