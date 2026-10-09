@@ -865,6 +865,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fmd-duktape-ref"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "thiserror",
+]
+
+[[package]]
 name = "fmd-http"
 version = "0.1.0"
 dependencies = [
@@ -905,6 +913,7 @@ dependencies = [
  "cc",
  "chacha20 0.9.1",
  "flate2",
+ "fmd-duktape-ref",
  "fmd-http",
  "fmd-testkit",
  "fmd-xpath",

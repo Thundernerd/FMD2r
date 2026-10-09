@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://rcostation.xyz/Comic/51/Issue-4?id=245214&quality=hq&readType=1",
+    "headers": [],
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+      [
+        "content-type",
+        "text/html; charset=utf-8"
+      ]
+    ],
+    "body": "bodies/0001.response"
+  }
+}

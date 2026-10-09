@@ -39,6 +39,7 @@ x25519-dalek = "2"
 cc = "1"
 
 [dev-dependencies]
+fmd-duktape-ref = { path = "../fmd-duktape-ref" }
 fmd-testkit = { path = "../fmd-testkit" }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 tempfile.workspace = true

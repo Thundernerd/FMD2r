@@ -105,19 +105,25 @@ fn eval(source: &[u8], lua_dir: &Path, settings: JsSettings) -> Result<Vec<u8>, 
         options.strict = false;
         let completion = ctx.eval_with_options::<Value, _>(source.to_vec(), options);
         match completion {
-            Ok(value) => Ok(safe_to_string(&ctx, value)),
+            Ok(value) => Ok(cesu8(safe_to_string(&ctx, value))),
             Err(_) => Err(JsError(utf8_lossy(safe_to_string(&ctx, ctx.catch())))),
         }
     })
 }
 
-/// Adds `print` and `require` (baseunits/Duktape.pas:88-90), implemented in `prelude.js`.
+/// Gives the heap Duktape 2.3's built-ins where QuickJS's differ (`builtins.js`), adds `print`
+/// and `require` (baseunits/Duktape.pas:88-90, `prelude.js`), then removes the built-in members
+/// Duktape lacks (`surface.js`).
 fn install_globals<'js>(ctx: &Ctx<'js>, lua_dir: PathBuf) -> rquickjs::Result<()> {
+    let builtins: Function = ctx.eval(include_str!("duktape/builtins.js"))?;
+    let native: Function = builtins.call(())?;
     let prelude: Function = ctx.eval(include_str!("duktape/prelude.js"))?;
     let mod_search = Function::new(ctx.clone(), move |id: String| mod_search(&lua_dir, &id))?;
     // baseunits/Duktape.pas:28.
     let log = Function::new(ctx.clone(), |text: String| tracing::info!("{text}"))?;
-    prelude.call::<_, ()>((mod_search, log))
+    prelude.call::<_, ()>((mod_search, log, native))?;
+    let surface: Function = ctx.eval(include_str!("duktape/surface.js"))?;
+    surface.call::<_, ()>(())
 }
 
 /// `Duktape.modSearch` (baseunits/Duktape.pas:39-67): the source of module `id`, read by
@@ -173,6 +179,43 @@ fn to_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Option<Vec<u8>> {
         rquickjs::qjs::JS_FreeCString(ctx.as_raw().as_ptr(), ptr);
         Some(bytes)
     }
+}
+
+/// `utf8` with every 4-byte sequence (a character outside the BMP, which QuickJS encodes from a
+/// surrogate pair) re-encoded as its two surrogates, 3 bytes each. That is CESU-8, how Duktape
+/// 2.3 stores and returns such characters: its strings hold UTF-16 code units in its extended
+/// UTF-8, so `duk_safe_to_string` (baseunits/Duktape.pas:94) never joins a pair.
+fn cesu8(utf8: Vec<u8>) -> Vec<u8> {
+    if !utf8.iter().any(|&b| b >= 0xf0) {
+        return utf8;
+    }
+    let mut out = Vec::with_capacity(utf8.len() + utf8.len() / 2);
+    let mut i = 0;
+    while i < utf8.len() {
+        let b = utf8[i];
+        let c = (i + 4 <= utf8.len()).then(|| {
+            (u32::from(b & 0x07) << 18)
+                | (u32::from(utf8[i + 1] & 0x3f) << 12)
+                | (u32::from(utf8[i + 2] & 0x3f) << 6)
+                | u32::from(utf8[i + 3] & 0x3f)
+        });
+        if let Some(c) = c.filter(|c| b >= 0xf0 && *c >= 0x10000) {
+            let c = c - 0x10000;
+            for unit in [0xd800 | (c >> 10), 0xdc00 | (c & 0x3ff)] {
+                // A surrogate is U+D800..U+DFFF: 1110_1101 10xx_xxxx 10xx_xxxx.
+                out.extend([
+                    0xe0 | (unit >> 12) as u8,
+                    0x80 | ((unit >> 6) & 0x3f) as u8,
+                    0x80 | (unit & 0x3f) as u8,
+                ]);
+            }
+            i += 4;
+        } else {
+            out.push(b);
+            i += 1;
+        }
+    }
+    out
 }
 
 /// The bytes before the first NUL.
