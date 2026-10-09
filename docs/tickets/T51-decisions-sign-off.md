@@ -17,4 +17,15 @@ Decisions the ticket agents made and asked to have reviewed. This ticket is for 
 9. **`fmd.pcre2` is a stub (T13).** No upstream module uses it. Recommendation: accept; the module scan (T29) reports it if one ever does.
 
 ## Acceptance criteria
-- [ ] Each item marked accepted, or a follow-up ticket created for it.
+- [x] Each item marked accepted, or a follow-up ticket created for it.
+
+## Decisions (2026-10-09)
+1. Follow-up: T63 (the API never returns secrets; encrypted at rest with `accounts.key`). The check found the API returned them unredacted.
+2. Follow-up: T64. The check found the Password and Listen address settings had no effect (only `--password` / `--bind` and their env vars did) and the real default bind is `127.0.0.1:8080`. T64 makes the settings work (stored password hashed, CLI and env override), aligns the default, and warns when there is no password on a non-loopback address.
+3. The display is decided in T60 (call the mark "seen") and done in T62. Storing seen chapters separately would not fix the badge, which compares two counts; follow-up: T65 (count by link).
+4. Accepted.
+5. Accepted.
+6. Accepted.
+7. Accepted.
+8. Accepted.
+9. Accepted.
