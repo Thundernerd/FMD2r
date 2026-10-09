@@ -1,25 +1,17 @@
 //! `fmd.subprocess` (baseunits/lua/LuaSubprocess.pas:21-93), with the Windows command lines
 //! upstream modules build translated for Linux. Commands never go through a shell.
 //!
-//! Translation rules, applied to `RunCommand(exe, args...)` and `RunCommandHide(exe, args...)`:
-//! - `cmd.exe /c X args...` (any case, `cmd` without `.exe` too) runs `X args...` directly
-//!   (lua/utils/nodejs.lua:41). Its command line may chain steps with `&&` tokens; each runs
-//!   only when the previous one succeeded. Two cmd built-ins are emulated, because nodejs.lua
-//!   relies on them: `cd <dir>` (also `cd /d <dir>`, `chdir`) changes the directory later steps
-//!   run in (:82), and `mkdir <dir>...` (also `md`) creates directories with their parents
-//!   (:71). Other cmd syntax (pipes, redirection, quoting) is not interpreted.
-//! - In the executable and every path-like argument, `\` becomes `/`. An argument is path-like
-//!   when it contains a `\` and otherwise only letters, digits, non-ASCII characters, spaces
-//!   and `._-~:/+@#$%`; anything else (quotes, brackets, `;`, `=`, ...) marks code or data,
-//!   whose backslashes are kept.
-//! - Every command runs in the runtime's working directory (see [`Runtime::set_working_dir`]),
-//!   so relative paths like `lua\websitebypass\cloudflare.py` resolve against it, as they
-//!   resolve against FMD2's directory on Windows (lua/websitebypass/cloudflare.lua:344).
-//!
-//! - `io.open` gets the same treatment, so upstream scripts find the files they name with
-//!   Windows paths (`lua\websitebypass\websitebypass_config.json`,
-//!   lua/websitebypass/cloudflare.lua:272): a path-like name has its `\` turned into `/`, and a
-//!   relative name resolves against the working directory once one is set.
+//! Translation rules, for `RunCommand`/`RunCommandHide`:
+//! - `cmd[.exe] /c X args...` runs `X args...` directly (lua/utils/nodejs.lua:41); `&&` chains
+//!   steps, and the `cd [/d]`/`chdir` (:82) and `mkdir`/`md` (:71) built-ins are emulated.
+//!   Other cmd syntax (pipes, redirection, quoting) is not interpreted.
+//! - `\` becomes `/` in the executable and every path-like argument: one with a `\` and
+//!   otherwise only letters, digits, non-ASCII, spaces and `._-~:/+@#$%`. Anything else marks
+//!   code or data, whose backslashes are kept.
+//! - Commands run in the runtime's working directory (see [`Runtime::set_working_dir`]), as
+//!   relative paths resolve against FMD2's directory (lua/websitebypass/cloudflare.lua:344).
+//! - `io.open` translates path-like names the same way and resolves relative ones against the
+//!   working directory (lua/websitebypass/cloudflare.lua:272).
 //!
 //! [`Runtime::set_working_dir`]: crate::Runtime::set_working_dir
 
@@ -48,11 +40,8 @@ pub struct Command {
 /// What a finished process produced.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Output {
-    /// Everything it wrote to stdout.
     pub stdout: Vec<u8>,
-    /// Everything it wrote to stderr.
     pub stderr: Vec<u8>,
-    /// Its exit status.
     pub status: i32,
 }
 
@@ -72,9 +61,8 @@ impl<S: Spawner + ?Sized> Spawner for std::sync::Arc<S> {
 /// Runs commands as real child processes, stdin closed and both output pipes captured, like
 /// `RunCommandLoop` with `poUsePipes` (fcl-process processbody.inc:536-589 in FPC 3.2.2).
 ///
-/// The one exception is upstream's `websitebypass/cloudflare.py` run with Python, which cannot
-/// work on Linux; FMD2r answers it with a built-in FlareSolverr client printing the script's
-/// JSON (see `flaresolverr.rs`).
+/// Except upstream's `websitebypass/cloudflare.py`, which cannot work on Linux; a built-in
+/// FlareSolverr client answers it instead (see `flaresolverr.rs`).
 pub struct SystemSpawner;
 
 impl Spawner for SystemSpawner {
@@ -114,7 +102,6 @@ impl Default for Config {
 }
 
 impl Config {
-    /// The configuration of `lua`, or the default when none was set.
     pub(crate) fn of(lua: &Lua) -> Config {
         lua.app_data_ref::<Config>()
             .map(|c| c.clone())
@@ -122,7 +109,6 @@ impl Config {
     }
 }
 
-/// Whether `exe` names Windows' command interpreter.
 fn is_cmd(exe: &str) -> bool {
     let name = exe.rsplit(['\\', '/']).next().unwrap_or(exe);
     name.eq_ignore_ascii_case("cmd.exe") || name.eq_ignore_ascii_case("cmd")
@@ -136,7 +122,6 @@ fn is_path_like(arg: &str) -> bool {
             .all(|c| c.is_alphanumeric() || !c.is_ascii() || " ._-~:/+@#$%\\".contains(c))
 }
 
-/// `arg` with Windows path separators replaced, if it is path-like.
 fn to_unix_path(arg: String) -> String {
     if is_path_like(&arg) {
         arg.replace('\\', "/")
@@ -145,8 +130,7 @@ fn to_unix_path(arg: String) -> String {
     }
 }
 
-/// Replaces the standard `io.open` with one that translates its file name like a command's
-/// path arguments (see the module docs), then opens it with the standard function.
+/// Wraps `io.open` to translate its file name (see the module docs).
 pub(super) fn wrap_io_open(lua: &Lua) -> mlua::Result<()> {
     let io: Table = lua.globals().get("io")?;
     let open: mlua::Function = io.get("open")?;
@@ -172,15 +156,15 @@ pub(super) fn wrap_io_open(lua: &Lua) -> mlua::Result<()> {
 /// One step of a translated command line.
 #[derive(Debug)]
 enum Step {
-    /// cmd's `cd`: later steps run in this directory, relative to the current one.
+    /// Relative to the current directory.
     Cd(Option<String>),
-    /// cmd's `mkdir`: creates these directories.
     Mkdir(Vec<String>),
-    /// Starts a process.
-    Run { program: String, args: Vec<String> },
+    Run {
+        program: String,
+        args: Vec<String>,
+    },
 }
 
-/// Turns one `&&`-separated part of a cmd command line into a step.
 fn cmd_step(mut tokens: Vec<String>) -> Option<Step> {
     if tokens.is_empty() {
         return None;
@@ -202,7 +186,6 @@ fn cmd_step(mut tokens: Vec<String>) -> Option<Step> {
     })
 }
 
-/// Turns the executable and arguments a module passed into the steps to run.
 fn translate(exe: String, args: Vec<String>) -> Vec<Step> {
     let exe = to_unix_path(exe);
     let mut args: Vec<String> = args.into_iter().map(to_unix_path).collect();
@@ -216,8 +199,8 @@ fn translate(exe: String, args: Vec<String>) -> Vec<Step> {
     vec![Step::Run { program: exe, args }]
 }
 
-/// Runs `steps` in `dir` until one fails, collecting their output. Returns whether all ran
-/// and succeeded, the collected output, and the last exit status.
+/// Runs `steps` in `dir` until one fails, returning whether all succeeded and the collected
+/// output.
 fn execute(steps: Vec<Step>, mut dir: PathBuf, spawner: &dyn Spawner) -> (bool, Output) {
     let mut out = Output {
         stdout: Vec::new(),
@@ -272,9 +255,8 @@ fn execute(steps: Vec<Step>, mut dir: PathBuf, spawner: &dyn Spawner) -> (bool, 
                             return (false, out);
                         }
                     }
-                    // RunCommandLoop catches the failed start and returns 1, keeping what was
-                    // read so far (processbody.inc:580-588 in FPC 3.2.2); the exit status stays
-                    // unset in FMD2, -1 here.
+                    // RunCommandLoop catches the failed start (processbody.inc:580-588 in FPC
+                    // 3.2.2); the exit status stays unset in FMD2, -1 here.
                     Err(_) => {
                         out.status = -1;
                         return (false, out);

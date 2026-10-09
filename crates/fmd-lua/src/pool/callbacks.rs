@@ -112,7 +112,6 @@ pub struct InfoReply {
 /// (baseunits/lua/LuaUpdateListManager.pas:18-42).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct UpdateList {
-    /// `CurrentDirectoryPageNumber`.
     pub current_directory_page_number: i32,
     /// The text last passed to `UpdateStatusText`, which FMD2 shows in its status bar
     /// (`UpdateStatusFormatted`, baseunits/uUpdateThread.pas:614-624).
@@ -237,7 +236,6 @@ pub enum Call {
 }
 
 impl Call {
-    /// The callback this call runs.
     pub fn callback(&self) -> Callback {
         match self {
             Call::BeforeUpdateList { .. } => Callback::OnBeforeUpdateList,
@@ -324,8 +322,7 @@ pub(super) fn run(ctx: &mut Ctx<'_>, call: Call) -> Result<Answer, JobError> {
             let global = ctx.push_global(callback, |lua| lua.globals().get("PAGENUMBER"))?;
             let page = match global {
                 Value::Nil => page,
-                // Keeping only the low 32 bits of the Pascal `Integer` is the behaviour being
-                // reproduced.
+                // Low 32 bits, like the Pascal `Integer`.
                 value => to_integer(&lua, value) as i32,
             };
             Ok(Answer::GetDirectoryPageNumber(PageCount {
@@ -438,9 +435,9 @@ pub(super) fn run(ctx: &mut Ctx<'_>, call: Call) -> Result<Answer, JobError> {
             let lua = ctx.lua().clone();
             ctx.setup(callback, |ctx| {
                 ctx.set_http()?;
-                // FMD2's `WORKID` here is whatever the same download thread set last, i.e.
-                // this page's (baseunits/uDownloadsManager.pas:382-394); a pool worker may
-                // have run another task since, so it is set explicitly.
+                // FMD2 relies on the download thread's last `WORKID`
+                // (baseunits/uDownloadsManager.pas:382-394); a pool worker may have run
+                // another task since.
                 lua.globals().set("WORKID", work_id)?;
                 lua.globals().set("PATH", path.as_str())?;
                 lua.globals().set("FILENAME", name.as_str())
@@ -535,7 +532,6 @@ fn push_net_status(lua: &Lua) -> mlua::Result<()> {
 /// A `Byte` result read with `lua_tointeger` (e.g. baseunits/lua/LuaWebsiteModules.pas:260):
 /// 0 for a value that is no integer; the Pascal assignment keeps the low 8 bits.
 fn to_byte(lua: &Lua, value: Value) -> u8 {
-    // Keeping only the low 8 bits is the behaviour being reproduced.
     to_integer(lua, value) as u8
 }
 
@@ -676,8 +672,7 @@ impl ListObject {
                 "CurrentDirectoryPageNumber",
                 |_, list: &mut UpdateList| Ok(list.current_directory_page_number),
                 |lua, list: &mut UpdateList, value: Value| {
-                    // Keeping only the low 32 bits of the Pascal `Integer` is the behaviour
-                    // being reproduced.
+                    // Low 32 bits, like the Pascal `Integer`.
                     list.current_directory_page_number = to_integer(lua, value) as i32;
                     Ok(())
                 },

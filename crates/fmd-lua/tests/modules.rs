@@ -1,5 +1,5 @@
-//! Loading website modules with `ModuleRegistry::load_dir` and the `MODULE` object they see
-//! (docs/tickets/T06-module-loader-module-object.md, "Seams under test").
+//! `ModuleRegistry::load_dir` and the `MODULE` object
+//! (docs/tickets/T06-module-loader-module-object.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

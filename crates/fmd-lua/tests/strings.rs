@@ -1,8 +1,5 @@
-//! TStrings objects (`fmd.strings`), exercised through Lua snippets run on the public runtime
-//! (docs/tickets/T04-tstrings-memorystream.md, "Seams under test").
-//!
-//! Expected values come from FPC 3.2.2's `TStringList` (the RTL that FMD2 builds with), probed
-//! with a Pascal program, with Windows' CRLF `sLineBreak`, FMD2's only release platform.
+//! TStrings objects (`fmd.strings`) (docs/tickets/T04-tstrings-memorystream.md). Expected values
+//! were probed from FPC 3.2.2's `TStringList` (FMD2's RTL), with Windows' CRLF `sLineBreak`.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -89,7 +86,7 @@ fn set_text_method_and_add_text_append_lines() {
 }
 
 /// Asserts that assigning `input` to `prop` yields `items`, and reading `prop` back yields
-/// `output`. Both come from FPC 3.2.2's `TStringList`.
+/// `output`.
 fn assert_parses(prop: &str, setup: &str, input: &str, items: &[&str], output: &str) {
     let rt = Runtime::new().unwrap();
     let lua = rt.lua();

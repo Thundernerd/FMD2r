@@ -11,8 +11,8 @@ use rquickjs::{Context, Ctx, FromJs, Function, Value};
 
 use crate::{LuaDir, app_data_or_default};
 
-/// Bounds on one `ExecJS` call. FMD2's Duktape has none; a script that exceeds them fails like
-/// any script error, so a runaway script cannot hang or crash a worker.
+/// Bounds on one `ExecJS` call, which FMD2's Duktape lacks; exceeding them fails like a script
+/// error, so a runaway script cannot hang or crash a worker.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct JsLimits {
     /// Wall-clock time the script may run.
@@ -22,7 +22,7 @@ pub struct JsLimits {
 }
 
 impl Default for JsLimits {
-    /// 30 seconds and 256 MiB: far beyond what module scripts (unpackers, crypto-js) need.
+    /// Far beyond what module scripts (unpackers, crypto-js) need.
     fn default() -> Self {
         JsLimits {
             time: Duration::from_secs(30),
@@ -48,7 +48,7 @@ pub(crate) fn register(lua: &mlua::Lua) -> mlua::Result<()> {
     crate::package::add_lib(lua, "duktape", open)
 }
 
-/// Opens the library table, like `luaopen_duktape` (baseunits/lua/LuaDuktape.pas:32-36).
+/// `luaopen_duktape` (baseunits/lua/LuaDuktape.pas:32-36).
 fn open(lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
     let lib = lua.create_table()?;
     lib.set("ExecJS", lua.create_function(exec_js)?)?;
@@ -58,8 +58,7 @@ fn open(lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
 /// `ExecJS(code)` (baseunits/lua/LuaDuktape.pas:14-24): the script's completion value as a
 /// string, or no value at all when the script fails, after logging the error.
 fn exec_js(lua: &mlua::Lua, code: mlua::Value) -> mlua::Result<mlua::MultiValue> {
-    // luaToString (baseunits/lua/LuaUtils.pas:206-213): `lua_tolstring` read as a C string,
-    // so non-strings other than numbers become '' and the code ends at the first NUL.
+    // luaToString (baseunits/lua/LuaUtils.pas:206-213): a C string, so it ends at the first NUL.
     let source = lua
         .coerce_string(code)?
         .map(|s| until_nul(&s.as_bytes()).to_vec())
@@ -128,12 +127,11 @@ fn install_globals<'js>(ctx: &Ctx<'js>, lua_dir: PathBuf) -> rquickjs::Result<()
 
 /// `Duktape.modSearch` (baseunits/Duktape.pas:39-67): the source of module `id`, read by
 /// `loadModuleFile` (baseunits/Duktape.pas:106-121) from `<lua dir>/<id>`, else
-/// `<lua dir>/<id>.js`. With neither file it returns `undefined`, so `require` hands back the
-/// module's empty `exports` instead of throwing.
+/// `<lua dir>/<id>.js`. With neither it returns `undefined`, so `require` hands back the empty
+/// `exports` instead of throwing.
 ///
-/// Module sources are decoded as UTF-8, replacing invalid bytes. Files are read on every
-/// `require` rather than cached for the process (`TFileCache`, baseunits/Duktape.pas:150), so
-/// an updated `lua/` tree takes effect without a restart.
+/// Read on every `require` rather than cached (`TFileCache`, baseunits/Duktape.pas:150), so an
+/// updated `lua/` tree takes effect without a restart.
 fn mod_search(lua_dir: &Path, id: &str) -> Option<String> {
     let mut path = lua_dir.join(id);
     if !path.is_file() {
@@ -153,8 +151,7 @@ fn mod_search(lua_dir: &Path, id: &str) -> Option<String> {
 }
 
 /// `duk_safe_to_string` (baseunits/Duktape.Api.pas:1636; Duktape 2.3's `duk_safe_to_lstring`):
-/// `ToString(value)`; when that throws, `ToString` of the error; when
-/// that throws too, `"Error"`.
+/// `ToString(value)`, else `ToString` of the error, else `"Error"`.
 fn safe_to_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Vec<u8> {
     to_string(ctx, value)
         .or_else(|| to_string(ctx, ctx.catch()))
@@ -166,9 +163,8 @@ fn to_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Option<Vec<u8>> {
     let string = rquickjs::convert::Coerced::<rquickjs::String>::from_js(ctx, value).ok()?;
     let mut len = 0;
     // SAFETY: `JS_ToCStringLen` returns a NUL-terminated buffer of `len` bytes owned by the
-    // context (or null on failure), which is copied out and freed before returning. The safe
-    // `String::to_string` is not used because it rejects the lone surrogates QuickJS encodes as
-    // 3-byte sequences, which Duktape passes through the same way.
+    // context (or null), copied out and freed before returning. The safe `String::to_string`
+    // rejects the lone surrogates Duktape passes through.
     unsafe {
         let ptr =
             rquickjs::qjs::JS_ToCStringLen(ctx.as_raw().as_ptr(), &mut len, string.0.as_raw());
@@ -181,10 +177,8 @@ fn to_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Option<Vec<u8>> {
     }
 }
 
-/// `utf8` with every 4-byte sequence (a character outside the BMP, which QuickJS encodes from a
-/// surrogate pair) re-encoded as its two surrogates, 3 bytes each. That is CESU-8, how Duktape
-/// 2.3 stores and returns such characters: its strings hold UTF-16 code units in its extended
-/// UTF-8, so `duk_safe_to_string` (baseunits/Duktape.pas:94) never joins a pair.
+/// `utf8` with every 4-byte sequence re-encoded as two 3-byte surrogates (CESU-8), as Duktape
+/// 2.3 returns non-BMP characters: it never joins a pair (baseunits/Duktape.pas:94).
 fn cesu8(utf8: Vec<u8>) -> Vec<u8> {
     if !utf8.iter().any(|&b| b >= 0xf0) {
         return utf8;
@@ -218,12 +212,10 @@ fn cesu8(utf8: Vec<u8>) -> Vec<u8> {
     out
 }
 
-/// The bytes before the first NUL.
 fn until_nul(bytes: &[u8]) -> &[u8] {
     bytes.split(|&b| b == 0).next().unwrap_or_default()
 }
 
-/// `bytes` decoded as UTF-8, with invalid sequences replaced by U+FFFD.
 fn utf8_lossy(bytes: Vec<u8>) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }

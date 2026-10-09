@@ -1,8 +1,6 @@
-//! Subprocess fixtures: a [`Spawner`] that records every process `fmd.subprocess` runs into a
-//! fixture directory, next to the HTTP fixtures, and one that answers from them offline. A
-//! module that runs node (lua/utils/nodejs.lua) fetches pages from inside that process, past
-//! the recorded HTTP; replaying the process's output makes it run offline too. The format is
-//! documented in `docs/fixtures.md`.
+//! Subprocess fixtures: [`Spawner`]s that record `fmd.subprocess` calls next to the HTTP
+//! fixtures and replay them offline, since node (lua/utils/nodejs.lua) fetches pages past the
+//! recorded HTTP. Format: `docs/fixtures.md`.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -15,7 +13,6 @@ use crate::module::lock;
 /// The version of the format `subprocess.json` declares.
 pub const SUBPROCESS_FORMAT: u32 = 1;
 
-/// The file the calls are recorded in, in the fixture directory.
 pub const SUBPROCESS_FILE: &str = "subprocess.json";
 
 /// Errors reading or writing a subprocess fixture file.
@@ -142,8 +139,7 @@ impl RecordingSpawner {
 }
 
 impl Spawner for RecordingSpawner {
-    /// Runs `command` through the inner spawner and records it. Failing to write the recording
-    /// fails the call, so an incomplete recording doesn't go unnoticed.
+    /// Failing to write the recording fails the call, so an incomplete one doesn't go unnoticed.
     fn run(&self, command: &Command) -> std::io::Result<Output> {
         let result = self.inner.run(command);
         let outcome = match &result {
@@ -167,8 +163,7 @@ impl Spawner for RecordingSpawner {
 
 /// Answers processes from a `subprocess.json` without starting any.
 ///
-/// A call is answered by the recorded calls with the same program and arguments, in recording
-/// order; once they're used up, the last one answers every further repeat. A call with no
+/// Matching recordings answer in order, the last one repeating once used up. A call with no
 /// recording fails to start, like a missing program, and is listed by
 /// [`misses`](ReplaySpawner::misses).
 pub struct ReplaySpawner {

@@ -1,8 +1,6 @@
-//! `CreateTXQuery`, TXQuery and `IXQValue`, exercised through Lua snippets run on the public
-//! runtime (docs/tickets/T08-fmd-xpath-trait-ffi-lua-bindings.md, "Seams under test"), as one
-//! suite every XPath backend must pass (docs/tickets/T34-native-xpath-backend.md).
-//!
-//! Expected values come from baseunits/lua/LuaXQuery.pas, baseunits/lua/LuaIXQValue.pas and
+//! `CreateTXQuery`, TXQuery and `IXQValue`: one suite every XPath backend must pass
+//! (docs/tickets/T08-fmd-xpath-trait-ffi-lua-bindings.md, T34-native-xpath-backend.md).
+//! Expected values come from baseunits/lua/LuaXQuery.pas, LuaIXQValue.pas and
 //! baseunits/XQueryEngineHTML.pas.
 
 /// Expands to the whole suite as `#[test]` functions over the backend `$backend`.
@@ -10,9 +8,8 @@ macro_rules! suite {
     ($backend:expr) => {
         use fmd_lua::{LuaMemoryStream, Runtime, mlua};
 
-        /// A global `NewStream(content)` making a MemoryStream (modules get theirs from the Host API,
-        /// e.g. `HTTP.Document`). Writing leaves the position at the end, so the stream's own
-        /// `ToString` would read nothing.
+        /// A global `NewStream(content)` making a MemoryStream. Writing leaves the position at the
+        /// end, so the stream's own `ToString` would read nothing.
         fn install_stream(runtime: &Runtime) {
             let lua = runtime.lua();
             let new = lua

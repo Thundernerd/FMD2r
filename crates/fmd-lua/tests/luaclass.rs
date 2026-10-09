@@ -1,5 +1,4 @@
-//! `LuaClass` object semantics, exercised through Lua snippets run on the public runtime
-//! (docs/tickets/T03-luaclass-binding-helper.md, "Seams under test").
+//! `LuaClass` object semantics (docs/tickets/T03-luaclass-binding-helper.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

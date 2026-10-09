@@ -1,9 +1,7 @@
-//! Running module callbacks on the `WorkerPool`, with fixture modules on disk and a stub HTTP
-//! transport (docs/tickets/T14-callback-runner-worker-pool.md, "Seams under test").
-//!
-//! Expected values come from FMD2's `Do*` callback runners (baseunits/lua/LuaWebsiteModules.pas:
-//! 154-465), its per-thread handler (baseunits/lua/LuaWebsiteModuleHandler.pas:33-57) and
-//! `TLuaHandler.CallFunction` (baseunits/lua/LuaHandler.pas:134-144).
+//! Module callbacks on the `WorkerPool` (docs/tickets/T14-callback-runner-worker-pool.md).
+//! Expected values come from FMD2's `Do*` runners (baseunits/lua/LuaWebsiteModules.pas:154-465),
+//! baseunits/lua/LuaWebsiteModuleHandler.pas:33-57 and `TLuaHandler.CallFunction`
+//! (baseunits/lua/LuaHandler.pas:134-144).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -57,7 +55,6 @@ function GNL() LINKS.Add('/m'..URL); NAMES.Add('n'); return no_error end
 function GPN() TASK.PageLinks.Add('p1'); TASK.PageLinks.Add('p2'); return true end
 "#;
 
-/// Another module, with ID `u`.
 const U: &str = r#"
 function Init() local m = NewWebsiteModule(); m.ID='u'; m.Name='U'; m.RootURL='https://u'; m.OnGetInfo='GetInfo' end
 function GetInfo() MANGAINFO.Title = 'U'; return no_error end

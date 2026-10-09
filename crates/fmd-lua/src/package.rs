@@ -21,15 +21,13 @@ const LIB_PREFIX: &str = "fmd.";
 const HOST_LIBS_KEY: &str = "fmd.package.hostlibs";
 
 /// The compiled Lua files `require` has loaded, by path, shared by every Lua state that holds a
-/// clone (FMD2's global `Package` cache, baseunits/lua/LuaPackage.pas:43, :147). Each file is
-/// read and compiled once, then every state loads the same bytecode.
+/// clone (FMD2's global `Package` cache, baseunits/lua/LuaPackage.pas:43, :147).
 #[derive(Clone, Default)]
 pub struct PackageCache(Arc<Cache>);
 
 struct Cache {
     chunks: Mutex<HashMap<PathBuf, Arc<[u8]>>>,
-    /// Which read of the Lua tree the cache stands for: new when the cache is made or cleared,
-    /// and never the same for two caches.
+    /// Which read of the Lua tree the cache stands for; unique across caches and clears.
     generation: AtomicU64,
 }
 
@@ -49,14 +47,12 @@ fn next_generation() -> u64 {
 }
 
 impl PackageCache {
-    /// An empty cache.
     pub fn new() -> Self {
         PackageCache::default()
     }
 
     /// Drops every cached chunk, so the next `require` reads the files again
-    /// (`ClearCache`, baseunits/lua/LuaPackage.pas:141-144). Other files read from the tree
-    /// once and kept, like the anti-bot scripts, are read again too.
+    /// (`ClearCache`, baseunits/lua/LuaPackage.pas:141-144), as are the anti-bot scripts.
     pub fn clear(&self) {
         let mut chunks = self.lock();
         chunks.clear();
@@ -65,8 +61,7 @@ impl PackageCache {
             .store(next_generation(), Ordering::Relaxed);
     }
 
-    /// Changes whenever the cache is cleared; what was read from the Lua tree at an earlier
-    /// generation is out of date.
+    /// Changes whenever the cache is cleared.
     pub(crate) fn generation(&self) -> u64 {
         self.0.generation.load(Ordering::Relaxed)
     }

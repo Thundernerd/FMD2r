@@ -34,16 +34,14 @@ fn file_name_only(path: &[u8]) -> &[u8] {
     }
 }
 
-/// Compares like `TStringList.Sort`'s default `AnsiCompareText`: case-insensitively. FMD2's
-/// comparison is locale-aware; this one folds ASCII case only and compares bytes. FMD2's
-/// QuickSort is not stable either, so names equal but for case may order differently.
+/// Like `TStringList.Sort`'s `AnsiCompareText`, but folding ASCII case only rather than by
+/// locale. FMD2's QuickSort is unstable, so names equal but for case may order differently.
 fn compare_text(a: &[u8], b: &[u8]) -> Ordering {
     a.iter()
         .map(u8::to_ascii_lowercase)
         .cmp(b.iter().map(u8::to_ascii_lowercase))
 }
 
-/// `names` sorted like `TStringList.Sort`.
 fn sorted(names: &[Vec<u8>]) -> Vec<Vec<u8>> {
     let mut names = names.to_vec();
     names.sort_by(|a, b| compare_text(a, b));
@@ -51,9 +49,8 @@ fn sorted(names: &[Vec<u8>]) -> Vec<Vec<u8>> {
 }
 
 /// Pads the first run of digits in `s` with zeros to `width`, like `PadZero` with `PadAll` and
-/// `StripZero` false (baseunits/uBaseUnit.pas:1591-1637). Like the Pascal, a single character
-/// after the digits that ends the string is dropped (`'2a'` becomes `'002'`): the copy of the
-/// rest at :1635 only runs while that character is not the last one.
+/// `StripZero` false (baseunits/uBaseUnit.pas:1591-1637). Like the Pascal, a single trailing
+/// character after the digits is dropped (`'2a'` becomes `'002'`, :1635).
 fn pad_zero(s: &[u8], width: usize) -> Vec<u8> {
     let Some(start) = s.iter().position(u8::is_ascii_digit) else {
         return s.to_vec();
@@ -66,8 +63,7 @@ fn pad_zero(s: &[u8], width: usize) -> Vec<u8> {
     let mut out = s[..start].to_vec();
     out.resize(out.len() + width.saturating_sub(digits.len()), b'0');
     out.extend_from_slice(digits);
-    // `i` is the 1-based position of the character after the digits; the rest is copied only
-    // when `i < Length(S)` (:1635).
+    // `i < Length(S)` with `i` 1-based (:1635).
     if end + 1 < s.len() {
         out.extend_from_slice(&s[end..]);
     }
@@ -75,9 +71,8 @@ fn pad_zero(s: &[u8], width: usize) -> Vec<u8> {
 }
 
 /// Renames `names` so that they keep their order when sorted, like
-/// `SerializeAndMaintainNames` (baseunits/uBaseUnit.pas:1669-1742): the names stay as they are
-/// if they already sort, else get their numbers zero-padded if that makes them sort, else get
-/// a `001_` style counter prefixed. Returns `None` when the list is left alone.
+/// `SerializeAndMaintainNames` (baseunits/uBaseUnit.pas:1669-1742): unchanged (`None`) if they
+/// already sort, else zero-padded numbers if that sorts, else a `001_` counter prefix.
 fn serialize_and_maintain_names(names: &[Vec<u8>]) -> Option<Vec<Vec<u8>>> {
     if names.is_empty() {
         return None;

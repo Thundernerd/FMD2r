@@ -1,5 +1,5 @@
-//! The remaining `fmd.*` host libraries and the `pb` C module, exercised through Lua snippets
-//! run on the public runtime (docs/tickets/T13-remaining-libs-pb.md, "Seams under test").
+//! The remaining `fmd.*` host libraries and the `pb` C module
+//! (docs/tickets/T13-remaining-libs-pb.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -110,7 +110,6 @@ fn gzip_returns_nothing_for_input_shorter_than_a_header() {
 /// One event a [`Recorder`] saw: level, target, `module` field and message.
 type Recorded = (tracing::Level, String, String, String);
 
-/// A tracing subscriber that records every event.
 #[derive(Clone, Default)]
 struct Recorder(std::sync::Arc<std::sync::Mutex<Vec<Recorded>>>);
 
@@ -497,8 +496,7 @@ mod imagepuzzle {
         (handle.build(runtime.lua()).unwrap(), handle)
     }
 
-    /// A `size`×`size` image whose pixel (x, y) is `(50x, 50y, 100, 255)`, so every pixel
-    /// tells where it came from.
+    /// A `size`×`size` image whose pixel (x, y) is `(50x, 50y, 100, 255)`.
     fn coordinates_image(size: u32) -> RgbaImage {
         RgbaImage::from_fn(size, size, |x, y| {
             Rgba([50 * x as u8, 50 * y as u8, 100, 255])
@@ -659,8 +657,7 @@ mod mangafoxwatermark {
         path.display().to_string()
     }
 
-    // The template set is process-wide, as in FMD2 (MangaFoxWatermark.pas:84-85), so the whole
-    // flow runs in one test.
+    // One test: the template set is process-wide, as in FMD2 (MangaFoxWatermark.pas:84-85).
     #[test]
     fn loads_templates_and_crops_a_matching_watermark() {
         let runtime = fmd_lua::Runtime::new().unwrap();
@@ -728,8 +725,7 @@ mod mangafoxwatermark {
     }
 }
 
-/// A runtime that finds Lua files in the fixture corpus' `lua/` directory, as the T06 searcher
-/// will.
+/// A runtime whose Lua directory is the fixture corpus' `lua/`.
 fn runtime_with_lua_dir() -> Runtime {
     let runtime = Runtime::new().unwrap();
     let lua_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/lua");

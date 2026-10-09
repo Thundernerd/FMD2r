@@ -16,12 +16,9 @@ use crate::{LuaClass, LuaMemoryStream, LuaStrings, Module, SettingsStoreError, S
 /// The state behind one Lua `HTTP` object: the session plus the `Headers`, `Cookies` and
 /// `Document` objects that Lua reads and writes.
 ///
-/// FMD2 hands Lua the session's own `Headers`, `Cookies` and `Document`
-/// (baseunits/lua/LuaHTTPSend.pas:160-162). Here the session keeps its own copies, so every
-/// method that reads or changes them runs through [`HttpObject::with_session`], which copies
-/// the Lua-side objects into the session before it runs and back afterwards; between method
-/// calls only Lua can change them, so both sides always agree. Methods and properties that
-/// touch none of the three use the session directly.
+/// FMD2 hands Lua the session's own objects (baseunits/lua/LuaHTTPSend.pas:160-162). Here the
+/// session keeps copies, so methods that touch them go through [`HttpObject::with_session`],
+/// which syncs both ways around the call.
 struct HttpObject {
     session: HttpSession,
     headers: LuaStrings,
@@ -76,7 +73,6 @@ fn copy_into(source: &StringList, target: &mut NameValueList) {
         .collect();
 }
 
-/// Replaces `target`'s items with `source`'s lines.
 fn copy_from(source: &NameValueList, target: &mut StringList) {
     target.clear();
     for line in source.lines() {
@@ -316,14 +312,12 @@ impl LuaHttp {
             )
             // `RetryCount`: extra attempts after a failure, -1 for no limit
             // (baseunits/lua/LuaHTTPSend.pas:165, baseunits/httpsendthread.pas:624-626).
-            // Assignment converts like `luaClassAddIntegerProperty`'s `lua_tointeger`
-            // (baseunits/lua/LuaClass.pas:476-486).
+            // Assignment converts like `luaClassAddIntegerProperty`'s `lua_tointeger`, keeping
+            // the low 32 bits (baseunits/lua/LuaClass.pas:476-486).
             .property(
                 "RetryCount",
                 |_, http: &mut HttpObject| Ok(http.session.retry_count()),
                 |lua, http: &mut HttpObject, value: Value| {
-                    // Keeping only the low 32 bits of the Pascal `Integer` is the behaviour
-                    // being reproduced.
                     let value = lua.coerce_integer(value)?.unwrap_or(0) as i32;
                     http.session.set_retry_count(value);
                     Ok(())
@@ -346,9 +340,8 @@ impl LuaHttp {
     }
 }
 
-/// `luaToString` (baseunits/lua/LuaUtils.pas:206) as text: strings and numbers convert,
-/// anything else is empty. `fmd-http` keeps URLs, header lines and settings as Rust strings, so
-/// bytes that are not UTF-8 are replaced, where FMD2 passes them through.
+/// `luaToString` (baseunits/lua/LuaUtils.pas:206) as text. `fmd-http` takes Rust strings, so
+/// non-UTF-8 bytes are replaced where FMD2 passes them through.
 fn text(lua: &Lua, value: Value) -> mlua::Result<String> {
     Ok(String::from_utf8_lossy(&to_bytes(lua, value)?).into_owned())
 }
@@ -406,11 +399,9 @@ pub struct HttpModule {
 /// A new session for `module`, or a plain one without a module, set up like FMD2's
 /// `TModuleContainer.CreateHTTP` and `PrepareHTTP` (baseunits/WebsiteModules.pas:353-387).
 ///
-/// The session uses the module's cookie jar and connection queue, and before every request
-/// merges the cookies of the module's settings (`MergeHTTPCookiesFromSetting`,
-/// baseunits/WebsiteModules.pas:278-283). When the settings are enabled at creation, their
-/// user agent replaces the default when non-empty, and their proxy type `Direct` turns the
-/// proxy off while a proxy server replaces the default one (:362-379).
+/// Before every request it merges the cookies of the module's settings
+/// (`MergeHTTPCookiesFromSetting`, baseunits/WebsiteModules.pas:278-283); the settings'
+/// user agent and proxy apply at creation (:362-379).
 pub fn create_http(client: &HttpClient, module: Option<&HttpModule>) -> HttpSession {
     let Some(module) = module else {
         return client.session();

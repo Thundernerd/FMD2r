@@ -1,6 +1,5 @@
-//! The unknown-Host-API report: every Host API name the upstream modules and templates reference
-//! (T02's static scan) checked against what a callback's Lua state provides
-//! (docs/tickets/T14-callback-runner-worker-pool.md, "Corpus check").
+//! Every Host API name the upstream modules reference (T02's scan) checked against a callback's
+//! Lua state (docs/tickets/T14-callback-runner-worker-pool.md, "Corpus check").
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -57,9 +56,8 @@ fn every_host_api_name_the_corpus_references_is_implemented() {
         files.len(),
         missing.len()
     );
-    // FMD2's `MANGAINFO` has no `Artist` either (baseunits/lua/LuaMangaInfo.pas:18-37): the
-    // assignment in modules/OrckuMangas.lua is an upstream typo that FMD2 silently ignores
-    // too. Any other name listed is a Host API gap (or an upstream change to look at).
+    // FMD2's `MANGAINFO` has no `Artist` either (baseunits/lua/LuaMangaInfo.pas:18-37); it is an
+    // upstream typo in modules/OrckuMangas.lua. Any other name is a Host API gap.
     assert_eq!(
         missing,
         BTreeSet::from(["MANGAINFO.Artist".to_owned()]),

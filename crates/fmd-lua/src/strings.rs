@@ -36,7 +36,6 @@ impl Default for StringList {
 const QUOTE: u8 = b'"';
 
 impl StringList {
-    /// An empty list.
     pub fn new() -> Self {
         StringList::default()
     }
@@ -51,15 +50,13 @@ impl StringList {
         self.delimiter
     }
 
-    /// Sets the `DelimitedText` separator.
     pub fn set_delimiter(&mut self, delimiter: u8) {
         self.delimiter = delimiter;
     }
 
     /// Replaces the items with the lines of `bytes`, as loaded from a file or stream
-    /// (`TStrings.LoadFromStream`). A leading UTF-8 BOM is dropped and remembered, so that
-    /// [`StringList::save`] writes it back, as FPC keeps the detected encoding. Other BOMs are
-    /// not decoded.
+    /// (`TStrings.LoadFromStream`). A leading UTF-8 BOM is dropped and remembered for
+    /// [`StringList::save`], as FPC keeps the detected encoding; other BOMs are not decoded.
     pub fn load(&mut self, bytes: &[u8]) {
         let text = bytes.strip_prefix(UTF8_BOM);
         self.utf8_bom = text.is_some();
@@ -91,10 +88,8 @@ impl StringList {
 
     /// Sorts the items ignoring ASCII case (`TStringList.Sort` with `CaseSensitive` off).
     ///
-    /// FPC compares with `AnsiCompareText`, which on Windows is the user locale's collation;
-    /// this compares the ASCII-lowercased bytes, which agrees with it for plain ASCII names
-    /// except for punctuation that collation weighs differently. Equal items keep their order,
-    /// where FPC's quicksort leaves it unspecified.
+    /// FPC uses `AnsiCompareText` (the Windows locale's collation); ASCII-lowercased bytes agree
+    /// with it except for some punctuation. Unlike FPC's quicksort, the sort is stable.
     pub fn sort(&mut self) {
         self.items.sort_by(|a, b| {
             a.iter()
@@ -114,7 +109,6 @@ impl StringList {
         self.name_value_separator
     }
 
-    /// Sets the separator between a name and its value.
     pub fn set_name_value_separator(&mut self, separator: u8) {
         self.name_value_separator = separator;
     }
@@ -158,7 +152,6 @@ impl StringList {
         }
     }
 
-    /// Splits `item` at its first name/value separator.
     fn split_name<'a>(&self, item: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
         let at = item.iter().position(|&b| b == self.name_value_separator)?;
         Some((&item[..at], &item[at + 1..]))
@@ -188,7 +181,6 @@ impl StringList {
         self.items = split_delimited(text, b',');
     }
 
-    /// The items, in order.
     pub fn items(&self) -> &[Vec<u8>] {
         &self.items
     }
@@ -198,7 +190,6 @@ impl StringList {
         self.items.len()
     }
 
-    /// Whether the list has no items.
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
@@ -250,11 +241,9 @@ impl StringList {
     }
 }
 
-/// The UTF-8 byte order mark.
 const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
 
-/// The line break `Text` ends every line with: `sLineBreak` on Windows, the only platform FMD2
-/// ships for.
+/// `sLineBreak` on Windows, the only platform FMD2 ships for.
 const LINE_BREAK: &[u8] = b"\r\n";
 
 /// Splits `text` into lines like FPC's `GetNextLine`: a line ends at CR, LF or CRLF, and a
@@ -369,26 +358,23 @@ fn found_index(index: Option<usize>) -> i32 {
 
 /// An out-of-bounds index, with FPC's `EStringListError` message (`SListIndexError`).
 ///
-/// In FMD2 this is a Pascal exception, which unwinds past Lua's `pcall` and fails the whole
-/// module call; here it becomes a Lua error, which `pcall` can catch.
+/// In FMD2 a Pascal exception that unwinds past `pcall`; here a catchable Lua error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("List index ({0}) out of bounds")]
 pub struct ListIndexError(pub i32);
 
-/// A shareable handle to a [`StringList`] that can be exposed to Lua as a TStrings object, so a
-/// Host API object (e.g. MANGAINFO) can own a list and read back what modules put in it.
+/// A shared [`StringList`] exposed to Lua as a TStrings object, so a Host API object (e.g.
+/// MANGAINFO) can read back what modules put in it.
 #[derive(Debug, Clone, Default)]
 pub struct LuaStrings {
     list: Rc<RefCell<StringList>>,
 }
 
 impl LuaStrings {
-    /// A handle to a new, empty list.
     pub fn new() -> Self {
         LuaStrings::default()
     }
 
-    /// The shared list.
     pub fn list(&self) -> &Rc<RefCell<StringList>> {
         &self.list
     }
@@ -562,13 +548,11 @@ fn set(lua: &Lua, list: &mut StringList, index: Value, item: Value) -> mlua::Res
 /// Converts an index argument like `lua_tointeger`: non-numbers become 0. The Pascal `Integer`
 /// parameter keeps only the low 32 bits.
 fn to_index(lua: &Lua, value: Value) -> mlua::Result<i32> {
-    // Keeping only the low 32 bits is the behaviour being reproduced.
     Ok(lua.coerce_integer(value)?.unwrap_or(0) as i32)
 }
 
-/// The MemoryStream argument of `LoadFromStream`/`SaveToStream`. FMD2 dereferences whatever
-/// it is given as a stream (baseunits/lua/LuaStrings.pas:35, :47), failing the call for a
-/// non-object; here anything but a MemoryStream is a Lua error.
+/// The MemoryStream argument of `LoadFromStream`/`SaveToStream`; FMD2 fails the call on a
+/// non-object (baseunits/lua/LuaStrings.pas:35, :47), here anything else is a Lua error.
 fn to_stream(value: Value) -> mlua::Result<Rc<RefCell<MemoryStream>>> {
     match &value {
         Value::UserData(object) => LuaMemoryStream::from_lua(object),
@@ -579,8 +563,8 @@ fn to_stream(value: Value) -> mlua::Result<Rc<RefCell<MemoryStream>>> {
 }
 
 /// The first character of a string argument, as `String(luaToString(L, 1))[1]` takes it
-/// (baseunits/lua/LuaStrings.pas:119, :131). For an empty string that dereferences nil in
-/// FMD2, which fails the call; here it is a Lua error.
+/// (baseunits/lua/LuaStrings.pas:119, :131); an empty string, a nil dereference there, is a
+/// Lua error.
 fn first_char(lua: &Lua, value: Value) -> mlua::Result<u8> {
     to_bytes(lua, value)?.first().copied().ok_or_else(|| {
         mlua::Error::runtime("Access violation: empty string has no first character")

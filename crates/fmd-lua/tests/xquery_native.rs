@@ -1,5 +1,4 @@
-//! The XQuery Lua suite over the `native` XPath backend: the same snippets give the same
-//! results as over `fpc` (docs/tickets/T34-native-xpath-backend.md, "Seams under test").
+//! The XQuery Lua suite over the `native` XPath backend (docs/tickets/T34-native-xpath-backend.md).
 
 #![cfg(feature = "xpath-native")]
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.

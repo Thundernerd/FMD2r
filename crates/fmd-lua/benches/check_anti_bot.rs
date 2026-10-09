@@ -1,8 +1,6 @@
-//! What the anti-bot hook adds to every request of a module: `____CheckAntiBot` over upstream's
-//! `checkantibot.lua` (docs/tickets/T30-anti-bot.md, acceptance: under 50 µs typical).
-//!
-//! Times `HTTP.GET` answered 200 by an in-memory transport, with and without the hook; the
-//! difference is the check. Run with `cargo bench -p fmd-lua --bench check_anti_bot`.
+//! Per-request cost of the anti-bot hook (`____CheckAntiBot`): `HTTP.GET` timed with and without
+//! it (docs/tickets/T30-anti-bot.md: under 50 µs typical).
+//! Run with `cargo bench -p fmd-lua --bench check_anti_bot`.
 
 // A bench is test code (CODING_STANDARDS.md); clippy only exempts `#[test]` fns.
 #![allow(clippy::unwrap_used, clippy::print_stdout)]

@@ -1,7 +1,5 @@
-//! The anti-bot hook (`WebsiteBypassRequest`, baseunits/lua/LuaWebsiteBypass.pas:142-212) run by
-//! `HTTP` objects of a module, through Lua snippets on the public runtime with a stub transport
-//! and upstream's `websitebypass/*.lua` from the fixture corpus
-//! (docs/tickets/T30-anti-bot.md, "Seams under test").
+//! The anti-bot hook (`WebsiteBypassRequest`, baseunits/lua/LuaWebsiteBypass.pas:142-212) on a
+//! module's `HTTP` objects, with upstream's `websitebypass/*.lua` (docs/tickets/T30-anti-bot.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -57,7 +55,6 @@ impl Transport for StubTransport {
     }
 }
 
-/// The value of header `name` in `request`.
 fn header<'a>(request: &'a WireRequest, name: &str) -> Option<&'a str> {
     request
         .headers
@@ -129,8 +126,7 @@ impl ModuleHttpSettings for Settings {
     }
 }
 
-/// A stand-in for upstream's `websitebypass.lua` that solves the challenge right away: it sets
-/// the clearance cookie and a user agent, asks for a reload, and counts its calls in
+/// A `websitebypass.lua` stand-in that solves the challenge at once and counts its calls in
 /// `MODULE.Storage['bypass_calls']`.
 const SOLVING_BYPASS: &str = r#"
 function ____WebsiteBypass(METHOD, URL)
@@ -184,8 +180,7 @@ impl Site {
         }
     }
 
-    /// A runtime set up like a module callback: `MODULE`, and an `HTTP` object created for the
-    /// module with the anti-bot hook.
+    /// A runtime set up like a module callback, with the anti-bot hook on `HTTP`.
     fn runtime(&self, lua_dir: &Path) -> Runtime {
         let rt = Runtime::new().unwrap();
         rt.set_lua_dir(lua_dir);
@@ -389,9 +384,8 @@ struct FlareSolverrLog {
     requests: Vec<(String, String, String)>,
 }
 
-/// A FlareSolverr stub on loopback speaking its protocol (`GET /` readiness, `POST /v1` with
-/// `cmd`), solving every `request.get` with cookie `cf_clearance=solved` and user agent
-/// `Solver/2.0`. Returns its port.
+/// A loopback FlareSolverr stub solving every `request.get` with cookie `cf_clearance=solved`
+/// and user agent `Solver/2.0`. Returns its port.
 fn flaresolverr_stub(log: Arc<Mutex<FlareSolverrLog>>) -> u16 {
     use std::io::{BufRead, BufReader, Read, Write};
 

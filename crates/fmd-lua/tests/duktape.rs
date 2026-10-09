@@ -1,6 +1,5 @@
-//! `fmd.duktape.ExecJS`, exercised through Lua snippets run on the public runtime
-//! (docs/tickets/T12-fmd-duktape-execjs.md, "Seams under test"). Expected values are what
-//! FMD2's Duktape returns (baseunits/Duktape.pas:77-104, baseunits/lua/LuaDuktape.pas:14-24).
+//! `fmd.duktape.ExecJS` (docs/tickets/T12-fmd-duktape-execjs.md), expecting what FMD2's Duktape
+//! returns (baseunits/Duktape.pas:77-104, baseunits/lua/LuaDuktape.pas:14-24).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -195,11 +194,9 @@ fn terminating_the_worker_interrupts_a_script() {
     assert!(started.elapsed() < Duration::from_secs(10));
 }
 
-/// FMD2 hands Duktape the Lua string's bytes as UTF-8 and pushes the result's bytes back
-/// (baseunits/lua/LuaDuktape.pas:18, baseunits/Duktape.pas:92-94). JS strings are UTF-16 in
-/// between, so BMP text round-trips byte for byte. A character outside the BMP is a surrogate
-/// pair, and comes back as CESU-8 (each surrogate as 3 bytes) as from Duktape 2.3
-/// (tests/duktape_reference.rs compares this with a Duktape build).
+/// Bytes cross as UTF-8 (baseunits/lua/LuaDuktape.pas:18, baseunits/Duktape.pas:92-94) via
+/// UTF-16 JS strings: BMP text round-trips, a non-BMP character comes back as CESU-8, as from
+/// Duktape 2.3.
 #[test]
 fn passes_strings_through_as_utf8() {
     runtime()
@@ -229,8 +226,7 @@ fn passes_strings_through_as_utf8() {
         .unwrap();
 }
 
-/// The JS that upstream modules build around page scripts, on recorded-style inputs. Expected
-/// values are the decoded payloads, which the inputs were made from.
+/// The JS upstream modules build around page scripts; inputs were made from the expected payloads.
 #[test]
 fn evaluates_upstream_module_snippets() {
     runtime()

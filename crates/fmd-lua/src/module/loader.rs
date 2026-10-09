@@ -22,7 +22,6 @@ pub struct ModuleRegistry {
 
 /// The outcome of [`ModuleRegistry::load_dir`].
 pub struct LoadReport {
-    /// The modules loaded.
     pub registry: ModuleRegistry,
     /// How many module files were found.
     pub files: usize,
@@ -51,10 +50,9 @@ impl ModuleRegistry {
 
     /// Loads every module in `<lua_dir>/modules`, with options and cookies in `settings`.
     ///
-    /// Like `ScanAndLoadFiles` (baseunits/lua/LuaWebsiteModules.pas:636-656), the `*.lua` and
-    /// `*.luac` files directly in `modules/` load on one thread per CPU, each in a fresh Lua
-    /// state, sharing one cache of the files they `require`. A file that fails is reported and
-    /// the scan goes on.
+    /// Like `ScanAndLoadFiles` (baseunits/lua/LuaWebsiteModules.pas:636-656): one thread per
+    /// CPU, a fresh Lua state per file, one shared `require` cache. A failing file is reported
+    /// and the scan goes on.
     pub fn load_dir_with(lua_dir: &Path, settings: Arc<dyn ModuleSettingsStore>) -> LoadReport {
         let dir = lua_dir.join("modules");
         match module_files(&dir) {
@@ -70,8 +68,8 @@ impl ModuleRegistry {
         }
     }
 
-    /// Loads the module files `files` (in `<lua_dir>/modules`) as [`load_dir_with`] loads every
-    /// one, for re-scanning only the files an update changed.
+    /// Loads `files` (in `<lua_dir>/modules`) like [`load_dir_with`], for re-scanning only the
+    /// files an update changed.
     ///
     /// [`load_dir_with`]: ModuleRegistry::load_dir_with
     pub fn load_files_with(
@@ -83,9 +81,8 @@ impl ModuleRegistry {
         Self::collect(files.to_vec(), results, &settings)
     }
 
-    /// Loads the modules of the one module file `file` as the scan loads each of its files
-    /// (`LoadLuaWebsiteModule`, baseunits/lua/LuaWebsiteModules.pas:514-590), keeping options and
-    /// cookies in memory. `lua_dir` is the `lua/` tree its `require`s resolve against.
+    /// Loads one module file as the scan does (`LoadLuaWebsiteModule`,
+    /// baseunits/lua/LuaWebsiteModules.pas:514-590), keeping options and cookies in memory.
     pub fn load_file(lua_dir: &Path, file: &Path) -> LoadReport {
         let settings: Arc<dyn ModuleSettingsStore> = Arc::new(MemorySettingsStore::new());
         let files = vec![file.to_path_buf()];
@@ -93,7 +90,7 @@ impl ModuleRegistry {
         Self::collect(files, results, &settings)
     }
 
-    /// The report of `files`, loaded into `results` (in `files` order).
+    /// `results` are in `files` order.
     fn collect(
         files: Vec<PathBuf>,
         results: Vec<FileResult>,
@@ -135,16 +132,14 @@ impl ModuleRegistry {
         &self.modules
     }
 
-    /// The module with ID `id`.
     pub fn get(&self, id: &str) -> Option<&Arc<Module>> {
         self.modules.iter().find(|m| m.def_read().id == id)
     }
 
     /// The module serving `host` (`LocateModuleByHost`, baseunits/WebsiteModules.pas:500-534):
-    /// the last module, by ID, whose `RootURL` contains the lowercased host; failing that, the
-    /// last one containing the bare host name (`SplitURL` without protocol and port); failing
-    /// that, when that name starts with `www.` or holds a `w` (FMD2's `w+\d*` regex matches
-    /// anywhere), the last one containing it without its first four characters.
+    /// the last module, by ID, whose `RootURL` contains the lowercased host; else the bare host
+    /// name (`SplitURL` without protocol and port); else, when that name holds a `w` (FMD2's
+    /// `w+\d*` regex matches anywhere), the name without its first four characters.
     ///
     /// FMD2 first tries the module it located last; every call here starts afresh.
     pub fn locate_by_host(&self, host: &str) -> Option<&Arc<Module>> {
@@ -203,8 +198,7 @@ fn module_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-/// Runs every file's `Init` on one thread per CPU, each thread taking the next file until none
-/// are left (`TLuaWebsiteModulesLoaderThread.Execute`,
+/// Runs every file's `Init` on one thread per CPU (`TLuaWebsiteModulesLoaderThread.Execute`,
 /// baseunits/lua/LuaWebsiteModules.pas:592-606). Results come back in `files` order.
 fn load_files(lua_dir: &Path, files: &[PathBuf]) -> Vec<FileResult> {
     let cache = PackageCache::new();

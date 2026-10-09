@@ -23,10 +23,10 @@ end
 return _G[name] ~= nil
 "#;
 
-/// The names among `names` (as [`scan_host_api_names`](crate::scan_host_api_names) lists them) that the state
-/// a callback runs in does not provide: a state with every global and object any `Do*`
-/// function sets (baseunits/lua/LuaWebsiteModules.pas:154-465), `MODULE` over a module
-/// with account support, and the loader's `NewWebsiteModule`.
+/// The names among `names` (from [`scan_host_api_names`](crate::scan_host_api_names)) that a
+/// callback's state lacks: one with every global any `Do*` function sets
+/// (baseunits/lua/LuaWebsiteModules.pas:154-465), `MODULE` with account support, and the
+/// loader's `NewWebsiteModule`.
 pub fn missing_host_api<'a>(
     names: impl IntoIterator<Item = &'a str>,
 ) -> crate::Result<BTreeSet<String>> {
