@@ -1600,9 +1600,9 @@ export interface components {
 			capabilities: components['schemas']['ModuleCapabilities'];
 			category: string;
 			/**
-			 * @description Whether its settings differ from the defaults: its overrides are on
-			 *     (`Settings.Enabled`, baseunits/WebsiteModulesSettings.pas:80) or an option's value is not
-			 *     the one it declares.
+			 * @description Whether its settings differ from the defaults: an option's value is not the one it
+			 *     declares, or its overrides are on (`Settings.Enabled`,
+			 *     baseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting.
 			 */
 			customized: boolean;
 			id: string;

@@ -4027,7 +4027,7 @@
           },
           "customized": {
             "type": "boolean",
-            "description": "Whether its settings differ from the defaults: its overrides are on\n(`Settings.Enabled`, baseunits/WebsiteModulesSettings.pas:80) or an option's value is not\nthe one it declares."
+            "description": "Whether its settings differ from the defaults: an option's value is not the one it\ndeclares, or its overrides are on (`Settings.Enabled`,\nbaseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting."
           },
           "id": {
             "type": "string"
