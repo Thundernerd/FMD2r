@@ -148,6 +148,8 @@ async fn child() {
             .await
             .unwrap();
     }
+    // The parent may open `app.db` from now on: its schema is in place.
+    fs::write(dir.join("ready"), "").unwrap();
     loop {
         let status = db.tasks().list().unwrap()[0].status;
         if matches!(status, TaskStatus::Finished | TaskStatus::Failed) {
@@ -284,6 +286,10 @@ fn a_task_killed_while_packing_resumes_and_packs_every_page() {
         let mut child = spawn_child(dir.path(), None);
         let mut db = None;
         wait_until(&mut child, "packing", || {
+            // Opening `app.db` while the child migrates it races its migrations.
+            if !dir.path().join("ready").exists() {
+                return false;
+            }
             let db = db.get_or_insert_with(|| AppDb::open(dir.path().join("app.db")).unwrap());
             let tasks = db.tasks().list().unwrap();
             tasks.first().map(|t| t.status) == Some(TaskStatus::Compressing)
