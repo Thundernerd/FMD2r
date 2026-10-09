@@ -6,17 +6,17 @@ Layout follows prototype variant B "Library" (https://claude.ai/artifact/As3XTN7
 
 ## Scripts
 
-| Command                 | What it does                                                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`           | Dev server; `/api` is proxied to `fmd2r serve` at `$FMD2R_URL` (default `http://127.0.0.1:8080`)                    |
-| `npm run dev:mock`      | Dev server in mock mode (no backend needed)                                                                         |
-| `npm run build`         | Production build into `build/`                                                                                      |
-| `npm run lint`          | Prettier check and ESLint                                                                                           |
-| `npm run check`         | `svelte-check` type checking                                                                                        |
-| `npm test`              | Vitest unit tests                                                                                                   |
-| `npm run test:e2e`      | Playwright smoke tests against `vite preview` in mock mode                                                          |
-| `npm run test:e2e:real` | Playwright smoke tests against a real `fmd2r serve` with a fixture module (needs the Rust toolchain; not run in CI) |
-| `npm run gen:api`       | Regenerate `src/lib/api/schema.d.ts` from `../openapi.json`                                                         |
+| Command                 | What it does                                                                                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`           | Dev server; `/api` is proxied to `fmd2r serve` at `$FMD2R_URL` (default `http://127.0.0.1:8080`)                                                                                                     |
+| `npm run dev:mock`      | Dev server in mock mode (no backend needed)                                                                                                                                                          |
+| `npm run build`         | Production build into `build/`                                                                                                                                                                       |
+| `npm run lint`          | Prettier check and ESLint                                                                                                                                                                            |
+| `npm run check`         | `svelte-check` type checking                                                                                                                                                                         |
+| `npm test`              | Vitest unit tests                                                                                                                                                                                    |
+| `npm run test:e2e`      | Playwright smoke tests against `vite preview` in mock mode                                                                                                                                           |
+| `npm run test:e2e:real` | The end-to-end run (add by URL to Get files, through a restart) against a real `fmd2r serve` with a fixture module, desktop and 375px (needs the Rust toolchain; CI runs it in `ci.yml`'s `e2e` job) |
+| `npm run gen:api`       | Regenerate `src/lib/api/schema.d.ts` from `../openapi.json`                                                                                                                                          |
 
 ## Mock mode
 
