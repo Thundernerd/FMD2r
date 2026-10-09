@@ -1,8 +1,5 @@
-//! Compiles the vendored Duktape 2.3.0 with its 1.x-style module loader and the `ExecJS` shim.
-//! The pinned version is in vendor/duktape/VERSION.
-//!
-//! duktape.c is compiled through src/duktape_fmd2.c, which gives it the date handling of FMD2's
-//! Windows build.
+//! Compiles the vendored Duktape with its 1.x-style module loader and the `ExecJS` shim.
+//! duktape.c goes through src/duktape_fmd2.c for the date handling of FMD2's Windows build.
 
 fn main() {
     let vendor = "vendor/duktape";
