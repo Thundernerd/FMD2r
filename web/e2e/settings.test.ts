@@ -202,3 +202,41 @@ test('opening a module by link selects it and shows it in the list', async ({ pa
 	await expect(pick).toHaveAttribute('aria-pressed', 'true');
 	await expect(pick).toBeInViewport();
 });
+
+test('the website selection shows its search and lines its websites up in columns', async ({
+	page
+}) => {
+	await page.goto('/settings#section-websites');
+	const websites = page.getByRole('region', { name: 'Websites', exact: true });
+	const search = websites.getByRole('searchbox', { name: 'Search websites' });
+	// As tall as a plain input, not cut to a progress bar's 6px.
+	const normal = await page.evaluate(() => {
+		const input = document.body.appendChild(document.createElement('input'));
+		input.className = 'input';
+		const height = input.getBoundingClientRect().height;
+		input.remove();
+		return height;
+	});
+	const shown = await search.evaluate((input) => {
+		// The part of the box its row does not clip away.
+		const box = input.getBoundingClientRect();
+		const row = input.parentElement?.getBoundingClientRect() ?? box;
+		return Math.min(box.bottom, row.bottom) - Math.max(box.top, row.top);
+	});
+	expect(shown).toBeGreaterThanOrEqual(normal);
+	await expect(websites.getByRole('button', { name: 'Select all' })).toBeVisible();
+	await expect(websites.getByRole('button', { name: 'Select none' })).toBeVisible();
+
+	// A long name takes no more room than the others, so the websites line up in columns.
+	const arabic = websites.getByRole('group', { name: 'Arabic' }).getByRole('checkbox');
+	await expect(arabic).toHaveCount(3);
+	const items = await arabic.evaluateAll((boxes) =>
+		boxes.map((box) => {
+			const choice = box.closest('label')?.getBoundingClientRect();
+			return { top: choice?.top, left: box.getBoundingClientRect().left, width: choice?.width };
+		})
+	);
+	expect(new Set(items.map((item) => item.width)).size).toBe(1);
+	const columns = items.filter((item) => item.top === items[0]?.top).length;
+	items.forEach((item, i) => expect(item.left).toBe(items[i % columns]?.left));
+});

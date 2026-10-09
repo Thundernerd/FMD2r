@@ -58,7 +58,7 @@
 		The websites Discover lists and searches. Adding by URL, the library and the series page work
 		with every website.
 	</p>
-	<div class="bar">
+	<div class="toolbar">
 		<input
 			class="input"
 			type="search"
@@ -80,13 +80,13 @@
 			<legend class="label">{group.category}</legend>
 			<!-- Modules sharing an ID share its selection, so either checkbox toggles it. -->
 			{#each group.modules as m (moduleKey(m))}
-				<label class="choice">
+				<label class="choice" title={label(m)}>
 					<input
 						type="checkbox"
 						checked={selected.has(m.id)}
 						onchange={(e) => toggle([m.id], e.currentTarget.checked)}
 					/>
-					<span>{label(m)}</span>
+					<span class="name">{label(m)}</span>
 				</label>
 			{/each}
 		</fieldset>
@@ -103,22 +103,23 @@
 		flex-direction: column;
 		gap: var(--sp-2);
 	}
-	.bar {
+	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--sp-2);
 		align-items: center;
 	}
-	.bar .input {
+	.toolbar .input {
 		flex: 1;
 		min-width: 160px;
 	}
+	/* Even columns: every website takes the same width, however long its name. */
 	.group {
 		border: 0;
 		margin: 0;
 		padding: 0;
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 		gap: var(--sp-1) var(--sp-4);
 	}
 	.group legend {
@@ -129,7 +130,12 @@
 		display: flex;
 		align-items: center;
 		gap: var(--sp-2);
-		min-width: 200px;
+		min-width: 0;
+	}
+	.name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	p {
 		margin: 0;

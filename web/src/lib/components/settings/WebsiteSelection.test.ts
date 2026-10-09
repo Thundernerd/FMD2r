@@ -13,9 +13,9 @@ const MODULES = [
 
 /** FMD2's website selection: a checkbox per module, grouped by category, with a search
  * (`tsWebsiteSelection`, mangadownloader/forms/frmMain.pas:234, search at :3315-3317). */
-function renderSelection(selected: string[]) {
+function renderSelection(selected: string[], modules = MODULES) {
 	const draft = new Draft<object>({ general: { selected_websites: selected } });
-	render(WebsiteSelection, { modules: MODULES, draft });
+	render(WebsiteSelection, { modules, draft });
 	return draft;
 }
 
@@ -51,5 +51,25 @@ describe('WebsiteSelection', () => {
 
 		await fireEvent.click(screen.getByRole('button', { name: 'Select none' }));
 		expect(selection(draft)).toEqual(['mangadex']);
+	});
+
+	it('shows the full name of a website in its tooltip', () => {
+		// lua/modules/DetectiveConanAr.lua:8-10.
+		const name = 'شبكة كونان العربية (detectiveconanar)';
+		renderSelection(
+			[],
+			[
+				...MODULES,
+				summary(
+					'784d8c809fa042109663230a2afdd88a',
+					name,
+					'https://manga.detectiveconanar.com',
+					'Arabic'
+				)
+			]
+		);
+		expect(box(name).closest('label')?.title).toBe(name);
+		// A repeated name carries its host, as the label does.
+		expect(box('HachiRaw (hachiraw.win)').closest('label')?.title).toBe('HachiRaw (hachiraw.win)');
 	});
 });
