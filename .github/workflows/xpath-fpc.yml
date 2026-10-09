@@ -1,13 +1,11 @@
 name: XPath fpc
 
-# The fpc XPath backend's parity guard, split from ci.yml: since T35 the native backend is the
-# default and the check job builds only that one. This job builds crates/xpath-fpc (outside the
-# root workspace: it needs fpc, which the check job doesn't install) and runs both backends on the
-# shared suites and on the differential corpus (fixtures/xpath-corpus).
+# The fpc XPath backend's parity guard: since T35 ci.yml builds only the native backend. Builds
+# crates/xpath-fpc (outside the root workspace: it needs fpc) and runs both backends on the shared
+# suites and the differential corpus (fixtures/xpath-corpus).
 #
-# On pushes and PRs it runs only when something it builds or tests changes: the shim, fmd-xpath,
-# the code and tests that fmd-lua and fmd2r compile differently with the fpc backend on, the
-# corpus, and the manifests and toolchain. The nightly run and workflow_dispatch cover the rest.
+# Pushes and PRs run it only for paths that build differently with the fpc backend; the nightly
+# run and workflow_dispatch cover the rest.
 on:
   push:
     branches: [main]

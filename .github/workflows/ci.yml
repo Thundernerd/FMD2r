@@ -12,9 +12,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # A clean debug build of every test binary needs over 16 GB with full debug info, more than a
-  # runner's disk: the linker then dies with SIGBUS. Line tables keep file:line in backtraces at
-  # under 5 GB; incremental artifacts are no use on a fresh runner.
+  # Full debug info for every test binary exceeds a runner's disk (the linker dies with SIGBUS);
+  # line tables keep file:line in backtraces. Incremental artifacts are no use on a fresh runner.
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
   CARGO_INCREMENTAL: 0
 
@@ -30,10 +29,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      # Includes the smoke list's offline replay (crates/fmd2r/tests/smoke.rs): every entry's
-      # recorded HTTP traffic, compared with its info and pages snapshots in fixtures/smoke. The
-      # crates build only the native XPath backend, the default; xpath-fpc.yml keeps the fpc
-      # backend as its parity guard.
+      # Includes the smoke list's offline replay (crates/fmd2r/tests/smoke.rs). Only the native
+      # XPath backend builds here; xpath-fpc.yml guards the fpc one.
       - name: Test
         run: cargo test --workspace
       # Prints how many upstream modules pass `Init` (the test itself fails on any failure).
@@ -66,9 +63,8 @@ jobs:
           npx playwright install --with-deps chromium
           npm run test:e2e
 
-  # The plan's end-to-end run (docs/plan.md, Verification) against the real composed server:
-  # web/e2e-real/serve.mjs runs the debug `fmd2r serve` with a fixture module and a local image
-  # site, so nothing reaches the network.
+  # The plan's end-to-end run (docs/plan.md, Verification): web/e2e-real/serve.mjs runs the debug
+  # `fmd2r serve` with a fixture module and a local image site, so nothing reaches the network.
   e2e:
     runs-on: ubuntu-latest
     # The run takes a few minutes; this stops a hang well before the default 6 hours.

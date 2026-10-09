@@ -1,7 +1,7 @@
 #!/bin/sh
 # Smoke-tests the FMD2r container image: the server answers, the SPA is embedded, the bundled Lua
 # modules load, the tools upstream scripts call are on PATH, and there is no libfmdxpath.so (the
-# image uses the native XPath backend only). CI's `docker` job and the release workflow run it.
+# image uses the native XPath backend only).
 #
 # Usage: scripts/docker-smoke.sh [IMAGE]   (default: fmd2r:smoke)
 # With FMD2R_EXPECT_VERSION set (a leading `v` is dropped), GET /api/about must report it.
@@ -59,8 +59,7 @@ docker exec "$name" magick -version >/dev/null || fail "magick -version"
 docker exec "$name" python3 --version || fail "python3 --version"
 docker exec "$name" node --version || fail "node --version"
 
-# `module init` arrives with T15; until then the subcommand is a stub and this step is skipped.
-# Once it is real, the step runs and fails loudly on any error (including a renamed flag).
+# Skipped while `module init` is a stub (until T15); after that, any error fails the step.
 if docker exec "$name" fmd2r module init 2>&1 | grep -q 'not implemented yet (T15)'; then
   echo "::warning::fmd2r module init is not implemented yet (T15); skipped"
 else

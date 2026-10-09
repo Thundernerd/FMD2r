@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Refresh fixtures/lua from the upstream FMD2 Lua tree.
 #
-# FMD2 tracks its modules at owner dazedcat19, repo FMD2, ref master, path lua
-# (dist/config.json "GitHub" block). This copies that `lua/` directory at one commit into the
-# destination, replacing what was there, and writes the commit SHA to UPSTREAM_REF.
-# It uses a shallow, sparse git fetch, so no GitHub API token is needed.
+# FMD2 tracks its modules at dazedcat19/FMD2, ref master, path lua (dist/config.json "GitHub"
+# block). Replaces the destination with that `lua/` tree at one commit and writes the SHA to
+# UPSTREAM_REF. A shallow, sparse git fetch needs no GitHub API token.
 #
 # Usage: scripts/sync-upstream-lua.sh [--ref REF] [--repo URL] [--dest DIR]
 #   --ref   branch, tag or commit to sync (default: master)

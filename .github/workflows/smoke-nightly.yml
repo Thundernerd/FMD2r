@@ -1,18 +1,14 @@
 name: Smoke (nightly)
 
-# Runs the smoke list (fixtures/smoke/list.toml) against the live sites and against its recorded
-# fixtures, and uploads a report that tells the two kinds of breakage apart: an entry whose replay
-# fails is an FMD2r regression, one that fails only live had its site or upstream module change.
+# Runs the smoke list (fixtures/smoke/list.toml) live and against its recorded fixtures. In the
+# report, a failing replay is an FMD2r regression; failing only live means the site or upstream
+# module changed.
 #
-# Entry failures don't fail the job (`fmd-smoke run` exits 0 on them): live sites break all the
-# time, and the smoke steps only report. The run steps also continue on errors, so the report is
-# written from whatever results exist. It runs on a schedule, not on pushes or PRs, so it doesn't
-# gate merges; CI's own replay (the `smoke` test run by `cargo test` in ci.yml) does.
+# Entry failures don't fail the job (live sites break all the time; CI's replay gates merges), and
+# the run steps continue on errors so the report is written from whatever results exist.
 #
-# Both runs also record their XPath evaluations into a differential corpus, which `fmd2r xpath
-# diff` then evaluates on the fpc and native backends: the live run brings today's pages, so this
-# catches native/fpc differences the committed corpus (fixtures/xpath-corpus) doesn't have. A
-# mismatch fails the job (after the report is written), unlike entry failures.
+# Both runs record their XPath evaluations, which `fmd2r xpath diff` checks on the fpc and native
+# backends: live pages catch differences the committed corpus misses. A mismatch fails the job.
 on:
   schedule:
     - cron: "23 3 * * *"

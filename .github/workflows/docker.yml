@@ -31,10 +31,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The container image, per platform: compose.yaml validates, the image builds, and
-  # scripts/docker-smoke.sh checks the running container (health, SPA, bundled modules,
-  # python3/node/magick, no libfmdxpath.so). fmd2r cross-compiles for arm64; the arm64 image's
-  # runtime stage and smoke test run under QEMU.
+  # fmd2r cross-compiles for arm64; only the arm64 image's runtime stage and smoke test run under
+  # QEMU.
   docker:
     runs-on: ubuntu-latest
     strategy:

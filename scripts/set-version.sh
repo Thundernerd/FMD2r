@@ -1,8 +1,6 @@
 #!/bin/sh
-# Sets the version every workspace crate builds with: `[workspace.package] version` in Cargo.toml
-# and the workspace crates' entries in Cargo.lock, so `--locked` builds still pass. The release
-# workflow runs it with the tag's version before building, so `fmd2r --version`, `GET /api/about`
-# and the image all report the tag, whatever Cargo.toml says on main.
+# Sets the workspace version in Cargo.toml and the workspace crates' Cargo.lock entries (so
+# `--locked` builds still pass). The release workflow runs it so builds report the tag's version.
 #
 # Usage: scripts/set-version.sh VERSION   (e.g. 1.2.3 or 1.2.3-rc.1; a leading `v` is dropped)
 set -eu
