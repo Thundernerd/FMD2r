@@ -53,3 +53,21 @@ Pushing a version tag (`v1.2.3`, `v1.2.3-rc.1`) runs `.github/workflows/release.
 (pre-release tags skip `latest`), and creates a GitHub release with
 `fmd2r-<tag>-x86_64-linux-gnu.tar.gz` (the binary and `libfmdxpath.so`, built on Ubuntu 22.04 so
 it needs glibc 2.35 or newer) and its `SHA256SUMS`.
+
+## CI
+
+The workflows in `.github/workflows` are set up for fast feedback on PRs: a new push to a PR
+cancels that PR's runs still in progress (runs on `main` always finish), and the slow jobs run
+only when their inputs change.
+
+| Workflow | Runs on | What it checks |
+| --- | --- | --- |
+| `ci.yml` | every PR and push to `main` | fmt, clippy, `cargo test` (native XPath backend, smoke replay, module corpus), and the web UI |
+| `xpath-fpc.yml` | PRs and pushes to `main` that touch the fpc shim, `fmd-xpath`, `fmd-lua`'s XPath binding, `fmd2r xpath`, `fixtures/xpath-corpus` or the manifests; nightly; manual | the `fpc` backend's parity with the native one, and uploads `libfmdxpath.so` |
+| `docker.yml` | PRs and pushes to `main` that touch what the image is built from; manual | builds the image and runs `scripts/docker-smoke.sh` |
+| `smoke-nightly.yml` | nightly; manual | the smoke list live and replayed, and a native/fpc diff on the day's pages |
+| `release.yml` | version tags | see [Releases](#releases) |
+
+To run a path-filtered workflow on a branch whose changes it skipped, start it by hand from the
+Actions tab ("Run workflow") or with `gh workflow run xpath-fpc.yml --ref <branch>` (likewise
+`docker.yml`).

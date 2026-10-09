@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# A new push to a PR cancels its running checks; runs on main always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
   # A clean debug build of every test binary needs over 16 GB with full debug info, more than a
@@ -27,56 +32,13 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       # Includes the smoke list's offline replay (crates/fmd2r/tests/smoke.rs): every entry's
       # recorded HTTP traffic, compared with its info and pages snapshots in fixtures/smoke. The
-      # crates build only the native XPath backend, the default; the xpath-fpc job below keeps
-      # the fpc backend as its parity guard.
+      # crates build only the native XPath backend, the default; xpath-fpc.yml keeps the fpc
+      # backend as its parity guard.
       - name: Test
         run: cargo test --workspace
       # Prints how many upstream modules pass `Init` (the test itself fails on any failure).
       - name: Module corpus
         run: cargo test -p fmd-lua --test module_corpus -- --nocapture
-
-  # crates/xpath-fpc is outside the root workspace: it needs fpc, which the check job doesn't install.
-  # It is also the native backend's parity guard: both backends on the shared suites, and on the
-  # differential corpus (fixtures/xpath-corpus).
-  xpath-fpc:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: crates/xpath-fpc
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install FPC
-        run: sudo apt-get update && sudo apt-get install -y fpc
-      - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            crates/xpath-fpc
-            .
-      - name: Format
-        run: cargo fmt -- --check
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Test
-        run: cargo test
-      # The root workspace's crates with the fpc XPath backend on (the check job builds them without it).
-      - name: Clippy (fpc backend)
-        working-directory: .
-        run: cargo clippy -p fmd-xpath -p fmd-lua -p fmd2r --all-targets --features fmd-xpath/diff,fmd-lua/xpath-fpc,fmd2r/xpath-fpc -- -D warnings
-      # `fmd-xpath/diff` runs the differential corpus on both backends (tests/corpus.rs).
-      - name: Test (fpc backend)
-        working-directory: .
-        run: cargo test -p fmd-xpath -p fmd-lua --features fmd-xpath/diff,fmd-lua/xpath-fpc
-      - name: Test fmd2r xpath (fpc backend)
-        working-directory: .
-        run: cargo test -p fmd2r --features xpath-fpc --test xpath
-      - name: Build libfmdxpath.so
-        run: ./build.sh build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: libfmdxpath-linux-x86_64
-          path: crates/xpath-fpc/build/libfmdxpath.so
-          if-no-files-found: error
 
   web:
     runs-on: ubuntu-latest
