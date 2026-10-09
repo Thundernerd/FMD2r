@@ -612,7 +612,8 @@ fn axis_nodes(node: &NodeRef, axis: Axis) -> Vec<usize> {
     let is_attr = |i: usize| matches!(dom.node(i).kind, NodeKind::Attribute { .. });
     match axis {
         Axis::Child => n.children.clone(),
-        // Namespace declarations aren't attributes.
+        // Namespace declarations aren't attributes (`isNamespaceNode`, internettools
+        // data/simplehtmltreeparser.pas:742-745).
         Axis::Attribute => n
             .attributes
             .iter()

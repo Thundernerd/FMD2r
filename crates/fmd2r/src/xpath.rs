@@ -56,7 +56,11 @@ impl BackendArg {
             BackendArg::Native => Backend::Native,
         };
         backend.engine().ok_or_else(|| {
-            anyhow!("the {backend:?} XPath backend is not built in (build fmd2r with --features xpath-fpc)")
+            let feature = match self {
+                BackendArg::Fpc => "xpath-fpc",
+                BackendArg::Native => "fmd-lua/xpath-native",
+            };
+            anyhow!("the {backend:?} XPath backend is not built in (build fmd2r with --features {feature})")
         })
     }
 }

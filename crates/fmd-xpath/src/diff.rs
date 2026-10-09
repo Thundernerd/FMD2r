@@ -96,7 +96,7 @@ pub struct Report {
 }
 
 /// The longest normalised result a report shows; the rest is cut.
-const SHOWN: usize = 4000;
+const MAX_SHOWN_RESULT: usize = 4000;
 
 impl Report {
     /// The report as Markdown: a summary, then the mismatches grouped by [`feature`].
@@ -123,7 +123,11 @@ impl Report {
                     ("expected", &mismatch.expected),
                     ("actual", &mismatch.actual),
                 ] {
-                    let _ = writeln!(out, "{label}:\n```\n{}```", cut(&value.to_string()));
+                    let _ = writeln!(
+                        out,
+                        "{label}:\n```\n{}```",
+                        truncate_shown(&value.to_string())
+                    );
                 }
             }
         }
@@ -131,12 +135,12 @@ impl Report {
     }
 }
 
-/// `text` up to [`SHOWN`] bytes, marked when cut.
-fn cut(text: &str) -> String {
-    if text.len() <= SHOWN {
+/// `text` up to [`MAX_SHOWN_RESULT`] bytes, marked when cut.
+fn truncate_shown(text: &str) -> String {
+    if text.len() <= MAX_SHOWN_RESULT {
         return text.to_owned();
     }
-    let mut end = SHOWN;
+    let mut end = MAX_SHOWN_RESULT;
     while !text.is_char_boundary(end) {
         end -= 1;
     }
@@ -145,7 +149,7 @@ fn cut(text: &str) -> String {
 
 /// The expression feature a report groups an entry under: a CSS selector, JSON, the first
 /// function it calls, or a plain path.
-pub fn feature(entry: &Entry) -> String {
+fn feature(entry: &Entry) -> String {
     let expr = &entry.expression;
     if entry.css {
         return "css selector".to_owned();
@@ -221,13 +225,13 @@ fn first_function(expr: &str) -> Option<&str> {
 /// Evaluates every entry of `corpus` on `reference` and `candidate` and reports the entries
 /// whose [`Normalized`] results differ.
 pub fn diff(corpus: &Corpus, reference: &dyn XPathEngine, candidate: &dyn XPathEngine) -> Report {
-    let reference = Backend::parse(corpus, reference);
-    let candidate = Backend::parse(corpus, candidate);
+    let reference = ParsedCorpus::parse(corpus, reference);
+    let candidate = ParsedCorpus::parse(corpus, candidate);
     let mut report = Report::default();
     for entry in corpus.entries() {
         report.entries += 1;
-        let expected = reference.evaluate(entry);
-        let actual = candidate.evaluate(entry);
+        let expected = reference.normalized(entry);
+        let actual = candidate.normalized(entry);
         if expected != actual {
             report.mismatches.push(Mismatch {
                 entry: entry.clone(),
@@ -239,14 +243,14 @@ pub fn diff(corpus: &Corpus, reference: &dyn XPathEngine, candidate: &dyn XPathE
     report
 }
 
-/// A backend with every corpus document parsed.
-struct Backend {
+/// Every corpus document, parsed by one engine.
+struct ParsedCorpus {
     documents: HashMap<u64, Result<Box<dyn Document>, String>>,
 }
 
-impl Backend {
-    fn parse(corpus: &Corpus, engine: &dyn XPathEngine) -> Backend {
-        Backend {
+impl ParsedCorpus {
+    fn parse(corpus: &Corpus, engine: &dyn XPathEngine) -> ParsedCorpus {
+        ParsedCorpus {
             documents: corpus
                 .documents()
                 .map(|(hash, body)| (hash, engine.parse(body).map_err(|e| e.to_string())))
@@ -254,15 +258,15 @@ impl Backend {
         }
     }
 
-    fn evaluate(&self, entry: &Entry) -> Normalized {
-        match self.eval(entry) {
+    fn normalized(&self, entry: &Entry) -> Normalized {
+        match self.value_of(entry) {
             Ok(value) => Normalized::of(value.as_ref()),
             Err(e) => Normalized::error(e),
         }
     }
 
     /// The entry's value, its context rebuilt from its origin.
-    fn eval(&self, entry: &Entry) -> Result<Box<dyn XPathValue>, String> {
+    fn value_of(&self, entry: &Entry) -> Result<Box<dyn XPathValue>, String> {
         let document = match self.documents.get(&entry.document) {
             Some(Ok(document)) => document,
             Some(Err(e)) => return Err(e.clone()),
@@ -271,14 +275,14 @@ impl Backend {
         let context = entry
             .context
             .as_deref()
-            .map(|origin| self.value(origin))
+            .map(|origin| self.origin_value(origin))
             .transpose()?;
         Ok(document.eval(&entry.expression, context.as_deref(), entry.css))
     }
 
     /// The value `origin` describes.
-    fn value(&self, origin: &Origin) -> Result<Box<dyn XPathValue>, String> {
-        let mut value = self.eval(&origin.entry)?;
+    fn origin_value(&self, origin: &Origin) -> Result<Box<dyn XPathValue>, String> {
+        let mut value = self.value_of(&origin.entry)?;
         for step in &origin.path {
             value = match step {
                 Step::Item(i) => value.get(*i),

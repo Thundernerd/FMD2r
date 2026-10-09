@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use fmd_http::{HttpSession, TerminateToken};
-use fmd_xpath::LoggingEngine;
+use fmd_xpath::{LoggingEngine, XPathEngine};
 use mlua::chunk::ChunkMode;
 use mlua::{Function, Lua, MultiValue, Value};
 
@@ -16,7 +16,7 @@ use super::{Bytecode, CallbackError, Envelope, Job, JobError, JobResult, Queue, 
 use crate::module::lock;
 use crate::{
     Globals, HttpModule, LuaHttp, Module, ModuleHttpOverrides, ModuleHttpSettings, Runtime,
-    SettingsStoreError, create_http,
+    SettingsStoreError, XPathBackend, create_http,
 };
 
 /// Calls a function under `xpcall`, returning the traceback taken where it failed (or `''`),
@@ -159,19 +159,23 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
             terminate: None,
         })
         .map_err(|e| plain(format!("new Lua state: {e}")))?;
-    if let Some(backend) = shared.xpath_backend {
-        runtime
-            .set_xpath_backend(backend)
-            .map_err(|e| plain(format!("new Lua state: {e}")))?;
-    }
-    if let Some(corpus) = &shared.xpath_corpus {
+    // The XPath backend of `CreateTXQuery`: the configured one, else the runtime's default;
+    // wrapped to record into the differential corpus when one is set.
+    if shared.xpath_backend.is_some() || shared.xpath_corpus.is_some() {
         let engine = match shared.xpath_backend {
-            Some(backend) => backend.engine(),
-            None => crate::default_xpath_engine(),
+            Some(backend) => backend
+                .engine()
+                .ok_or(crate::Error::MissingXPathBackend(backend)),
+            None => crate::default_xpath_engine()
+                .ok_or(crate::Error::MissingXPathBackend(XPathBackend::default())),
         }
-        .ok_or_else(|| plain("new Lua state: no XPath backend to log".to_owned()))?;
+        .map_err(|e| plain(format!("new Lua state: {e}")))?;
+        let engine: Rc<dyn XPathEngine> = match &shared.xpath_corpus {
+            Some(corpus) => Rc::new(LoggingEngine::new(engine, corpus.hook())),
+            None => engine,
+        };
         runtime
-            .set_xpath_engine(Rc::new(LoggingEngine::new(engine, corpus.hook())))
+            .set_xpath_engine(engine)
             .map_err(|e| plain(format!("new Lua state: {e}")))?;
     }
     let lua = runtime.lua();

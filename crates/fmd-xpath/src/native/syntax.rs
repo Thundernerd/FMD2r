@@ -264,7 +264,8 @@ impl Axis {
 pub(crate) enum NodeTest {
     /// A name (ASCII case-insensitive, like internettools on HTML); `*` matches any.
     Name(String),
-    /// `*:name`: the local part of a name, whatever its prefix.
+    /// `*:name`: the local part of a name, whatever its prefix (`qmCheckNamespaceURL` unset,
+    /// internettools data/xquery.pas:1729-1731).
     LocalName(String),
     AnyName,
     /// `node()`.

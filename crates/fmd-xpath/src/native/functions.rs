@@ -812,7 +812,8 @@ fn node_name(which: &str, node: Option<&NodeRef>) -> XResult<Seq> {
     })
 }
 
-/// `fn:namespace-uri`: the URL of the node's namespace, empty when it has none.
+/// `fn:namespace-uri`: the URL of the node's namespace, empty when it has none (internettools
+/// data/xquery__functions.pas:3290).
 fn namespace_uri(node: Option<&NodeRef>) -> XResult<Seq> {
     string(node.map_or("", |node| node.dom.namespace_url(node.id)))
 }

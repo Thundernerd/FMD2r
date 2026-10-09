@@ -42,6 +42,22 @@ pub(crate) struct Node {
     default_namespace: Option<NsId>,
 }
 
+impl Node {
+    /// A node with id `id` and no attributes, children or namespace yet.
+    fn new(kind: NodeKind, parent: Option<NodeId>, id: NodeId) -> Node {
+        Node {
+            kind,
+            parent,
+            attributes: Vec::new(),
+            children: Vec::new(),
+            last: id,
+            namespace: None,
+            declarations: Vec::new(),
+            default_namespace: None,
+        }
+    }
+}
+
 /// Index of a namespace in [`Dom::namespaces`].
 pub(crate) type NsId = usize;
 
@@ -121,7 +137,8 @@ impl Dom {
         }
     }
 
-    /// The URL of the node's namespace; empty when it has none (`fn:namespace-uri`).
+    /// The URL of the node's namespace; empty when it has none (`fn:namespace-uri`, internettools
+    /// data/xquery__functions.pas:3290).
     pub(crate) fn namespace_url(&self, id: NodeId) -> &str {
         self.nodes[id]
             .namespace
@@ -185,7 +202,8 @@ impl Dom {
         serializer.out
     }
 
-    /// `elementIsHTML`: no namespace, the empty one, or XHTML's.
+    /// `elementIsHTML`: no namespace, the empty one, or XHTML's (internettools
+    /// data/xquery__serialization_nodes.pas:397-402).
     fn is_html_namespace(&self, id: NodeId) -> bool {
         self.nodes[id].namespace.is_none_or(|ns| {
             let url = &self.namespaces[ns].url;
@@ -407,8 +425,10 @@ impl<'a> Serializer<'a> {
                 declaration(prefix, url, &mut self.out);
             }
         }
+        // `requireNamespace`, or `xmlns=""` for an element without a namespace inside a default
+        // one (internettools data/xquery__serialization_nodes.pas:584-591).
         match node.namespace {
-            // `requireNamespace`: already declared above.
+            // Already declared above.
             Some(_) => {}
             None => {
                 if list
@@ -792,35 +812,18 @@ fn freeze(nodes: &[SinkNode], dom: &mut Dom) {
             SinkData::Dropped => continue,
         };
         let new = dom.nodes.len();
-        dom.nodes.push(Node {
-            kind,
-            parent,
-            attributes: Vec::new(),
-            children: Vec::new(),
-            last: new,
-            namespace: None,
-            declarations: Vec::new(),
-            default_namespace: None,
-        });
+        dom.nodes.push(Node::new(kind, parent, new));
         if let Some(parent) = parent {
             dom.nodes[parent].children.push(new);
         }
         if let SinkData::Element { attrs, .. } = &nodes[id].data {
             for attr in attrs {
                 let a = dom.nodes.len();
-                dom.nodes.push(Node {
-                    kind: NodeKind::Attribute {
-                        name: qualified(&attr.name),
-                        value: attr.value.to_string(),
-                    },
-                    parent: Some(new),
-                    attributes: Vec::new(),
-                    children: Vec::new(),
-                    last: a,
-                    namespace: None,
-                    declarations: Vec::new(),
-                    default_namespace: None,
-                });
+                let kind = NodeKind::Attribute {
+                    name: qualified(&attr.name),
+                    value: attr.value.to_string(),
+                };
+                dom.nodes.push(Node::new(kind, Some(new), a));
                 dom.nodes[new].attributes.push(a);
             }
         }
@@ -908,7 +911,7 @@ fn resolve_prefix(dom: &mut Dom, scope: NodeId, id: NodeId) {
 }
 
 /// The namespace `prefix` names at the element `scope`: the innermost declaration on it or
-/// its ancestors; `xml` needs none.
+/// its ancestors; `xml` needs none (internettools data/simplehtmltreeparser.pas:2736-2747).
 fn find_namespace(dom: &mut Dom, scope: NodeId, prefix: &str) -> Option<NsId> {
     let mut element = Some(scope);
     while let Some(e) = element {
@@ -946,7 +949,8 @@ fn reserved_namespace(dom: &mut Dom, prefix: &str, url: &str) -> NsId {
     dom.namespaces.len() - 1
 }
 
-/// `xmlStrWhitespaceCollapse`: trimmed, runs of whitespace as one space.
+/// `xmlStrWhitespaceCollapse`, which a declared URL goes through (internettools
+/// data/simplehtmltreeparser.pas:2453): trimmed, runs of whitespace as one space.
 fn collapse_whitespace(s: &str) -> String {
     s.split([' ', '\t', '\n', '\r'])
         .filter(|part| !part.is_empty())
@@ -957,7 +961,8 @@ fn collapse_whitespace(s: &str) -> String {
 /// `prefix:local`, as internettools names nodes from the source.
 fn qualified(name: &QualName) -> String {
     match &name.prefix {
-        // html5ever gives a foreign element's `xmlns` the empty prefix.
+        // html5ever gives a foreign element's `xmlns` the empty prefix; internettools keeps the
+        // name as written (data/simplehtmltreeparser.pas:2451-2457).
         Some(prefix) if !prefix.is_empty() => format!("{prefix}:{}", name.local),
         _ => name.local.to_string(),
     }

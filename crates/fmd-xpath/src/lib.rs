@@ -8,7 +8,7 @@ use std::any::Any;
 use std::rc::Rc;
 
 use corpus::{Entry, Origin, Step};
-pub use diff::{Mismatch, Normalized, NormalizedItem, Report, diff, feature};
+pub use diff::{Mismatch, Normalized, NormalizedItem, Report, diff};
 
 pub mod corpus;
 mod diff;
