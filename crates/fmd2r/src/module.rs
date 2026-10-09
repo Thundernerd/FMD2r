@@ -329,20 +329,20 @@ fn pages(args: RunArgs) -> anyhow::Result<()> {
     });
     println!("{}", serde_json::to_string_pretty(&out)?);
     if !prepared.resolved {
-        // Not on `GetPageNumber`'s result alone: modules return it false on chapters that work
-        // (MangaDex returns `no_error`, which `DoGetPageNumber` leaves nil,
+        // Not on `GetPageNumber`'s result alone: modules return false on chapters that work
+        // (MangaDex returns `no_error`, unset in `DoGetPageNumber` and so read as false,
         // baseunits/lua/LuaWebsiteModules.pas:285-304), and FMD2 ignores it.
-        match prepared.get_page_number {
-            Some(false) => bail!("no page link resolved; GetPageNumber returned false"),
-            _ => bail!("no page link resolved"),
+        if prepared.get_page_number == Some(false) {
+            bail!("no page link resolved; GetPageNumber returned false");
         }
+        bail!("no page link resolved");
     }
     Ok(())
 }
 
 /// What [`prepare_chapter`] left: the task, and each callback's result (`None` when it did not
 /// run).
-struct Prepared {
+struct PreparedChapter {
     task: Task,
     task_start: Option<bool>,
     get_page_number: Option<bool>,
@@ -354,7 +354,7 @@ struct Prepared {
 }
 
 /// The callbacks of [`pages`], returning the task as they left it.
-fn prepare_chapter(run: &ModuleRun) -> Result<Prepared, JobError> {
+fn prepare_chapter(run: &ModuleRun) -> Result<PreparedChapter, JobError> {
     let def = run.target.module.def();
     let link = &run.target.link;
     let affinity = run.pool.affinity();
@@ -426,9 +426,9 @@ fn prepare_chapter(run: &ModuleRun) -> Result<Prepared, JobError> {
     let resolved = if def.dynamic_page_link {
         found_pages
     } else {
-        task.page_links.iter().any(|l| l != UNRESOLVED_PAGE)
+        task.page_links.iter().any(|page| page != UNRESOLVED_PAGE)
     };
-    Ok(Prepared {
+    Ok(PreparedChapter {
         resolved,
         task,
         task_start,

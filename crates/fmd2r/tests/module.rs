@@ -550,7 +550,7 @@ fn fixture_with_get_page_number(root_url: &str, get_page_number: &str) -> String
 }
 
 #[test]
-fn pages_fails_with_the_json_when_get_page_number_returns_false() {
+fn pages_fails_naming_a_false_get_page_number_when_no_page_link_resolves() {
     let server = Server::start(site);
     // Like MangaDex on a chapter it answers with a 404 JSON.
     let module =
