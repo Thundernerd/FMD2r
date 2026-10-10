@@ -363,9 +363,11 @@
 										: 'Goes through the setup with the current values.'}
 								</span>
 							</p>
+						{/if}
+						{#if section.id === 'appearance'}
 							<p class="custom-css small muted">
-								Your own styles: a <span class="mono">custom.css</span>
-								in the data folder{#if dataDir}{' '}(<span class="mono">{dataDir}</span>){/if}
+								Your own styles: a <span class="mono">custom.css</span> in the data folder
+								{#if dataDir}(<span class="mono">{dataDir}</span>){/if}
 								is loaded after the app's, on the next reload.
 							</p>
 						{/if}

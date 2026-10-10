@@ -51,8 +51,8 @@ test('a custom.css in the data folder restyles the app and the login page', asyn
 	}
 });
 
-test('Settings → General says where custom.css goes', async ({ page }) => {
-	await page.goto('/settings#section-general');
+test('Settings → Appearance says where custom.css goes', async ({ page }) => {
+	await page.goto('/settings#section-appearance');
 	await expect(
 		page.getByText(/custom\.css in the data folder \(\S*fmd2r-e2e-\S*\/data\) is loaded/)
 	).toBeVisible();

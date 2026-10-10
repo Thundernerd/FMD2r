@@ -36,7 +36,7 @@ keep those providers' terms. FMD2r ships none of it: each install downloads its 
 ## Custom stylesheet
 
 For changes the settings don't offer, put a `custom.css` in the data folder (`--data-dir`;
-Settings → General shows its full path). The web UI loads it after its own styles, so a rule there
+Settings → Appearance shows where that is). The web UI loads it after its own styles, so a rule there
 wins at equal specificity. The server reads it on every request: edit it and reload the page, no
 restart needed. It is served without a login, so the login page uses it too. Files over 1 MiB are
 refused.
@@ -53,11 +53,14 @@ names aren't, and may change between releases. The ones worth overriding:
   `--accent-fg`, `--accent-soft`, and the status colours `--ok`, `--warn`, `--bad`, `--idle` with
   their `-soft` backgrounds. A colour set on `:root` applies in light and dark mode alike; give
   each mode its own with `light-dark(<light>, <dark>)`, e.g. `--bg: light-dark(#fff, #000);`.
-  Dark mode follows the OS unless a theme is picked, so the `:root[data-theme='dark']` rule
-  above only applies to an explicitly picked dark theme; for the OS's dark mode use
+  An `--accent` set here replaces whichever accent colour Settings → Appearance picks.
+- Light or dark: Settings → Appearance sets `data-theme='light'` or `'dark'` on `<html>`, and
+  none for "Same as the device". So the `:root[data-theme='dark']` rule above applies when Dark
+  is picked; to match the device's dark mode too, add
   `@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --bg: #000; } }`.
 - Fonts and sizes: `--f-display`, `--f-body`, `--f-mono`, and `--fs-xs` to `--fs-hero`
-  (`--fs-md` is body text).
+  (`--fs-md` is body text). Each size is a multiple of `--text-scale`, the Text size setting: a
+  fixed `16px` ignores that setting, while `calc(16px * var(--text-scale))` keeps it working.
 - Spacing and corners: `--sp-1` to `--sp-6`, `--r`, `--r-lg`, `--r-xl`.
 
 An `@import` of a web font or another stylesheet by URL works. In Docker the data folder is the
