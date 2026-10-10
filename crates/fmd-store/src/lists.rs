@@ -7,6 +7,7 @@ use std::path::Path;
 use rusqlite::types::Value;
 use rusqlite::{OptionalExtension, Row, Statement, params, params_from_iter};
 
+use crate::cover_links::{CoverLinkRepo, CoverSource};
 use crate::db::Db;
 use crate::error::Result;
 
@@ -14,6 +15,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/lists_v1.sql"),
     include_str!("migrations/lists_v2.sql"),
     include_str!("migrations/lists_v3.sql"),
+    include_str!("migrations/lists_v4.sql"),
 ];
 
 /// Run inside the transaction that changed `module_id`'s list.
@@ -47,6 +49,11 @@ impl ListsDb {
     /// The list titles' MangaBaka matches.
     pub fn matches(&self) -> MatchRepo<'_> {
         MatchRepo { db: &self.db }
+    }
+
+    /// The list titles' cover links.
+    pub fn cover_links(&self) -> CoverLinkRepo<'_> {
+        CoverLinkRepo { db: &self.db }
     }
 }
 
@@ -647,6 +654,8 @@ impl MatchRepo<'_> {
         Ok(inputs)
     }
 
+    /// A title whose match changed loses the cover link taken from its old match; an accepted
+    /// match replaces the cover link taken from the website.
     pub fn store<'m, I>(&self, module_id: &str, matches: I) -> Result<()>
     where
         I: IntoIterator<Item = (&'m MatchInput, &'m StoredMatch)>,
@@ -659,7 +668,15 @@ impl MatchRepo<'_> {
                      (module_id, link, series_id, confidence, format, status, year, fingerprint)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             )?;
+            let mut stale_cover = tx.prepare_cached(&format!(
+                "DELETE FROM cover_links WHERE module_id = ?1 AND link = ?2
+                 AND ((source = '{}' AND series_id IS NOT ?3)
+                      OR (source = '{}' AND ?3 IS NOT NULL))",
+                CoverSource::MangaBaka.as_str(),
+                CoverSource::Website.as_str()
+            ))?;
             for (input, m) in matches {
+                stale_cover.execute(params![module_id, input.link, m.series_id])?;
                 stmt.execute(params![
                     module_id,
                     input.link,
@@ -686,8 +703,16 @@ impl MatchRepo<'_> {
         Ok(())
     }
 
+    /// Also drops the cover links taken from the matches.
     pub fn clear(&self) -> Result<()> {
-        self.db.lock().execute("DELETE FROM metadata_matches", [])?;
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM metadata_matches", [])?;
+        tx.execute(
+            "DELETE FROM cover_links WHERE source = ?1",
+            [CoverSource::MangaBaka.as_str()],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 

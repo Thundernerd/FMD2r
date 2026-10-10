@@ -337,6 +337,97 @@
         }
       }
     },
+    "/api/covers/series": {
+      "get": {
+        "tags": [
+          "covers"
+        ],
+        "summary": "A list title's cover. Its link comes from, in order: the link stored for the title while it\nis recent (`covers.revalidate_after_hours`); the title's accepted match in the MangaBaka\ndatabase, when it is downloaded; the website module's `GetInfo`, a few at a time per module.\nThe link found is stored, \"no cover\" included. The image then goes through the cover cache\nlike `GET /api/covers`. With `general.load_covers` off nothing is looked up or fetched.",
+        "operationId": "getSeriesCover",
+        "parameters": [
+          {
+            "name": "module",
+            "in": "query",
+            "description": "The website module the title is listed by.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "link",
+            "in": "query",
+            "description": "The title's link relative to the module's `RootURL`, as its list has it.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "w",
+            "in": "query",
+            "description": "Scale down to this width in pixels (1 to 2000), keeping the aspect ratio.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cover image",
+            "content": {
+              "image/*": {}
+            }
+          },
+          "304": {
+            "description": "The browser's copy (`If-None-Match`) is current"
+          },
+          "400": {
+            "description": "A bad width, or a cover link that may not be fetched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown module, the title has no cover, or covers are off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The website or the cover's host failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "lists.db is not open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/events": {
       "get": {
         "tags": [
@@ -3908,7 +3999,8 @@
           "numchapter",
           "added_jdn",
           "format",
-          "publication"
+          "publication",
+          "cover_url"
         ],
         "properties": {
           "added_jdn": {
@@ -3924,6 +4016,10 @@
           },
           "authors": {
             "type": "string"
+          },
+          "cover_url": {
+            "type": "string",
+            "description": "The title's cover through `/api/covers/series`; add `w` for a thumbnail."
           },
           "format": {
             "type": "string",

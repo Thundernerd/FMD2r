@@ -4,6 +4,7 @@
 //! `tokio::task::spawn_blocking`.
 
 mod app;
+mod cover_links;
 mod crypto;
 mod db;
 mod error;
@@ -24,6 +25,7 @@ pub use app::tasks::{
     ChapterStatus, ImportedChapter, ImportedTask, NewChapter, NewPage, NewTask, PageStatus, Task,
     TaskChapter, TaskId, TaskPage, TaskRepo, TaskStatus,
 };
+pub use cover_links::{CoverLink, CoverLinkRepo, CoverSource};
 pub use crypto::{ACCOUNTS_KEY_FILE, Cipher, KeyFileCipher};
 pub use error::{Result, StoreError};
 pub use lists::{

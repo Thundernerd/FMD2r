@@ -18,6 +18,7 @@
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
+	import { editable } from '#lib/settings/module.ts';
 	import { showFieldErrors } from '#lib/settings/save.ts';
 	import {
 		OWN_SECTION_PATHS,
@@ -95,36 +96,43 @@
 			.catch(() => (modules = []));
 	});
 
-	/** The editable part of a module's settings, shaped like its PATCH body. */
-	const editable = (view: ModuleSettingsView) => ({
-		enabled: view.enabled,
-		limits: view.limits,
-		http: view.http,
-		save_to: view.save_to,
-		options: Object.fromEntries(view.options.map((o) => [o.key, o.value]))
-	});
-
+	// The previous module stays on show until the next one is loaded, so the panel doesn't collapse
+	// to "Loading…" and back, changing the page's height under the reader.
 	$effect(() => {
 		const id = selected;
-		moduleView = null;
-		moduleDraft = null;
-		if (!id) return;
+		if (!id) {
+			moduleView = null;
+			moduleDraft = null;
+			moduleLoading = false;
+			return;
+		}
 		moduleLoading = true;
+		/** Whether `id` is still the one to show, not overtaken by a later pick. */
+		const stillSelected = () => page.url.searchParams.get('module') === id;
 		api
 			.getModuleSettings(id)
 			.then((view) => {
-				if (page.url.searchParams.get('module') !== id) return;
+				if (!stillSelected()) return;
 				moduleView = view;
 				moduleDraft = new Draft(editable(view));
 			})
-			.catch(() => (saveError = `Could not load the settings of module ${id}.`))
-			.finally(() => (moduleLoading = false));
+			.catch(() => {
+				if (!stillSelected()) return;
+				moduleView = null;
+				moduleDraft = null;
+				saveError = `Could not load the settings of module ${id}.`;
+			})
+			.finally(() => {
+				if (stillSelected()) moduleLoading = false;
+			});
 	});
 
 	function selectModule(id: string) {
 		if (id === selected) return;
-		if (moduleDraft?.dirty && !confirm(`Discard the unsaved changes to ${moduleView?.name}?`)) {
-			return;
+		if (moduleDraft?.dirty) {
+			if (!confirm(`Discard the unsaved changes to ${moduleView?.name}?`)) return;
+			// The module stays on show until the next one loads; its dropped edits mustn't be saved.
+			moduleDraft.reset();
 		}
 		const url = new URL(page.url.href);
 		url.searchParams.set('module', id);
@@ -304,7 +312,7 @@
 							Logins for websites that support them. Changes save right away; passwords are stored
 							encrypted and never shown again.
 						</p>
-						<AccountsPanel />
+						<AccountsPanel {api} {modules} />
 					</section>
 				{:else if section}
 					<section id="section-{section.id}" class="card" aria-labelledby="heading-{section.id}">

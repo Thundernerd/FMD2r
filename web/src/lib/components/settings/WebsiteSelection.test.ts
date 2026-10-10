@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 import { Draft } from '#lib/settings/draft.svelte.ts';
-import { HACHIRAW, HACHIRAW_ID, summary } from '../modules.fixture.ts';
+import { DETECTIVE_CONAN, HACHIRAW, HACHIRAW_ID, summary } from '../modules.fixture.ts';
 import WebsiteSelection from './WebsiteSelection.svelte';
 
 const MODULES = [
@@ -13,9 +13,9 @@ const MODULES = [
 
 /** FMD2's website selection: a checkbox per module, grouped by category, with a search
  * (`tsWebsiteSelection`, mangadownloader/forms/frmMain.pas:234, search at :3315-3317). */
-function renderSelection(selected: string[]) {
+function renderSelection(selected: string[], modules = MODULES) {
 	const draft = new Draft<object>({ general: { selected_websites: selected } });
-	render(WebsiteSelection, { modules: MODULES, draft });
+	render(WebsiteSelection, { modules, draft });
 	return draft;
 }
 
@@ -51,5 +51,13 @@ describe('WebsiteSelection', () => {
 
 		await fireEvent.click(screen.getByRole('button', { name: 'Select none' }));
 		expect(selection(draft)).toEqual(['mangadex']);
+	});
+
+	it('shows the full name of a website in its tooltip', () => {
+		const { name } = DETECTIVE_CONAN;
+		renderSelection([], [...MODULES, DETECTIVE_CONAN]);
+		expect(box(name).closest('label')?.title).toBe(name);
+		// A repeated name carries its host, as the label does.
+		expect(box('HachiRaw (hachiraw.win)').closest('label')?.title).toBe('HachiRaw (hachiraw.win)');
 	});
 });

@@ -117,6 +117,29 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/covers/series': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * A list title's cover. Its link comes from, in order: the link stored for the title while it
+		 *     is recent (`covers.revalidate_after_hours`); the title's accepted match in the MangaBaka
+		 *     database, when it is downloaded; the website module's `GetInfo`, a few at a time per module.
+		 *     The link found is stored, "no cover" included. The image then goes through the cover cache
+		 *     like `GET /api/covers`. With `general.load_covers` off nothing is looked up or fetched.
+		 */
+		get: operations['getSeriesCover'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/events': {
 		parameters: {
 			query?: never;
@@ -1553,6 +1576,8 @@ export interface components {
 			alttitles: string;
 			artists: string;
 			authors: string;
+			/** @description The title's cover through `/api/covers/series`; add `w` for a thumbnail. */
+			cover_url: string;
 			/** @description As in the `format` filter. */
 			format: string;
 			genres: string[];
@@ -2922,6 +2947,76 @@ export interface operations {
 			};
 			/** @description Upstream failed to deliver the cover */
 			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	getSeriesCover: {
+		parameters: {
+			query: {
+				/** @description The website module the title is listed by. */
+				module: string;
+				/** @description The title's link relative to the module's `RootURL`, as its list has it. */
+				link: string;
+				/** @description Scale down to this width in pixels (1 to 2000), keeping the aspect ratio. */
+				w?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description The cover image */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'image/*': unknown;
+				};
+			};
+			/** @description The browser's copy (`If-None-Match`) is current */
+			304: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description A bad width, or a cover link that may not be fetched */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Unknown module, the title has no cover, or covers are off */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The website or the cover's host failed */
+			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description lists.db is not open */
+			503: {
 				headers: {
 					[name: string]: unknown;
 				};

@@ -202,3 +202,109 @@ test('opening a module by link selects it and shows it in the list', async ({ pa
 	await expect(pick).toHaveAttribute('aria-pressed', 'true');
 	await expect(pick).toBeInViewport();
 });
+
+test('the website selection shows its search and lines its websites up in columns', async ({
+	page
+}) => {
+	await page.goto('/settings#section-websites');
+	const websites = page.getByRole('region', { name: 'Websites', exact: true });
+	const search = websites.getByRole('searchbox', { name: 'Search websites' });
+	// As tall as a plain input, not cut to a progress bar's 6px.
+	const normal = await page.evaluate(() => {
+		const input = document.body.appendChild(document.createElement('input'));
+		input.className = 'input';
+		const height = input.getBoundingClientRect().height;
+		input.remove();
+		return height;
+	});
+	const shown = await search.evaluate((input) => {
+		// The part of the box its row does not clip away.
+		const box = input.getBoundingClientRect();
+		const row = input.parentElement?.getBoundingClientRect() ?? box;
+		return Math.min(box.bottom, row.bottom) - Math.max(box.top, row.top);
+	});
+	expect(shown).toBeGreaterThanOrEqual(normal);
+	await expect(websites.getByRole('button', { name: 'Select all' })).toBeVisible();
+	await expect(websites.getByRole('button', { name: 'Select none' })).toBeVisible();
+
+	// A long name takes no more room than the others, so the websites line up in columns. The
+	// width leaves room for two columns, so the three websites take two rows.
+	await page.setViewportSize({ width: 640, height: 740 });
+	const arabic = websites.getByRole('group', { name: 'Arabic' }).getByRole('checkbox');
+	await expect(arabic).toHaveCount(3);
+	const items = await arabic.evaluateAll((boxes) =>
+		boxes.map((box) => {
+			const choice = box.closest('label')?.getBoundingClientRect();
+			return { top: choice?.top, left: box.getBoundingClientRect().left, width: choice?.width };
+		})
+	);
+	expect(new Set(items.map((item) => item.width)).size).toBe(1);
+	const columns = items.filter((item) => item.top === items[0]?.top).length;
+	expect(columns).toBeLessThan(items.length);
+	items.forEach((item, i) => expect(item.left).toBe(items[i % columns]?.left));
+});
+
+test('picking a module keeps the page where it is', async ({ page }) => {
+	// Slow enough that the page renders while the picked module's settings load.
+	await page.addInitScript(() =>
+		sessionStorage.setItem('fmd2r.mock.module-settings-delay-ms', '500')
+	);
+	await page.goto('/settings?module=mangadex');
+	const modules = page.getByRole('region', { name: 'Website modules' });
+	const panel = modules.getByRole('region', { name: 'Module settings' });
+	await expect(panel.getByRole('heading', { name: 'MangaDex' })).toBeVisible();
+	await expect(panel).toHaveAttribute('aria-busy', 'false');
+	const list = modules.getByRole('list', { name: 'Modules' });
+	const pick = list.getByRole('button', { name: /TuMangaOnline/ });
+	// Scroll the page down, the pick in the middle of the window.
+	await pick.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+	const before = await page.evaluate(() => window.scrollY);
+	expect(before).toBeGreaterThan(0);
+	const listScroll = await list.evaluate((el) => el.scrollTop);
+	// Every position the window scrolls to, to catch a jump that is scrolled back afterwards.
+	const scrolled = await page.evaluateHandle(() => {
+		const positions: number[] = [];
+		addEventListener('scroll', () => positions.push(window.scrollY));
+		return positions;
+	});
+
+	await pick.click();
+	await expect(page).toHaveURL(/[?&]module=tmo\b/);
+	// The previous module stays on show while the picked one loads.
+	await expect(panel).toHaveAttribute('aria-busy', 'true');
+	await expect(panel.getByRole('heading', { name: 'MangaDex' })).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'TuMangaOnline' })).toBeVisible();
+	await expect(panel).toHaveAttribute('aria-busy', 'false');
+	expect(
+		await scrolled.evaluate((positions, y) => positions.filter((p) => p !== y), before)
+	).toEqual([]);
+	expect(await page.evaluate(() => window.scrollY)).toBe(before);
+	expect(await list.evaluate((el) => el.scrollTop)).toBe(listScroll);
+});
+
+test('picking another module asks before dropping the open one’s edits', async ({ page }) => {
+	await page.addInitScript(() =>
+		sessionStorage.setItem('fmd2r.mock.module-settings-delay-ms', '500')
+	);
+	await page.goto('/settings?module=mangadex');
+	const modules = page.getByRole('region', { name: 'Website modules' });
+	const panel = modules.getByRole('region', { name: 'Module settings' });
+	await panel.getByRole('checkbox', { name: 'Data saver' }).check();
+	const saveBar = page.getByRole('region', { name: 'Save changes' });
+	await expect(saveBar).toContainText('Unsaved changes');
+	const pick = modules.getByRole('button', { name: /TuMangaOnline/ });
+
+	page.once('dialog', (dialog) => dialog.dismiss());
+	await pick.click();
+	await expect(page).toHaveURL(/[?&]module=mangadex\b/);
+	await expect(panel.getByRole('checkbox', { name: 'Data saver' })).toBeChecked();
+
+	page.once('dialog', (dialog) => dialog.accept());
+	await pick.click();
+	await expect(page).toHaveURL(/[?&]module=tmo\b/);
+	// The dropped edits are gone while the previous module still shows, so they can't be saved.
+	await expect(panel).toHaveAttribute('aria-busy', 'true');
+	await expect(panel.getByRole('checkbox', { name: 'Data saver' })).not.toBeChecked();
+	await expect(saveBar).toBeHidden();
+	await expect(panel.getByRole('heading', { name: 'TuMangaOnline' })).toBeVisible();
+});

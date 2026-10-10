@@ -320,6 +320,12 @@ export interface MockOptions {
 	 * Defaults to `sessionStorage['fmd2r.mock.series-delay-ms']`, or no delay.
 	 */
 	seriesDelayMs?: number;
+	/**
+	 * How long, in ms, `GET /api/modules/{id}/settings` takes to answer, so a test can pick a module
+	 * while the previous one shows. Defaults to `sessionStorage['fmd2r.mock.module-settings-delay-ms']`,
+	 * or no delay.
+	 */
+	moduleSettingsDelayMs?: number;
 	/** Start with a MangaBaka database downloaded, so list titles carry formats and statuses. */
 	mangabaka?: boolean;
 }
@@ -327,6 +333,7 @@ export interface MockOptions {
 const PASSWORD_KEY = 'fmd2r.mock.password';
 const SESSION_KEY = 'fmd2r.mock.session';
 const SERIES_DELAY_KEY = 'fmd2r.mock.series-delay-ms';
+const MODULE_SETTINGS_DELAY_KEY = 'fmd2r.mock.module-settings-delay-ms';
 
 /** A sessionStorage item, or `null` without storage (tests, private mode). */
 const stored = (key: string): string | null => {
@@ -350,6 +357,7 @@ const store = (key: string, value: string | null) => {
 export function createMockBackend({
 	password = stored(PASSWORD_KEY),
 	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0),
+	moduleSettingsDelayMs = Number(stored(MODULE_SETTINGS_DELAY_KEY) ?? 0),
 	mangabaka = false
 }: MockOptions = {}): MockBackend {
 	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
@@ -833,6 +841,9 @@ export function createMockBackend({
 			const id = decodeURIComponent(moduleSettings[2]);
 			if (moduleSettings[1] === 'PATCH') {
 				return update(req, (patch) => settings.patchModule(id, patch));
+			}
+			if (moduleSettingsDelayMs > 0) {
+				await new Promise((resolve) => setTimeout(resolve, moduleSettingsDelayMs));
 			}
 			const view = settings.getModule(id);
 			return view ? json(view) : new Response(null, { status: 404 });

@@ -216,6 +216,38 @@ const MODULES: MockModule[] = [
 		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
 		options: []
 	},
+	// An Arabic group with a long name: lua/modules/DetectiveConanAr.lua:7-10,
+	// lua/modules/MangaAe.lua:55-58 and lua/modules/SwatManga.lua:7-10.
+	{
+		summary: {
+			id: '784d8c809fa042109663230a2afdd88a',
+			name: 'شبكة كونان العربية (detectiveconanar)',
+			root_url: 'https://manga.detectiveconanar.com',
+			category: 'Arabic'
+		},
+		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
+		options: []
+	},
+	{
+		summary: {
+			id: '5366eb91e0394d04892884b2705035d1',
+			name: 'MangaAe',
+			root_url: 'https://manga.ae',
+			category: 'Arabic'
+		},
+		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
+		options: []
+	},
+	{
+		summary: {
+			id: '0e45db2650604f74a0caeb7c1d69a749',
+			name: 'Swat Manga',
+			root_url: 'https://meshmanga.com',
+			category: 'Arabic'
+		},
+		limits: { max_task_limit: 0, max_thread_per_task_limit: 0, max_connection_limit: 0 },
+		options: []
+	},
 	{
 		summary: {
 			id: 'tmo',
