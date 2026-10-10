@@ -75,6 +75,12 @@ export interface Api {
 	login(password: string): Promise<boolean>;
 	/** Ends this browser's session and clears its cookie. */
 	logout(): Promise<void>;
+	/**
+	 * Sets `server.auth_token`, which ends every session, then logs in with the new password;
+	 * resolves to whether that login worked. The 401s that the ending sessions cause meanwhile
+	 * don't reach `onUnauthorized` unless that login fails.
+	 */
+	changePassword(password: string): Promise<boolean>;
 	listInbox(): Promise<InboxItem[]>;
 	markRead(id: string): Promise<void>;
 	/** The whole download queue, in queue order. */
@@ -214,11 +220,24 @@ export function createApi({
 	logsDownloadUrl,
 	onUnauthorized
 }: ApiOptions = {}): Api {
+	/**
+	 * Whether `changePassword` runs, and how many logged in again: a 401 to a request sent before
+	 * one did is stale.
+	 */
+	let changingPassword = false;
+	let passwordChanges = 0;
+	/** A 401 that came while the password changed, reported only if logging in again failed. */
+	let refusedMeanwhile = false;
+
 	const client = createClient<paths>({
 		baseUrl,
 		fetch: async (input) => {
+			const sentAfter = passwordChanges;
 			const res = await fetch(input);
-			if (res.status === 401 && new URL(input.url).pathname !== '/api/login') onUnauthorized?.();
+			if (res.status === 401 && new URL(input.url).pathname !== '/api/login') {
+				if (changingPassword) refusedMeanwhile = true;
+				else if (sentAfter === passwordChanges) onUnauthorized?.();
+			}
 			return res;
 		}
 	});
@@ -244,7 +263,7 @@ export function createApi({
 		return unwrap(what, res);
 	};
 
-	return {
+	const api: Api = {
 		async health() {
 			return unwrap('health', await client.GET('/api/health'));
 		},
@@ -253,6 +272,20 @@ export function createApi({
 			if (response.status === 401) return false;
 			if (!response.ok) throw new ApiError(response.status, 'login');
 			return true;
+		},
+		async changePassword(password) {
+			changingPassword = true;
+			refusedMeanwhile = false;
+			let loggedIn = false;
+			try {
+				await api.patchSettings({ server: { auth_token: password } });
+				loggedIn = await api.login(password);
+				return loggedIn;
+			} finally {
+				changingPassword = false;
+				if (loggedIn) passwordChanges++;
+				else if (refusedMeanwhile) onUnauthorized?.();
+			}
 		},
 		async logout() {
 			const { response } = await client.POST('/api/logout');
@@ -525,4 +558,5 @@ export function createApi({
 			return res.data;
 		}
 	};
+	return api;
 }
