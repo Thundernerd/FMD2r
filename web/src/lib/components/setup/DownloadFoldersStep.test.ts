@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/sve
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApi } from '#lib/api/client.ts';
 import { createMockBackend } from '#lib/api/mock.ts';
+import { EventStore } from '#lib/events.svelte.ts';
 import type { SetupStep } from '#lib/setup/steps.ts';
 import DownloadFoldersStep from './DownloadFoldersStep.svelte';
 import FakeStep from './FakeStep.fixture.svelte';
@@ -18,7 +19,8 @@ async function open({ inContainer = false } = {}) {
 		baseUrl: 'http://fmd2r.test',
 		fetch: createMockBackend({ setUp: false, inContainer }).fetch
 	});
-	render(SetupWizard, { api, steps: STEPS, onfinish: () => {} });
+	const store = new EventStore({ url: '/api/events', connect: () => ({}) as never });
+	render(SetupWizard, { api, store, steps: STEPS, onfinish: () => {} });
 	await screen.findByRole('heading', { level: 2, name: 'Download folders' });
 	return api;
 }
