@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { api, events, session } from '#lib/app.ts';
 	import { ValidationError } from '#lib/api/client.ts';
+	import { adoptAppearance, previewAppearance } from '#lib/appearance.ts';
 	import type {
 		ModuleSettingsView,
 		ModuleSummary,
@@ -85,12 +86,23 @@
 	const section = $derived(SETTINGS_SECTIONS.find((s) => s.id === active));
 	/** The folder the server loads the user's `custom.css` from, once `/api/about` says. */
 	let dataDir = $state<string | null>(null);
+
+	// An edited appearance shows at once, before saving; discarding it, or leaving the page with it
+	// unsaved, shows the saved one again.
+	$effect(() => {
+		const appearance = (draft?.value as Settings | undefined)?.appearance;
+		if (appearance) previewAppearance($state.snapshot(appearance));
+	});
+	$effect(() => () => previewAppearance(null));
 	let preview = $state<RenamePreview | null>(null);
 
 	$effect(() => {
 		api
 			.getSettings()
-			.then((settings) => (draft = new Draft(settings)))
+			.then((settings) => {
+				adoptAppearance(settings.appearance);
+				draft = new Draft(settings);
+			})
 			.catch(() => (loadError = 'Could not load the settings.'));
 		api
 			.listModules()
@@ -178,6 +190,7 @@
 				...(moduleId && moduleChanges ? { modules: { [moduleId]: moduleChanges } } : {})
 			});
 			draft?.commit(result.settings);
+			adoptAppearance(result.settings.appearance);
 			const view = moduleId ? result.modules[moduleId] : undefined;
 			if (view && moduleDraft) {
 				moduleView = view;

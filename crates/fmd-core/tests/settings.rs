@@ -2,7 +2,8 @@
 #![allow(clippy::unwrap_used)]
 
 use fmd_core::settings::{
-    OutputFormat, SettingsError, SettingsService, SymbolMode, WebpSaveAs, XPathBackend,
+    Accent, OutputFormat, SettingsError, SettingsService, SymbolMode, TextSize, ThemeMode,
+    WebpSaveAs, XPathBackend,
 };
 use fmd_store::{AppDb, ListsDb, MangaListing, NewFavorite, NewTask, TaskStatus};
 use serde_json::json;
@@ -429,4 +430,46 @@ fn a_settings_change_before_the_first_start_does_not_decide_the_setup() {
     let lists = lists_with(dir.path(), &[]);
 
     assert!(first_start_setup_completed(&db, &lists));
+}
+
+#[test]
+fn appearance_defaults_to_the_system_mode_normal_text_and_teal() {
+    let (_dir, db) = open_db();
+    // Settings stored by a build predating the appearance group.
+    db.settings()
+        .set("general", &json!({ "language": "nl" }))
+        .unwrap();
+
+    let s = SettingsService::load(db).unwrap().get();
+    assert_eq!(s.general.language, "nl");
+    assert_eq!(s.appearance.mode, ThemeMode::System);
+    assert_eq!(s.appearance.text_size, TextSize::Normal);
+    assert_eq!(s.appearance.accent, Accent::Teal);
+}
+
+#[test]
+fn unknown_appearance_values_are_rejected() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db).unwrap();
+
+    for patch in [
+        json!({ "appearance": { "mode": "sepia" } }),
+        json!({ "appearance": { "text_size": "huge" } }),
+        json!({ "appearance": { "accent": "#ff00ff" } }),
+        json!({ "appearance": { "font": "serif" } }),
+    ] {
+        let err = service.update(patch.clone()).unwrap_err();
+        assert!(matches!(err, SettingsError::Invalid(_)), "{patch}: {err:?}");
+    }
+    assert_eq!(service.get().appearance, Default::default());
+
+    service
+        .update(
+            json!({ "appearance": { "mode": "dark", "text_size": "larger", "accent": "purple" } }),
+        )
+        .unwrap();
+    let s = service.get();
+    assert_eq!(s.appearance.mode, ThemeMode::Dark);
+    assert_eq!(s.appearance.text_size, TextSize::Larger);
+    assert_eq!(s.appearance.accent, Accent::Purple);
 }

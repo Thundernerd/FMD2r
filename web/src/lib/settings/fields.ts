@@ -16,7 +16,9 @@ export type Control =
 	| { kind: 'text'; nullable?: boolean; placeholder?: string }
 	| { kind: 'secret' }
 	| { kind: 'number'; min: number; max: number; nullable?: boolean }
-	| { kind: 'select'; choices: Choice[] };
+	| { kind: 'select'; choices: Choice[] }
+	/** A row of colour swatches, one per accent (`data-accent` in tokens.css) of `choices`. */
+	| { kind: 'swatches'; choices: Choice[] };
 
 /** The path of the `has_<name>` flag that tells whether the secret at `path` is set. */
 export function secretFlag(path: string): string {

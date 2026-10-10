@@ -55,7 +55,9 @@ describe('settings sections', () => {
 			SETTINGS_SECTIONS.flatMap((s) => s.fields).find((f) => f.path === path)?.control;
 		const values = (path: string) => {
 			const control = select(path);
-			return control?.kind === 'select' ? control.choices.map((c) => c.value) : [];
+			return control?.kind === 'select' || control?.kind === 'swatches'
+				? control.choices.map((c) => c.value)
+				: [];
 		};
 		expect(values('output.format')).toEqual(schemas['OutputFormat']?.enum);
 		expect(values('images.webp_save_as')).toEqual(schemas['WebpSaveAs']?.enum);
@@ -63,6 +65,9 @@ describe('settings sections', () => {
 		expect(values('connections.proxy.type')).toEqual(schemas['ProxyType']?.enum);
 		expect(values('saveto.illegal_chars')).toEqual(schemas['SymbolMode']?.enum);
 		expect(values('xpath.backend')).toEqual(schemas['XPathBackend']?.enum);
+		expect(values('appearance.mode')).toEqual(schemas['ThemeMode']?.enum);
+		expect(values('appearance.text_size')).toEqual(schemas['TextSize']?.enum);
+		expect(values('appearance.accent')).toEqual(schemas['Accent']?.enum);
 	});
 
 	it('bound every number by the range the server validates', () => {

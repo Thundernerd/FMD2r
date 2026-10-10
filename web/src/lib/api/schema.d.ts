@@ -1022,6 +1022,12 @@ export interface components {
 			/** @description The XPath engine behind `CreateTXQuery`. */
 			xpath_backend?: string | null;
 		};
+		/**
+		 * @description The accent swatches. Each has a light and a dark value chosen for at least 4.5:1 contrast of
+		 *     links and of text on the accent (`web/src/lib/styles/tokens.css`).
+		 * @enum {string}
+		 */
+		Accent: 'teal' | 'blue' | 'green' | 'purple' | 'orange' | 'red';
 		/** @description A module's account. The password is never returned; `has_password` says whether one is set. */
 		AccountInfo: {
 			enabled: boolean;
@@ -1063,6 +1069,18 @@ export interface components {
 			module_id: string;
 			/** @description The download directory; the default one when missing. The generated manga folder is added. */
 			save_to?: string | null;
+		};
+		/**
+		 * @description How the web UI looks, the same on every device (T89). No FMD2 counterpart: FMD2 follows the
+		 *     Windows theme.
+		 */
+		AppearanceSettings: {
+			/** @default teal */
+			accent: components['schemas']['Accent'];
+			/** @default system */
+			mode: components['schemas']['ThemeMode'];
+			/** @default normal */
+			text_size: components['schemas']['TextSize'];
 		};
 		/** @description One chapter of a series. */
 		ChapterInfo: {
@@ -2271,6 +2289,14 @@ export interface components {
 		SettingsView: {
 			/**
 			 * @default {
+			 *       "accent": "teal",
+			 *       "mode": "system",
+			 *       "text_size": "normal"
+			 *     }
+			 */
+			appearance: components['schemas']['AppearanceSettings'];
+			/**
+			 * @default {
 			 *       "always_start_from_failed_chapters": true,
 			 *       "auto_retry_failed_tasks": 1,
 			 *       "flaresolverr_url": "",
@@ -2637,6 +2663,16 @@ export interface components {
 		};
 		/** @description The queue order changed (`task.reordered`); the data is an empty object. */
 		TasksReordered: Record<string, never>;
+		/**
+		 * @description The text size: 0.9, 1, 1.15 or 1.3 times the normal font sizes.
+		 * @enum {string}
+		 */
+		TextSize: 'small' | 'normal' | 'large' | 'larger';
+		/**
+		 * @description Light or dark.
+		 * @enum {string}
+		 */
+		ThemeMode: 'system' | 'light' | 'dark';
 		/** @description The outcome of checking one tool. */
 		ToolCheck: {
 			/** @description Its version or address when usable, otherwise why not. */

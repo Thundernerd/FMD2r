@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import { api, events, session } from '#lib/app.ts';
+	import { adoptAppearance } from '#lib/appearance.ts';
 	import AddByUrl from '#lib/components/AddByUrl.svelte';
 	import InboxPopover from '#lib/components/InboxPopover.svelte';
 	import LoginScreen from '#lib/components/LoginScreen.svelte';
@@ -41,7 +42,10 @@
 	$effect(() => {
 		// Behind the login screen the settings can't be read; logging in asks again.
 		if (session.locked) return;
-		setup.check(api);
+		// app.html applied the cached appearance; this corrects it if it changed on another device.
+		setup.check(api).then((settings) => {
+			if (settings) adoptAppearance(settings.appearance);
+		});
 	});
 
 	const onSetup = $derived(page.url.pathname === '/setup');

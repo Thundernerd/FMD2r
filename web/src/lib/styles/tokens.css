@@ -15,9 +15,7 @@
 	--line: light-dark(#d6dde0, #2b383e);
 	--fg: light-dark(#172226, #e3eaec);
 	--muted: light-dark(#5a6a70, #93a3a9);
-	--accent: light-dark(#0b6e7f, #3fb3c4);
-	--accent-fg: light-dark(#ffffff, #06272c);
-	--accent-soft: light-dark(#d5ecef, #163a40);
+	/* The accent comes from `data-accent`, below. */
 	--ok: light-dark(#2b7a45, #5cc27e);
 	--warn: light-dark(#a86a12, #e0a647);
 	--bad: light-dark(#b8352a, #f07a6e);
@@ -47,27 +45,28 @@
 		light-dark(#173e46, #173e46)
 	);
 
-	/* Typography */
+	/* Typography. Every font size scales with `--text-scale`, the text size setting (appearance.ts). */
+	--text-scale: 1;
 	--f-display: 'Schibsted Grotesk', 'Segoe UI', system-ui, sans-serif;
 	--f-body: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
 	--f-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
-	--fs-xs: 11px;
-	--fs-sm: 12px;
+	--fs-xs: calc(11px * var(--text-scale));
+	--fs-sm: calc(12px * var(--text-scale));
 	/* Buttons, list rows and facts. */
-	--fs-ui: 13px;
+	--fs-ui: calc(13px * var(--text-scale));
 	/* Card titles on Library and Discover. */
-	--fs-card: 13.5px;
-	--fs-md: 14px;
+	--fs-card: calc(13.5px * var(--text-scale));
+	--fs-md: calc(14px * var(--text-scale));
 	/* The search box on Library and Discover. */
-	--fs-search: 15px;
-	--fs-lg: 16px;
-	--fs-xl: 18px;
+	--fs-search: calc(15px * var(--text-scale));
+	--fs-lg: calc(16px * var(--text-scale));
+	--fs-xl: calc(18px * var(--text-scale));
 	/* The brand in the top bar and on the login screen. */
-	--fs-title: 20px;
-	--fs-h2: 26px;
-	--fs-h1: 30px;
+	--fs-title: calc(20px * var(--text-scale));
+	--fs-h2: calc(26px * var(--text-scale));
+	--fs-h1: calc(30px * var(--text-scale));
 	/* The series page's title. */
-	--fs-hero: 34px;
+	--fs-hero: calc(34px * var(--text-scale));
 	--lh: 1.45;
 
 	/* Spacing */
@@ -100,4 +99,45 @@
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
+}
+
+/* The accent swatches, picked with `data-accent` on `<html>` (the accent setting), or on a swatch
+ * button to show it in its own colour. Text on `--accent`, and `--accent` as text on the page's
+ * backgrounds and on `--accent-soft`, keep at least 4.5:1 contrast in both modes. Teal, the
+ * default, also applies without the attribute. */
+:root,
+[data-accent='teal'] {
+	--accent: light-dark(#0b6e7f, #3fb3c4);
+	--accent-fg: light-dark(#ffffff, #06272c);
+	--accent-soft: light-dark(#d5ecef, #163a40);
+}
+
+[data-accent='blue'] {
+	--accent: light-dark(#1f5fbf, #79aef5);
+	--accent-fg: light-dark(#ffffff, #0a2140);
+	--accent-soft: light-dark(#dbe6f7, #1a2d4a);
+}
+
+[data-accent='green'] {
+	--accent: light-dark(#23733a, #5cc27e);
+	--accent-fg: light-dark(#ffffff, #0a2914);
+	--accent-soft: light-dark(#d9eedf, #173a24);
+}
+
+[data-accent='purple'] {
+	--accent: light-dark(#6a45b8, #b59cf2);
+	--accent-fg: light-dark(#ffffff, #22134a);
+	--accent-soft: light-dark(#e7defa, #2d2246);
+}
+
+[data-accent='orange'] {
+	--accent: light-dark(#9c4c09, #f0a050);
+	--accent-fg: light-dark(#ffffff, #2e1803);
+	--accent-soft: light-dark(#f8e8d8, #3d2a16);
+}
+
+[data-accent='red'] {
+	--accent: light-dark(#b3322b, #f28b82);
+	--accent-fg: light-dark(#ffffff, #3a0d09);
+	--accent-soft: light-dark(#f8e2de, #3d1f1c);
 }
