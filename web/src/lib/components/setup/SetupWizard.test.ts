@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApi } from '#lib/api/client.ts';
 import { createMockBackend } from '#lib/api/mock.ts';
+import { EventStore } from '#lib/events.svelte.ts';
 import type { SetupStep } from '#lib/setup/steps.ts';
 import FakeStep from './FakeStep.fixture.svelte';
 import SetupWizard from './SetupWizard.svelte';
@@ -17,7 +18,8 @@ const freshApi = () =>
 	createApi({ baseUrl: 'http://fmd2r.test', fetch: createMockBackend({ setUp: false }).fetch });
 
 async function open(api = freshApi(), onfinish = vi.fn()) {
-	render(SetupWizard, { api, steps: STEPS, onfinish });
+	const store = new EventStore({ url: '/api/events', connect: () => ({}) as never });
+	render(SetupWizard, { api, store, steps: STEPS, onfinish });
 	await screen.findByRole('heading', { level: 2 });
 	return { api, onfinish };
 }

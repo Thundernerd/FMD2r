@@ -52,7 +52,7 @@
 			value: mangabaka?.downloaded
 				? 'Downloaded'
 				: mangabaka?.running
-					? 'Downloading'
+					? 'Still downloading; Settings shows its progress'
 					: 'Not downloaded',
 			href: '/settings#section-metadata'
 		}
