@@ -96,7 +96,8 @@
 	/** Shows the filters in the URL, replacing its history entry so Back leaves Discover. */
 	$effect(() => {
 		const next = query;
-		const shown = untrack(() => queryString(filtersFromQuery(route.url.searchParams)));
+		// Rewritten also when it differs only in dropped or reordered values.
+		const shown = untrack(() => route.url.search.replace(/^\?/, ''));
 		if (next !== shown) {
 			void goto(next ? `/discover?${next}` : '/discover', {
 				replaceState: true,
@@ -105,26 +106,31 @@
 		}
 	});
 
-	/** A link to other filters while on Discover (such as the nav bar's) applies them. */
-	afterNavigate((navigation) => {
-		const url = navigation.to?.url;
-		if (navigation.type === 'goto' || url?.pathname !== '/discover') return;
-		const next = filtersFromQuery(url.searchParams);
-		if (queryString(next) === query) return;
+	function apply(next: Filters) {
 		module = next.module;
 		text = q = next.q;
 		genres = next.genres;
 		status = next.status;
 		format = next.format;
 		publication = next.publication;
+	}
+
+	/** How Discover was last arrived at; only Back and Forward restore a snapshot. */
+	let arrival: string | null = null;
+
+	afterNavigate((navigation) => {
+		arrival = navigation.type;
+		// A link to other filters while on Discover (such as the nav bar's) applies them.
+		const url = navigation.to?.url;
+		if (navigation.type === 'goto' || url?.pathname !== '/discover') return;
+		const next = filtersFromQuery(url.searchParams);
+		if (queryString(next) !== query) apply(next);
 	});
 
 	/** Bumped by every new search, so answers to an older one are dropped. */
 	let generation = 0;
-	/** The query of results restored from a snapshot, which the next search keeps. */
-	let restored: string | null = null;
 
-	interface Saved {
+	interface DiscoverSnapshot {
 		query: string;
 		text: string;
 		items: ListItem[];
@@ -135,12 +141,14 @@
 
 	// Back to Discover shows the results and scroll position it left. SvelteKit restores
 	// the scroll before the snapshot, while the grid is still empty, so the snapshot does it.
-	snapshot<Saved>({
+	// A reload also finds a snapshot, but starts afresh from page 1.
+	snapshot<DiscoverSnapshot>({
 		capture: () => ({ query, text, items: $state.snapshot(items), total, page, scrollY }),
 		restore: (saved) => {
+			if (arrival !== 'popstate') return;
 			text = saved.text;
 			if (saved.query !== query) return;
-			restored = saved.query;
+			// Drops the page-1 search that started on mounting.
 			generation++;
 			items = saved.items;
 			total = saved.total;
@@ -182,11 +190,9 @@
 	}
 
 	$effect(() => {
-		// A new search whenever a filter changes, unless it shows restored results.
-		const current = query;
-		const keep = restored === current;
-		restored = null;
-		if (!keep) void load(1, true);
+		// A new search whenever a filter changes.
+		void query;
+		void load(1, true);
 	});
 	$effect(loadFacets);
 
