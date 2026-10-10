@@ -142,7 +142,7 @@ pub enum ServerEvent {
     /// A new inbox item; its SSE id is the `events` row id, so clients can resume.
     InboxNew(InboxItem),
     Log(LogLine),
-    /// A list update or FMD2-DB import moved on (`job.lists.<kind>`).
+    /// A list update or ready-made list import moved on (`job.lists.<kind>`).
     Lists(ListEvent),
     /// A favorites check moved on (`job.favorites.<kind>`).
     Favorites(FavoritesEvent),

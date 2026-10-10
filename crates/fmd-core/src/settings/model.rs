@@ -462,7 +462,8 @@ pub struct UpdateListSettings {
     /// (mangadownloader/forms/frmMain.lfm:2950-2951).
     #[schema(minimum = 1, maximum = 365)]
     pub new_manga_days: u32,
-    /// FMD2-DB URL template ([`DEFAULT_DB_URL`]); `<website>` is replaced by the module ID.
+    /// Ready-made lists URL template, from the FMD2-DB project by default ([`DEFAULT_DB_URL`]);
+    /// `<website>` is replaced by the module ID.
     pub db_url: String,
 }
 

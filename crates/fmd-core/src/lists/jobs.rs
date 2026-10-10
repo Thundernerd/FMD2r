@@ -21,7 +21,7 @@ use crate::settings::SettingsService;
 pub enum ListJobKind {
     /// Running the module's update-list callbacks ([`ListUpdater`]).
     Update,
-    /// Downloading and importing its FMD2-DB dump ([`DbImporter`]).
+    /// Downloading and importing its ready-made list ([`DbImporter`]).
     ImportDb,
 }
 
@@ -61,9 +61,9 @@ pub struct ListEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ListFailureReason {
-    /// FMD2-DB has no dump for the module (its URL answers 404).
+    /// There is no ready-made list of the module (its URL answers 404).
     NoDump,
-    /// The website, or FMD2-DB's host, could not be reached: a connection error, or an error
+    /// The website, or the ready-made lists' host, could not be reached: a connection error, or an error
     /// status other than 404.
     Unreachable,
     /// The download was not a 7z archive holding a usable database, or was empty.
@@ -128,25 +128,25 @@ impl ListFailureReason {
         let website = &module.name;
         match (self, job) {
             (Self::NoDump, _) if module.on_get_name_and_link.is_some() => format!(
-                "FMD2-DB has no ready-made list for {website}. \
+                "There is no ready-made list for {website} yet. \
                  Use Update list to build it from the website."
             ),
             (Self::NoDump, _) => format!(
-                "FMD2-DB has no ready-made list for {website}, \
+                "There is no ready-made list for {website} yet, \
                  and this website cannot build one itself."
             ),
             (Self::Unreachable, _) => format!(
-                "Could not reach FMD2-DB to get the list of {website}. \
+                "Could not reach the ready-made lists to get the list of {website}. \
                  Check the connection and try again later."
             ),
             (Self::BadArchive, _) => {
-                format!("The list FMD2-DB sent for {website} is damaged or empty.")
+                format!("The ready-made list of {website} is damaged or empty.")
             }
             (Self::Failed, ListJobKind::Update) => {
                 format!("Updating the list of {website} failed.")
             }
             (Self::Failed, ListJobKind::ImportDb) => {
-                format!("Getting the list of {website} from FMD2-DB failed.")
+                format!("Getting the ready-made list of {website} failed.")
             }
         }
     }

@@ -6,12 +6,19 @@
 #![allow(clippy::unwrap_used)]
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use fmd_core::lists::{DbImporter, ImportError, ListFailureReason, db_url};
+use fmd_core::jobs::Job;
+use fmd_core::lists::{
+    DbImporter, ImportError, ListEvent, ListEventKind, ListFailureReason, ListJobs, ListUpdater,
+    db_url,
+};
+use fmd_core::settings::SettingsService;
 use fmd_http::{
     BoxFuture, HttpClient, TerminateToken, Transport, TransportError, WireRequest, WireResponse,
 };
-use fmd_store::{ListsDb, MangaListing, PageRequest, SearchFilters};
+use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
+use fmd_store::{AppDb, ListsDb, MangaListing, PageRequest, SearchFilters};
 
 const GOURMET: &str = "598672e8158d4fd781bea8d426534695";
 const LATIN1: &str = "201234a2c811487c8542fb7ec2c92b20";
@@ -48,7 +55,7 @@ impl Transport for Server {
 }
 
 struct Fixture {
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
     lists: ListsDb,
     server: Arc<Server>,
     importer: DbImporter,
@@ -65,7 +72,7 @@ fn fixture(status: u16, body: Vec<u8>) -> Fixture {
     let http = HttpClient::with_transport(server.clone()).unwrap();
     let importer = DbImporter::new(http, lists.clone());
     Fixture {
-        _dir: dir,
+        dir,
         lists,
         server,
         importer,
@@ -267,4 +274,69 @@ fn an_empty_download_is_a_bad_archive() {
 
     assert_eq!(error.reason(), ListFailureReason::BadArchive, "{error:?}");
     assert_eq!(rows(&f.lists, GOURMET).len(), 1);
+}
+
+/// Runs `ListJobs::import_db` of a website that can build its own list against a 404 and
+/// returns the job's last error once it ended.
+fn failed_import_job_message(f: Fixture) -> String {
+    let lua = f.dir.path().join("lua/modules");
+    std::fs::create_dir_all(&lua).unwrap();
+    std::fs::write(
+        lua.join("Site.lua"),
+        "function Init()\n  local m = NewWebsiteModule()\n  m.ID = 'site'; m.Name = 'Site'; \
+         m.RootURL = 'https://site.test'; m.OnGetNameAndLink = 'GetNameAndLink'\nend\n",
+    )
+    .unwrap();
+    let report = ModuleRegistry::load_dir(&f.dir.path().join("lua"));
+    let module = report.registry.get("site").unwrap().clone();
+    let http = HttpClient::with_transport(f.server.clone()).unwrap();
+    let mut config = PoolConfig::new(http);
+    config.threads = 1;
+    let pool = Arc::new(WorkerPool::new(config).unwrap());
+    let db = AppDb::open(f.dir.path().join("app.db")).unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let jobs = ListJobs::new(
+        ListUpdater::new(pool, f.lists.clone()),
+        f.importer,
+        Arc::new(SettingsService::load(db).unwrap()),
+        move |id: &str| (id == "site").then(|| module.clone()),
+        move |event: ListEvent| {
+            let _ = tx.send(event.kind);
+        },
+    );
+    jobs.import_db("site").unwrap();
+    while rx.recv_timeout(Duration::from_secs(10)).unwrap() != ListEventKind::Failed {}
+    jobs.status().last_error.unwrap()
+}
+
+/// The message before the details, which keep the URL and so the upstream project's name.
+fn message_of(last_error: &str) -> &str {
+    last_error.split_once("\n\nDetails:").unwrap().0
+}
+
+#[test]
+fn a_missing_dump_reads_as_no_ready_made_list_without_naming_fmd2_db() {
+    let last_error = failed_import_job_message(fixture(404, b"Not Found".to_vec()));
+    let message = message_of(&last_error);
+
+    assert_eq!(
+        message,
+        "There is no ready-made list for Site yet. Use Update list to build it from the website."
+    );
+}
+
+#[test]
+fn unreachable_or_damaged_ready_made_lists_are_worded_without_naming_fmd2_db() {
+    let unreachable = failed_import_job_message(fixture(500, b"Internal Server Error".to_vec()));
+    assert_eq!(
+        message_of(&unreachable),
+        "Could not reach the ready-made lists to get the list of Site. \
+         Check the connection and try again later."
+    );
+
+    let damaged = failed_import_job_message(fixture(200, b"<html>rate limited</html>".to_vec()));
+    assert_eq!(
+        message_of(&damaged),
+        "The ready-made list of Site is damaged or empty."
+    );
 }

@@ -38,7 +38,7 @@ const LIST_SIZES: Record<string, number> = {
 	rawkuma: 30,
 	tmo: 24
 };
-/** Titles a "Get from FMD2-DB" import gives a module. */
+/** Titles a "Get ready-made list" import gives a module. */
 const DB_SIZE = 60;
 /** Directory pages a mock update walks, one per event tick. */
 const UPDATE_PAGES = 8;

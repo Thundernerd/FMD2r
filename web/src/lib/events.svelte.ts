@@ -70,7 +70,7 @@ export class EventStore {
 	inbox = $state<InboxItem[]>([]);
 	unread = $derived(this.inbox.filter((i) => !i.read).length);
 	jobs = $state<Record<string, JobState>>({});
-	/** The latest list update or FMD2-DB import event of each module, by module ID. */
+	/** The latest list update or ready-made list import event of each module, by module ID. */
 	lists = $state<Record<string, ListEvent>>({});
 	/** The latest favorites check event, or `null` before the first. */
 	favorites = $state<FavoritesEvent | null>(null);

@@ -25,7 +25,7 @@
 	);
 	const JOB: Record<ListJobKind, string> = {
 		update: 'Updating the list',
-		import_db: 'Getting the list from FMD2-DB'
+		import_db: 'Getting the ready-made list'
 	};
 
 	/** What a failed job of the module says, by why it failed; the server words the Jobs panel's
@@ -35,16 +35,16 @@
 		switch (reason) {
 			case 'no_dump':
 				return module.capabilities.update_list
-					? `FMD2-DB has no ready-made list for ${site}. Use Update list to build it from the website.`
-					: `FMD2-DB has no ready-made list for ${site}, and this website cannot build one itself.`;
+					? `There is no ready-made list for ${site} yet. Use Update list to build it from the website.`
+					: `There is no ready-made list for ${site} yet, and this website cannot build one itself.`;
 			case 'unreachable':
-				return `Could not reach FMD2-DB to get the list of ${site}. Check the connection and try again later.`;
+				return `Could not reach the ready-made lists to get the list of ${site}. Check the connection and try again later.`;
 			case 'bad_archive':
-				return `The list FMD2-DB sent for ${site} is damaged or empty.`;
+				return `The ready-made list of ${site} is damaged or empty.`;
 			default:
 				return job === 'update'
 					? `Updating the list of ${site} failed.`
-					: `Getting the list of ${site} from FMD2-DB failed.`;
+					: `Getting the ready-made list of ${site} failed.`;
 		}
 	}
 
@@ -97,7 +97,7 @@
 		{#if module.list_size}
 			<span class="num">{module.list_size.toLocaleString('en')}</span> titles · {updatedText}
 		{:else}
-			No list yet. Get it from FMD2-DB, or build it from the website (slow).
+			No list yet. Get a ready-made one, or build it from the website (slow).
 		{/if}
 	</div>
 	{#if running}
@@ -125,7 +125,7 @@
 	{:else}
 		<div class="row">
 			<button class="btn sm" type="button" disabled={busy} onclick={() => start('import_db')}
-				>Get from FMD2-DB</button
+				>Get ready-made list</button
 			>
 			<button
 				class="btn sm"

@@ -1356,7 +1356,7 @@
         "tags": [
           "lists"
         ],
-        "summary": "Replace a module's list with its FMD2-DB dump (`update_lists.db_url`).",
+        "summary": "Replace a module's list with its ready-made list (`update_lists.db_url`).",
         "operationId": "importListDb",
         "parameters": [
           {
@@ -6178,7 +6178,7 @@
           },
           "db_url": {
             "type": "string",
-            "description": "FMD2-DB URL template ([`DEFAULT_DB_URL`]); `<website>` is replaced by the module ID.",
+            "description": "Ready-made lists URL template, from the FMD2-DB project by default ([`DEFAULT_DB_URL`]);\n`<website>` is replaced by the module ID.",
             "default": "https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z"
           },
           "interval_hours": {

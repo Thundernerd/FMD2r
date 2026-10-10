@@ -57,7 +57,7 @@ test('more results load as the list scrolls, and a title opens its series page',
 	await expect(page).toHaveURL(href ?? '');
 });
 
-test('a website without a list gets one from FMD2-DB with live progress', async ({
+test('a website without a list gets a ready-made one with live progress', async ({
 	page
 }, info) => {
 	test.skip(info.project.name === 'phone', 'the filters are a drawer on a phone');
@@ -70,7 +70,7 @@ test('a website without a list gets one from FMD2-DB with live progress', async 
 		'Bato.to has no list yet'
 	);
 
-	await list.getByRole('button', { name: 'Get from FMD2-DB' }).click();
+	await list.getByRole('button', { name: 'Get ready-made list' }).click();
 	await expect(list.getByRole('progressbar', { name: 'List job progress' })).toBeVisible();
 	await expect(list).toContainText('Imported 60 titles.');
 	await expect(list).toContainText('60 titles');
