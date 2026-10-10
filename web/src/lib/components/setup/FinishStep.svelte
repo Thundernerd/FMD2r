@@ -81,7 +81,8 @@
 	{/each}
 </dl>
 <p>
-	Discover lists a website once its list is fetched: pick it in
+	Each website's list still has to be fetched before Discover shows its series: pick the website in
+	<!-- Finishes first, like the links above. -->
 	<a
 		href="/discover"
 		onclick={(e) => {

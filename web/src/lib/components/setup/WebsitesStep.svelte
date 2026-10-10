@@ -1,36 +1,37 @@
 <script lang="ts">
 	import type { MergePatch } from '#lib/api/client.ts';
 	import type { ModuleSummary } from '#lib/api/types.ts';
-	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
+	import WebsiteSelection, {
+		selectedWebsites
+	} from '#lib/components/settings/WebsiteSelection.svelte';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
 	import type { StepProps } from '#lib/setup/steps.ts';
 
 	let { api, settings }: StepProps = $props();
 
 	let modules = $state<ModuleSummary[] | null>(null);
-	let loadError = $state<string | null>(null);
-	$effect(() => {
+	let failed = $state(false);
+
+	function load() {
+		failed = false;
 		api
 			.listModules()
 			.then((loaded) => (modules = loaded))
-			.catch((e: unknown) => (loadError = e instanceof Error ? e.message : String(e)));
-	});
+			.catch(() => (failed = true));
+	}
+	$effect(load);
 
 	// svelte-ignore state_referenced_locally
 	const draft = new Draft<object>({
 		general: { selected_websites: settings.general.selected_websites }
 	});
 
-	/** The selected websites; a module that is not loaded keeps its place for when it comes back. */
-	const selection = $derived.by((): string[] => {
-		const value = draft.get('general.selected_websites');
-		return Array.isArray(value) ? value.filter((v) => typeof v === 'string') : [];
-	});
+	const selection = $derived(selectedWebsites(draft));
 	/** Whether a loaded website is selected, so Discover has one to list. */
-	const chosen = $derived(modules?.some((m) => selection.includes(m.id)) ?? false);
+	const hasWebsite = $derived(modules?.some((m) => selection.includes(m.id)) ?? false);
 
 	export function ready(): boolean {
-		return chosen;
+		return hasWebsite;
 	}
 
 	export async function save(): Promise<MergePatch> {
@@ -38,15 +39,12 @@
 	}
 </script>
 
-<p>
-	Choose the websites Discover lists and searches. The library and Add by URL work with every
-	website, whichever you choose here.
-</p>
-{#if loadError}
-	<p class="error" role="alert">Could not load the websites: {loadError}</p>
+{#if failed}
+	<p class="error" role="alert">Could not load the websites.</p>
+	<button class="btn sm" type="button" onclick={load}>Try again</button>
 {:else if modules}
 	<WebsiteSelection {modules} {draft} />
-	{#if !chosen}
+	{#if !hasWebsite}
 		<p class="small muted">Select at least one website to continue, so Discover has one to list.</p>
 	{/if}
 {:else}
@@ -60,5 +58,8 @@
 	}
 	.error {
 		color: var(--bad);
+	}
+	.btn {
+		align-self: flex-start;
 	}
 </style>

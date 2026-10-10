@@ -1,6 +1,17 @@
+<script lang="ts" module>
+	import type { Draft } from '#lib/settings/draft.svelte.ts';
+
+	const PATH = 'general.selected_websites';
+
+	/** The module IDs `draft` selects, including those of modules that are not loaded. */
+	export function selectedWebsites(draft: Draft<object>): string[] {
+		const value = draft.get(PATH);
+		return Array.isArray(value) ? value.filter((v) => typeof v === 'string') : [];
+	}
+</script>
+
 <script lang="ts">
 	import type { ModuleSummary } from '#lib/api/types.ts';
-	import type { Draft } from '#lib/settings/draft.svelte.ts';
 	import {
 		groupModules,
 		matchesSearch,
@@ -18,15 +29,9 @@
 		draft: Draft<object>;
 	} = $props();
 
-	const PATH = 'general.selected_websites';
-
 	let search = $state('');
 
-	/** The selected module IDs, including those of modules that are not loaded. */
-	const selection = $derived.by((): string[] => {
-		const value = draft.get(PATH);
-		return Array.isArray(value) ? value.filter((v) => typeof v === 'string') : [];
-	});
+	const selection = $derived(selectedWebsites(draft));
 	const selected = $derived(new Set(selection));
 	const loaded = $derived(new Set(modules.map((m) => m.id)));
 	const count = $derived([...loaded].filter((id) => selected.has(id)).length);
