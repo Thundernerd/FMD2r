@@ -264,6 +264,11 @@ Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53
 | T75 | Sort Settings → Accounts like the website lists | — |
 | T76 | Picking a website module doesn't jump the page | — |
 | T77 | Fix the Settings → Websites layout (hidden search box, ragged long names) | — |
+| T78 | A setup wizard on first start | — |
+| T79 | Setup step: download folders | T78 |
+| T80 | Setup step: download format | T78 |
+| T81 | Setup step: MangaBaka database | T78 |
+| T82 | Setup step: websites | T78 |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:
