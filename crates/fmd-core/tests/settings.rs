@@ -2,7 +2,7 @@
 #![allow(clippy::unwrap_used)]
 
 use fmd_core::settings::{
-    Accent, OutputFormat, SettingsError, SettingsService, SymbolMode, TextSize, ThemeMode,
+    Accent, OutputFormat, SettingsError, SettingsService, SymbolMode, TextSize, Theme, ThemeMode,
     WebpSaveAs, XPathBackend,
 };
 use fmd_store::{AppDb, ListsDb, MangaListing, NewFavorite, NewTask, TaskStatus};
@@ -472,4 +472,35 @@ fn unknown_appearance_values_are_rejected() {
     assert_eq!(s.appearance.mode, ThemeMode::Dark);
     assert_eq!(s.appearance.text_size, TextSize::Larger);
     assert_eq!(s.appearance.accent, Accent::Purple);
+}
+
+#[test]
+fn the_theme_defaults_to_default_and_takes_only_the_built_in_ones() {
+    let (_dir, db) = open_db();
+    // Appearance stored by a build predating themes.
+    db.settings()
+        .set("appearance", &json!({ "mode": "dark" }))
+        .unwrap();
+    let service = SettingsService::load(db).unwrap();
+    assert_eq!(service.get().appearance.theme, Theme::Default);
+    assert_eq!(service.get().appearance.mode, ThemeMode::Dark);
+
+    for theme in ["sepia", "High-Contrast", "high_contrast", ""] {
+        let patch = json!({ "appearance": { "theme": theme } });
+        let err = service.update(patch.clone()).unwrap_err();
+        assert!(matches!(err, SettingsError::Invalid(_)), "{patch}: {err:?}");
+    }
+    assert_eq!(service.get().appearance.theme, Theme::Default);
+
+    for (value, theme) in [
+        ("high-contrast", Theme::HighContrast),
+        ("warm", Theme::Warm),
+        ("compact", Theme::Compact),
+        ("default", Theme::Default),
+    ] {
+        service
+            .update(json!({ "appearance": { "theme": value } }))
+            .unwrap();
+        assert_eq!(service.get().appearance.theme, theme);
+    }
 }

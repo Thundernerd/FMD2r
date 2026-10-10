@@ -55,7 +55,9 @@ describe('settings sections', () => {
 			SETTINGS_SECTIONS.flatMap((s) => s.fields).find((f) => f.path === path)?.control;
 		const values = (path: string) => {
 			const control = select(path);
-			return control?.kind === 'select' || control?.kind === 'swatches'
+			return control?.kind === 'select' ||
+				control?.kind === 'swatches' ||
+				control?.kind === 'themes'
 				? control.choices.map((c) => c.value)
 				: [];
 		};
@@ -65,6 +67,7 @@ describe('settings sections', () => {
 		expect(values('connections.proxy.type')).toEqual(schemas['ProxyType']?.enum);
 		expect(values('saveto.illegal_chars')).toEqual(schemas['SymbolMode']?.enum);
 		expect(values('xpath.backend')).toEqual(schemas['XPathBackend']?.enum);
+		expect(values('appearance.theme')).toEqual(schemas['Theme']?.enum);
 		expect(values('appearance.mode')).toEqual(schemas['ThemeMode']?.enum);
 		expect(values('appearance.text_size')).toEqual(schemas['TextSize']?.enum);
 		expect(values('appearance.accent')).toEqual(schemas['Accent']?.enum);

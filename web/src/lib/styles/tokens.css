@@ -7,7 +7,14 @@
  * with `data-theme`: setting `color-scheme` anywhere else won't flip these tokens. */
 :root {
 	color-scheme: light;
+	/* The text size setting (appearance.ts) sets this on `<html>`. */
+	--text-scale: 1;
+}
 
+/* The default theme. A theme card in Settings sets `data-style='default'` around its own theme, so it
+ * shows that theme over the defaults rather than over the theme in use. */
+:root,
+[data-style='default'] {
 	/* Colours */
 	--bg: light-dark(#f3f5f6, #101618);
 	--surface: light-dark(#ffffff, #172024);
@@ -46,7 +53,6 @@
 	);
 
 	/* Typography. Every font size scales with `--text-scale`, the text size setting (appearance.ts). */
-	--text-scale: 1;
 	--f-display: 'Schibsted Grotesk', 'Segoe UI', system-ui, sans-serif;
 	--f-body: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
 	--f-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -82,6 +88,9 @@
 	--r-lg: 10px;
 	--r-xl: 12px;
 	--r-pill: 999px;
+
+	/* The width of the keyboard focus outline. */
+	--focus-w: 2px;
 
 	/* Chrome geometry */
 	--page-max: 1280px;
@@ -140,4 +149,66 @@
 	--accent: light-dark(#b3322b, #f28b82);
 	--accent-fg: light-dark(#ffffff, #3a0d09);
 	--accent-soft: light-dark(#f8e2de, #3d1f1c);
+}
+
+/* The built-in themes, picked with `data-style` on `<html>` (the theme setting), or on a theme card
+ * in Settings to show it in its own look. Each overrides only the tokens it changes, in light and
+ * dark, and comes after the accents so that one setting its own accent wins over the swatch. The
+ * contrast of each is checked by contrast.test.ts. */
+
+/* Text and borders at least 7:1 against their background, a wider focus outline, and its own
+ * accent (the swatches are disabled in Settings). */
+[data-style='high-contrast'] {
+	--bg: light-dark(#f4f4f4, #000000);
+	--surface: light-dark(#ffffff, #0b0b0b);
+	--surface-2: light-dark(#e6e6e6, #1c1c1c);
+	--line: light-dark(#4a4a4a, #b0b0b0);
+	--fg: light-dark(#000000, #ffffff);
+	--muted: light-dark(#2e2e2e, #d6d6d6);
+	--accent: light-dark(#00398f, #9ccaff);
+	--accent-fg: light-dark(#ffffff, #000000);
+	--accent-soft: light-dark(#dce6f7, #0d2747);
+	--ok: light-dark(#0b5320, #86e7a6);
+	--warn: light-dark(#5e3a00, #ffd27a);
+	--bad: light-dark(#8a1a12, #ffaaa1);
+	--idle: light-dark(#3d3d3d, #c4c4c4);
+	--focus-w: 3px;
+}
+
+/* Paper-like neutrals and a serif display font. */
+[data-style='warm'] {
+	--bg: light-dark(#f4eee2, #1a1612);
+	--surface: light-dark(#fffaf0, #241f19);
+	--surface-2: light-dark(#ebe3d3, #2f2820);
+	--line: light-dark(#dacfba, #3e352b);
+	--fg: light-dark(#2b241c, #eee5d7);
+	--muted: light-dark(#685a49, #aa9c89);
+	--idle-soft: light-dark(#ece5d8, #2c261f);
+	--f-display: 'Literata', Georgia, 'Times New Roman', serif;
+}
+
+/* Every font size a step smaller (the next smaller `--fs-*`) and tighter spacing, for more rows on
+ * screen. Widths and breakpoints stay as they are. The page is a shade deeper, so the closer-packed
+ * cards still stand apart from it. */
+[data-style='compact'] {
+	--bg: light-dark(#ecf0f1, #0b1012);
+	--fs-xs: calc(10px * var(--text-scale));
+	--fs-sm: calc(11px * var(--text-scale));
+	--fs-ui: calc(12px * var(--text-scale));
+	--fs-card: calc(13px * var(--text-scale));
+	--fs-md: calc(13.5px * var(--text-scale));
+	--fs-search: calc(14px * var(--text-scale));
+	--fs-lg: calc(15px * var(--text-scale));
+	--fs-xl: calc(16px * var(--text-scale));
+	--fs-title: calc(18px * var(--text-scale));
+	--fs-h2: calc(20px * var(--text-scale));
+	--fs-h1: calc(26px * var(--text-scale));
+	--fs-hero: calc(30px * var(--text-scale));
+	--lh: 1.35;
+	--sp-1: 3px;
+	--sp-2: 6px;
+	--sp-3: 9px;
+	--sp-4: 12px;
+	--sp-5: 18px;
+	--sp-6: 24px;
 }

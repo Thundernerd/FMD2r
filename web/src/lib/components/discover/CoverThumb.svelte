@@ -65,7 +65,7 @@
 		overflow: hidden;
 	}
 	:global(a:hover) > .frame {
-		outline: 2px solid var(--accent);
+		outline: var(--focus-w) solid var(--accent);
 		outline-offset: 2px;
 	}
 	.cover {

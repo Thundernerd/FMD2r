@@ -29,6 +29,14 @@
 			.join(' ') || undefined
 	);
 
+	/** Swatches that can't be changed now, and why (`lockedWhen` of the control). */
+	const lockNote = $derived.by(() => {
+		const control = field.control;
+		if (control.kind !== 'swatches' || !control.lockedWhen) return null;
+		const { path, value, note } = control.lockedWhen;
+		return draft.get(path) === value ? note : null;
+	});
+
 	/** Whether the secret is set on the server; it never sends the value. */
 	const secretSet = $derived(draft.get(secretFlag(field.path)) === true);
 	const secretStatus = $derived.by(() => {
@@ -62,9 +70,9 @@
 	}
 
 	/** Arrow keys move the pick along the row, as in any radio group. */
-	function onSwatchKey(e: KeyboardEvent, index: number) {
+	function onRadioKey(e: KeyboardEvent, index: number) {
 		const control = field.control;
-		if (control.kind !== 'swatches') return;
+		if (control.kind !== 'swatches' && control.kind !== 'themes') return;
 		const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
 		if (!step) return;
 		e.preventDefault();
@@ -107,7 +115,9 @@
 			role="radiogroup"
 			aria-labelledby="{id}-label"
 			aria-invalid={error ? true : undefined}
-			aria-describedby={describedBy}
+			aria-describedby={[describedBy, lockNote ? `${id}-locked` : ''].filter(Boolean).join(' ') ||
+				undefined}
+			aria-disabled={lockNote ? true : undefined}
 		>
 			{#each field.control.choices as choice, i (choice.value)}
 				<button
@@ -119,9 +129,48 @@
 					aria-label={choice.label}
 					aria-checked={i === checked}
 					tabindex={i === checked || (checked < 0 && i === 0) ? 0 : -1}
+					disabled={!!lockNote}
 					onclick={() => draft.set(field.path, choice.value as Json)}
-					onkeydown={(e) => onSwatchKey(e, i)}
+					onkeydown={(e) => onRadioKey(e, i)}
 				></button>
+			{/each}
+		</div>
+		{#if lockNote}
+			<p class="locked small muted" id="{id}-locked">{lockNote}</p>
+		{/if}
+	{:else if field.control.kind === 'themes'}
+		{@const checked = field.control.choices.findIndex((c) => c.value === value)}
+		<span class="caption" id="{id}-label">{field.label}</span>
+		<div
+			{id}
+			class="themes"
+			role="radiogroup"
+			aria-labelledby="{id}-label"
+			aria-invalid={error ? true : undefined}
+			aria-describedby={describedBy}
+		>
+			{#each field.control.choices as choice, i (choice.value)}
+				<button
+					type="button"
+					role="radio"
+					class="theme"
+					aria-checked={i === checked}
+					tabindex={i === checked || (checked < 0 && i === 0) ? 0 : -1}
+					onclick={() => draft.set(field.path, choice.value as Json)}
+					onkeydown={(e) => onRadioKey(e, i)}
+				>
+					<!-- The theme's own background, surface, text and accent (`data-style` in tokens.css),
+					     over the default theme's rather than the one in use. -->
+					<span class="theme-preview" data-style="default" aria-hidden="true">
+						<span class="theme-bg" data-style={choice.value}>
+							<span class="theme-surface">
+								<span class="theme-text">Aa</span>
+								<span class="theme-accent"></span>
+							</span>
+						</span>
+					</span>
+					<span class="theme-name">{choice.label}</span>
+				</button>
 			{/each}
 		</div>
 	{:else}
@@ -249,6 +298,71 @@
 	}
 	.swatch[aria-checked='true'] {
 		box-shadow: 0 0 0 2px var(--fg);
+	}
+	.swatch:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+	.locked {
+		margin: 0;
+	}
+	.themes {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sp-3);
+	}
+	/* Each card's preview shows its own theme: `data-style` sets the theme's tokens on it (tokens.css). */
+	.theme {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-1);
+		width: 120px;
+		padding: var(--sp-1);
+		border: 1px solid var(--line);
+		border-radius: var(--r-lg);
+		background: var(--surface);
+		color: var(--fg);
+		font: var(--fs-ui) / var(--lh) var(--f-body);
+		text-align: left;
+		cursor: pointer;
+	}
+	.theme[aria-checked='true'] {
+		border-color: var(--fg);
+		box-shadow: 0 0 0 1px var(--fg);
+	}
+	.theme-preview {
+		display: flex;
+		flex-direction: column;
+	}
+	.theme-bg {
+		display: flex;
+		padding: var(--sp-2);
+		border-radius: var(--r);
+		background: var(--bg);
+	}
+	.theme-surface {
+		display: flex;
+		flex: 1;
+		align-items: center;
+		justify-content: space-between;
+		padding: var(--sp-1) var(--sp-2);
+		border: 1px solid var(--line);
+		border-radius: var(--r);
+		background: var(--surface);
+	}
+	.theme-text {
+		font: 700 var(--fs-lg) / 1 var(--f-display);
+		color: var(--fg);
+	}
+	.theme-accent {
+		width: 16px;
+		height: 16px;
+		border-radius: var(--r-pill);
+		background: var(--accent);
+	}
+	.theme-name {
+		padding: 0 var(--sp-1);
+		font-weight: 500;
 	}
 	.input.num {
 		max-width: 140px;

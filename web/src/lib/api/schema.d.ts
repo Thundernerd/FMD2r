@@ -1081,6 +1081,8 @@ export interface components {
 			mode: components['schemas']['ThemeMode'];
 			/** @default normal */
 			text_size: components['schemas']['TextSize'];
+			/** @default default */
+			theme: components['schemas']['Theme'];
 		};
 		/** @description One chapter of a series. */
 		ChapterInfo: {
@@ -2291,7 +2293,8 @@ export interface components {
 			 * @default {
 			 *       "accent": "teal",
 			 *       "mode": "system",
-			 *       "text_size": "normal"
+			 *       "text_size": "normal",
+			 *       "theme": "default"
 			 *     }
 			 */
 			appearance: components['schemas']['AppearanceSettings'];
@@ -2668,6 +2671,12 @@ export interface components {
 		 * @enum {string}
 		 */
 		TextSize: 'small' | 'normal' | 'large' | 'larger';
+		/**
+		 * @description The built-in themes, each a set of style tokens (`data-style` in `web/src/lib/styles/tokens.css`)
+		 *     with a light and a dark variant; the layout is the same in all of them.
+		 * @enum {string}
+		 */
+		Theme: 'default' | 'high-contrast' | 'warm' | 'compact';
 		/**
 		 * @description Light or dark.
 		 * @enum {string}

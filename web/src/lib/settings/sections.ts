@@ -33,12 +33,12 @@ const number = (path: string, label: string, min: number, max: number, help?: st
 	help,
 	control: { kind: 'number', min, max }
 });
-const swatches = (path: string, label: string, choices: Choice[], help?: string): Field => ({
-	path,
-	label,
-	help,
-	control: { kind: 'swatches', choices }
-});
+const swatches = (
+	path: string,
+	label: string,
+	choices: Choice[],
+	extra: Omit<Extract<Control, { kind: 'swatches' }>, 'kind' | 'choices'> = {}
+): Field => ({ path, label, control: { kind: 'swatches', choices, ...extra } });
 const select = (path: string, label: string, choices: Choice[], help?: string): Field => ({
 	path,
 	label,
@@ -122,6 +122,19 @@ export const SETTINGS_SECTIONS: Section[] = [
 		id: 'appearance',
 		title: 'Appearance',
 		fields: [
+			{
+				path: 'appearance.theme',
+				label: 'Theme',
+				control: {
+					kind: 'themes',
+					choices: [
+						{ value: 'default', label: 'Default' },
+						{ value: 'high-contrast', label: 'High contrast' },
+						{ value: 'warm', label: 'Warm' },
+						{ value: 'compact', label: 'Compact' }
+					]
+				}
+			},
 			select(
 				'appearance.mode',
 				'Light or dark',
@@ -138,14 +151,25 @@ export const SETTINGS_SECTIONS: Section[] = [
 				{ value: 'large', label: 'Large' },
 				{ value: 'larger', label: 'Larger' }
 			]),
-			swatches('appearance.accent', 'Accent colour', [
-				{ value: 'teal', label: 'Teal' },
-				{ value: 'blue', label: 'Blue' },
-				{ value: 'green', label: 'Green' },
-				{ value: 'purple', label: 'Purple' },
-				{ value: 'orange', label: 'Orange' },
-				{ value: 'red', label: 'Red' }
-			])
+			swatches(
+				'appearance.accent',
+				'Accent colour',
+				[
+					{ value: 'teal', label: 'Teal' },
+					{ value: 'blue', label: 'Blue' },
+					{ value: 'green', label: 'Green' },
+					{ value: 'purple', label: 'Purple' },
+					{ value: 'orange', label: 'Orange' },
+					{ value: 'red', label: 'Red' }
+				],
+				{
+					lockedWhen: {
+						path: 'appearance.theme',
+						value: 'high-contrast',
+						note: 'High contrast keeps its own accent, so links and buttons stay at 7:1.'
+					}
+				}
+			)
 		]
 	},
 	{

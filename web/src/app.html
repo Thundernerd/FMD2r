@@ -13,6 +13,7 @@
 				const cached = JSON.parse(localStorage.getItem('fmd2r.appearance') || 'null');
 				if (cached) {
 					const root = document.documentElement;
+					if (typeof cached.style === 'string') root.dataset.style = cached.style;
 					if (cached.theme === 'light' || cached.theme === 'dark')
 						root.dataset.theme = cached.theme;
 					if (typeof cached.accent === 'string') root.dataset.accent = cached.accent;
