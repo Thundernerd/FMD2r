@@ -93,4 +93,23 @@ describe('the MangaBaka setup step', () => {
 		expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
 		expect(button('Next').disabled).toBe(false);
 	});
+
+	it("says so up front when the server's status can't download it", async () => {
+		const real = createApi({ baseUrl: 'http://fmd2r.test', fetch: createMockBackend().fetch });
+		const status = await real.mangabakaStatus();
+		await open({ mangabakaStatus: () => Promise.resolve({ ...status, available: false }) });
+
+		expect((await screen.findByRole('alert')).textContent).toMatch(/can’t download/);
+		expect(screen.queryByRole('button', { name: 'Download now' })).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
+		expect(button('Next').disabled).toBe(false);
+	});
+
+	it('can still be skipped when the status fails to load', async () => {
+		await open({ mangabakaStatus: () => Promise.reject(new Error('offline')) });
+
+		await screen.findByRole('alert');
+		await fireEvent.click(button('Skip'));
+		expect(button('Next').disabled).toBe(false);
+	});
 });

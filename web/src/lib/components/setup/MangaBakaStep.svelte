@@ -1,23 +1,22 @@
 <script lang="ts">
-	import MangaBakaProgress from '#lib/components/settings/MangaBakaProgress.svelte';
-	import { MangaBakaDownload } from '#lib/mangabaka.svelte.ts';
+	import MangaBakaProgress from '#lib/components/MangaBakaProgress.svelte';
+	import { MangaBakaDatabase } from '#lib/mangabaka.svelte.ts';
 	import type { StepProps } from '#lib/setup/steps.ts';
 
 	let { api, store }: StepProps = $props();
 
+	// The wizard gives a step its api and store once, for its lifetime.
 	// svelte-ignore state_referenced_locally
-	const mangabaka = new MangaBakaDownload(api, store);
+	const mangabaka = new MangaBakaDatabase(api, store);
 	let skipped = $state(false);
-	/** Why this server can't download it: it said so (503), or its status does. */
-	const unavailable = $derived(
-		mangabaka.unavailable ??
-			(mangabaka.status?.available === false ? 'it runs without the database job' : null)
-	);
 
 	/** Next waits for a choice, unless there is nothing left to choose. */
 	export function ready(): boolean {
 		return (
-			skipped || unavailable !== null || mangabaka.running || mangabaka.status?.downloaded === true
+			skipped ||
+			mangabaka.unavailable !== null ||
+			mangabaka.running ||
+			mangabaka.status?.downloaded === true
 		);
 	}
 </script>
@@ -32,19 +31,23 @@
 </p>
 <p class="small muted">You can add or remove it later in Settings → MangaBaka database.</p>
 
-{#if unavailable !== null}
+{#if mangabaka.unavailable !== null}
 	<p class="bad small" role="alert">
-		This server can’t download the MangaBaka database: {unavailable}. Discover works without it.
+		This server can’t download the MangaBaka database: {mangabaka.unavailable}. Discover works
+		without it.
 	</p>
 {:else if mangabaka.running}
 	<MangaBakaProgress download={mangabaka} />
 	<p class="small muted">It downloads in the background; you can go on.</p>
 {:else if mangabaka.status?.downloaded}
 	<p>It is downloaded already.</p>
-{:else if mangabaka.status}
+{:else}
 	<div class="actions">
-		<button class="btn primary" type="button" disabled={mangabaka.busy} onclick={mangabaka.download}
-			>Download now</button
+		<button
+			class="btn primary"
+			type="button"
+			disabled={mangabaka.busy || !mangabaka.status}
+			onclick={mangabaka.download}>Download now</button
 		>
 		<button
 			class="btn"

@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { MangaBakaDownload } from '#lib/mangabaka.svelte.ts';
+	import type { MangaBakaDatabase } from '#lib/mangabaka.svelte.ts';
 
 	/** A running MangaBaka download's progress bar and step. */
-	let { download }: { download: MangaBakaDownload } = $props();
+	let { download }: { download: MangaBakaDatabase } = $props();
 </script>
 
 <div class="progress">

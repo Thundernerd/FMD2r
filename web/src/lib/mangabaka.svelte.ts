@@ -2,6 +2,9 @@ import { ApiError, type Api } from '#lib/api/client.ts';
 import type { MangaBakaStatus, MetadataEvent } from '#lib/api/types.ts';
 import type { EventStore } from '#lib/events.svelte.ts';
 
+/** Why a server can't download it, when it doesn't say: it runs without the lists database. */
+const NO_LISTS = 'it has no list database to match it against';
+
 const ENDED: MetadataEvent['kind'][] = ['finished', 'cancelled', 'failed'];
 
 /**
@@ -9,12 +12,12 @@ const ENDED: MetadataEvent['kind'][] = ['finished', 'cancelled', 'failed'];
  * comes live from the `job.metadata.*` events. Create it while a component initializes; it
  * refreshes the status when a download ends.
  */
-export class MangaBakaDownload {
+export class MangaBakaDatabase {
 	status = $state<MangaBakaStatus | null>(null);
 	busy = $state(false);
 	error = $state<string | null>(null);
-	/** Why this server cannot download the database, once it said so (503). */
-	unavailable = $state<string | null>(null);
+	/** Why the server refused a download (503), when it did. */
+	#refused = $state<string | null>(null);
 
 	readonly #api: Api;
 	readonly #store: EventStore;
@@ -26,6 +29,10 @@ export class MangaBakaDownload {
 	readonly running = $derived.by(
 		() => this.status?.running === true && !(this.event && ENDED.includes(this.event.kind))
 	);
+	/** Why this server can't download the database: its status says so, or it refused (503). */
+	readonly unavailable = $derived.by(
+		() => this.#refused ?? (this.status?.available === false ? NO_LISTS : null)
+	);
 	readonly percent = $derived.by(() => {
 		const e = this.event;
 		return e && e.total > 0 ? Math.min(100, Math.round((e.done / e.total) * 100)) : null;
@@ -36,8 +43,8 @@ export class MangaBakaDownload {
 		this.#store = store;
 		$effect(() => this.refresh());
 
-		// A download that ends changes the date and size.
-		let seen: MetadataEvent | null = null;
+		// A download that ends changes the date and size. An event from before is no news.
+		let seen: MetadataEvent | null = store.metadata;
 		$effect(() => {
 			const latest = this.#store.metadata;
 			if (!latest || latest === seen) return;
@@ -61,7 +68,7 @@ export class MangaBakaDownload {
 			await action();
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 503) {
-				this.unavailable = e.detail ?? 'it runs without the database job';
+				this.#refused = e.detail ?? NO_LISTS;
 			} else this.error = failure;
 		} finally {
 			this.busy = false;

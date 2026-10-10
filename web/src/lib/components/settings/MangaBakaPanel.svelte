@@ -1,20 +1,14 @@
 <script lang="ts">
 	import type { Api } from '#lib/api/client.ts';
 	import type { EventStore } from '#lib/events.svelte.ts';
-	import { MangaBakaDownload } from '#lib/mangabaka.svelte.ts';
-	import MangaBakaProgress from './MangaBakaProgress.svelte';
+	import { MangaBakaDatabase } from '#lib/mangabaka.svelte.ts';
+	import MangaBakaProgress from '#lib/components/MangaBakaProgress.svelte';
 
 	let { api, store }: { api: Api; store: EventStore } = $props();
 
+	// Settings gives the panel its api and store once, for its lifetime.
 	// svelte-ignore state_referenced_locally
-	const mangabaka = new MangaBakaDownload(api, store);
-	const status = $derived(mangabaka.status);
-	const busy = $derived(mangabaka.busy);
-	const error = $derived(
-		mangabaka.error ??
-			(mangabaka.unavailable && `This server cannot download it: ${mangabaka.unavailable}.`)
-	);
-	const { download, cancel, remove } = mangabaka;
+	const mangabaka = new MangaBakaDatabase(api, store);
 
 	const megabytes = (bytes: number) => `${Math.round(bytes / 1_000_000).toLocaleString('en')} MB`;
 	const date = (iso: string) =>
@@ -27,7 +21,8 @@
 		database gives list titles a format, a publication status and descriptions, matched offline: no
 		title leaves this server. Nothing is downloaded until you ask; the download is about 390 MB.
 	</p>
-	{#if status}
+	{#if mangabaka.status}
+		{@const status = mangabaka.status}
 		{#if status.downloaded && status.built_at}
 			<p class="state">
 				<span>Built {date(status.built_at)}</span>
@@ -46,27 +41,34 @@
 
 		<div class="actions">
 			{#if mangabaka.running}
-				<button class="btn" type="button" disabled={busy} onclick={cancel}>Cancel</button>
-			{:else if status.downloaded}
-				<button class="btn" type="button" disabled={busy || !status.available} onclick={download}
-					>Update</button
+				<button class="btn" type="button" disabled={mangabaka.busy} onclick={mangabaka.cancel}
+					>Cancel</button
 				>
-				<button class="btn" type="button" disabled={busy} onclick={remove}>Remove</button>
+			{:else if status.downloaded}
+				<button
+					class="btn"
+					type="button"
+					disabled={mangabaka.busy || !status.available}
+					onclick={mangabaka.download}>Update</button
+				>
+				<button class="btn" type="button" disabled={mangabaka.busy} onclick={mangabaka.remove}
+					>Remove</button
+				>
 			{:else}
 				<button
 					class="btn primary"
 					type="button"
-					disabled={busy || !status.available}
-					onclick={download}>Download</button
+					disabled={mangabaka.busy || !status.available}
+					onclick={mangabaka.download}>Download</button
 				>
 			{/if}
 		</div>
-		{#if !status.available}
-			<p class="small muted">This server cannot download it.</p>
+		{#if mangabaka.unavailable}
+			<p class="small muted">This server cannot download it: {mangabaka.unavailable}.</p>
 		{/if}
 	{/if}
-	{#if error}
-		<p class="bad small" role="alert">{error}</p>
+	{#if mangabaka.error}
+		<p class="bad small" role="alert">{mangabaka.error}</p>
 	{/if}
 </div>
 
