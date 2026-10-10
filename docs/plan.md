@@ -272,6 +272,12 @@ Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53
 | T83 | Setup step: password, when the server is open | T78 |
 | T84 | Setup step: import from FMD2 | T78 |
 | T85 | Call FMD2-DB lists "ready-made lists" in the UI | — |
+| T86 | Discover keeps its filters and place when you come back | — |
+| T87 | Group Discover's filters by where they come from | — |
+| T88 | Every font size and colour comes from a style token | — |
+| T89 | Appearance settings: light or dark, text size, accent colour | T88 |
+| T90 | Built-in themes | T89 |
+| T91 | Load a custom stylesheet from the data folder | T88 |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:
