@@ -1,6 +1,6 @@
 //! `POST /api/import` driven through `build_router` with `oneshot`, uploading zipped FMD2
 //! `userdata` directories built with T32's fixtures
-//! (docs/tickets/T47-import-upload-and-timezone.md, "Seams under test").
+//! (T47, issue #178, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 

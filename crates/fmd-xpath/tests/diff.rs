@@ -1,4 +1,4 @@
-//! The differential runner (docs/tickets/T35-xpath-differential-corpus.md, "Seams under test"):
+//! The differential runner (T35, issue #166, "Seams under test"):
 //! a corpus recorded through the logging hook, replayed on two backends.
 
 #![cfg(feature = "native")]

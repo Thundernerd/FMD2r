@@ -1,5 +1,5 @@
 //! `GET /api/covers/series`: a list title's cover, from its stored link, its MangaBaka match or
-//! its website's `GetInfo` (docs/tickets/T70-discover-cover-thumbnails.md, "Seams under test").
+//! its website's `GetInfo` (T70, issue #201, "Seams under test").
 //! The websites and MangaBaka's CDN are a mocked network; the MangaBaka database is built from
 //! fmd-core's recorded fixture (crates/fmd-core/tests/fixtures/mangabaka).
 

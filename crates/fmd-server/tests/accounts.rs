@@ -1,5 +1,5 @@
 //! Account endpoints (`/api/accounts`) driven through `build_router` with `oneshot`, over the
-//! ticket's fixture module (docs/tickets/T31-accounts-login.md, "Seams under test").
+//! ticket's fixture module (T31, issue #162, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 

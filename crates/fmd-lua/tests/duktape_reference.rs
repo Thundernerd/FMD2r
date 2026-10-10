@@ -1,5 +1,5 @@
 //! `fmd.duktape.ExecJS` compared byte for byte with `fmd-duktape-ref`, the Duktape 2.3.0 FMD2
-//! bundles (docs/tickets/T50-js-engine-verification.md).
+//! bundles (T50, issue #181).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

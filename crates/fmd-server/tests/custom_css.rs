@@ -1,4 +1,4 @@
-//! `GET /custom.css` from the data folder (docs/tickets/T91-custom-css.md, "Seams under test").
+//! `GET /custom.css` from the data folder (T91, issue #222, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 

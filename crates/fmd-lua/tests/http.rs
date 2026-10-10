@@ -1,4 +1,4 @@
-//! The `HTTP` object over a stub transport (docs/tickets/T10-http-lua-object.md). Expected values
+//! The `HTTP` object over a stub transport (T10, issue #141). Expected values
 //! come from baseunits/httpsendthread.pas and baseunits/lua/LuaHTTPSend.pas.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.

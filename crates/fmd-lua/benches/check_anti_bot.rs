@@ -1,5 +1,5 @@
 //! Per-request cost of the anti-bot hook (`____CheckAntiBot`): `HTTP.GET` timed with and without
-//! it (docs/tickets/T30-anti-bot.md: under 50 µs typical).
+//! it (T30, issue #161: under 50 µs typical).
 //! Run with `cargo bench -p fmd-lua --bench check_anti_bot`.
 
 // A bench is test code (CODING_STANDARDS.md); clippy only exempts `#[test]` fns.

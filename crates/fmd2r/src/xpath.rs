@@ -1,5 +1,5 @@
 //! `fmd2r xpath …`: evaluate XPath on either backend, and compare the backends on the
-//! differential corpus (docs/tickets/T35-xpath-differential-corpus.md).
+//! differential corpus (T35, issue #166).
 
 use std::path::PathBuf;
 

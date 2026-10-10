@@ -1,5 +1,7 @@
 # Issue tracker
 
-Tickets live in the repo as `docs/tickets/T<nn>-*.md` (not as GitHub issues; the GitHub issues belong to a separate effort). A PR implements exactly one ticket and its title starts with that ticket id, e.g. `T03: LuaClass binding helper`. For `/code-review`, the spec is the ticket file itself, read together with `docs/plan.md` and `CODING_STANDARDS.md`.
+Tickets are GitHub issues on this repo, labelled `ticket`. T01–T91 came from the old `docs/tickets/` folder (issues #132–#222) and keep their `T<nn>:` title prefix; newer tickets have plain titles. A ticket's "Blocked by" section lists the issues that must be closed first.
 
-A ticket with an `Owner: user` line under its `Deps:` line is for the maintainer (decisions, sign-offs). The coordinator never launches an agent for it.
+A PR implements exactly one ticket and closes it with `Closes #<n>` in its body. For `/code-review`, the spec is the issue (`gh issue view <n> --comments`), read together with `docs/plan.md` and `CODING_STANDARDS.md`.
+
+A ticket with an `Owner: user` line at the top of its body is for the maintainer (decisions, sign-offs). Agents are never launched for it.

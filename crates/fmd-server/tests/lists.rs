@@ -1,6 +1,6 @@
 //! Discover's list endpoints (`/api/lists/search`, `/api/lists/facets`, `/api/modules`) driven
 //! through `build_router` with `oneshot` over a fixture `lists.db`
-//! (docs/tickets/T26-discover-list-update.md, "Seams under test").
+//! (T26, issue #157, "Seams under test").
 //!
 //! Filters behave like FMD2's `Filter` (baseunits/DBDataProcess.pas:1367-1430): an included
 //! genre must occur in `genres`, an excluded one must not, and the status matches exactly.

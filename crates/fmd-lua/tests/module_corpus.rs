@@ -1,5 +1,5 @@
 //! Every upstream module in the corpus fixture through `ModuleRegistry::load_dir`
-//! (docs/tickets/T06-module-loader-module-object.md).
+//! (T06, issue #137).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

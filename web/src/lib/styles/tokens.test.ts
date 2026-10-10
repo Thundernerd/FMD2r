@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const SRC = join(import.meta.dirname, '../..');
 
 /** The only file that may spell out a font size or a colour; everything else uses its tokens, so
- * overriding them restyles the whole app (docs/tickets/T88-style-tokens-everywhere.md). */
+ * overriding them restyles the whole app (T88, issue #219). */
 const TOKENS = 'lib/styles/tokens.css';
 
 const HARD_CODED: [string, RegExp][] = [

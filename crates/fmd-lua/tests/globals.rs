@@ -1,5 +1,5 @@
 //! The global helper functions modules call without a `require`
-//! (docs/tickets/T05-global-helpers.md). Expected values follow the Pascal sources each test cites.
+//! (T05, issue #136). Expected values follow the Pascal sources each test cites.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

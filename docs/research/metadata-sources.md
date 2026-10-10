@@ -35,8 +35,8 @@ Not (b), `GetInfo` only: one website request per title on screen, with each site
 
 **Tickets:**
 
-- [T73](../tickets/T73-mangabaka-metadata.md) (new): the database download, offline matching, and the metadata on Discover and the series page.
-- T70 (`docs/tickets/T70-discover-cover-thumbnails.md`): updated to take covers from T73's stored matches first, with `GetInfo` as the fallback. It now depends on T73.
+- [T73](https://github.com/Thundernerd/FMD2r/issues/204) (new): the database download, offline matching, and the metadata on Discover and the series page.
+- [T70](https://github.com/Thundernerd/FMD2r/issues/201): updated to take covers from T73's stored matches first, with `GetInfo` as the fallback. It now depends on T73.
 
 ### What the user sees
 

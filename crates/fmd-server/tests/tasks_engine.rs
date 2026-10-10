@@ -1,6 +1,6 @@
 //! Queue endpoints over the real download engine: a `DownloadManager` with a `WorkerPool`
 //! running a fixture module, a stub HTTP transport serving images, a temp `app.db` and a temp
-//! output dir (docs/tickets/T23-queue.md, "Seams under test").
+//! output dir (T23, issue #154, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 

@@ -1,4 +1,4 @@
-//! The list update job against a fixture module (docs/tickets/T26-discover-list-update.md).
+//! The list update job against a fixture module (T26, issue #157).
 //!
 //! Expected behaviour: `TUpdateListManagerThread.Execute` and `TUpdateListThread`
 //! (baseunits/uUpdateThread.pas:173-313, :626-780, :842-903).

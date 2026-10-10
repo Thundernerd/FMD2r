@@ -1,4 +1,4 @@
-//! The XQuery Lua suite over the `native` XPath backend (docs/tickets/T34-native-xpath-backend.md).
+//! The XQuery Lua suite over the `native` XPath backend (T34, issue #165).
 
 #![cfg(feature = "xpath-native")]
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.

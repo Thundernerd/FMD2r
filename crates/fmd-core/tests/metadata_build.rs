@@ -1,5 +1,5 @@
 //! Building `metadata.db` from the recorded MangaBaka dump
-//! (docs/tickets/T73-mangabaka-metadata.md).
+//! (T73, issue #204).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

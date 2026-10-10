@@ -1,5 +1,5 @@
 //! The shared `fmd-xpath` suite over the `fpc` backend
-//! (docs/tickets/T08-fmd-xpath-trait-ffi-lua-bindings.md, "Seams under test").
+//! (T08, issue #139, "Seams under test").
 //!
 //! Expected values come from FMD2's engine set-up (baseunits/XQueryEngineHTML.pas:384-400).
 

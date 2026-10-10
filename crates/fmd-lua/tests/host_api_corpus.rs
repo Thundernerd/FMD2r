@@ -1,5 +1,5 @@
 //! Every Host API name the upstream modules reference (T02's scan) checked against a callback's
-//! Lua state (docs/tickets/T14-callback-runner-worker-pool.md, "Corpus check").
+//! Lua state (T14, issue #145, "Corpus check").
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

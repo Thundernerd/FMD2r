@@ -1,4 +1,4 @@
-//! The MangaBaka database through the HTTP API (docs/tickets/T73-mangabaka-metadata.md, "Seams
+//! The MangaBaka database through the HTTP API (T73, issue #204, "Seams
 //! under test"), over fmd-core's recorded dump (crates/fmd-core/tests/fixtures/mangabaka).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.

@@ -1,6 +1,6 @@
 //! `POST /api/resolve` and `GET /api/series` driven through `build_router` with `oneshot`, over a
 //! real `WorkerPool` running fixture Lua modules whose HTTP goes to a stub transport
-//! (docs/tickets/T24-series-page-add-by-url.md, "Seams under test").
+//! (T24, issue #155, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 

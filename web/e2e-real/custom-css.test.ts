@@ -12,7 +12,7 @@ test.afterEach(async ({ request }) => {
 	await request.delete(`${SITE}/custom-css`);
 });
 
-// docs/tickets/T91-custom-css.md: a `custom.css` in the data folder restyles the UI on the next
+// T91, issue #222: a `custom.css` in the data folder restyles the UI on the next
 // load, without a restart, and the login page too.
 test('a custom.css in the data folder restyles the app and the login page', async ({
 	page,

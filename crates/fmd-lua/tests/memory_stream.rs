@@ -1,4 +1,4 @@
-//! MemoryStream objects (`HTTP.Document`) (docs/tickets/T04-tstrings-memorystream.md). Expected
+//! MemoryStream objects (`HTTP.Document`) (T04, issue #135). Expected
 //! values were probed from FPC 3.2.2's `TMemoryStream`.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
