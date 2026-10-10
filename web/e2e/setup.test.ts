@@ -16,11 +16,13 @@ test('a fresh install goes through setup first, and only once', async ({ page })
 
 	await page.goto('/');
 	await expect(wizard(page)).toBeVisible();
-	await expect(page.getByText('Step 1 of 3')).toBeVisible();
+	await expect(page.getByText('Step 1 of 4')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 2 of 3')).toBeVisible();
+	await expect(page.getByText('Step 2 of 4')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 3 of 3')).toBeVisible();
+	await expect(page.getByText('Step 3 of 4')).toBeVisible();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByText('Step 4 of 4')).toBeVisible();
 	await page.getByRole('button', { name: 'Finish' }).click();
 
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
@@ -36,11 +38,11 @@ test('a reload during setup resumes at the step it was on', async ({ page }) => 
 	await freshInstall(page);
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 2 of 3')).toBeVisible();
+	await expect(page.getByText('Step 2 of 4')).toBeVisible();
 
 	await page.reload();
-	await expect(page.getByText('Step 2 of 3')).toBeVisible();
-	await expect(page.getByRole('heading', { level: 2, name: 'Download format' })).toBeVisible();
+	await expect(page.getByText('Step 2 of 4')).toBeVisible();
+	await expect(page.getByRole('heading', { level: 2, name: 'Download folders' })).toBeVisible();
 });
 
 test('an existing install never sees setup', async ({ page }) => {
@@ -55,7 +57,7 @@ test('setup can be run again from Settings without redirecting other pages', asy
 	await page.goto('/settings#section-general');
 	await page.getByRole('button', { name: 'Run setup again' }).click();
 	await expect(wizard(page)).toBeVisible();
-	await expect(page.getByText('Step 1 of 3')).toBeVisible();
+	await expect(page.getByText('Step 1 of 4')).toBeVisible();
 
 	await page.goto('/discover');
 	await expect(page).toHaveURL(/\/discover$/);
@@ -67,6 +69,7 @@ test("the finish step's links to Settings finish the setup first", async ({ page
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('link', { name: 'Change Download format in Settings' }).click();
 
 	await expect(page).toHaveURL(/\/settings#section-output$/);
@@ -75,9 +78,36 @@ test("the finish step's links to Settings finish the setup first", async ({ page
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
 });
 
+test('download folders added during setup show in Settings → Save to', async ({ page }) => {
+	await freshInstall(page);
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Next' }).click();
+	const step = page.getByRole('region', { name: 'Download folders' });
+	await expect(step.getByRole('group', { name: 'Downloads' })).toBeVisible();
+	await step.getByRole('button', { name: 'Add destination' }).click();
+	const added = step.getByRole('group', { name: 'New destination' });
+	await added.getByRole('textbox', { name: 'Folder' }).fill('/data/manhwa');
+	await added.getByRole('textbox', { name: 'Name' }).fill('Manhwa');
+	await step.getByRole('group', { name: 'Manhwa' }).getByRole('radio', { name: 'Default' }).check();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Finish' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+
+	await page.goto('/settings#section-saveto');
+	const section = page.getByRole('region', { name: 'Save to' });
+	const downloads = section.getByRole('group', { name: 'Downloads' });
+	await expect(downloads.getByRole('textbox', { name: 'Folder' })).toHaveValue('downloads');
+	await expect(downloads.getByRole('radio', { name: 'Default' })).not.toBeChecked();
+	const manhwa = section.getByRole('group', { name: 'Manhwa' });
+	await expect(manhwa.getByRole('textbox', { name: 'Folder' })).toHaveValue('/data/manhwa');
+	await expect(manhwa.getByRole('radio', { name: 'Default' })).toBeChecked();
+});
+
 test('the download format picked during setup shows in Settings → Output', async ({ page }) => {
 	await freshInstall(page);
 	await page.goto('/');
+	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Download format' })).toBeVisible();
 	await expect(page.getByRole('radio', { name: /^Folder of images/ })).toBeChecked();
