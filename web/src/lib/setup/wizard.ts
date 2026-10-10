@@ -1,5 +1,6 @@
 import DownloadFoldersStep from '#lib/components/setup/DownloadFoldersStep.svelte';
 import FinishStep from '#lib/components/setup/FinishStep.svelte';
+import FormatStep from '#lib/components/setup/FormatStep.svelte';
 import WelcomeStep from '#lib/components/setup/WelcomeStep.svelte';
 import type { SetupStep } from './steps.ts';
 
@@ -11,5 +12,6 @@ import type { SetupStep } from './steps.ts';
 export const SETUP_STEPS: SetupStep[] = [
 	{ id: 'welcome', title: 'Welcome', component: WelcomeStep },
 	{ id: 'download-folders', title: 'Download folders', component: DownloadFoldersStep },
+	{ id: 'format', title: 'Download format', component: FormatStep },
 	{ id: 'finish', title: 'Finish', component: FinishStep }
 ];
