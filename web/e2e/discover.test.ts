@@ -185,3 +185,76 @@ test('scrolling Discover loads the covers of the visible cards only', async ({ p
 	await expect(last.locator('img.loaded')).toBeVisible();
 	expect(requested).toContain(lastLink);
 });
+
+test('Back from a title returns to the same search, results and scroll position', async ({
+	page
+}, info) => {
+	test.skip(info.project.name === 'phone', 'the filters are a drawer on a phone');
+	await page.goto('/discover');
+	const results = page.getByRole('region', { name: 'Results' });
+	const filters = page.getByRole('complementary', { name: 'Filters' });
+	const count = results.getByRole('status');
+	const search = results.getByRole('searchbox', { name: 'Search titles' });
+	const cards = results.getByRole('link');
+	await expect(count).toHaveText('332 titles');
+
+	// Every list holds 51 such titles: one more than a page. MangaDex alone has too few.
+	await filters.getByRole('combobox', { name: 'Website' }).selectOption({ label: 'All websites' });
+	await search.fill('d');
+	await filters.getByRole('button', { name: 'Romance: ignored' }).click();
+	await filters.getByRole('combobox', { name: 'Status' }).selectOption('2');
+	await expect(count).toHaveText('51 titles');
+	await expect(page).toHaveURL(/\/discover\?q=d&genres_include=Romance&status=2$/);
+
+	await expect(cards).toHaveCount(50);
+	await cards.last().scrollIntoViewIfNeeded();
+	await expect(cards).toHaveCount(51);
+	const last = cards.last();
+	await last.scrollIntoViewIfNeeded();
+	const scrollY = await page.evaluate(() => window.scrollY);
+	expect(scrollY).toBeGreaterThan(0);
+	const cardHeight = (await last.boundingBox())?.height ?? 0;
+	const href = (await last.getAttribute('href')) ?? '';
+	await last.click();
+	await expect(page).toHaveURL(href);
+
+	await page.goBack();
+	await expect(page).toHaveURL(/\/discover\?q=d&genres_include=Romance&status=2$/);
+	await expect(search).toHaveValue('d');
+	await expect(filters.getByRole('button', { name: 'Romance: included' })).toBeVisible();
+	await expect(filters.getByRole('combobox', { name: 'Status' })).toHaveValue('2');
+	await expect(count).toHaveText('51 titles');
+	await expect(cards).toHaveCount(51);
+	await expect
+		.poll(() => page.evaluate(() => window.scrollY))
+		.toBeGreaterThan(scrollY - cardHeight);
+	expect(Math.abs((await page.evaluate(() => window.scrollY)) - scrollY)).toBeLessThan(cardHeight);
+});
+
+test('a Discover URL opens the search it names', async ({ page }) => {
+	await page.goto('/discover?q=d&status=2');
+	const results = page.getByRole('region', { name: 'Results' });
+	await expect(results.getByRole('searchbox', { name: 'Search titles' })).toHaveValue('d');
+	const cards = results.getByRole('link');
+	await expect(cards.first()).toBeVisible();
+	for (const card of await cards.all()) {
+		await expect(card.locator('.t')).toHaveText(/(^|\s)d/i);
+		await expect(card).toContainText('Hiatus');
+	}
+});
+
+test('filter changes add no history entries', async ({ page }, info) => {
+	test.skip(info.project.name === 'phone', 'the filters are a drawer on a phone');
+	await page.goto('/library');
+	await page.getByRole('link', { name: 'Discover' }).first().click();
+	await expect(page).toHaveURL(/\/discover$/);
+	const filters = page.getByRole('complementary', { name: 'Filters' });
+
+	await filters.getByRole('combobox', { name: 'Website' }).selectOption({ label: 'MangaDex' });
+	await filters.getByRole('combobox', { name: 'Status' }).selectOption('1');
+	await filters.getByRole('button', { name: 'Action: ignored' }).click();
+	await expect(page).toHaveURL(/\/discover\?module=mangadex&genres_include=Action&status=1$/);
+
+	await page.goBack();
+	await expect(page).toHaveURL(/\/library$/);
+});
