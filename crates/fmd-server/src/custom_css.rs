@@ -14,7 +14,7 @@ use crate::{ApiError, AppState};
 const FILE: &str = "custom.css";
 
 /// The largest stylesheet served; anything bigger is a 413.
-const LIMIT: u64 = 1024 * 1024;
+const MAX_BYTES: u64 = 1024 * 1024;
 
 /// Read on every request, so edits show on the next reload. No file, or no data folder, is an
 /// empty stylesheet rather than a 404, so the browser console stays clean.
@@ -42,13 +42,13 @@ async fn read(path: &Path) -> Result<Vec<u8>, ApiError> {
     };
     let mut body = Vec::new();
     // One byte past the limit tells an oversized file apart without reading all of it.
-    file.take(LIMIT + 1)
+    file.take(MAX_BYTES + 1)
         .read_to_end(&mut body)
         .await
         .map_err(|e| ApiError::Internal(format!("reading {FILE}: {e}")))?;
-    if body.len() as u64 > LIMIT {
+    if body.len() as u64 > MAX_BYTES {
         return Err(ApiError::PayloadTooLarge(format!(
-            "{FILE} is larger than 1 MiB"
+            "{FILE} is larger than {MAX_BYTES} bytes"
         )));
     }
     Ok(body)

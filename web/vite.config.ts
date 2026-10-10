@@ -4,7 +4,8 @@ import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
 // A mock-mode build (used by the Playwright smoke tests) must never land in `build/`, which T21 embeds.
-const out = process.env.VITE_API_MOCK === 'true' ? '.svelte-kit/build-mock' : 'build';
+const mock = process.env.VITE_API_MOCK === 'true';
+const out = mock ? '.svelte-kit/build-mock' : 'build';
 const backend = process.env.FMD2R_URL ?? 'http://127.0.0.1:8080';
 
 export default defineConfig({
@@ -21,7 +22,7 @@ export default defineConfig({
 		// `custom.css` to `fmd2r serve`. `vite preview` proxies too, so mock mode leaves the CSS out.
 		proxy: {
 			'/api': backend,
-			...(process.env.VITE_API_MOCK === 'true' ? {} : { '/custom.css': backend })
+			...(mock ? {} : { '/custom.css': backend })
 		}
 	},
 	test: {

@@ -33,6 +33,16 @@ fn header_of(res: &Response, name: header::HeaderName) -> &str {
     res.headers().get(name).unwrap().to_str().unwrap()
 }
 
+/// An empty 200 served as CSS.
+async fn assert_empty_stylesheet(res: Response) {
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        header_of(&res, header::CONTENT_TYPE),
+        "text/css; charset=utf-8"
+    );
+    assert_eq!(body(res).await, "");
+}
+
 #[tokio::test]
 async fn serves_custom_css_from_the_data_folder_as_uncached_css() {
     let (dir, state) = harness();
@@ -65,14 +75,7 @@ async fn an_edit_shows_in_the_next_response() {
 async fn no_file_is_an_empty_stylesheet() {
     let (_dir, state) = harness();
 
-    let res = get_css(&state).await;
-
-    assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(
-        header_of(&res, header::CONTENT_TYPE),
-        "text/css; charset=utf-8"
-    );
-    assert_eq!(body(res).await, "");
+    assert_empty_stylesheet(get_css(&state).await).await;
 }
 
 #[tokio::test]
@@ -80,14 +83,7 @@ async fn no_data_folder_is_an_empty_stylesheet() {
     let dir = tempfile::tempdir().unwrap();
     let state = AppState::new(AppDb::open(dir.path().join("app.db")).unwrap()).unwrap();
 
-    let res = get_css(&state).await;
-
-    assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(
-        header_of(&res, header::CONTENT_TYPE),
-        "text/css; charset=utf-8"
-    );
-    assert_eq!(body(res).await, "");
+    assert_empty_stylesheet(get_css(&state).await).await;
 }
 
 #[tokio::test]

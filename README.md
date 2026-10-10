@@ -52,8 +52,10 @@ names aren't, and may change between releases. The ones worth overriding:
 - Colours: `--bg`, `--surface`, `--surface-2`, `--line`, `--fg`, `--muted`, `--accent`,
   `--accent-fg`, `--accent-soft`, and the status colours `--ok`, `--warn`, `--bad`, `--idle` with
   their `-soft` backgrounds. A colour set on `:root` applies in light and dark mode alike; give
-  each mode its own with `light-dark(<light>, <dark>)`. (Dark mode follows the OS, so a
-  `:root[data-theme='dark']` rule only applies once a theme is picked explicitly.)
+  each mode its own with `light-dark(<light>, <dark>)`, e.g. `--bg: light-dark(#fff, #000);`.
+  Dark mode follows the OS unless a theme is picked, so the `:root[data-theme='dark']` rule
+  above only applies to an explicitly picked dark theme; for the OS's dark mode use
+  `@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --bg: #000; } }`.
 - Fonts and sizes: `--f-display`, `--f-body`, `--f-mono`, and `--fs-xs` to `--fs-hero`
   (`--fs-md` is body text).
 - Spacing and corners: `--sp-1` to `--sp-6`, `--r`, `--r-lg`, `--r-xl`.
