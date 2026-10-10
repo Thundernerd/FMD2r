@@ -76,6 +76,10 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     let state = tokio::task::spawn_blocking(move || -> Result<AppState, ServeError> {
         let lists = ListsDb::open(lists_path)?;
         let state = AppState::new(AppDb::open(db_path)?)?;
+        // Before anything else stores settings, which would make a fresh install look set up.
+        if let Err(e) = state.settings.mark_existing_install_set_up(&lists) {
+            tracing::warn!(target: "fmd_server", "deciding whether setup is needed: {e}");
+        }
         if let Err(e) = state.settings.select_listed_websites(&lists) {
             tracing::warn!(target: "fmd_server", "selecting the websites with a list: {e}");
         }

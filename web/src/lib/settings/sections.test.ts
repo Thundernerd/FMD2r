@@ -7,7 +7,8 @@ import {
 	DERIVED_PATHS,
 	OWN_SECTION_PATHS,
 	SECTION_EXTRA_PATHS,
-	SETTINGS_SECTIONS
+	SETTINGS_SECTIONS,
+	SETUP_PATHS
 } from '#lib/settings/sections.ts';
 
 // The server's OpenAPI document carries the T18 defaults of every settings group.
@@ -35,7 +36,8 @@ describe('settings sections', () => {
 			),
 			...OWN_SECTION_PATHS,
 			...Object.values(SECTION_EXTRA_PATHS).flat(),
-			...DERIVED_PATHS
+			...DERIVED_PATHS,
+			...SETUP_PATHS
 		];
 		expect([...paths].sort()).toEqual(leaves(DEFAULTS).sort());
 	});
@@ -104,6 +106,9 @@ describe('settings sections', () => {
 		const settings = await api.getSettings();
 		expect(settings.general.selected_websites.length).toBeGreaterThan(0);
 		settings.general.selected_websites = [];
+		// Like an install that was set up, so the mock opens on the app rather than the setup.
+		expect(settings.general.setup_completed).toBe(true);
+		settings.general.setup_completed = false;
 		expect(settings).toEqual(DEFAULTS);
 	});
 });

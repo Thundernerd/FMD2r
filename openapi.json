@@ -3535,6 +3535,16 @@
             },
             "description": "Module IDs Discover lists and searches (`general/MangaListSelect`,\nmangadownloader/forms/frmMain.pas:5990-6004). IDs of unloaded modules are kept but\nignored; FMD2 drops them (mangadownloader/forms/frmMain.pas:6464-6470). Empty by default:\nFMD2r does not ship `default_selected_websites` (baseunits/FMDOptions.pas:94, :250).",
             "default": []
+          },
+          "setup_completed": {
+            "type": "boolean",
+            "description": "Whether the setup wizard has been finished; while false the web UI shows it before\nanything else. No FMD2 setting. A fresh install starts with it false, one that already\nhas data is marked set up on its first start\n([`SettingsService::mark_existing_install_set_up`](super::SettingsService::mark_existing_install_set_up)).",
+            "default": false
+          },
+          "setup_step": {
+            "type": "string",
+            "description": "The id of the setup step to resume at, saved with each step's settings; empty for the\nfirst. No FMD2 setting.",
+            "default": ""
           }
         }
       },
@@ -5493,7 +5503,9 @@
               "language": "en",
               "load_covers": true,
               "lua_dir": "lua",
-              "selected_websites": []
+              "selected_websites": [],
+              "setup_completed": false,
+              "setup_step": ""
             }
           },
           "images": {

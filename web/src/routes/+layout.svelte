@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '#lib/styles/app.css';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import { api, events, session } from '#lib/app.ts';
@@ -9,6 +10,7 @@
 	import OpenServerBanner from '#lib/components/OpenServerBanner.svelte';
 	import QueueDock from '#lib/components/QueueDock.svelte';
 	import TopNav from '#lib/components/TopNav.svelte';
+	import { setup } from '#lib/setup/status.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -36,6 +38,19 @@
 		};
 	});
 
+	$effect(() => {
+		// Behind the login screen the settings can't be read; logging in asks again.
+		if (session.locked) return;
+		setup.check(api);
+	});
+
+	const onSetup = $derived(page.url.pathname === '/setup');
+	// Until setup is finished every page leads to it; run again from Settings, it doesn't.
+	const redirecting = $derived(setup.completed === false && !onSetup);
+	$effect(() => {
+		if (redirecting) goto('/setup', { replaceState: true });
+	});
+
 	// The Queue page shows the full queue, so the dock would only repeat it; the Settings page
 	// puts its save bar where the dock sits.
 	const showDock = $derived(!['/queue', '/settings'].includes(page.url.pathname));
@@ -48,6 +63,12 @@
 
 {#if session.locked}
 	<LoginScreen {api} onlogin={() => session.loggedIn()} />
+{:else if setup.completed === null || redirecting}
+	<!-- Nothing until it is known whether setup comes first. -->
+{:else if onSetup}
+	<main>
+		{@render children()}
+	</main>
 {:else}
 	<div class="app" class:with-dock={showDock}>
 		<OpenServerBanner health={session.health} />

@@ -1359,6 +1359,20 @@ export interface components {
 			 * @default []
 			 */
 			selected_websites: string[];
+			/**
+			 * @description Whether the setup wizard has been finished; while false the web UI shows it before
+			 *     anything else. No FMD2 setting. A fresh install starts with it false, one that already
+			 *     has data is marked set up on its first start
+			 *     ([`SettingsService::mark_existing_install_set_up`](super::SettingsService::mark_existing_install_set_up)).
+			 * @default false
+			 */
+			setup_completed: boolean;
+			/**
+			 * @description The id of the setup step to resume at, saved with each step's settings; empty for the
+			 *     first. No FMD2 setting.
+			 * @default
+			 */
+			setup_step: string;
 		};
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
@@ -2300,7 +2314,9 @@ export interface components {
 			 *       "language": "en",
 			 *       "load_covers": true,
 			 *       "lua_dir": "lua",
-			 *       "selected_websites": []
+			 *       "selected_websites": [],
+			 *       "setup_completed": false,
+			 *       "setup_step": ""
 			 *     }
 			 */
 			general: components['schemas']['GeneralSettings'];
