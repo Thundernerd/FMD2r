@@ -326,6 +326,14 @@
 						{#if section.id === 'metadata'}
 							<MangaBakaPanel {api} store={events} />
 						{/if}
+						{#if section.id === 'general'}
+							<p class="setup-again">
+								<button class="btn" type="button" onclick={() => goto('/setup')}>
+									Run setup again
+								</button>
+								<span class="small muted">Goes through the setup with the current values.</span>
+							</p>
+						{/if}
 						{#if section.id === 'saveto'}
 							<p class="preview small" aria-live="polite">
 								<span class="label">Preview</span>
@@ -501,5 +509,12 @@
 			bottom: calc(var(--sp-4) + var(--safe-bottom));
 			padding: 10px 14px;
 		}
+	}
+	.setup-again {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--sp-2);
+		margin: var(--sp-3) 0 0;
 	}
 </style>

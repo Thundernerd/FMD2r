@@ -188,6 +188,55 @@ impl SettingsService {
         Ok(())
     }
 
+    /// On the first start with `general.setup_completed` (none stored yet), marks an install
+    /// that already has data (stored settings, library series, tasks or lists) as set up, so only
+    /// a fresh install shows the setup wizard. Run it before anything else stores settings.
+    /// Blocking.
+    pub fn mark_existing_install_set_up(&self, lists: &ListsDb) -> Result<(), SettingsError> {
+        let _guard = self.write.lock().unwrap_or_else(|e| e.into_inner());
+        let repo = self.db.settings();
+        let stored_general = repo.get::<Value>("general")?;
+        if stored_general
+            .as_ref()
+            .is_some_and(|general| general.get("setup_completed").is_some())
+        {
+            return Ok(());
+        }
+        let completed = self.has_data(lists)?;
+        let mut stored = stored_general.unwrap_or_default();
+        merge(
+            &mut stored,
+            serde_json::json!({ "setup_completed": completed }),
+        );
+        repo.set("general", &stored)?;
+        let current = self.get();
+        if current.general.setup_completed != completed {
+            let mut next = (*current).clone();
+            next.general.setup_completed = completed;
+            self.tx.send_replace(Arc::new(next));
+        }
+        Ok(())
+    }
+
+    /// Whether any settings group, library series, task or list is stored.
+    fn has_data(&self, lists: &ListsDb) -> Result<bool, SettingsError> {
+        let repo = self.db.settings();
+        if let Value::Object(groups) = serde_json::to_value(Settings::default())? {
+            for key in groups.keys() {
+                if repo.get::<Value>(key)?.is_some() {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(!self.db.favorites().list()?.is_empty()
+            || !self.db.tasks().list()?.is_empty()
+            || lists
+                .masterlist()
+                .summaries()?
+                .iter()
+                .any(|summary| summary.count > 0))
+    }
+
     /// `current` with `patch` applied, normalised and validated.
     fn patched(current: &Settings, mut patch: Value) -> Result<Settings, SettingsError> {
         hash_patched(&mut patch)?;
@@ -276,14 +325,20 @@ impl SettingsService {
             }
             let mut stored = repo.get::<Value>(&key)?.unwrap_or(Value::Null);
             let unselected = key == "general" && stored.get("selected_websites").is_none();
+            let undecided = key == "general" && stored.get("setup_completed").is_none();
             merge(&mut stored, group);
-            // An empty selection nobody chose stays unstored, so the upgrade still selects the
-            // listed websites ([`Self::select_listed_websites`]).
-            if unselected
-                && stored.get("selected_websites") == Some(&Value::Array(Vec::new()))
-                && let Value::Object(fields) = &mut stored
-            {
-                fields.remove("selected_websites");
+            if let Value::Object(fields) = &mut stored {
+                // An empty selection nobody chose stays unstored, so the upgrade still selects
+                // the listed websites ([`Self::select_listed_websites`]).
+                if unselected && fields.get("selected_websites") == Some(&Value::Array(Vec::new()))
+                {
+                    fields.remove("selected_websites");
+                }
+                // Likewise an unfinished setup nobody set, so the first start still decides it
+                // ([`Self::mark_existing_install_set_up`]).
+                if undecided && fields.get("setup_completed") == Some(&Value::Bool(false)) {
+                    fields.remove("setup_completed");
+                }
             }
             seal_group(self.db.cipher(), &key, &mut stored)?;
             changed.push((key, stored));

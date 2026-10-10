@@ -55,6 +55,9 @@ export const SECTION_EXTRA_PATHS: Record<string, string[]> = {
 	saveto: ['saveto.destinations']
 };
 
+/** Settings the setup wizard keeps (whether it was finished, where to resume), with no control. */
+export const SETUP_PATHS = ['general.setup_completed', 'general.setup_step'];
+
 /** Settings with no control of their own: the server keeps them in step with others. */
 export const DERIVED_PATHS = [
 	// The default destination's folder, for API clients that predate destinations.

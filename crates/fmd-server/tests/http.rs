@@ -811,3 +811,22 @@ async fn a_patch_without_a_secret_keeps_it_and_an_empty_one_clears_it() {
     assert_eq!(body["module_updater"]["has_github_token"], false);
     assert_eq!(body["server"]["has_auth_token"], false);
 }
+
+#[tokio::test]
+async fn settings_report_and_set_whether_setup_is_completed() {
+    let h = harness();
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(body["general"]["setup_completed"], false);
+    assert_eq!(body["general"]["setup_step"], "");
+
+    let patch = serde_json::json!({ "general": { "setup_step": "format" } });
+    let res = send(&h.state, patch_json("/api/settings", patch)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let patch = serde_json::json!({ "general": { "setup_completed": true } });
+    let res = send(&h.state, patch_json("/api/settings", patch)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let body = body_json(send(&h.state, get("/api/settings")).await).await;
+    assert_eq!(body["general"]["setup_completed"], true);
+    assert_eq!(body["general"]["setup_step"], "format");
+}
