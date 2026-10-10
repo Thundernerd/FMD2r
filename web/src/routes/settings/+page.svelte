@@ -315,7 +315,7 @@
 							Logins for websites that support them. Changes save right away; passwords are stored
 							encrypted and never shown again.
 						</p>
-						<AccountsPanel />
+						<AccountsPanel {api} {modules} />
 					</section>
 				{:else if section}
 					<section id="section-{section.id}" class="card" aria-labelledby="heading-{section.id}">

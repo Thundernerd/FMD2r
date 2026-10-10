@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ListFacets, ListItem, MangaBakaStatus, ModuleSummary } from '#lib/api/types.ts';
 	import { api, events } from '#lib/app.ts';
+	import CoverThumb from '#lib/components/discover/CoverThumb.svelte';
 	import GenreChips from '#lib/components/discover/GenreChips.svelte';
 	import ListActions from '#lib/components/discover/ListActions.svelte';
 	import MangaBakaHint from '#lib/components/discover/MangaBakaHint.svelte';
@@ -44,6 +45,8 @@
 	let modules = $state<ModuleSummary[] | null>(null);
 	/** `general.selected_websites`, once loaded. */
 	let websites = $state<string[] | null>(null);
+	/** `general.load_covers`: off shows only placeholders. Off until the settings load. */
+	let loadCovers = $state(false);
 	let module = $state('');
 	let text = $state('');
 	let q = $state('');
@@ -80,7 +83,10 @@
 	$effect(() => {
 		api
 			.getSettings()
-			.then((settings) => (websites = settings.general.selected_websites))
+			.then((settings) => {
+				websites = settings.general.selected_websites;
+				loadCovers = settings.general.load_covers;
+			})
 			.catch(() => (error = 'Could not load the selected websites.'));
 	});
 
@@ -165,13 +171,6 @@
 			...Object.entries(labels).map(([value, label]) => ({ value, label, count: count(value) })),
 			{ value: UNKNOWN, label: 'Unknown', count: count(UNKNOWN) }
 		];
-	}
-
-	/** A stable hue per title for its placeholder cover. */
-	function hue(title: string): number {
-		let h = 0;
-		for (const c of title) h = (h * 31 + c.charCodeAt(0)) % 360;
-		return h;
 	}
 
 	function afterJob() {
@@ -279,9 +278,7 @@
 						{#each items as item (`${item.module_id}\n${item.link}`)}
 							<li>
 								<a class="card" href={seriesHref(item)}>
-									<span class="cover" style:--h={hue(item.title)} aria-hidden="true"
-										>{item.title}</span
-									>
+									<CoverThumb src={loadCovers ? item.cover_url : null} title={item.title} />
 									<span class="t">{item.title}</span>
 									<span class="small muted">{subtitle(item)}</span>
 								</a>
@@ -370,23 +367,6 @@
 		gap: 6px;
 		color: inherit;
 		text-decoration: none;
-	}
-	.card:hover .cover {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
-	.cover {
-		width: 100%;
-		aspect-ratio: 5 / 7;
-		display: flex;
-		align-items: flex-end;
-		padding: 6px;
-		border-radius: 4px;
-		color: #fff;
-		font: 700 13px/1.1 var(--f-display);
-		background: linear-gradient(160deg, hsl(var(--h) 45% 52%), hsl(calc(var(--h) + 40) 50% 28%));
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-		overflow: hidden;
 	}
 	.t {
 		font-weight: 600;
