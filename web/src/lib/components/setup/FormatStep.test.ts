@@ -53,12 +53,15 @@ describe('the download format step', () => {
 		expect((await api.getSettings()).output.format).toBe('epub');
 	});
 
-	it('links to the other output options in Settings, finishing the setup first', async () => {
+	it.each([
+		['Settings → Output', '/settings#section-output'],
+		['Settings → Images', '/settings#section-images']
+	])('links to %s for the other options, finishing the setup first', async (name, to) => {
 		const { api, onfinish } = await open();
 		await fireEvent.click(radio(/^CBZ/));
-		await fireEvent.click(screen.getByRole('link', { name: /Settings/ }));
+		await fireEvent.click(screen.getByRole('link', { name }));
 
-		await vi.waitFor(() => expect(onfinish).toHaveBeenCalledWith('/settings#section-output'));
+		await vi.waitFor(() => expect(onfinish).toHaveBeenCalledWith(to));
 		const settings = await api.getSettings();
 		expect(settings.output.format).toBe('cbz');
 		expect(settings.general.setup_completed).toBe(true);

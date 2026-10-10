@@ -5,6 +5,7 @@
 
 	let { settings, finish }: StepProps = $props();
 
+	// The step edits a copy of the format, saved on Next.
 	// svelte-ignore state_referenced_locally
 	let format = $state(settings.output.format);
 
@@ -27,16 +28,20 @@
 	{/each}
 </fieldset>
 <p class="small muted">
-	Compression, PDF quality and image conversion are in
+	PDF quality is in {@render settingsLink('Output', '/settings#section-output')}; image compression
+	and conversion in {@render settingsLink('Images', '/settings#section-images')}.
+</p>
+
+{#snippet settingsLink(section: string, href: string)}
 	<!-- Finishes first, or the unfinished setup would lead straight back here. -->
 	<a
-		href="/settings#section-output"
+		{href}
 		onclick={(e) => {
 			e.preventDefault();
-			finish('/settings#section-output');
-		}}>Settings → Output</a
-	>.
-</p>
+			finish(href);
+		}}>Settings → {section}</a
+	>
+{/snippet}
 
 <style>
 	p {

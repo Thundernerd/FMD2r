@@ -45,7 +45,7 @@ const U32_MAX = 4_294_967_295;
 const RENAME_TOKENS =
 	'Tokens: %MANGA% %CHAPTER% %NUMBERING% %WEBSITE% %AUTHOR% %ARTIST% %FILENAME%.';
 
-/** A way to save chapters (`output.format`), with when it fits for the setup wizard. */
+/** A way to save chapters (`output.format`), with what it suits, as the setup wizard shows it. */
 export interface OutputFormatChoice extends Choice {
 	value: OutputFormat;
 	description: string;
