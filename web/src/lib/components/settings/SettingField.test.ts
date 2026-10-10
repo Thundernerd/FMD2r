@@ -67,3 +67,33 @@ describe('a secret setting', () => {
 		expect(screen.getByText('Cleared when saved')).toBeTruthy();
 	});
 });
+
+const ACCENT: Field = {
+	path: 'appearance.accent',
+	label: 'Accent colour',
+	control: {
+		kind: 'swatches',
+		choices: [
+			{ value: 'teal', label: 'Teal' },
+			{ value: 'blue', label: 'Blue' },
+			{ value: 'purple', label: 'Purple' }
+		]
+	}
+};
+
+describe('a swatches setting', () => {
+	it('shows which swatch is picked and saves the one clicked', async () => {
+		const draft = new Draft<object>({ appearance: { accent: 'teal' } });
+		render(SettingField, { field: ACCENT, draft });
+		const teal = screen.getByRole('radio', { name: 'Teal' });
+		const purple = screen.getByRole('radio', { name: 'Purple' });
+		expect(teal.getAttribute('aria-checked')).toBe('true');
+		expect(purple.getAttribute('aria-checked')).toBe('false');
+
+		await fireEvent.click(purple);
+		expect(draft.changes()).toEqual({ appearance: { accent: 'purple' } });
+		expect(purple.getAttribute('aria-checked')).toBe('true');
+		expect(teal.getAttribute('aria-checked')).toBe('false');
+		expect(screen.getByRole('radiogroup', { name: 'Accent colour' })).toBeTruthy();
+	});
+});

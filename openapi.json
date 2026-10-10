@@ -2913,6 +2913,18 @@
           }
         }
       },
+      "Accent": {
+        "type": "string",
+        "description": "The accent swatches. Each has a light and a dark value chosen for at least 4.5:1 contrast of\nlinks and of text on the accent (`web/src/lib/styles/tokens.css`).",
+        "enum": [
+          "teal",
+          "blue",
+          "green",
+          "purple",
+          "orange",
+          "red"
+        ]
+      },
       "AccountInfo": {
         "type": "object",
         "description": "A module's account. The password is never returned; `has_password` says whether one is set.",
@@ -3020,6 +3032,39 @@
               "null"
             ],
             "description": "The download directory; the default one when missing. The generated manga folder is added."
+          }
+        }
+      },
+      "AppearanceSettings": {
+        "type": "object",
+        "description": "How the web UI looks, the same on every device (T89). No FMD2 counterpart: FMD2 follows the\nWindows theme.",
+        "properties": {
+          "accent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Accent",
+                "description": "The accent colour, one of a fixed set of swatches."
+              }
+            ],
+            "default": "teal"
+          },
+          "mode": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ThemeMode",
+                "description": "Light or dark; `system` follows the device's `prefers-color-scheme`."
+              }
+            ],
+            "default": "system"
+          },
+          "text_size": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TextSize",
+                "description": "The text size; every font size is scaled by it."
+              }
+            ],
+            "default": "normal"
           }
         }
       },
@@ -5444,6 +5489,18 @@
         "type": "object",
         "description": "Every application setting, with the secrets left out: [`Settings`] as the API shows it.\nEach group's schema carries its defaults.",
         "properties": {
+          "appearance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AppearanceSettings"
+              }
+            ],
+            "default": {
+              "accent": "teal",
+              "mode": "system",
+              "text_size": "normal"
+            }
+          },
           "connections": {
             "oneOf": [
               {
@@ -6127,6 +6184,25 @@
       "TasksReordered": {
         "type": "object",
         "description": "The queue order changed (`task.reordered`); the data is an empty object."
+      },
+      "TextSize": {
+        "type": "string",
+        "description": "The text size: 0.9, 1, 1.15 or 1.3 times the normal font sizes.",
+        "enum": [
+          "small",
+          "normal",
+          "large",
+          "larger"
+        ]
+      },
+      "ThemeMode": {
+        "type": "string",
+        "description": "Light or dark.",
+        "enum": [
+          "system",
+          "light",
+          "dark"
+        ]
       },
       "ToolCheck": {
         "type": "object",

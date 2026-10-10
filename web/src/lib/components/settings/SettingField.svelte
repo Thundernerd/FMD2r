@@ -61,6 +61,22 @@
 		draft.set(field.path, raw === '' ? null : Number(raw));
 	}
 
+	/** Arrow keys move the pick along the row, as in any radio group. */
+	function onSwatchKey(e: KeyboardEvent, index: number) {
+		const control = field.control;
+		if (control.kind !== 'swatches') return;
+		const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+		if (!step) return;
+		e.preventDefault();
+		const count = control.choices.length;
+		const next = (index + step + count) % count;
+		const choice = control.choices[next];
+		if (!choice) return;
+		draft.set(field.path, choice.value as Json);
+		const row = (e.currentTarget as HTMLElement).parentElement;
+		row?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus();
+	}
+
 	function onSelect(index: number) {
 		const control = field.control;
 		if (control.kind !== 'select') return;
@@ -82,6 +98,32 @@
 			/>
 			<span>{field.label}</span>
 		</label>
+	{:else if field.control.kind === 'swatches'}
+		{@const checked = field.control.choices.findIndex((c) => c.value === value)}
+		<span class="caption" id="{id}-label">{field.label}</span>
+		<div
+			{id}
+			class="swatches"
+			role="radiogroup"
+			aria-labelledby="{id}-label"
+			aria-invalid={error ? true : undefined}
+			aria-describedby={describedBy}
+		>
+			{#each field.control.choices as choice, i (choice.value)}
+				<button
+					type="button"
+					role="radio"
+					class="swatch"
+					data-accent={choice.value}
+					title={choice.label}
+					aria-label={choice.label}
+					aria-checked={i === checked}
+					tabindex={i === checked || (checked < 0 && i === 0) ? 0 : -1}
+					onclick={() => draft.set(field.path, choice.value as Json)}
+					onkeydown={(e) => onSwatchKey(e, i)}
+				></button>
+			{/each}
+		</div>
 	{:else}
 		<label class="caption" for={id}>{field.label}</label>
 		{#if field.control.kind === 'text'}
@@ -188,6 +230,25 @@
 		display: flex;
 		align-items: center;
 		gap: var(--sp-2);
+	}
+	.swatches {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sp-2);
+	}
+	/* Each swatch is its own accent: `data-accent` sets `--accent` on it (tokens.css). */
+	.swatch {
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		border-radius: var(--r-pill);
+		border: 2px solid var(--surface);
+		background: var(--accent);
+		box-shadow: 0 0 0 1px var(--line);
+		cursor: pointer;
+	}
+	.swatch[aria-checked='true'] {
+		box-shadow: 0 0 0 2px var(--fg);
 	}
 	.input.num {
 		max-width: 140px;

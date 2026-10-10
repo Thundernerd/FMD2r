@@ -29,6 +29,7 @@ export const defaultSettings = (): Settings => ({
 		setup_completed: false,
 		setup_step: ''
 	},
+	appearance: { mode: 'system', text_size: 'normal', accent: 'teal' },
 	connections: {
 		max_parallel_tasks: 1,
 		threads_per_task: 1,
