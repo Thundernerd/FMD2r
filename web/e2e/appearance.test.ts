@@ -107,5 +107,41 @@ test('the largest text still fits every page without scrolling sideways', async 
 			() => document.documentElement.scrollWidth - window.innerWidth
 		);
 		expect(overflow, url).toBeLessThanOrEqual(0);
+		// No button or navigation label runs past its box. A badge placed over the edge on purpose
+		// (positioned absolutely, like the inbox count) isn't part of the label, and text cut short
+		// with an ellipsis (a log line) is meant to be.
+		const clipped = await page.evaluate(() =>
+			[...document.querySelectorAll<HTMLElement>('button, nav a')]
+				.filter((el) => el.offsetParent !== null)
+				.filter((el) => {
+					const box = el.getBoundingClientRect();
+					const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+					for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+						const parent = node.parentElement;
+						if (!node.textContent?.trim() || !parent) continue;
+						if (parent !== el && parent.closest('button, nav a') !== el) continue;
+						const style = getComputedStyle(parent);
+						if (['absolute', 'fixed'].includes(style.position)) continue;
+						const ellipsis = (e: Element | null) =>
+							!!e && getComputedStyle(e).textOverflow === 'ellipsis';
+						if (ellipsis(parent) || ellipsis(parent.parentElement)) continue;
+						const range = document.createRange();
+						range.selectNodeContents(node);
+						const text = range.getBoundingClientRect();
+						// Not rendered (inside an element that is hidden).
+						if (!text.width && !text.height) continue;
+						if (
+							text.left < box.left - 1 ||
+							text.right > box.right + 1 ||
+							text.top < box.top - 1 ||
+							text.bottom > box.bottom + 1
+						)
+							return true;
+					}
+					return false;
+				})
+				.map((el) => el.textContent?.trim() || el.getAttribute('aria-label'))
+		);
+		expect(clipped, url).toEqual([]);
 	}
 });

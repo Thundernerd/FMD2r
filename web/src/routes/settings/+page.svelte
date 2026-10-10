@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { api, events, session } from '#lib/app.ts';
 	import { ValidationError } from '#lib/api/client.ts';
-	import { adoptAppearance, applyAppearance } from '#lib/appearance.ts';
+	import { adoptAppearance, previewAppearance } from '#lib/appearance.ts';
 	import type {
 		ModuleSettingsView,
 		ModuleSummary,
@@ -85,23 +85,20 @@
 
 	const section = $derived(SETTINGS_SECTIONS.find((s) => s.id === active));
 
-	/** The saved appearance, shown again when the page is left with an edited one unsaved. */
-	let savedAppearance: Settings['appearance'] | null = null;
-	// An edited appearance shows at once, before saving; discarding it shows the saved one again.
+	// An edited appearance shows at once, before saving; discarding it, or leaving the page with it
+	// unsaved, shows the saved one again.
 	$effect(() => {
 		const appearance = (draft?.value as Settings | undefined)?.appearance;
-		if (appearance) applyAppearance($state.snapshot(appearance));
+		if (appearance) previewAppearance($state.snapshot(appearance));
 	});
-	$effect(() => () => {
-		if (savedAppearance) applyAppearance(savedAppearance);
-	});
+	$effect(() => () => previewAppearance(null));
 	let preview = $state<RenamePreview | null>(null);
 
 	$effect(() => {
 		api
 			.getSettings()
 			.then((settings) => {
-				savedAppearance = settings.appearance;
+				adoptAppearance(settings.appearance);
 				draft = new Draft(settings);
 			})
 			.catch(() => (loadError = 'Could not load the settings.'));
@@ -187,7 +184,6 @@
 				...(moduleId && moduleChanges ? { modules: { [moduleId]: moduleChanges } } : {})
 			});
 			draft?.commit(result.settings);
-			savedAppearance = result.settings.appearance;
 			adoptAppearance(result.settings.appearance);
 			const view = moduleId ? result.modules[moduleId] : undefined;
 			if (view && moduleDraft) {

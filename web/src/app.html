@@ -6,7 +6,8 @@
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<title>FMD2r</title>
 		<script>
-			// The appearance last applied (src/lib/appearance.ts), before the first paint: the settings
+			// The appearance last applied (`adoptAppearance` in src/lib/appearance.ts, which writes this
+			// cache; keep the two in step), before the first paint: the settings
 			// only answer after the page renders, which would flash the default look first.
 			try {
 				const cached = JSON.parse(localStorage.getItem('fmd2r.appearance') || 'null');
