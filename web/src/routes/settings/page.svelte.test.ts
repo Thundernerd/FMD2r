@@ -3,11 +3,11 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { SvelteURL } from 'svelte/reactivity';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/app.ts';
-import { page } from './app.fake.svelte.ts';
+import { page } from '#lib/testing/app.fake.svelte.ts';
 import SettingsPage from './+page.svelte';
 
-vi.mock('$app/state', () => import('./app.fake.svelte.ts'));
-vi.mock('$app/navigation', () => import('./app.fake.svelte.ts'));
+vi.mock('$app/state', () => import('#lib/testing/app.fake.svelte.ts'));
+vi.mock('$app/navigation', () => import('#lib/testing/app.fake.svelte.ts'));
 vi.mock('#lib/app.ts', async () => {
 	const { createApi } = await import('#lib/api/client.ts');
 	const { createMockBackend } = await import('#lib/api/mock.ts');
