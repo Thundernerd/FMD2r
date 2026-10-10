@@ -87,6 +87,8 @@ test('on a phone the filters open in a drawer', async ({ page }, info) => {
 
 	await page.getByRole('button', { name: 'Filters' }).click();
 	await expect(filters).toBeVisible();
+	await expect(filters.getByRole('group', { name: 'Website filters' })).toBeVisible();
+	await expect(filters.getByRole('group', { name: 'Metadata filters' })).toBeVisible();
 	await filters.getByRole('combobox', { name: 'Website' }).selectOption({ label: 'ComicK' });
 	await filters.getByRole('button', { name: 'Done' }).click();
 	await expect(filters).toBeHidden();
@@ -132,14 +134,19 @@ test('with no website selected Discover links to the selection', async ({ page }
 	await expect(websites).toBeInViewport();
 });
 
-test('the MangaBaka database is downloaded on request and adds format facets', async ({
+test('the MangaBaka database is downloaded on request and adds the metadata filters', async ({
 	page
 }, info) => {
 	test.skip(info.project.name === 'phone', 'the filters are a drawer on a phone');
 	await page.goto('/discover');
 	const filters = page.getByRole('complementary', { name: 'Filters' });
-	await expect(filters.getByRole('combobox', { name: 'Status' })).toBeVisible();
-	await expect(filters.getByRole('combobox', { name: 'Format' })).toHaveCount(0);
+	const website = filters.getByRole('group', { name: 'Website filters' });
+	const metadata = filters.getByRole('group', { name: 'Metadata filters' });
+	await expect(website.getByRole('combobox', { name: 'Status' })).toBeVisible();
+	await expect(metadata).toContainText(
+		'Download the MangaBaka database to filter by format and publication.'
+	);
+	await expect(metadata.getByRole('combobox')).toHaveCount(0);
 
 	await page.getByRole('note').getByRole('link', { name: 'Set up the MangaBaka database' }).click();
 	await expect(page.getByRole('heading', { name: 'MangaBaka database' })).toBeVisible();
@@ -150,8 +157,9 @@ test('the MangaBaka database is downloaded on request and adds format facets', a
 	await expect(page.getByRole('button', { name: 'Remove' })).toBeVisible();
 
 	await page.getByRole('link', { name: 'Discover' }).first().click();
-	await expect(filters.getByRole('combobox', { name: 'Format' })).toBeVisible();
-	await expect(filters.getByRole('combobox', { name: 'Publication' })).toBeVisible();
+	await expect(metadata.getByRole('combobox', { name: 'Format' })).toBeVisible();
+	await expect(metadata.getByRole('combobox', { name: 'Publication' })).toBeVisible();
+	await expect(metadata.getByRole('link')).toHaveCount(0);
 	await expect(page.getByRole('note')).toHaveCount(0);
 });
 

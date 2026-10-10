@@ -28,7 +28,21 @@ const optionLabels = (select: HTMLElement) =>
 		.map((o) => o.textContent?.trim());
 
 describe('Discover with the MangaBaka database', () => {
-	it('filters by format, next to the genres', async () => {
+	it('groups Format and Publication as metadata filters', async () => {
+		await api.patchSettings({ general: { selected_websites: ['webtoons'] } });
+		render(Discover);
+
+		const metadata = await screen.findByRole('group', { name: 'Metadata filters' });
+		expect(within(metadata).getByText('From MangaBaka.')).toBeTruthy();
+		await within(metadata).findByRole('combobox', { name: 'Format' });
+		within(metadata).getByRole('combobox', { name: 'Publication' });
+		expect(within(metadata).queryByRole('link')).toBeNull();
+		const website = screen.getByRole('group', { name: 'Website filters' });
+		expect(within(website).queryByRole('combobox', { name: 'Format' })).toBeNull();
+		expect(website.compareDocumentPosition(metadata)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+	});
+
+	it('filters by format', async () => {
 		await api.patchSettings({ general: { selected_websites: ['webtoons'] } });
 		render(Discover);
 
