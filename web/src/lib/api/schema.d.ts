@@ -1003,6 +1003,8 @@ export interface components {
 			databases: components['schemas']['DatabaseSize'][];
 			/** @description The git commit the binary was built from, when known. */
 			git_revision?: string | null;
+			/** @description Whether the server runs in a container (Docker or Podman), whose folders must be mounted. */
+			in_container: boolean;
 			/** @description Module files that failed to load. */
 			load_failures: components['schemas']['LoadFailure'][];
 			/**

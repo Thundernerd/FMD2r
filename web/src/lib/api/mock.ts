@@ -237,6 +237,8 @@ const seedAbout = (): About => ({
 		{ name: 'lists.db', bytes: 318_767_104 }
 	],
 	uptime_secs: 93_784,
+	// Like the Docker image, whose data lives in `/data`.
+	in_container: true,
 	tools: [
 		{ name: 'python3', ok: true, detail: 'Python 3.12.3' },
 		{ name: 'node', ok: true, detail: 'v22.4.0' },

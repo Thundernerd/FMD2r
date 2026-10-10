@@ -36,6 +36,8 @@ pub(crate) struct About {
     uptime_secs: u64,
     /// External tools modules and conversions rely on.
     tools: Vec<ToolCheck>,
+    /// Whether the server runs in a container (Docker or Podman), whose folders must be mounted.
+    in_container: bool,
 }
 
 /// The size of one database in the data dir.
@@ -70,7 +72,15 @@ pub(crate) async fn about(State(state): State<AppState>) -> Result<Json<About>, 
         databases,
         uptime_secs: state.started.elapsed().as_secs(),
         tools,
+        in_container: in_container(),
     }))
+}
+
+/// Docker creates `/.dockerenv` in every container, Podman `/run/.containerenv`.
+fn in_container() -> bool {
+    ["/.dockerenv", "/run/.containerenv"]
+        .iter()
+        .any(|p| Path::new(p).exists())
 }
 
 fn database_sizes(dir: &Path) -> Vec<DatabaseSize> {
