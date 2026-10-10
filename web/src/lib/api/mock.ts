@@ -27,6 +27,7 @@ import type {
 } from './types';
 import type { TaskAction } from './client';
 import { groupOf } from '#lib/queue.svelte.ts';
+import { isObject } from '#lib/settings/draft.svelte.ts';
 
 type ResolveBody = paths['/api/resolve']['post']['requestBody']['content']['application/json'];
 
@@ -333,6 +334,13 @@ export interface MockOptions {
 	 * Defaults to true unless `sessionStorage['fmd2r.mock.fresh-install']` is set.
 	 */
 	setUp?: boolean;
+	/**
+	 * Whether the server listens on an address other machines can reach (`GET /api/health`'s
+	 * `loopback` is false). Defaults to whether `sessionStorage['fmd2r.mock.open']` is set.
+	 */
+	open?: boolean;
+	/** The settings overridden besides `server.auth_token`, which `password` overrides. */
+	overridden?: string[];
 }
 
 const PASSWORD_KEY = 'fmd2r.mock.password';
@@ -340,6 +348,8 @@ const SESSION_KEY = 'fmd2r.mock.session';
 const SERIES_DELAY_KEY = 'fmd2r.mock.series-delay-ms';
 const MODULE_SETTINGS_DELAY_KEY = 'fmd2r.mock.module-settings-delay-ms';
 const FRESH_INSTALL_KEY = 'fmd2r.mock.fresh-install';
+const OPEN_KEY = 'fmd2r.mock.open';
+const SAVED_PASSWORD_KEY = 'fmd2r.mock.saved-password';
 
 /** A sessionStorage item, or `null` without storage (tests, private mode). */
 const stored = (key: string): string | null => {
@@ -361,17 +371,36 @@ const store = (key: string, value: string | null) => {
 };
 
 export function createMockBackend({
-	password = stored(PASSWORD_KEY),
+	password: fixedPassword = stored(PASSWORD_KEY),
 	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0),
 	moduleSettingsDelayMs = Number(stored(MODULE_SETTINGS_DELAY_KEY) ?? 0),
 	mangabaka = false,
-	setUp = stored(FRESH_INSTALL_KEY) === null
+	setUp = stored(FRESH_INSTALL_KEY) === null,
+	open = stored(OPEN_KEY) !== null,
+	overridden = []
 }: MockOptions = {}): MockBackend {
 	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
 	let loggedIn = stored(SESSION_KEY) !== null;
 	const setLoggedIn = (value: boolean) => {
 		loggedIn = value;
 		store(SESSION_KEY, value ? '1' : null);
+	};
+	/** The `server.auth_token` setting, kept in sessionStorage like the rest of the settings. */
+	let savedPassword = stored(SAVED_PASSWORD_KEY);
+	/** The password the server wants, if any: `fixedPassword` overrides the setting. */
+	const password = () => fixedPassword ?? savedPassword;
+	/** A saved `server.auth_token` (from `PATCH /api/settings`) that changes it ends every session. */
+	const savePassword = (patch: unknown) => {
+		const server = isObject(patch) ? patch['server'] : undefined;
+		if (!isObject(server) || !('auth_token' in server) || fixedPassword !== null) return;
+		const next =
+			typeof server['auth_token'] === 'string' && server['auth_token'] !== ''
+				? server['auth_token']
+				: null;
+		if (next === savedPassword) return;
+		savedPassword = next;
+		store(SAVED_PASSWORD_KEY, next);
+		setLoggedIn(false);
 	};
 	const inbox = seedInbox();
 	let tasks = seedTasks(Date.now());
@@ -559,13 +588,18 @@ export function createMockBackend({
 	/** The write-only passwords, kept apart so no answer can carry one. */
 	const passwords: Record<string, string> = { ehentai: 'secret', madokami: '' };
 	/** Runs a settings update, answering a rejected one the way fmd-server does. */
-	const update = async (req: Request, apply: (patch: Record<string, unknown>) => unknown) => {
+	const update = async (
+		req: Request,
+		apply: (patch: Record<string, unknown>) => unknown,
+		settingsOf: (patch: Record<string, unknown>) => unknown = (patch) => patch
+	) => {
 		const patch = (await req.json()) as unknown;
 		if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
 			return json({ status: 400, detail: 'expected a JSON object' }, 400);
 		}
 		try {
 			const result = apply(patch as Record<string, unknown>);
+			if (result !== null) savePassword(settingsOf(patch as Record<string, unknown>));
 			return result === null ? new Response(null, { status: 404 }) : json(result);
 		} catch (e) {
 			if (!(e instanceof Invalid)) throw e;
@@ -632,20 +666,25 @@ export function createMockBackend({
 		const route = `${req.method} ${pathname}`;
 
 		if (route === 'GET /api/health')
-			return json({ status: 'ok', auth: password !== null, loopback: true, overridden: [] });
+			return json({
+				status: 'ok',
+				auth: password() !== null,
+				loopback: !open,
+				overridden: fixedPassword === null ? overridden : [...overridden, 'server.auth_token']
+			});
 		if (route === 'POST /api/login') {
 			const body = (await req.json()) as { password?: unknown } | null;
-			if (password !== null && body?.password !== password) {
+			if (password() !== null && body?.password !== password()) {
 				return json({ status: 401, title: 'Unauthorized' }, 401);
 			}
-			if (password !== null) setLoggedIn(true);
+			if (password() !== null) setLoggedIn(true);
 			return new Response(null, { status: 204 });
 		}
 		if (route === 'POST /api/logout') {
 			setLoggedIn(false);
 			return new Response(null, { status: 204 });
 		}
-		if (password !== null && !loggedIn) {
+		if (password() !== null && !loggedIn) {
 			return json({ status: 401, title: 'Unauthorized' }, 401);
 		}
 		if (route === 'GET /api/inbox') return json(inbox);
@@ -760,7 +799,8 @@ export function createMockBackend({
 		if (route === 'GET /api/jobs') return json(jobs);
 		if (route === 'GET /api/settings') return json(settings.getSettings());
 		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
-		if (route === 'PATCH /api/settings/all') return update(req, settings.patchAll);
+		if (route === 'PATCH /api/settings/all')
+			return update(req, settings.patchAll, (save) => save['settings']);
 		if (route === 'POST /api/check-folders') {
 			const body = (await req.json()) as { paths?: unknown } | null;
 			const paths = Array.isArray(body?.paths) ? body.paths.map(String) : [];

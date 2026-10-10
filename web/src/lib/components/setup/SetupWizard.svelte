@@ -7,10 +7,11 @@
 
 	let {
 		api,
-		steps,
+		steps: allSteps,
 		onfinish
 	}: {
 		api: Api;
+		/** Every step, including those this server may leave out (see `SetupStep.shows`). */
 		steps: SetupStep[];
 		/** Setup is saved and marked completed; open `to` (`/` from the last step's Finish). */
 		onfinish: (to: string) => void;
@@ -22,15 +23,18 @@
 	let saving = $state(false);
 	let saveError = $state<string | null>(null);
 	let current = $state<StepExports | undefined>();
+	/** The steps this server needs; fixed once loaded, so finishing a step can't hide it. */
+	let steps = $state.raw<SetupStep[]>([]);
 
 	const step = $derived(steps[index]);
 	const last = $derived(index === steps.length - 1);
 	const ready = $derived(current?.ready?.() ?? true);
+	const nextLabel = $derived(current?.nextLabel?.() ?? 'Next');
 
 	$effect(() => {
-		api
-			.getSettings()
-			.then((loaded) => {
+		Promise.all([api.getSettings(), api.health()])
+			.then(([loaded, health]) => {
+				steps = allSteps.filter((s) => s.shows?.(health) ?? true);
 				// Resumes where it was left; a finished setup starts over.
 				index = Math.max(
 					steps.findIndex((s) => s.id === loaded.general.setup_step),
@@ -121,7 +125,7 @@
 				disabled={!ready || saving}
 				onclick={() => advance()}
 			>
-				{last ? 'Finish' : 'Next'}
+				{last ? 'Finish' : nextLabel}
 			</button>
 		</div>
 	{/if}

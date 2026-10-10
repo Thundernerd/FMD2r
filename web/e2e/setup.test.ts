@@ -71,3 +71,40 @@ test("the finish step's links to Settings finish the setup first", async ({ page
 	await page.goto('/');
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
 });
+
+/** Makes the mock backend listen where other machines can reach it, with no password. */
+const openServer = (page: Page) =>
+	page.addInitScript(() => sessionStorage.setItem('fmd2r.mock.open', '1'));
+
+const banner = (page: Page) => page.getByRole('alert').filter({ hasText: 'no password' });
+
+test('an open server can set a password during setup without logging out', async ({ page }) => {
+	await freshInstall(page);
+	await openServer(page);
+	await page.goto('/');
+	await expect(page.getByText('Step 1 of 3')).toBeVisible();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Password' })).toBeVisible();
+	await page.getByRole('textbox', { name: 'Password', exact: true }).fill('hunter2');
+	await page.getByLabel('Confirm password').fill('hunter2');
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	await expect(page.getByRole('heading', { level: 2, name: 'Finish' })).toBeVisible();
+	await page.getByRole('button', { name: 'Finish' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Log in' })).toHaveCount(0);
+	await expect(banner(page)).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible();
+});
+
+test('skipping the password step leaves the open server warning', async ({ page }) => {
+	await freshInstall(page);
+	await openServer(page);
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Skip' }).click();
+	await page.getByRole('button', { name: 'Finish' }).click();
+
+	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+	await expect(banner(page)).toBeVisible();
+});
