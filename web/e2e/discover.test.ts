@@ -154,3 +154,34 @@ test('the MangaBaka database is downloaded on request and adds format facets', a
 	await expect(filters.getByRole('combobox', { name: 'Publication' })).toBeVisible();
 	await expect(page.getByRole('note')).toHaveCount(0);
 });
+
+/** A 1x1 PNG. */
+const PIXEL = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+	'base64'
+);
+
+test('scrolling Discover loads the covers of the visible cards only', async ({ page }) => {
+	const requested: string[] = [];
+	await page.route('**/api/covers/series?**', (route) => {
+		requested.push(new URL(route.request().url()).searchParams.get('link') ?? '');
+		return route.fulfill({ contentType: 'image/png', body: PIXEL });
+	});
+	await page.goto('/discover');
+	const cards = page.getByRole('region', { name: 'Results' }).getByRole('link');
+	await expect(cards).toHaveCount(50);
+	await expect(cards.first().locator('img.loaded')).toBeVisible();
+
+	const onScreen = requested.length;
+	expect(onScreen).toBeGreaterThan(0);
+	expect(onScreen).toBeLessThan(50);
+	const last = cards.nth(49);
+	const lastLink = new URL((await last.getAttribute('href')) ?? '', page.url()).searchParams.get(
+		'link'
+	);
+	expect(requested).not.toContain(lastLink);
+
+	await last.scrollIntoViewIfNeeded();
+	await expect(last.locator('img.loaded')).toBeVisible();
+	expect(requested).toContain(lastLink);
+});

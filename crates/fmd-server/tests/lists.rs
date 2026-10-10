@@ -149,6 +149,7 @@ async fn search_includes_and_excludes_genres() {
             "added_jdn": 2_460_000,
             "format": "unknown",
             "publication": "unknown",
+            "cover_url": "/api/covers/series?module=a&link=%2F1",
         })
     );
 }

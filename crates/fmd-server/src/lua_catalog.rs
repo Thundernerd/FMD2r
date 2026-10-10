@@ -174,4 +174,10 @@ impl CoverModules for LuaCatalog {
             session: create_http(&self.http, Some(&module_http)),
         })
     }
+
+    /// A session like the one `TModuleContainer.CreateHTTP` gives code outside any module
+    /// (baseunits/WebsiteModules.pas:353-387): the global user agent and proxy only.
+    fn plain_session(&self) -> Option<fmd_http::HttpSession> {
+        Some(create_http(&self.http, None))
+    }
 }
