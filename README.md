@@ -96,11 +96,17 @@ FMD2R_GIT_REVISION=$(git rev-parse --short=12 HEAD) docker compose up -d --build
 ### Releases
 
 Pushing a version tag (`v1.2.3`, `v1.2.3-rc.1`) runs `.github/workflows/release.yml`: it builds the
-image for linux/amd64 and linux/arm64, smoke-tests each (`scripts/docker-smoke.sh`, arm64 under
-QEMU), pushes it to GHCR as `<version>`, `<major>.<minor>` and `latest` (pre-release tags skip
-`latest`), and creates a GitHub release with `fmd2r-<tag>-x86_64-linux-gnu.tar.gz` and
-`fmd2r-<tag>-aarch64-linux-gnu.tar.gz` (the binary, built on Ubuntu 22.04 so it needs glibc 2.35
-or newer; each smoke-tested with `scripts/tarball-smoke.sh`) and their `SHA256SUMS`.
+image for linux/amd64 and linux/arm64 in parallel, each natively on its own runner (arm64 on
+GitHub's `ubuntu-24.04-arm`), smoke-tests each (`scripts/docker-smoke.sh`) and pushes it to GHCR
+by digest, untagged. Once both platforms pass, a final job combines the two digests into one
+multi-platform image tagged `<version>`, `<major>.<minor>` and `latest` (pre-release tags skip
+`latest`), so nothing is tagged unless both platforms passed. The workflow then creates a GitHub
+release with `fmd2r-<tag>-x86_64-linux-gnu.tar.gz` and `fmd2r-<tag>-aarch64-linux-gnu.tar.gz` (the
+binary, built on Ubuntu 22.04 so it needs glibc 2.35 or newer; each smoke-tested with
+`scripts/tarball-smoke.sh`) and their `SHA256SUMS`.
+
+PRs that change `release.yml` or the scripts it runs, and manual runs, are dry runs: they build and
+smoke-test both platforms and the tarballs but push and release nothing.
 
 The tag sets the version: before building, `scripts/set-version.sh` writes it into `Cargo.toml` and
 `Cargo.lock`, so `fmd2r --version` and `GET /api/about` report it without a version bump on main,
@@ -118,7 +124,7 @@ only when their inputs change.
 | `xpath-fpc.yml` | PRs and pushes to `main` that touch the fpc shim, `fmd-xpath`, `fmd-lua`'s XPath binding, `fmd2r xpath`, `fixtures/xpath-corpus` or the manifests; nightly; manual | the `fpc` backend's parity with the native one, and uploads `libfmdxpath.so` |
 | `docker.yml` | PRs and pushes to `main` that touch what the image is built from; manual | builds the image for amd64 and arm64 and runs `scripts/docker-smoke.sh` on each (arm64 under QEMU) |
 | `smoke-nightly.yml` | nightly; manual | the smoke list live and replayed, and a native/fpc diff on the day's pages |
-| `release.yml` | version tags | see [Releases](#releases) |
+| `release.yml` | version tags; dry runs on PRs that touch it or its scripts; manual | see [Releases](#releases) |
 
 To run a path-filtered workflow on a branch whose changes it skipped, start it by hand from the
 Actions tab ("Run workflow") or with `gh workflow run xpath-fpc.yml --ref <branch>` (likewise
