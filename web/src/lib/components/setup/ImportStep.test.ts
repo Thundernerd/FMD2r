@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApi } from '#lib/api/client.ts';
+import { ApiError, createApi } from '#lib/api/client.ts';
 import { createMockBackend } from '#lib/api/mock.ts';
 import type { SetupStep } from '#lib/setup/steps.ts';
 import FakeStep from './FakeStep.fixture.svelte';
@@ -73,6 +73,24 @@ describe('the import from FMD2 step', () => {
 		// The mock userdata saves chapters as CBZ (`saveto/Compress` 2).
 		expect((screen.getByRole('textbox', { name: 'Format' }) as HTMLInputElement).value).toBe('cbz');
 		expect(screen.getByText(/from your FMD2 settings/)).toBeTruthy();
+	});
+
+	it('keeps the report when the import fails, so it can be retried or skipped', async () => {
+		const { importFmd2 } = await open();
+		await fireEvent.click(button('Import'));
+		await fireEvent.change(screen.getByLabelText('FMD2 userdata folder, zipped'), {
+			target: { files: [USERDATA_ZIP] }
+		});
+		await fireEvent.click(button('Check'));
+		await screen.findByText(/nothing was written/, {}, WAIT);
+
+		importFmd2.mockRejectedValueOnce(new ApiError(409, 'importFmd2', null));
+		await fireEvent.click(button('Import'));
+		expect((await screen.findByRole('alert')).textContent).toMatch(/already running/);
+		expect(screen.getByRole('table', { name: 'Import report' })).toBeTruthy();
+		expect(heading()).toBe('Import from FMD2');
+		expect(button('Import').disabled).toBe(false);
+		expect(button('Skip').disabled).toBe(false);
 	});
 
 	it('runs a dry run and shows its report before the real import', async () => {

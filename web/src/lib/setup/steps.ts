@@ -9,14 +9,16 @@ export interface StepProps {
 	settings: Settings;
 	/** Saves the step and finishes the setup, then opens `to`, e.g. a Settings section. */
 	finish: (to: string) => Promise<void>;
-	/** An FMD2 import changed the stored settings; the wizard reloads them for the later steps. */
-	imported: () => Promise<void>;
+	/** Reloads the settings after an FMD2 import changed them, for the later steps. */
+	reloadSettings: () => Promise<void>;
 }
 
 /** What a step's component may export. */
 export interface StepExports {
 	/** Whether Next is allowed yet (always, without it). Read reactively. */
 	ready?: () => boolean;
+	/** Whether the step's own work runs, e.g. an import; Back and Next wait for it. Read reactively. */
+	busy?: () => boolean;
 	/**
 	 * The settings the step chose, as a merge patch the wizard saves with `PATCH /api/settings`
 	 * (nothing to save when it returns nothing). Run on Next; rejecting keeps the user on the step.

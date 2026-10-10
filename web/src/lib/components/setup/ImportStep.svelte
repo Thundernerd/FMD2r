@@ -1,16 +1,17 @@
 <script lang="ts">
 	import { events } from '#lib/app.ts';
-	import ImportFlow from '#lib/components/library/ImportFlow.svelte';
+	import ImportFlow, { type ImportBusy } from '#lib/components/library/ImportFlow.svelte';
 	import type { StepProps } from '#lib/setup/steps.ts';
 
-	let { api, imported: reload }: StepProps = $props();
+	let { api, reloadSettings }: StepProps = $props();
 
 	let open = $state(false);
-	let busy = $state<'check' | 'import' | null>(null);
+	let running = $state<ImportBusy>(null);
+	let reloading = $state(false);
 	let imported = $state(false);
 
-	export function ready(): boolean {
-		return busy === null;
+	export function busy(): boolean {
+		return running !== null || reloading;
 	}
 
 	export function nextLabel(): string {
@@ -23,11 +24,17 @@
 	<ImportFlow
 		{api}
 		job={events.jobs['import']}
-		bind:busy
-		onimported={() => {
+		bind:busy={running}
+		onimported={async () => {
 			imported = true;
-			// Next's save returns the imported settings too; only the "from FMD2" note is lost.
-			reload().catch(() => {});
+			reloading = true;
+			try {
+				await reloadSettings();
+			} catch {
+				// Next's save returns the imported settings too; only the "from FMD2" note is lost.
+			} finally {
+				reloading = false;
+			}
 		}}
 	/>
 {:else}

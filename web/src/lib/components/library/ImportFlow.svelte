@@ -1,3 +1,8 @@
+<script lang="ts" module>
+	/** What runs: a dry run (`check`), the import, or nothing. */
+	export type ImportBusy = 'check' | 'import' | null;
+</script>
+
 <script lang="ts">
 	import type { Api } from '#lib/api/client.ts';
 	import { ApiError } from '#lib/api/client.ts';
@@ -15,8 +20,7 @@
 		job: JobState | undefined;
 		/** An import (not a dry run) finished. */
 		onimported: () => void;
-		/** What runs: a dry run (`check`), the import, or nothing. */
-		busy?: 'check' | 'import' | null;
+		busy?: ImportBusy;
 	} = $props();
 
 	let file = $state<File | null>(null);
@@ -68,7 +72,8 @@
 			checked = dryRun ? ran : null;
 			if (!dryRun) onimported();
 		} catch (e) {
-			report = null;
+			// A failed import keeps its dry run's report, to import again from.
+			if (dryRun) report = null;
 			error = message(e);
 		} finally {
 			busy = null;

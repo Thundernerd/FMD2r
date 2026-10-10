@@ -2,7 +2,7 @@
 	import type { Api, MergePatch } from '#lib/api/client.ts';
 	import { ApiError } from '#lib/api/client.ts';
 	import type { Settings } from '#lib/api/types.ts';
-	import { isObject } from '#lib/settings/draft.svelte.ts';
+	import { getPath, isObject } from '#lib/settings/draft.svelte.ts';
 	import type { SetupStep, StepExports } from '#lib/setup/steps.ts';
 
 	let {
@@ -28,9 +28,8 @@
 	const step = $derived(steps[index]);
 	const last = $derived(index === steps.length - 1);
 	const ready = $derived(current?.ready?.() ?? true);
-	const startsFromFmd2 = $derived(
-		step?.paths?.some((p) => fromFmd2.some((c) => c === p || c.startsWith(`${p}.`))) ?? false
-	);
+	const busy = $derived(saving || (current?.busy?.() ?? false));
+	const startsFromFmd2 = $derived(step?.paths?.some((p) => fromFmd2.includes(p)) ?? false);
 
 	$effect(() => {
 		api
@@ -51,20 +50,14 @@
 		return e instanceof Error ? e.message : String(e);
 	}
 
-	/** The leaf paths (arrays count as leaves) where `a` and `b` differ. */
-	function changed(a: unknown, b: unknown, path = ''): string[] {
-		if (isObject(a) && isObject(b)) {
-			const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-			return [...keys].flatMap((k) => changed(a[k], b[k], path ? `${path}.${k}` : k));
-		}
-		return JSON.stringify(a) === JSON.stringify(b) ? [] : [path];
-	}
-
-	/** Reloads the settings an FMD2 import changed, noting what changed. */
-	async function imported() {
+	/** Reloads the settings an FMD2 import changed, noting which of the steps' settings changed. */
+	async function reloadSettings() {
 		const before = settings;
 		const after = await api.getSettings();
-		fromFmd2 = [...new Set([...fromFmd2, ...changed(before, after)])];
+		const same = (path: string) =>
+			JSON.stringify(getPath(before, path)) === JSON.stringify(getPath(after, path));
+		const changed = steps.flatMap((s) => s.paths ?? []).filter((p) => !same(p));
+		fromFmd2 = [...new Set([...fromFmd2, ...changed])];
 		settings = after;
 	}
 
@@ -127,7 +120,7 @@
 				<p class="small muted">These start from your FMD2 settings; change what you like.</p>
 			{/if}
 			{#key step.id}
-				<step.component bind:this={current} {api} {settings} finish={advance} {imported} />
+				<step.component bind:this={current} {api} {settings} finish={advance} {reloadSettings} />
 			{/key}
 			{#if saveError}
 				<p class="error" role="alert">{saveError}</p>
@@ -136,16 +129,11 @@
 
 		<div class="actions">
 			{#if index > 0}
-				<button class="btn" type="button" disabled={saving} onclick={() => go(index - 1)}>
+				<button class="btn" type="button" disabled={busy} onclick={() => go(index - 1)}>
 					Back
 				</button>
 			{/if}
-			<button
-				class="btn primary"
-				type="button"
-				disabled={!ready || saving}
-				onclick={() => advance()}
-			>
+			<button class="btn primary" type="button" disabled={!ready || busy} onclick={() => advance()}>
 				{last ? 'Finish' : (current?.nextLabel?.() ?? 'Next')}
 			</button>
 		</div>

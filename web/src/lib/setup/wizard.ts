@@ -7,8 +7,8 @@ import type { SetupStep } from './steps.ts';
  * The setup wizard's steps, in order. Each step ticket adds its entry here: after the welcome,
  * import from FMD2 (T84), download folders (T79), download format (T80), MangaBaka (T81),
  * websites (T82) and password (T83, only when the server is open), then the finish. A step that
- * edits settings an FMD2 import brings (`saveto.destinations`, `output.format`,
- * `general.selected_websites`) lists them in `paths`, so it says when it starts from them.
+ * edits settings an FMD2 import brings (`saveto.default_dir`, which moves the default
+ * destination, `saveto.destinations`, `output.format`, `general.selected_websites`) lists them in `paths`, so it says when it starts from them.
  */
 export const SETUP_STEPS: SetupStep[] = [
 	{ id: 'welcome', title: 'Welcome', component: WelcomeStep },
