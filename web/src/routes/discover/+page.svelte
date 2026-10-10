@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { tick, untrack } from 'svelte';
+	import { afterNavigate, goto, snapshot } from '$app/navigation';
+	import { page as route } from '$app/state';
 	import type { ListFacets, ListItem, MangaBakaStatus, ModuleSummary } from '#lib/api/types.ts';
 	import { api, events } from '#lib/app.ts';
 	import CoverThumb from '#lib/components/discover/CoverThumb.svelte';
@@ -10,36 +13,19 @@
 	import {
 		emptyFilters,
 		facetQuery,
+		filtersFromQuery,
+		FORMAT,
+		PUBLICATION,
+		queryString,
 		searchQuery,
+		STATUS,
+		UNKNOWN,
 		type Filters,
 		type Tri
 	} from '#lib/discover/filters.ts';
 
 	/** How long typing pauses before the search runs. */
 	const DEBOUNCE_MS = 250;
-	/** `MangaInfo_Status*` (baseunits/uBaseUnit.pas:230-233). */
-	const STATUS: Record<string, string> = {
-		'0': 'Completed',
-		'1': 'Ongoing',
-		'2': 'Hiatus',
-		'3': 'Cancelled'
-	};
-	/** MangaBaka's formats, as the `format` filter names them. */
-	const FORMAT: Record<string, string> = {
-		manga: 'Manga',
-		manhwa: 'Manhwa',
-		manhua: 'Manhua',
-		oel: 'OEL',
-		other: 'Other'
-	};
-	/** MangaBaka's publication statuses, as the `publication` filter names them. */
-	const PUBLICATION: Record<string, string> = {
-		ongoing: 'Ongoing',
-		completed: 'Completed',
-		hiatus: 'Hiatus',
-		cancelled: 'Cancelled'
-	};
-	const UNKNOWN = 'unknown';
 	const NO_FACETS: ListFacets = { genres: [], statuses: [], formats: [], publications: [] };
 
 	let modules = $state<ModuleSummary[] | null>(null);
@@ -47,13 +33,15 @@
 	let websites = $state<string[] | null>(null);
 	/** `general.load_covers`: off shows only placeholders. Off until the settings load. */
 	let loadCovers = $state(false);
-	let module = $state('');
-	let text = $state('');
-	let q = $state('');
-	let genres = $state<Record<string, Tri>>({});
-	let status = $state('');
-	let format = $state('');
-	let publication = $state('');
+	// The filters start from the URL, so a reload, a shared link or Back opens the same search.
+	const initial = filtersFromQuery(route.url.searchParams);
+	let module = $state(initial.module);
+	let text = $state(initial.q);
+	let q = $state(initial.q);
+	let genres = $state<Record<string, Tri>>(initial.genres);
+	let status = $state(initial.status);
+	let format = $state(initial.format);
+	let publication = $state(initial.publication);
 	let mangabaka = $state<MangaBakaStatus | null>(null);
 	let filtersOpen = $state(false);
 
@@ -71,6 +59,8 @@
 		modules !== null && websites !== null && !modules.some((m) => websites?.includes(m.id))
 	);
 	const filters = $derived<Filters>({ module, q, genres, status, format, publication, page: 1 });
+	/** The filters as Discover's query string. */
+	const query = $derived(queryString(filters));
 	const more = $derived(items.length < total);
 
 	function loadModules() {
@@ -103,8 +93,71 @@
 		return () => clearTimeout(timer);
 	});
 
+	/** Shows the filters in the URL, replacing its history entry so Back leaves Discover. */
+	$effect(() => {
+		const next = query;
+		// Rewritten also when it differs only in dropped or reordered values.
+		const shown = untrack(() => route.url.search.replace(/^\?/, ''));
+		if (next !== shown) {
+			void goto(next ? `/discover?${next}` : '/discover', {
+				replaceState: true,
+				reset: false
+			});
+		}
+	});
+
+	function apply(next: Filters) {
+		module = next.module;
+		text = q = next.q;
+		genres = next.genres;
+		status = next.status;
+		format = next.format;
+		publication = next.publication;
+	}
+
+	/** How Discover was last arrived at; only Back and Forward restore a snapshot. */
+	let arrival: string | null = null;
+
+	afterNavigate((navigation) => {
+		arrival = navigation.type;
+		// A link to other filters while on Discover (such as the nav bar's) applies them.
+		const url = navigation.to?.url;
+		if (navigation.type === 'goto' || url?.pathname !== '/discover') return;
+		const next = filtersFromQuery(url.searchParams);
+		if (queryString(next) !== query) apply(next);
+	});
+
 	/** Bumped by every new search, so answers to an older one are dropped. */
 	let generation = 0;
+
+	interface DiscoverSnapshot {
+		query: string;
+		text: string;
+		items: ListItem[];
+		total: number;
+		page: number;
+		scrollY: number;
+	}
+
+	// Back to Discover shows the results and scroll position it left. SvelteKit restores
+	// the scroll before the snapshot, while the grid is still empty, so the snapshot does it.
+	// A reload also finds a snapshot, but starts afresh from page 1.
+	snapshot<DiscoverSnapshot>({
+		capture: () => ({ query, text, items: $state.snapshot(items), total, page, scrollY }),
+		restore: (saved) => {
+			if (arrival !== 'popstate') return;
+			text = saved.text;
+			if (saved.query !== query) return;
+			// Drops the page-1 search that started on mounting.
+			generation++;
+			items = saved.items;
+			total = saved.total;
+			page = saved.page;
+			loading = false;
+			error = null;
+			void tick().then(() => scrollTo(scrollX, saved.scrollY));
+		}
+	});
 
 	async function load(next: number, reset: boolean) {
 		const mine = reset ? ++generation : generation;
@@ -138,7 +191,7 @@
 
 	$effect(() => {
 		// A new search whenever a filter changes.
-		void filters;
+		void query;
 		void load(1, true);
 	});
 	$effect(loadFacets);
