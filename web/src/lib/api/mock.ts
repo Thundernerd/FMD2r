@@ -329,6 +329,8 @@ export interface MockOptions {
 	moduleSettingsDelayMs?: number;
 	/** Start with a MangaBaka database downloaded, so list titles carry formats and statuses. */
 	mangabaka?: boolean;
+	/** Whether the server can use MangaBaka at all (`GET /api/metadata/mangabaka`'s `available`). */
+	mangabakaAvailable?: boolean;
 	/**
 	 * Whether the install was set up; `false` is a fresh install, which shows the setup wizard.
 	 * Defaults to true unless `sessionStorage['fmd2r.mock.fresh-install']` is set.
@@ -377,6 +379,7 @@ export function createMockBackend({
 	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0),
 	moduleSettingsDelayMs = Number(stored(MODULE_SETTINGS_DELAY_KEY) ?? 0),
 	mangabaka = false,
+	mangabakaAvailable = true,
 	setUp = stored(FRESH_INSTALL_KEY) === null,
 	open = stored(OPEN_KEY) !== null,
 	overridden = [],
@@ -563,7 +566,7 @@ export function createMockBackend({
 	};
 
 	const settings = createMockSettings(setUp);
-	const metadata = createMockMetadata(mangabaka);
+	const metadata = createMockMetadata(mangabaka, mangabakaAvailable);
 	const lists = createMockLists(
 		() => settings.getSettings().general.selected_websites,
 		metadata.downloaded

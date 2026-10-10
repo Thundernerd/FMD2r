@@ -36,7 +36,21 @@ describe('Discover with the MangaBaka database', () => {
 	// Each test opens Discover without filters, whichever the last one left in the URL.
 	beforeEach(() => (page.url = new SvelteURL('http://fmd2r.test/discover')));
 
-	it('filters by format, next to the genres', async () => {
+	it('groups Format and Publication as metadata filters', async () => {
+		await api.patchSettings({ general: { selected_websites: ['webtoons'] } });
+		render(Discover);
+
+		const metadata = await screen.findByRole('group', { name: 'Metadata filters' });
+		expect(within(metadata).getByText('From MangaBaka.')).toBeTruthy();
+		expect(await within(metadata).findByRole('combobox', { name: 'Format' })).toBeTruthy();
+		expect(within(metadata).getByRole('combobox', { name: 'Publication' })).toBeTruthy();
+		expect(within(metadata).queryByRole('link')).toBeNull();
+		const website = screen.getByRole('group', { name: 'Website filters' });
+		expect(within(website).queryByRole('combobox', { name: 'Format' })).toBeNull();
+		expect(website.compareDocumentPosition(metadata)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+	});
+
+	it('filters by format', async () => {
 		await api.patchSettings({ general: { selected_websites: ['webtoons'] } });
 		render(Discover);
 

@@ -268,37 +268,52 @@
 				{:else}
 					<p class="small muted">Searching every selected website’s list.</p>
 				{/if}
-				<div class="status">
-					<label class="label" for="status">Status</label>
-					<select id="status" class="input" bind:value={status}>
-						<option value="">Any</option>
-						{#each Object.entries(STATUS) as [value, label] (value)}
-							{@const count = facets.statuses.find((s) => s.value === value)?.count ?? 0}
-							<option {value}>{label} ({count})</option>
-						{/each}
-					</select>
-				</div>
-				{#if mangabaka?.downloaded}
-					<div class="status">
-						<label class="label" for="format">Format</label>
-						<select id="format" class="input" bind:value={format}>
+				<fieldset class="group">
+					<legend class="group-head">Website filters</legend>
+					<p class="small muted">From each website’s list.</p>
+					<div class="field">
+						<label class="label" for="status">Status</label>
+						<select id="status" class="input" bind:value={status}>
 							<option value="">Any</option>
-							{#each options(FORMAT, facets.formats) as option (option.value)}
-								<option value={option.value}>{option.label} ({option.count})</option>
+							{#each Object.entries(STATUS) as [value, label] (value)}
+								{@const count = facets.statuses.find((s) => s.value === value)?.count ?? 0}
+								<option {value}>{label} ({count})</option>
 							{/each}
 						</select>
 					</div>
-					<div class="status">
-						<label class="label" for="publication">Publication</label>
-						<select id="publication" class="input" bind:value={publication}>
-							<option value="">Any</option>
-							{#each options(PUBLICATION, facets.publications) as option (option.value)}
-								<option value={option.value}>{option.label} ({option.count})</option>
-							{/each}
-						</select>
-					</div>
+					<GenreChips genres={facets.genres} bind:states={genres} />
+				</fieldset>
+				{#if mangabaka?.available}
+					<fieldset class="group">
+						<legend class="group-head">Metadata filters</legend>
+						<p class="small muted">From MangaBaka.</p>
+						{#if mangabaka.downloaded}
+							<div class="field">
+								<label class="label" for="format">Format</label>
+								<select id="format" class="input" bind:value={format}>
+									<option value="">Any</option>
+									{#each options(FORMAT, facets.formats) as option (option.value)}
+										<option value={option.value}>{option.label} ({option.count})</option>
+									{/each}
+								</select>
+							</div>
+							<div class="field">
+								<label class="label" for="publication">Publication</label>
+								<select id="publication" class="input" bind:value={publication}>
+									<option value="">Any</option>
+									{#each options(PUBLICATION, facets.publications) as option (option.value)}
+										<option value={option.value}>{option.label} ({option.count})</option>
+									{/each}
+								</select>
+							</div>
+						{:else}
+							<p class="small muted">
+								<a href="/settings#section-metadata">Download the MangaBaka database</a> to filter by
+								format and publication.
+							</p>
+						{/if}
+					</fieldset>
 				{/if}
-				<GenreChips genres={facets.genres} bind:states={genres} />
 			</aside>
 
 			<section class="results" aria-label="Results">
@@ -385,7 +400,24 @@
 	.scrim {
 		display: none;
 	}
-	.status {
+	.group {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-3);
+		margin: 0;
+		padding: var(--sp-4) 0 0;
+		border: 0;
+		border-top: 1px solid var(--line);
+		min-width: 0;
+	}
+	/* Floated, the legend is laid out as a flex item instead of sitting in the border. */
+	.group-head {
+		float: left;
+		width: 100%;
+		padding: 0;
+		font-weight: 600;
+	}
+	.field {
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-2);
