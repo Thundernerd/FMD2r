@@ -269,6 +269,9 @@ Found by the end-to-end run in `docs/verification/2026-10-09/e2e-report.md`. T53
 | T80 | Setup step: download format | T78 |
 | T81 | Setup step: MangaBaka database | T78 |
 | T82 | Setup step: websites | T78 |
+| T83 | Setup step: password, when the server is open | T78 |
+| T84 | Setup step: import from FMD2 | T78 |
+| T85 | Call FMD2-DB lists "ready-made lists" in the UI | — |
 
 ### Parallel waves
 - **Wave 1** (after T01), six independent lanes:
