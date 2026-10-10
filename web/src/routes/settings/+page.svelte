@@ -83,6 +83,8 @@
 	}
 
 	const section = $derived(SETTINGS_SECTIONS.find((s) => s.id === active));
+	/** Where the server loads the user's `custom.css` from, once `/api/about` says. */
+	let customCss = $state<string | null>(null);
 	let preview = $state<RenamePreview | null>(null);
 
 	$effect(() => {
@@ -94,7 +96,17 @@
 			.listModules()
 			.then((list) => (modules = list))
 			.catch(() => (modules = []));
+		api
+			.about()
+			.then(({ data_dir }) => (customCss = data_dir ? joinPath(data_dir, 'custom.css') : null))
+			.catch(() => (customCss = null));
 	});
+
+	/** `name` inside folder `dir`, with the separator the server's paths use. */
+	function joinPath(dir: string, name: string) {
+		const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';
+		return dir.endsWith(sep) ? `${dir}${name}` : `${dir}${sep}${name}`;
+	}
 
 	// The previous module stays on show until the next one is loaded, so the panel doesn't collapse
 	// to "Loading…" and back, changing the page's height under the reader.
@@ -344,6 +356,11 @@
 										: 'Goes through the setup with the current values.'}
 								</span>
 							</p>
+							<p class="custom-css small muted">
+								Your own styles: a <span class="mono">custom.css</span>
+								{#if customCss}at <span class="mono">{customCss}</span>{:else}in the data folder{/if}
+								is loaded after the app's, on the next reload.
+							</p>
 						{/if}
 						{#if section.id === 'saveto'}
 							<p class="preview small" aria-live="polite">
@@ -527,5 +544,9 @@
 		align-items: center;
 		gap: var(--sp-2);
 		margin: var(--sp-3) 0 0;
+	}
+	.custom-css {
+		margin: var(--sp-3) 0 0;
+		overflow-wrap: anywhere;
 	}
 </style>
