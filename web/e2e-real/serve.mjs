@@ -233,12 +233,14 @@ process.on('SIGTERM', stop);
 process.on('SIGINT', stop);
 
 startServer();
-// Once the server answers: pack chapters as CBZ into the temp dir, then report ready.
+// Once the server answers: pack chapters as CBZ into the temp dir, mark setup done so the flow
+// starts on the library rather than the fresh install's setup wizard, then report ready.
 await untilUp(() =>
 	fetch(`${app}/api/settings`, {
 		method: 'PATCH',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({
+			general: { setup_completed: true },
 			output: { format: 'cbz' },
 			saveto: { default_dir: join(dir, 'out') }
 		})
