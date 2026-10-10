@@ -55,7 +55,7 @@ impl Transport for Server {
 }
 
 struct Fixture {
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
     lists: ListsDb,
     server: Arc<Server>,
     importer: DbImporter,
@@ -72,7 +72,7 @@ fn fixture(status: u16, body: Vec<u8>) -> Fixture {
     let http = HttpClient::with_transport(server.clone()).unwrap();
     let importer = DbImporter::new(http, lists.clone());
     Fixture {
-        _dir: dir,
+        dir,
         lists,
         server,
         importer,
@@ -279,7 +279,7 @@ fn an_empty_download_is_a_bad_archive() {
 /// Runs `ListJobs::import_db` of a website that can build its own list against a 404 and
 /// returns the job's last error once it ended.
 fn failed_import_job_message(f: Fixture) -> String {
-    let lua = f._dir.path().join("lua/modules");
+    let lua = f.dir.path().join("lua/modules");
     std::fs::create_dir_all(&lua).unwrap();
     std::fs::write(
         lua.join("Site.lua"),
@@ -287,13 +287,13 @@ fn failed_import_job_message(f: Fixture) -> String {
          m.RootURL = 'https://site.test'; m.OnGetNameAndLink = 'GetNameAndLink'\nend\n",
     )
     .unwrap();
-    let report = ModuleRegistry::load_dir(&f._dir.path().join("lua"));
+    let report = ModuleRegistry::load_dir(&f.dir.path().join("lua"));
     let module = report.registry.get("site").unwrap().clone();
     let http = HttpClient::with_transport(f.server.clone()).unwrap();
     let mut config = PoolConfig::new(http);
     config.threads = 1;
     let pool = Arc::new(WorkerPool::new(config).unwrap());
-    let db = AppDb::open(f._dir.path().join("app.db")).unwrap();
+    let db = AppDb::open(f.dir.path().join("app.db")).unwrap();
     let (tx, rx) = std::sync::mpsc::channel();
     let jobs = ListJobs::new(
         ListUpdater::new(pool, f.lists.clone()),
@@ -309,19 +309,34 @@ fn failed_import_job_message(f: Fixture) -> String {
     jobs.status().last_error.unwrap()
 }
 
+/// The message before the details, which keep the URL and so the upstream project's name.
+fn message_of(last_error: &str) -> &str {
+    last_error.split_once("\n\nDetails:").unwrap().0
+}
+
 #[test]
 fn a_missing_dump_reads_as_no_ready_made_list_without_naming_fmd2_db() {
-    let f = fixture(404, b"Not Found".to_vec());
+    let last_error = failed_import_job_message(fixture(404, b"Not Found".to_vec()));
+    let message = message_of(&last_error);
 
-    let last_error = failed_import_job_message(f);
-    // The details after it keep the URL, which names the upstream project.
-    let (message, _details) = last_error.split_once("\n\nDetails:").unwrap();
-
-    assert!(
-        message.starts_with(
-            "There is no ready-made list for Site yet. Use Update list to build it from the website."
-        ),
-        "{message}"
+    assert_eq!(
+        message,
+        "There is no ready-made list for Site yet. Use Update list to build it from the website."
     );
-    assert!(!message.contains("FMD2-DB"), "{message}");
+}
+
+#[test]
+fn unreachable_or_damaged_ready_made_lists_are_worded_without_naming_fmd2_db() {
+    let unreachable = failed_import_job_message(fixture(500, b"Internal Server Error".to_vec()));
+    assert_eq!(
+        message_of(&unreachable),
+        "Could not reach the ready-made lists to get the list of Site. \
+         Check the connection and try again later."
+    );
+
+    let damaged = failed_import_job_message(fixture(200, b"<html>rate limited</html>".to_vec()));
+    assert_eq!(
+        message_of(&damaged),
+        "The ready-made list of Site is damaged or empty."
+    );
 }
