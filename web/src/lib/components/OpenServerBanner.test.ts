@@ -18,6 +18,7 @@ const health = (auth: boolean, loopback: boolean): Health => ({
 	status: 'ok',
 	auth,
 	loopback,
+	in_container: false,
 	overridden: []
 });
 

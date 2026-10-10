@@ -234,6 +234,8 @@ async fn health_says_whether_an_open_server_is_reachable_from_other_machines() {
     let body = health(&exposed).await;
     assert_eq!(body["auth"], false);
     assert_eq!(body["loopback"], false);
+    // Depends on where the tests run.
+    assert!(body["in_container"].is_boolean());
 
     let local = h
         .state
