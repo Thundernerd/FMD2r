@@ -54,7 +54,7 @@
 		padding: 10px var(--sp-4);
 	}
 	.brand {
-		font: 800 18px var(--f-display);
+		font: 800 var(--fs-xl) var(--f-display);
 		letter-spacing: -0.02em;
 		color: var(--fg);
 		text-decoration: none;
@@ -113,7 +113,7 @@
 			padding: 10px var(--sp-5);
 		}
 		.brand {
-			font-size: 20px;
+			font-size: var(--fs-title);
 		}
 		.nav {
 			position: static;

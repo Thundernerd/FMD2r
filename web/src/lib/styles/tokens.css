@@ -1,26 +1,45 @@
-/* Design tokens from the approved layout prototype (variant B "Library"). */
+/* Design tokens from the approved layout prototype (variant B "Library"). Every font size and colour
+ * in the app comes from here (a unit test checks it), so overriding these restyles all of it.
+ *
+ * Each colour is written once as `light-dark(<light>, <dark>)`; which one applies follows
+ * `color-scheme`, set at the bottom of this file from the OS setting or `data-theme`. */
 :root {
 	color-scheme: light;
 
 	/* Colours */
-	--bg: #f3f5f6;
-	--surface: #ffffff;
-	--surface-2: #e9edef;
-	--line: #d6dde0;
-	--fg: #172226;
-	--muted: #5a6a70;
-	--accent: #0b6e7f;
-	--accent-fg: #ffffff;
-	--accent-soft: #d5ecef;
-	--ok: #2b7a45;
-	--warn: #a86a12;
-	--bad: #b8352a;
-	--idle: #7a8790;
-	--ok-soft: #dcefe2;
-	--warn-soft: #f6e9d2;
-	--bad-soft: #f6dcd8;
-	--idle-soft: #e6eaec;
-	--shadow: 0 1px 2px rgba(15, 30, 35, 0.08), 0 6px 20px rgba(15, 30, 35, 0.08);
+	--bg: light-dark(#f3f5f6, #101618);
+	--surface: light-dark(#ffffff, #172024);
+	--surface-2: light-dark(#e9edef, #1f2a2f);
+	--line: light-dark(#d6dde0, #2b383e);
+	--fg: light-dark(#172226, #e3eaec);
+	--muted: light-dark(#5a6a70, #93a3a9);
+	--accent: light-dark(#0b6e7f, #3fb3c4);
+	--accent-fg: light-dark(#ffffff, #06272c);
+	--accent-soft: light-dark(#d5ecef, #163a40);
+	--ok: light-dark(#2b7a45, #5cc27e);
+	--warn: light-dark(#a86a12, #e0a647);
+	--bad: light-dark(#b8352a, #f07a6e);
+	--idle: light-dark(#7a8790, #8c9aa0);
+	--ok-soft: light-dark(#dcefe2, #1b3324);
+	--warn-soft: light-dark(#f6e9d2, #3a2c14);
+	--bad-soft: light-dark(#f6dcd8, #3d1f1c);
+	--idle-soft: light-dark(#e6eaec, #232d31);
+	/* `light-dark()` only picks colours, so the dark shadow's larger blur is a third layer that is
+	 * transparent in light, and the light one's is transparent in dark. */
+	--shadow:
+		0 1px 2px light-dark(rgba(15, 30, 35, 0.08), rgba(0, 0, 0, 0.4)),
+		0 6px 20px light-dark(rgba(15, 30, 35, 0.08), rgba(0, 0, 0, 0)),
+		0 8px 24px light-dark(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.35));
+	/* Dims the page behind a dialog or drawer. */
+	--scrim: light-dark(rgba(5, 15, 18, 0.45), rgba(5, 15, 18, 0.45));
+	/* Text drawn over a cover image, and the stand-in for a missing cover. */
+	--on-cover: light-dark(#ffffff, #ffffff);
+	--on-cover-shadow: 0 1px 2px light-dark(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4));
+	--cover-placeholder: linear-gradient(
+		160deg,
+		light-dark(#3f8f9c, #3f8f9c),
+		light-dark(#173e46, #173e46)
+	);
 
 	/* Typography */
 	--f-display: 'Schibsted Grotesk', 'Segoe UI', system-ui, sans-serif;
@@ -28,9 +47,21 @@
 	--f-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 	--fs-xs: 11px;
 	--fs-sm: 12px;
+	/* Buttons, list rows and facts. */
+	--fs-ui: 13px;
+	/* Card titles on Library and Discover. */
+	--fs-card: 13.5px;
 	--fs-md: 14px;
+	/* The search box on Library and Discover. */
+	--fs-search: 15px;
 	--fs-lg: 16px;
+	--fs-xl: 18px;
+	/* The brand in the top bar and on the login screen. */
+	--fs-title: 20px;
+	--fs-h2: 26px;
 	--fs-h1: 30px;
+	/* The series page's title. */
+	--fs-hero: 34px;
 	--lh: 1.45;
 
 	/* Spacing */
@@ -54,48 +85,13 @@
 	--safe-top: env(safe-area-inset-top, 0px);
 }
 
+/* Dark follows the OS unless `data-theme` picks one. */
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme='light']) {
 		color-scheme: dark;
-		--bg: #101618;
-		--surface: #172024;
-		--surface-2: #1f2a2f;
-		--line: #2b383e;
-		--fg: #e3eaec;
-		--muted: #93a3a9;
-		--accent: #3fb3c4;
-		--accent-fg: #06272c;
-		--accent-soft: #163a40;
-		--ok: #5cc27e;
-		--warn: #e0a647;
-		--bad: #f07a6e;
-		--idle: #8c9aa0;
-		--ok-soft: #1b3324;
-		--warn-soft: #3a2c14;
-		--bad-soft: #3d1f1c;
-		--idle-soft: #232d31;
-		--shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
 	}
 }
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--bg: #101618;
-	--surface: #172024;
-	--surface-2: #1f2a2f;
-	--line: #2b383e;
-	--fg: #e3eaec;
-	--muted: #93a3a9;
-	--accent: #3fb3c4;
-	--accent-fg: #06272c;
-	--accent-soft: #163a40;
-	--ok: #5cc27e;
-	--warn: #e0a647;
-	--bad: #f07a6e;
-	--idle: #8c9aa0;
-	--ok-soft: #1b3324;
-	--warn-soft: #3a2c14;
-	--bad-soft: #3d1f1c;
-	--idle-soft: #232d31;
-	--shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
 }

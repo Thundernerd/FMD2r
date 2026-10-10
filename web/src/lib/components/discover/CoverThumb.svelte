@@ -88,9 +88,9 @@
 		align-items: flex-end;
 		box-sizing: border-box;
 		padding: 6px;
-		color: #fff;
-		font: 700 13px/1.1 var(--f-display);
+		color: var(--on-cover);
+		font: 700 var(--fs-ui)/1.1 var(--f-display);
 		background: linear-gradient(160deg, hsl(var(--h) 45% 52%), hsl(calc(var(--h) + 40) 50% 28%));
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+		text-shadow: var(--on-cover-shadow);
 	}
 </style>

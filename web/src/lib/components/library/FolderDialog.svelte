@@ -138,7 +138,7 @@
 		gap: var(--sp-3);
 	}
 	.dialog::backdrop {
-		background: rgba(5, 15, 18, 0.45);
+		background: var(--scrim);
 	}
 	header {
 		display: flex;

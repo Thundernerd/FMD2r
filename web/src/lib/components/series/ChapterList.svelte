@@ -221,7 +221,7 @@
 		gap: var(--sp-2);
 		height: 100%;
 		padding: 0 14px;
-		font-size: 13px;
+		font-size: var(--fs-ui);
 		cursor: pointer;
 	}
 	.row:hover {

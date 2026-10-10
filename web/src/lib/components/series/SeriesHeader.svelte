@@ -185,10 +185,10 @@
 		display: flex;
 		align-items: flex-end;
 		padding: 10px;
-		color: #fff;
-		font: 700 18px/1.1 var(--f-display);
-		background: linear-gradient(160deg, #3f8f9c, #173e46);
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+		color: var(--on-cover);
+		font: 700 var(--fs-xl)/1.1 var(--f-display);
+		background: var(--cover-placeholder);
+		text-shadow: var(--on-cover-shadow);
 		overflow: hidden;
 	}
 	.meta {
@@ -205,7 +205,7 @@
 		flex-wrap: wrap;
 	}
 	h1 {
-		font-size: 34px;
+		font-size: var(--fs-hero);
 		letter-spacing: -0.02em;
 		overflow-wrap: anywhere;
 	}
@@ -241,7 +241,7 @@
 		gap: 22px;
 		flex-wrap: wrap;
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-ui);
 	}
 	.facts div {
 		display: flex;
@@ -311,7 +311,7 @@
 			height: 170px;
 		}
 		h1 {
-			font-size: 26px;
+			font-size: var(--fs-h2);
 		}
 	}
 </style>
