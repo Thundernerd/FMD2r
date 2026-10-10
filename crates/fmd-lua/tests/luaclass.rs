@@ -1,4 +1,4 @@
-//! `LuaClass` object semantics (docs/tickets/T03-luaclass-binding-helper.md).
+//! `LuaClass` object semantics (T03, issue #134).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

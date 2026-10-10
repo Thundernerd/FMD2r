@@ -1,4 +1,4 @@
-//! `fmd2r xpath eval` (docs/tickets/T35-xpath-differential-corpus.md, "Seams under test").
+//! `fmd2r xpath eval` (T35, issue #166, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 

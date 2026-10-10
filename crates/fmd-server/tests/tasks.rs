@@ -1,6 +1,6 @@
 //! Queue endpoints (`/api/tasks*`) driven through `build_router` with `oneshot` and a fake
 //! download engine that records what it is asked to do
-//! (docs/tickets/T23-queue.md, "Seams under test").
+//! (T23, issue #154, "Seams under test").
 //!
 //! The operations mirror FMD2's `TDownloadManager` (baseunits/uDownloadsManager.pas:1769-2045).
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.

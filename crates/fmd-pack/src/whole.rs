@@ -13,7 +13,7 @@ pub fn part_path(path: &Path) -> PathBuf {
 
 /// Has `write` write to [`part_path`], then syncs and renames it to `path`, so a crash mid-write
 /// leaves no partial file under `path` (FMD2 writes in place; see
-/// docs/tickets/T44-download-hard-crash-resume.md). A failed write removes the part file.
+/// T44, issue #175). A failed write removes the part file.
 pub fn write_whole<E: From<io::Error>>(
     path: &Path,
     write: impl FnOnce(&Path) -> Result<(), E>,

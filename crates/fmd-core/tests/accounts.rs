@@ -1,4 +1,4 @@
-//! Module accounts and login through `AccountService` (docs/tickets/T31-accounts-login.md).
+//! Module accounts and login through `AccountService` (T31, issue #162).
 //!
 //! Expected values: `TAccountCheckThread.Execute`
 //! (mangadownloader/forms/frmAccountManager.pas:124-134), `DoLogin`/`DoAccountState`

@@ -1,4 +1,4 @@
-//! Module callbacks on the `WorkerPool` (docs/tickets/T14-callback-runner-worker-pool.md).
+//! Module callbacks on the `WorkerPool` (T14, issue #145).
 //! Expected values come from FMD2's `Do*` runners (baseunits/lua/LuaWebsiteModules.pas:154-465),
 //! baseunits/lua/LuaWebsiteModuleHandler.pas:33-57 and `TLuaHandler.CallFunction`
 //! (baseunits/lua/LuaHandler.pas:134-144).

@@ -1,4 +1,4 @@
-//! The download engine through `DownloadManager` (docs/tickets/T20-download-engine.md).
+//! The download engine through `DownloadManager` (T20, issue #151).
 //!
 //! Expected values: `TTaskThread.Execute`, `TDownloadThread.DownloadImage` and
 //! `TDownloadManager` (baseunits/uDownloadsManager.pas:334-412, :975-1374, :1784-1985).

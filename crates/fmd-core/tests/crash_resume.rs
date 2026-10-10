@@ -1,5 +1,5 @@
 //! A download killed with SIGKILL resumes when the engine is opened again
-//! (docs/tickets/T44-download-hard-crash-resume.md).
+//! (T44, issue #175).
 //!
 //! The engine runs in a child process (this test binary with [`CHILD_DIR`] set, see [`child`]),
 //! which the parent kills and restarts. Expected values: `CheckAndActiveTaskAtStartup` and

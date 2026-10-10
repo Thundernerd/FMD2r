@@ -1,4 +1,4 @@
-//! TStrings objects (`fmd.strings`) (docs/tickets/T04-tstrings-memorystream.md). Expected values
+//! TStrings objects (`fmd.strings`) (T04, issue #135). Expected values
 //! were probed from FPC 3.2.2's `TStringList` (FMD2's RTL), with Windows' CRLF `sLineBreak`.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.

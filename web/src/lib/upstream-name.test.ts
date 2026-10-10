@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const SRC = join(import.meta.dirname, '..');
 
 /** Where "FMD2-DB" may stay: the upstream URL, and Settings' one note on where the lists come
- * from (docs/tickets/T85-rename-fmd2-db.md). */
+ * from (T85, issue #216). */
 const ALLOWED: [RegExp, string[]][] = [
 	[/dazedcat19\/FMD2-DB/g, []],
 	// The setting's help, and its description in the generated API schema.

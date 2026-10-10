@@ -1,4 +1,4 @@
-//! The favorites checker through `FavoritesChecker` (docs/tickets/T25-library-favorites.md).
+//! The favorites checker through `FavoritesChecker` (T25, issue #156).
 //!
 //! Expected behaviour: `TFavoriteThread.DoCheck`/`DoCheckMissing`
 //! (baseunits/uFavoritesManager.pas:329-531) and `TFavoriteManager.ShowResult` (:954-1178).
@@ -262,7 +262,7 @@ async fn a_check_stores_the_sites_chapter_links_replacing_the_previous_ones() {
         .await
         .unwrap();
 
-    // Kept so the new-chapter badge compares links (docs/tickets/T65-exact-new-chapter-badge.md).
+    // Kept so the new-chapter badge compares links (T65, issue #196).
     assert_eq!(
         fx.db.favorites().chapter_links(id).unwrap(),
         ["/c1", "/c2", "/c3"]

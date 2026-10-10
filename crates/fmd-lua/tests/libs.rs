@@ -1,5 +1,5 @@
 //! The remaining `fmd.*` host libraries and the `pb` C module
-//! (docs/tickets/T13-remaining-libs-pb.md).
+//! (T13, issue #144).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

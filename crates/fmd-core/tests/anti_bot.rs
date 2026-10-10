@@ -1,5 +1,5 @@
 //! What the anti-bot hook persists: module HTTP settings and `websitebypass_config.json`
-//! (docs/tickets/T30-anti-bot.md).
+//! (T30, issue #161).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

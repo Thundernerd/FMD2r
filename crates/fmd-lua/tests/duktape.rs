@@ -1,4 +1,4 @@
-//! `fmd.duktape.ExecJS` (docs/tickets/T12-fmd-duktape-execjs.md), expecting what FMD2's Duktape
+//! `fmd.duktape.ExecJS` (T12, issue #143), expecting what FMD2's Duktape
 //! returns (baseunits/Duktape.pas:77-104, baseunits/lua/LuaDuktape.pas:14-24).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
@@ -149,7 +149,7 @@ fn require_resolves_module_ids_like_duktape() {
 }
 
 /// FMD2's Duktape has no limits; here a runaway script fails like a script error instead of
-/// hanging or crashing the worker (docs/tickets/T12-fmd-duktape-execjs.md, "Execution limits").
+/// hanging or crashing the worker (T12, issue #143, "Execution limits").
 #[test]
 fn runaway_scripts_are_interrupted() {
     let runtime = runtime();

@@ -1,4 +1,4 @@
-//! The list titles' stored cover links (docs/tickets/T70-discover-cover-thumbnails.md, "Seams
+//! The list titles' stored cover links (T70, issue #201, "Seams
 //! under test"): they outlive a list update and an FMD2-DB import of the same module.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.

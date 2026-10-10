@@ -1,6 +1,6 @@
 # Coding standards
 
-These apply to every ticket in `docs/tickets/`. `/code-review` checks changes against this file.
+These apply to every ticket (GitHub issues labelled `ticket`). `/code-review` checks changes against this file.
 
 ## Rust
 

@@ -1,4 +1,4 @@
-//! Discover's search and facets over a 100k-title list (docs/tickets/T26-discover-list-update.md,
+//! Discover's search and facets over a 100k-title list (T26, issue #157,
 //! acceptance: search under 100 ms on a laptop; not gated in CI).
 //!
 //! Run with `cargo bench -p fmd-store --bench search`.

@@ -1,4 +1,4 @@
-//! The module updater against a stub GitHub (docs/tickets/T29-module-updater.md).
+//! The module updater against a stub GitHub (T29, issue #160).
 //!
 //! Expected values: `TGitHubRepo`'s ETag and commit/tree flow (baseunits/GitHubRepoV3.pas:163-272)
 //! and `TCheckUpdateThread`'s SHA diff (mangadownloader/forms/frmLuaModulesUpdater.pas:588-890).

@@ -1,5 +1,5 @@
 //! The `fmd-xpath` API suite every backend must pass
-//! (docs/tickets/T34-native-xpath-backend.md, "Seams under test"): T08's cases plus the
+//! (T34, issue #165, "Seams under test"): T08's cases plus the
 //! internettools extensions upstream modules use (docs/xpath-extensions.md).
 //!
 //! Expected values come from FMD2's engine (baseunits/XQueryEngineHTML.pas:384-400): passing on

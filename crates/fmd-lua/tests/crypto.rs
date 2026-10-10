@@ -1,4 +1,4 @@
-//! `fmd.crypto` known-answer vectors (docs/tickets/T11-fmd-crypto.md).
+//! `fmd.crypto` known-answer vectors (T11, issue #142).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]

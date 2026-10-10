@@ -1,5 +1,5 @@
 //! The anti-bot hook (`WebsiteBypassRequest`, baseunits/lua/LuaWebsiteBypass.pas:142-212) on a
-//! module's `HTTP` objects, with upstream's `websitebypass/*.lua` (docs/tickets/T30-anti-bot.md).
+//! module's `HTTP` objects, with upstream's `websitebypass/*.lua` (T30, issue #161).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

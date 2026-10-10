@@ -1,5 +1,5 @@
 //! The password setting through `PATCH /api/settings`
-//! (docs/tickets/T64-password-and-bind-settings.md, "Seams under test").
+//! (T64, issue #195, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 

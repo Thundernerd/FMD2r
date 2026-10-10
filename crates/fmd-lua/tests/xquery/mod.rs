@@ -1,5 +1,5 @@
 //! `CreateTXQuery`, TXQuery and `IXQValue`: one suite every XPath backend must pass
-//! (docs/tickets/T08-fmd-xpath-trait-ffi-lua-bindings.md, T34-native-xpath-backend.md).
+//! (T08, issue #139; T34, issue #165).
 //! Expected values come from baseunits/lua/LuaXQuery.pas, LuaIXQValue.pas and
 //! baseunits/XQueryEngineHTML.pas.
 

@@ -1,4 +1,4 @@
-//! Matching list titles against `metadata.db` (docs/tickets/T73-mangabaka-metadata.md).
+//! Matching list titles against `metadata.db` (T73, issue #204).
 //!
 //! Cases and expected results are T71's probe (docs/research/metadata-probe/results-*.csv).
 

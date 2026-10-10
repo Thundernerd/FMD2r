@@ -1,5 +1,5 @@
 //! The favorites endpoints driven through `build_router` with `oneshot`, over a fake module
-//! catalog and a fake favorites job (docs/tickets/T25-library-favorites.md, "Seams under test").
+//! catalog and a fake favorites job (T25, issue #156, "Seams under test").
 //!
 //! Expected behaviour comes from FMD2's `TMainForm.btAddToFavoritesClick`
 //! (mangadownloader/forms/frmMain.pas:2797-2846) and `TFavoriteManager`
@@ -303,7 +303,7 @@ async fn filters_pick_favorites_by_state_and_title() {
 
 impl Fixture {
     /// Stores what a new-chapter check of favorite `id` would: the site's chapter count and
-    /// links (docs/tickets/T65-exact-new-chapter-badge.md).
+    /// links (T65, issue #196).
     fn checked(&self, id: i64, links: &[&str]) {
         let mut favorite = self.db.favorites().get(FavoriteId(id)).unwrap().unwrap();
         favorite.current_chapter = u32::try_from(links.len()).unwrap();

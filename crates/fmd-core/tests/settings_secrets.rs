@@ -1,5 +1,5 @@
 //! Settings secrets are never stored in plain text in `app.db`, and an older build's plain
-//! values are encrypted on the next start (docs/tickets/T63-settings-secrets.md).
+//! values are encrypted on the next start (T63, issue #194).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]

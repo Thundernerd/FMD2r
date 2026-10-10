@@ -1,5 +1,5 @@
 //! The differential runner: every corpus entry evaluated on two backends, their results
-//! compared in a normalised form (docs/tickets/T35-xpath-differential-corpus.md).
+//! compared in a normalised form (T35, issue #166).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self, Write};

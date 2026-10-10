@@ -152,7 +152,7 @@ The importer reads FMD2's schemas (documented from `DownloadsDB.pas`, `Favorites
 
 ## Ticket list
 
-Each ticket has a spec in `docs/tickets/T<nn>-<slug>.md`; T00 (this documentation) has none.
+Each ticket is a GitHub issue labelled `ticket`, titled `T<nn>: …`; T00 (this documentation) has none.
 
 "Deps" lists the tickets that must be finished first. Tickets with no dependency between them can run at the same time; the waves below group them.
 

@@ -1,5 +1,5 @@
 //! The composed server: `serve(ServeConfig)` with a fixture module for a stub site on a local
-//! socket ("Seams under test" of docs/tickets/T37, T38 and T54).
+//! socket ("Seams under test" of T37, T38 and T54, issues #168, #169 and #185).
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
