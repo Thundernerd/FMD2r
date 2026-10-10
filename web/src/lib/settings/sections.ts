@@ -37,8 +37,14 @@ const swatches = (
 	path: string,
 	label: string,
 	choices: Choice[],
+	help?: string,
 	extra: Omit<Extract<Control, { kind: 'swatches' }>, 'kind' | 'choices'> = {}
-): Field => ({ path, label, control: { kind: 'swatches', choices, ...extra } });
+): Field => ({ path, label, help, control: { kind: 'swatches', choices, ...extra } });
+const themes = (path: string, label: string, choices: Choice[], accentPath: string): Field => ({
+	path,
+	label,
+	control: { kind: 'themes', choices, accentPath }
+});
 const select = (path: string, label: string, choices: Choice[], help?: string): Field => ({
 	path,
 	label,
@@ -122,19 +128,17 @@ export const SETTINGS_SECTIONS: Section[] = [
 		id: 'appearance',
 		title: 'Appearance',
 		fields: [
-			{
-				path: 'appearance.theme',
-				label: 'Theme',
-				control: {
-					kind: 'themes',
-					choices: [
-						{ value: 'default', label: 'Default' },
-						{ value: 'high-contrast', label: 'High contrast' },
-						{ value: 'warm', label: 'Warm' },
-						{ value: 'compact', label: 'Compact' }
-					]
-				}
-			},
+			themes(
+				'appearance.theme',
+				'Theme',
+				[
+					{ value: 'default', label: 'Default' },
+					{ value: 'high-contrast', label: 'High contrast' },
+					{ value: 'warm', label: 'Warm' },
+					{ value: 'compact', label: 'Compact' }
+				],
+				'appearance.accent'
+			),
 			select(
 				'appearance.mode',
 				'Light or dark',
@@ -162,6 +166,7 @@ export const SETTINGS_SECTIONS: Section[] = [
 					{ value: 'orange', label: 'Orange' },
 					{ value: 'red', label: 'Red' }
 				],
+				undefined,
 				{
 					lockedWhen: {
 						path: 'appearance.theme',

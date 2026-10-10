@@ -7,6 +7,8 @@ const BACKGROUND = {
 	Warm: 'rgb(244, 238, 226)',
 	Compact: 'rgb(236, 240, 241)'
 };
+/** The purple swatch's light `--accent`. */
+const LIGHT_PURPLE = 'rgb(106, 69, 184)';
 /** High contrast's own dark background. */
 const HIGH_CONTRAST_DARK_BG = 'rgb(0, 0, 0)';
 
@@ -42,8 +44,15 @@ test('high contrast keeps its own accent and greys out the swatches', async ({ p
 	await openAppearance(page);
 	const purple = page.getByRole('radio', { name: 'Purple' });
 	await expect(purple).toBeEnabled();
+	await purple.click();
 	await pickTheme(page, 'High contrast');
 	await expect(purple).toBeDisabled();
+	// The other cards still show the picked accent, not high contrast's own.
+	const defaultAccent = page
+		.getByRole('radio', { name: 'Default' })
+		.locator('.theme-accent')
+		.evaluate((el) => getComputedStyle(el).backgroundColor);
+	expect(await defaultAccent).toBe(LIGHT_PURPLE);
 	await expect(page.getByText('High contrast keeps its own accent')).toBeVisible();
 	await pickTheme(page, 'Warm');
 	await expect(purple).toBeEnabled();

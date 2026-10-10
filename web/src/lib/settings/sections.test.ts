@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createMockBackend } from '#lib/api/mock.ts';
 import { createApi } from '#lib/api/client.ts';
-import { secretFlag } from '#lib/settings/fields.ts';
+import { choicesOf, secretFlag } from '#lib/settings/fields.ts';
 import {
 	DERIVED_PATHS,
 	OWN_SECTION_PATHS,
@@ -55,11 +55,7 @@ describe('settings sections', () => {
 			SETTINGS_SECTIONS.flatMap((s) => s.fields).find((f) => f.path === path)?.control;
 		const values = (path: string) => {
 			const control = select(path);
-			return control?.kind === 'select' ||
-				control?.kind === 'swatches' ||
-				control?.kind === 'themes'
-				? control.choices.map((c) => c.value)
-				: [];
+			return control ? choicesOf(control).map((c) => c.value) : [];
 		};
 		expect(values('output.format')).toEqual(schemas['OutputFormat']?.enum);
 		expect(values('images.webp_save_as')).toEqual(schemas['WebpSaveAs']?.enum);

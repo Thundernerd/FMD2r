@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Draft, Json } from '#lib/settings/draft.svelte.ts';
-	import { secretFlag, type Field } from '#lib/settings/fields.ts';
+	import { choicesOf, secretFlag, type Field } from '#lib/settings/fields.ts';
 
 	let {
 		field,
@@ -19,22 +19,27 @@
 	const value = $derived(draft.get(field.path));
 	const error = $derived(draft.errors[field.path]);
 	const dirty = $derived(draft.isDirty(field.path));
-	const describedBy = $derived(
-		[
-			error ? `${id}-error` : '',
-			field.help ? `${id}-help` : '',
-			overridden ? `${id}-overridden` : ''
-		]
-			.filter(Boolean)
-			.join(' ') || undefined
-	);
-
 	/** Swatches that can't be changed now, and why (`lockedWhen` of the control). */
 	const lockNote = $derived.by(() => {
 		const control = field.control;
 		if (control.kind !== 'swatches' || !control.lockedWhen) return null;
 		const { path, value, note } = control.lockedWhen;
 		return draft.get(path) === value ? note : null;
+	});
+	const describedBy = $derived(
+		[
+			error ? `${id}-error` : '',
+			field.help ? `${id}-help` : '',
+			overridden ? `${id}-overridden` : '',
+			lockNote ? `${id}-locked` : ''
+		]
+			.filter(Boolean)
+			.join(' ') || undefined
+	);
+	/** The accent the theme cards show, the one picked with the swatches. */
+	const accent = $derived.by(() => {
+		const control = field.control;
+		return control.kind === 'themes' ? draft.get(control.accentPath) : undefined;
 	});
 
 	/** Whether the secret is set on the server; it never sends the value. */
@@ -71,14 +76,13 @@
 
 	/** Arrow keys move the pick along the row, as in any radio group. */
 	function onRadioKey(e: KeyboardEvent, index: number) {
-		const control = field.control;
-		if (control.kind !== 'swatches' && control.kind !== 'themes') return;
+		const choices = choicesOf(field.control);
 		const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-		if (!step) return;
+		if (!step || !choices.length) return;
 		e.preventDefault();
-		const count = control.choices.length;
+		const count = choices.length;
 		const next = (index + step + count) % count;
-		const choice = control.choices[next];
+		const choice = choices[next];
 		if (!choice) return;
 		draft.set(field.path, choice.value as Json);
 		const row = (e.currentTarget as HTMLElement).parentElement;
@@ -106,73 +110,58 @@
 			/>
 			<span>{field.label}</span>
 		</label>
-	{:else if field.control.kind === 'swatches'}
+	{:else if field.control.kind === 'swatches' || field.control.kind === 'themes'}
+		{@const kind = field.control.kind}
 		{@const checked = field.control.choices.findIndex((c) => c.value === value)}
 		<span class="caption" id="{id}-label">{field.label}</span>
 		<div
 			{id}
-			class="swatches"
+			class={kind}
 			role="radiogroup"
 			aria-labelledby="{id}-label"
 			aria-invalid={error ? true : undefined}
-			aria-describedby={[describedBy, lockNote ? `${id}-locked` : ''].filter(Boolean).join(' ') ||
-				undefined}
+			aria-describedby={describedBy}
 			aria-disabled={lockNote ? true : undefined}
 		>
 			{#each field.control.choices as choice, i (choice.value)}
 				<button
 					type="button"
 					role="radio"
-					class="swatch"
-					data-accent={choice.value}
-					title={choice.label}
-					aria-label={choice.label}
+					class={kind === 'swatches' ? 'swatch' : 'theme'}
+					data-accent={kind === 'swatches' ? choice.value : undefined}
+					title={kind === 'swatches' ? choice.label : undefined}
+					aria-label={kind === 'swatches' ? choice.label : undefined}
 					aria-checked={i === checked}
 					tabindex={i === checked || (checked < 0 && i === 0) ? 0 : -1}
 					disabled={!!lockNote}
 					onclick={() => draft.set(field.path, choice.value as Json)}
 					onkeydown={(e) => onRadioKey(e, i)}
-				></button>
+				>
+					{#if kind === 'themes'}
+						<!-- The theme's own background, surface, text and accent (`data-style` in
+						     tokens.css), over the default theme and the picked accent rather than the
+						     theme in use, whose accent may be its own. -->
+						<span
+							class="theme-preview"
+							data-style="default"
+							data-accent={typeof accent === 'string' ? accent : undefined}
+							aria-hidden="true"
+						>
+							<span class="theme-bg" data-style={choice.value}>
+								<span class="theme-surface">
+									<span class="theme-text">Aa</span>
+									<span class="theme-accent"></span>
+								</span>
+							</span>
+						</span>
+						<span class="theme-name">{choice.label}</span>
+					{/if}
+				</button>
 			{/each}
 		</div>
 		{#if lockNote}
 			<p class="locked small muted" id="{id}-locked">{lockNote}</p>
 		{/if}
-	{:else if field.control.kind === 'themes'}
-		{@const checked = field.control.choices.findIndex((c) => c.value === value)}
-		<span class="caption" id="{id}-label">{field.label}</span>
-		<div
-			{id}
-			class="themes"
-			role="radiogroup"
-			aria-labelledby="{id}-label"
-			aria-invalid={error ? true : undefined}
-			aria-describedby={describedBy}
-		>
-			{#each field.control.choices as choice, i (choice.value)}
-				<button
-					type="button"
-					role="radio"
-					class="theme"
-					aria-checked={i === checked}
-					tabindex={i === checked || (checked < 0 && i === 0) ? 0 : -1}
-					onclick={() => draft.set(field.path, choice.value as Json)}
-					onkeydown={(e) => onRadioKey(e, i)}
-				>
-					<!-- The theme's own background, surface, text and accent (`data-style` in tokens.css),
-					     over the default theme's rather than the one in use. -->
-					<span class="theme-preview" data-style="default" aria-hidden="true">
-						<span class="theme-bg" data-style={choice.value}>
-							<span class="theme-surface">
-								<span class="theme-text">Aa</span>
-								<span class="theme-accent"></span>
-							</span>
-						</span>
-					</span>
-					<span class="theme-name">{choice.label}</span>
-				</button>
-			{/each}
-		</div>
 	{:else}
 		<label class="caption" for={id}>{field.label}</label>
 		{#if field.control.kind === 'text'}

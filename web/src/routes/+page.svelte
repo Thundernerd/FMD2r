@@ -349,7 +349,7 @@
 		opacity: 0.5;
 	}
 	.card:hover .cover {
-		outline: var(--focus-w) solid var(--accent);
+		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
 	.art {
