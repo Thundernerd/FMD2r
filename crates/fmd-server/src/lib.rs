@@ -4,6 +4,7 @@ mod about;
 mod accounts;
 mod auth;
 mod covers;
+mod custom_css;
 mod error;
 mod events;
 mod favorites;
@@ -175,6 +176,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/openapi.json",
             get(move || async move { Json(doc.as_ref().clone()) }),
         )
+        .route("/custom.css", get(custom_css::get))
         .nest("/api", Router::new().fallback(api_not_found))
         .method_not_allowed_fallback(method_not_allowed)
         .fallback(spa::serve)

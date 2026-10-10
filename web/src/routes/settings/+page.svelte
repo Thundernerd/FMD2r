@@ -84,6 +84,8 @@
 	}
 
 	const section = $derived(SETTINGS_SECTIONS.find((s) => s.id === active));
+	/** The folder the server loads the user's `custom.css` from, once `/api/about` says. */
+	let dataDir = $state<string | null>(null);
 
 	// An edited appearance shows at once, before saving; discarding it, or leaving the page with it
 	// unsaved, shows the saved one again.
@@ -106,6 +108,10 @@
 			.listModules()
 			.then((list) => (modules = list))
 			.catch(() => (modules = []));
+		api
+			.about()
+			.then(({ data_dir }) => (dataDir = data_dir ?? null))
+			.catch(() => (dataDir = null));
 	});
 
 	// The previous module stays on show until the next one is loaded, so the panel doesn't collapse
@@ -358,6 +364,13 @@
 								</span>
 							</p>
 						{/if}
+						{#if section.id === 'appearance'}
+							<p class="custom-css small muted">
+								Your own styles: a <span class="mono">custom.css</span> in the data folder
+								{#if dataDir}(<span class="mono">{dataDir}</span>){/if}
+								is loaded after the app's, on the next reload.
+							</p>
+						{/if}
 						{#if section.id === 'saveto'}
 							<p class="preview small" aria-live="polite">
 								<span class="label">Preview</span>
@@ -540,5 +553,9 @@
 		align-items: center;
 		gap: var(--sp-2);
 		margin: var(--sp-3) 0 0;
+	}
+	.custom-css {
+		margin: var(--sp-3) 0 0;
+		overflow-wrap: anywhere;
 	}
 </style>

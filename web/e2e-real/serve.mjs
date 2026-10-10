@@ -8,6 +8,7 @@
 // - page `n` is a PNG `n` pixels wide, so a test can tell the pages apart;
 // - chapter 2's pages are held until `POST /release/<key>`, so a test can catch a task mid-download;
 // - `GET /fetches/<key>/<chapter>` counts the page requests for that chapter;
+// - `PUT /custom-css` writes its body to the data dir's `custom.css`, `DELETE /custom-css` removes it;
 // - `POST /restart` stops the server (SIGTERM) and starts it again on the same data dir, and
 //   answers once it is back.
 import { spawn, spawnSync } from 'node:child_process';
@@ -143,6 +144,20 @@ http
 			for (const answer of held.get(key) ?? []) answer();
 			held.delete(key);
 			res.writeHead(204).end();
+		} else if (url === '/custom-css' && (req.method === 'PUT' || req.method === 'DELETE')) {
+			const file = join(dir, 'data/custom.css');
+			if (req.method === 'DELETE') {
+				rmSync(file, { force: true });
+				res.writeHead(204).end();
+			} else {
+				/** @type {Buffer[]} */
+				const chunks = [];
+				req.on('data', (chunk) => chunks.push(chunk));
+				req.on('end', () => {
+					writeFileSync(file, Buffer.concat(chunks));
+					res.writeHead(204).end();
+				});
+			}
 		} else if (req.method === 'POST' && url === '/restart') {
 			restart().then(
 				() => res.writeHead(204).end(),
