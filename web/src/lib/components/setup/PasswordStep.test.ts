@@ -14,7 +14,7 @@ const serverApi = (options: MockOptions = {}, onUnauthorized = vi.fn()) =>
 		onUnauthorized
 	});
 
-async function open(api = serverApi(), onfinish = vi.fn()) {
+async function renderWizard(api = serverApi(), onfinish = vi.fn()) {
 	render(SetupWizard, { api, steps: SETUP_STEPS, onfinish });
 	await screen.findByRole('heading', { level: 2 });
 	return { api, onfinish };
@@ -25,7 +25,7 @@ const button = (name: string) => screen.getByRole('button', { name }) as HTMLBut
 /** Opens the setup at its password step, as a reload during setup would. */
 async function atPasswordStep(api = serverApi()) {
 	await api.patchSettings({ general: { setup_step: 'password' } });
-	await open(api);
+	await renderWizard(api);
 	expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Password');
 	return api;
 }
@@ -49,12 +49,12 @@ describe('the setup password step', () => {
 	});
 
 	it('shows, just before the finish, on a server other machines can reach without a password', async () => {
-		await open();
+		await renderWizard();
 		expect(stepTitles().slice(-2)).toEqual(['Password', 'Finish']);
 	});
 
 	it('is left out on a loopback-only server', async () => {
-		await open(serverApi({ open: false }));
+		await renderWizard(serverApi({ open: false }));
 		expect(stepTitles()).not.toContain('Password');
 	});
 
@@ -62,12 +62,12 @@ describe('the setup password step', () => {
 		const api = serverApi();
 		await api.patchSettings({ server: { auth_token: 'hunter2' } });
 		await api.login('hunter2');
-		await open(api);
+		await renderWizard(api);
 		expect(stepTitles()).not.toContain('Password');
 	});
 
 	it('is left out when the command line or environment sets the password', async () => {
-		await open(serverApi({ overridden: ['server.auth_token'] }));
+		await renderWizard(serverApi({ overridden: ['server.auth_token'] }));
 		expect(stepTitles()).not.toContain('Password');
 	});
 
@@ -137,5 +137,26 @@ describe('the setup password step', () => {
 		await Promise.all(probes);
 		expect(probes).toHaveLength(1);
 		expect(onUnauthorized).not.toHaveBeenCalled();
+	});
+
+	it('says the password is set when coming Back to it', async () => {
+		await atPasswordStep();
+		await type('Password', 'hunter2');
+		await type('Confirm password', 'hunter2');
+		await fireEvent.click(button('Next'));
+		await screen.findByRole('heading', { level: 2, name: 'Finish' });
+
+		await fireEvent.click(button('Back'));
+		expect(screen.getByText(/A password is set/)).toBeTruthy();
+		expect(screen.queryByText(/no password is set/)).toBeNull();
+		expect(button('Next').disabled).toBe(false);
+	});
+
+	it('resumes at the finish when a password was set elsewhere after leaving off at this step', async () => {
+		const api = serverApi();
+		await api.patchSettings({ general: { setup_step: 'password' } });
+		await api.changePassword('hunter2');
+		await renderWizard(api);
+		expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Finish');
 	});
 });

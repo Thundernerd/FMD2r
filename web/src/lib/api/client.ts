@@ -220,7 +220,10 @@ export function createApi({
 	logsDownloadUrl,
 	onUnauthorized
 }: ApiOptions = {}): Api {
-	/** Whether `changePassword` runs, and how many have finished: a 401 sent before one is stale. */
+	/**
+	 * Whether `changePassword` runs, and how many logged in again: a 401 to a request sent before
+	 * one did is stale.
+	 */
 	let changingPassword = false;
 	let passwordChanges = 0;
 	/** A 401 that came while the password changed, reported only if logging in again failed. */
@@ -280,8 +283,8 @@ export function createApi({
 				return loggedIn;
 			} finally {
 				changingPassword = false;
-				passwordChanges++;
-				if (refusedMeanwhile && !loggedIn) onUnauthorized?.();
+				if (loggedIn) passwordChanges++;
+				else if (refusedMeanwhile) onUnauthorized?.();
 			}
 		},
 		async logout() {

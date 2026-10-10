@@ -1,7 +1,10 @@
 <script lang="ts">
 	import type { StepProps } from '#lib/setup/steps.ts';
 
-	let { api }: StepProps = $props();
+	let { api, settings }: StepProps = $props();
+
+	/** Set by this step already, when the user came Back to it. */
+	const isSet = $derived(settings.server.has_auth_token);
 
 	let password = $state('');
 	let confirmation = $state('');
@@ -12,7 +15,7 @@
 	}
 
 	export function nextLabel(): string | undefined {
-		return password === '' && confirmation === '' ? 'Skip' : undefined;
+		return password === '' && confirmation === '' && !isSet ? 'Skip' : undefined;
 	}
 
 	/**
@@ -26,10 +29,14 @@
 	}
 </script>
 
-<p>
-	This server is reachable from other machines and no password is set: anyone who can reach it can
-	use it. Set a password to keep them out.
-</p>
+{#if isSet}
+	<p>A password is set now. Enter a new one to change it, or go on to the finish.</p>
+{:else}
+	<p>
+		This server is reachable from other machines and no password is set: anyone who can reach it can
+		use it. Set a password to keep them out.
+	</p>
+{/if}
 <label class="field">
 	<span class="label">Password</span>
 	<input class="input" type="password" autocomplete="new-password" bind:value={password} />
@@ -41,7 +48,9 @@
 {#if confirmation !== '' && password !== confirmation}
 	<p class="small mismatch">The passwords don't match.</p>
 {/if}
-<p class="small muted">Skip leaves the server open; Settings can set a password later.</p>
+{#if !isSet}
+	<p class="small muted">Skip leaves the server open; Settings can set a password later.</p>
+{/if}
 
 <style>
 	p {

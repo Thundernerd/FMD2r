@@ -35,9 +35,11 @@
 		Promise.all([api.getSettings(), api.health()])
 			.then(([loaded, health]) => {
 				steps = allSteps.filter((s) => s.shows?.(health) ?? true);
-				// Resumes where it was left; a finished setup starts over.
+				// Resumes where it was left, or at the next step when that one no longer shows; a
+				// finished setup starts over.
+				const left = allSteps.findIndex((s) => s.id === loaded.general.setup_step);
 				index = Math.max(
-					steps.findIndex((s) => s.id === loaded.general.setup_step),
+					steps.findIndex((s) => allSteps.indexOf(s) >= left),
 					0
 				);
 				settings = loaded;

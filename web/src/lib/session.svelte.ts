@@ -1,6 +1,9 @@
 import type { Api } from '#lib/api/client.ts';
 import type { Health } from '#lib/api/types.ts';
 
+/** Whether anyone who can reach the server can use it: no password, and not on loopback only. */
+export const isOpenServer = (health: Health): boolean => !health.auth && !health.loopback;
+
 /**
  * Whether the server wants the password, and whether this browser lacks a live session: set
  * when any API call answers 401, cleared by logging in.

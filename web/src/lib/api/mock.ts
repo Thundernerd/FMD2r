@@ -385,10 +385,13 @@ export function createMockBackend({
 		loggedIn = value;
 		store(SESSION_KEY, value ? '1' : null);
 	};
+	/** Fails each open fake event stream, as the server ends them all when the password changes. */
+	const streamEnds = new Set<() => void>();
+
 	/** The `server.auth_token` setting, kept in sessionStorage like the rest of the settings. */
 	let savedPassword = stored(SAVED_PASSWORD_KEY);
 	/** The password the server wants, if any: `fixedPassword` overrides the setting. */
-	const password = () => fixedPassword ?? savedPassword;
+	const requiredPassword = () => fixedPassword ?? savedPassword;
 	/** A saved `server.auth_token` (from `PATCH /api/settings`) that changes it ends every session. */
 	const savePassword = (patch: unknown) => {
 		const server = isObject(patch) ? patch['server'] : undefined;
@@ -401,6 +404,8 @@ export function createMockBackend({
 		savedPassword = next;
 		store(SAVED_PASSWORD_KEY, next);
 		setLoggedIn(false);
+		// Like the server's `end_sessions`, which closes every event stream.
+		for (const end of streamEnds) end();
 	};
 	const inbox = seedInbox();
 	let tasks = seedTasks(Date.now());
@@ -668,23 +673,23 @@ export function createMockBackend({
 		if (route === 'GET /api/health')
 			return json({
 				status: 'ok',
-				auth: password() !== null,
+				auth: requiredPassword() !== null,
 				loopback: !open,
 				overridden: fixedPassword === null ? overridden : [...overridden, 'server.auth_token']
 			});
 		if (route === 'POST /api/login') {
 			const body = (await req.json()) as { password?: unknown } | null;
-			if (password() !== null && body?.password !== password()) {
+			if (requiredPassword() !== null && body?.password !== requiredPassword()) {
 				return json({ status: 401, title: 'Unauthorized' }, 401);
 			}
-			if (password() !== null) setLoggedIn(true);
+			if (requiredPassword() !== null) setLoggedIn(true);
 			return new Response(null, { status: 204 });
 		}
 		if (route === 'POST /api/logout') {
 			setLoggedIn(false);
 			return new Response(null, { status: 204 });
 		}
-		if (password() !== null && !loggedIn) {
+		if (requiredPassword() !== null && !loggedIn) {
 			return json({ status: 401, title: 'Unauthorized' }, 401);
 		}
 		if (route === 'GET /api/inbox') return json(inbox);
@@ -1031,10 +1036,13 @@ export function createMockBackend({
 			},
 			close() {
 				streams.delete(emit);
+				streamEnds.delete(end);
 				clearTimeout(opening);
 				clearInterval(timer);
 			}
 		};
+		const end = () => es.onerror?.(new Event('error'));
+		streamEnds.add(end);
 		const opening = setTimeout(() => es.onopen?.(new Event('open')), 0);
 		const timer = setInterval(tick, 1000);
 		return es;

@@ -2,11 +2,12 @@ import FinishStep from '#lib/components/setup/FinishStep.svelte';
 import PasswordStep from '#lib/components/setup/PasswordStep.svelte';
 import WelcomeStep from '#lib/components/setup/WelcomeStep.svelte';
 import type { Health } from '#lib/api/types.ts';
+import { isOpenServer } from '#lib/session.svelte.ts';
 import type { SetupStep } from './steps.ts';
 
-/** Anyone who can reach the server can use it, and the UI can set its password. */
-export const isOpen = (health: Health): boolean =>
-	!health.auth && !health.loopback && !health.overridden.includes('server.auth_token');
+/** The server is open, and the password isn't the command line's or environment's to set. */
+const needsPassword = (health: Health): boolean =>
+	isOpenServer(health) && !health.overridden.includes('server.auth_token');
 
 /**
  * The setup wizard's steps, in order. Each step ticket adds its entry here: after the welcome,
@@ -16,6 +17,6 @@ export const isOpen = (health: Health): boolean =>
 export const SETUP_STEPS: SetupStep[] = [
 	{ id: 'welcome', title: 'Welcome', component: WelcomeStep },
 	// Last before the finish: setting a password ends every session, this one included.
-	{ id: 'password', title: 'Password', component: PasswordStep, shows: isOpen },
+	{ id: 'password', title: 'Password', component: PasswordStep, shows: needsPassword },
 	{ id: 'finish', title: 'Finish', component: FinishStep }
 ];
