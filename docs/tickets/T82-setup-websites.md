@@ -8,7 +8,7 @@ Discover lists only the websites the user selected (T69, `general.selected_websi
 In:
 - A "Websites" step that reuses `WebsiteSelection` (the same component, with its search, categories and "Select all"/"Select none"), with a short explanation: these are the websites Discover lists and searches, the library and "Add by URL" work with every website, and it can be changed later in Settings → Websites.
 - Next needs at least one website selected, and saves `general.selected_websites`. The step says why when none is selected.
-- After this step, the finish step (T78) mentions that each website's list still has to be fetched from Discover ("Update list" or "Get the list from FMD2-DB"), with a link there.
+- After this step, the finish step (T78) mentions that each website's list still has to be fetched from Discover ("Update list" or "Get ready-made list", T85), with a link there.
 
 Out: fetching lists from inside the wizard; changing `WebsiteSelection` beyond what fitting into the wizard needs.
 
