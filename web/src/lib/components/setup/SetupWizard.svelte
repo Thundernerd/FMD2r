@@ -2,15 +2,19 @@
 	import type { Api, MergePatch } from '#lib/api/client.ts';
 	import { ApiError } from '#lib/api/client.ts';
 	import type { Settings } from '#lib/api/types.ts';
+	import type { EventStore } from '#lib/events.svelte.ts';
 	import { isObject } from '#lib/settings/draft.svelte.ts';
 	import type { SetupStep, StepExports } from '#lib/setup/steps.ts';
 
 	let {
 		api,
+		store,
 		steps: allSteps,
 		onfinish
 	}: {
 		api: Api;
+		/** The server's live events, for the steps. */
+		store: EventStore;
 		/** Every step, including those this server may leave out (see `SetupStep.shows`). */
 		steps: SetupStep[];
 		/** Setup is saved and marked completed; open `to` (`/` from the last step's Finish). */
@@ -108,7 +112,7 @@
 		<section class="card step" aria-labelledby="setup-step-title">
 			<h2 id="setup-step-title">{step.title}</h2>
 			{#key step.id}
-				<step.component bind:this={current} {api} {settings} finish={advance} />
+				<step.component bind:this={current} {api} {store} {settings} finish={advance} />
 			{/key}
 			{#if saveError}
 				<p class="error" role="alert">{saveError}</p>

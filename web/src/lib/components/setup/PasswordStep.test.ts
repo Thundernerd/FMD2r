@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApi, type Api } from '#lib/api/client.ts';
 import { createMockBackend, type MockOptions } from '#lib/api/mock.ts';
+import { EventStore } from '#lib/events.svelte.ts';
 import { SETUP_STEPS } from '#lib/setup/wizard.ts';
 import SetupWizard from './SetupWizard.svelte';
 
@@ -15,7 +16,8 @@ const serverApi = (options: MockOptions = {}, onUnauthorized = vi.fn()) =>
 	});
 
 async function renderWizard(api = serverApi(), onfinish = vi.fn()) {
-	render(SetupWizard, { api, steps: SETUP_STEPS, onfinish });
+	const store = new EventStore({ url: '/api/events', connect: () => ({}) as never });
+	render(SetupWizard, { api, store, steps: SETUP_STEPS, onfinish });
 	await screen.findByRole('heading', { level: 2 });
 	return { api, onfinish };
 }

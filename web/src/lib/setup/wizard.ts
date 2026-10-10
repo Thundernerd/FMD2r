@@ -1,5 +1,9 @@
+import DownloadFoldersStep from '#lib/components/setup/DownloadFoldersStep.svelte';
 import FinishStep from '#lib/components/setup/FinishStep.svelte';
+import FormatStep from '#lib/components/setup/FormatStep.svelte';
+import MangaBakaStep from '#lib/components/setup/MangaBakaStep.svelte';
 import PasswordStep from '#lib/components/setup/PasswordStep.svelte';
+import WebsitesStep from '#lib/components/setup/WebsitesStep.svelte';
 import WelcomeStep from '#lib/components/setup/WelcomeStep.svelte';
 import type { Health } from '#lib/api/types.ts';
 import { isOpenServer } from '#lib/session.svelte.ts';
@@ -16,6 +20,10 @@ const needsPassword = (health: Health): boolean =>
  */
 export const SETUP_STEPS: SetupStep[] = [
 	{ id: 'welcome', title: 'Welcome', component: WelcomeStep },
+	{ id: 'download-folders', title: 'Download folders', component: DownloadFoldersStep },
+	{ id: 'format', title: 'Download format', component: FormatStep },
+	{ id: 'mangabaka', title: 'Metadata', component: MangaBakaStep },
+	{ id: 'websites', title: 'Websites', component: WebsitesStep },
 	// Last before the finish: setting a password ends every session, this one included.
 	{ id: 'password', title: 'Password', component: PasswordStep, shows: needsPassword },
 	{ id: 'finish', title: 'Finish', component: FinishStep }

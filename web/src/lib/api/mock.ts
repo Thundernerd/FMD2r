@@ -341,6 +341,8 @@ export interface MockOptions {
 	open?: boolean;
 	/** The settings overridden besides `server.auth_token`, which `password` overrides. */
 	overridden?: string[];
+	/** Whether the server says it runs in a container, like the Docker image. */
+	inContainer?: boolean;
 }
 
 const PASSWORD_KEY = 'fmd2r.mock.password';
@@ -377,7 +379,8 @@ export function createMockBackend({
 	mangabaka = false,
 	setUp = stored(FRESH_INSTALL_KEY) === null,
 	open = stored(OPEN_KEY) !== null,
-	overridden = []
+	overridden = [],
+	inContainer = false
 }: MockOptions = {}): MockBackend {
 	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
 	let loggedIn = stored(SESSION_KEY) !== null;
@@ -675,6 +678,7 @@ export function createMockBackend({
 				status: 'ok',
 				auth: requiredPassword() !== null,
 				loopback: !open,
+				in_container: inContainer,
 				overridden: fixedPassword === null ? overridden : [...overridden, 'server.auth_token']
 			});
 		if (route === 'POST /api/login') {

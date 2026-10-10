@@ -1,10 +1,13 @@
 import type { Component } from 'svelte';
 import type { Api, MergePatch } from '#lib/api/client.ts';
 import type { Health, Settings } from '#lib/api/types.ts';
+import type { EventStore } from '#lib/events.svelte.ts';
 
 /** What the wizard gives a step's component. */
 export interface StepProps {
 	api: Api;
+	/** The server's live events, e.g. a download's progress. */
+	store: EventStore;
 	/** The settings as saved so far, including the earlier steps' choices. */
 	settings: Settings;
 	/** Saves the step and finishes the setup, then opens `to`, e.g. a Settings section. */

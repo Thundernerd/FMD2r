@@ -25,3 +25,26 @@ export function freeName(destinations: Destination[], base: string): string {
 	for (let n = 2; taken(name); n++) name = `${base} ${n}`;
 	return name;
 }
+
+/**
+ * Why the server would reject `destinations`, keyed by the paths of its field errors
+ * (fmd_core's `validate_destinations`): empty or duplicate (ignoring case) names, empty folders,
+ * and not exactly one default. Empty when they are valid.
+ */
+export function destinationErrors(destinations: Destination[]): Record<string, string> {
+	const errors: Record<string, string> = {};
+	const seen: string[] = [];
+	destinations.forEach((d, i) => {
+		const name = d.name.trim();
+		if (!name) errors[`saveto.destinations.${i}.name`] = 'a destination needs a name';
+		else if (seen.includes(name.toLowerCase())) {
+			errors[`saveto.destinations.${i}.name`] = `another destination is named ${name}`;
+		}
+		seen.push(name.toLowerCase());
+		if (!d.path.trim()) errors[`saveto.destinations.${i}.path`] = 'a destination needs a folder';
+	});
+	if (destinations.filter((d) => d.default).length !== 1) {
+		errors['saveto.destinations'] = 'exactly one destination must be the default';
+	}
+	return errors;
+}
