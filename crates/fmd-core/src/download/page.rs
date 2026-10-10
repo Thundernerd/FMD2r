@@ -11,9 +11,8 @@ use super::files::{find_image_file, save_image};
 use super::task::{DONE, DYNAMIC, Phase, TaskRun, WAITING, log_callback_error};
 
 impl TaskRun<'_> {
-    /// `CheckOut` (baseunits/uDownloadsManager.pas:969-973): runs page threads for `phase`
-    /// until every page is handed out and done. The threads are capped by the task's thread
-    /// limit (`GetCurrentLimit`, :868-880) and the number of pages.
+    /// `CheckOut` (baseunits/uDownloadsManager.pas:969-973), capped by `GetCurrentLimit`
+    /// (:868-880) and the page count.
     pub(super) fn checkout(&self, phase: Phase) {
         let limit = self.inner.limits(self.module).threads_per_task.max(1);
         let pages = usize::try_from(self.container().task.page_number).unwrap_or(0);
@@ -36,9 +35,7 @@ impl TaskRun<'_> {
         self.progress(true);
     }
 
-    /// `GetWorkId` (baseunits/uDownloadsManager.pas:902-967): the next page for `phase`, or
-    /// `None` when all are handed out or the task is terminated. Pages skipped on the way
-    /// count as done.
+    /// `GetWorkId` (baseunits/uDownloadsManager.pas:902-967). Skipped pages count as done.
     fn work_id(&self, phase: Phase) -> Option<usize> {
         if self.terminated() {
             return None;
@@ -70,7 +67,7 @@ impl TaskRun<'_> {
     }
 }
 
-/// One page thread: its own Lua state and `HTTP` session, kept across its pages.
+/// Keeps its Lua state and `HTTP` session across its pages.
 struct PageThread<'r, 'a> {
     run: &'r TaskRun<'a>,
     affinity: Affinity,
@@ -103,8 +100,7 @@ impl<'r, 'a> PageThread<'r, 'a> {
         self.http.take().unwrap_or_else(|| self.run.new_session())
     }
 
-    /// Runs a page callback over this thread's session. `TASK` is shared by all page
-    /// threads, so only the entries the callback changed are taken back.
+    /// Only the `TASK` entries the callback changed are taken back (see [`merge`]).
     fn task_callback(
         &mut self,
         call: impl FnOnce(Caller<'_>, fmd_lua::Task) -> Pending<Reply<TaskReply>>,
@@ -128,8 +124,7 @@ impl<'r, 'a> PageThread<'r, 'a> {
         }
     }
 
-    /// `GetLinkPageFromURL` (baseunits/uDownloadsManager.pas:327-332): `OnGetImageURL` for
-    /// page `work_id`, with the chapter's link as `URL`.
+    /// `GetLinkPageFromURL` (baseunits/uDownloadsManager.pas:327-332).
     fn get_link_page(&mut self, work_id: usize) -> bool {
         if self.run.def.on_get_image_url.is_none() {
             return false;
@@ -143,10 +138,8 @@ impl<'r, 'a> PageThread<'r, 'a> {
 
     /// `TDownloadThread.DownloadImage` (baseunits/uDownloadsManager.pas:334-412).
     ///
-    /// With `DynamicPageLink`, a page whose link is not known yet gets it from `OnGetImageURL`
-    /// right before it downloads (docs/tickets/T20-download-engine.md); FMD2 instead passes
-    /// the marker on to `OnDownloadImage`, which still happens when the module has no
-    /// `OnGetImageURL`.
+    /// With `DynamicPageLink`, a page without a link gets it from `OnGetImageURL` first (T20);
+    /// FMD2 passes the marker to `OnDownloadImage`, as still happens without `OnGetImageURL`.
     fn download_image(&mut self, work_id: usize) -> bool {
         let run = self.run;
         let dir = run.working_dir.clone();
@@ -266,10 +259,8 @@ impl<'r, 'a> PageThread<'r, 'a> {
         ok
     }
 
-    /// `OnSaveImage` (baseunits/uDownloadsManager.pas:393-394) with the chapter's directory
-    /// as `PATH`, ending in a separator as `Task.CurrentWorkingDir + workFilename` (:388)
-    /// shows, and the file name without extension as `FILENAME`
-    /// (baseunits/lua/LuaWebsiteModules.pas:372-391).
+    /// `OnSaveImage` (baseunits/uDownloadsManager.pas:393-394), `PATH` ending in a separator
+    /// (:388) and `FILENAME` without extension (baseunits/lua/LuaWebsiteModules.pas:372-391).
     fn save_image(&mut self, work: i32, dir: &Path, name: &str) -> Option<String> {
         let mut path = dir.to_string_lossy().into_owned();
         if !path.ends_with('/') {
@@ -293,12 +284,9 @@ impl<'r, 'a> PageThread<'r, 'a> {
     }
 }
 
-/// Takes back into `shared` what a callback changed in its copy of `TASK`: whole lists that
-/// changed length, single entries otherwise, and changed numbers and link. In FMD2 every
-/// download thread's `TASK` is the one shared `TTaskContainer`
-/// (baseunits/lua/LuaWebsiteModules.pas:314, :336, :358), so a change one page's callback
-/// makes is seen by the task; here each callback works on a copy, and merging only what it
-/// changed keeps page threads running at once from undoing each other's pages.
+/// Takes back into `shared` what a callback changed in its copy of `TASK`. FMD2's threads share
+/// one `TTaskContainer` (baseunits/lua/LuaWebsiteModules.pas:314, :336, :358); merging only the
+/// changes keeps concurrent page threads from undoing each other's pages.
 fn merge(shared: &mut fmd_lua::Task, before: &fmd_lua::Task, after: fmd_lua::Task) {
     fn list(shared: &mut Vec<String>, before: &[String], after: Vec<String>) {
         if after.len() != before.len() {

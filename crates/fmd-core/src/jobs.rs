@@ -1,8 +1,4 @@
-//! Background jobs (favorites check, list update, module updater, ...) and the registry the
-//! server lists and controls them through.
-//!
-//! A job registers itself once with [`JobRegistry::register`] and calls
-//! [`JobRegistry::changed`] whenever its [`JobStatus`] moves, so the UI hears about it live.
+//! Background jobs and the registry the server lists and controls them through.
 
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard};
 
@@ -11,7 +7,7 @@ use thiserror::Error;
 use tokio::sync::broadcast;
 use utoipa::ToSchema;
 
-/// How many status changes a slow listener may fall behind before it misses some.
+/// How far a slow listener may fall behind before it misses changes.
 const CHANGES_CAPACITY: usize = 256;
 
 /// What a background job is doing.
@@ -27,7 +23,6 @@ pub enum JobPhase {
     Failed,
 }
 
-/// A snapshot of a job, as the System page shows it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct JobStatus {
     pub phase: JobPhase,
@@ -35,15 +30,13 @@ pub struct JobStatus {
     pub done: u64,
     /// Work items in the current (or last) run; 0 when unknown.
     pub total: u64,
-    /// When the last run started, in Unix milliseconds.
+    /// Unix milliseconds.
     pub last_run: Option<i64>,
-    /// When the next scheduled run starts, in Unix milliseconds.
+    /// Unix milliseconds.
     pub next_run: Option<i64>,
-    /// Why the last run failed.
     pub last_error: Option<String>,
 }
 
-/// Why a job could not be started or cancelled.
 #[derive(Debug, Error)]
 pub enum JobError {
     #[error("job is already running")]
@@ -57,20 +50,19 @@ pub enum JobError {
     Failed(String),
 }
 
-/// A background job the server can list, start and cancel.
 pub trait Job: Send + Sync + 'static {
-    /// Stable identifier, used in `/api/jobs/{id}/...`.
+    /// Used in `/api/jobs/{id}/...`.
     fn id(&self) -> &str;
     fn title(&self) -> &str;
-    /// Must be cheap: it is called on the async threads, for every listing and change.
+    /// Must be cheap: called on the async threads.
     fn status(&self) -> JobStatus;
-    /// Starts a run now and returns without waiting for it to finish.
+    /// Returns without waiting for the run.
     fn run(&self) -> Result<(), JobError>;
-    /// Asks the running run to stop; returns without waiting for it.
+    /// Returns without waiting for the run to stop.
     fn cancel(&self) -> Result<(), JobError>;
 }
 
-/// The jobs known to the server, in registration order. Cheap to clone.
+/// In registration order. Cheap to clone.
 #[derive(Clone)]
 pub struct JobRegistry {
     jobs: Arc<RwLock<Vec<Arc<dyn Job>>>>,
@@ -91,10 +83,10 @@ impl JobRegistry {
         }
     }
 
-    /// Adds `job`, replacing a registered job with the same id.
+    /// Replaces a registered job with the same id.
     pub fn register(&self, job: impl Job) {
         let job: Arc<dyn Job> = Arc::new(job);
-        // The list stays consistent even if a holder panicked, so a poisoned lock is still usable.
+        // The list stays consistent even if a holder panicked.
         let mut jobs = self.jobs.write().unwrap_or_else(PoisonError::into_inner);
         match jobs.iter_mut().find(|j| j.id() == job.id()) {
             Some(slot) => *slot = job,
@@ -102,7 +94,6 @@ impl JobRegistry {
         }
     }
 
-    /// Every registered job, in registration order.
     pub fn list(&self) -> Vec<Arc<dyn Job>> {
         self.read().clone()
     }
@@ -115,12 +106,11 @@ impl JobRegistry {
         self.jobs.read().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Announces that the status of job `id` changed.
+    /// Call whenever job `id`'s status moves, so the UI hears about it live.
     pub fn changed(&self, id: &str) {
         let _ = self.changes.send(id.to_owned());
     }
 
-    /// Ids of jobs whose status changed, as [`JobRegistry::changed`] announces them.
     pub fn subscribe(&self) -> broadcast::Receiver<String> {
         self.changes.subscribe()
     }

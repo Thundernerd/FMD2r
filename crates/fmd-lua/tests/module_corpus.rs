@@ -1,5 +1,5 @@
 //! Every upstream module in the corpus fixture through `ModuleRegistry::load_dir`
-//! (docs/tickets/T06-module-loader-module-object.md, "Seams under test").
+//! (docs/tickets/T06-module-loader-module-object.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -25,7 +25,6 @@ fn every_upstream_module_passes_init() {
         files.len(),
         report.registry.modules().len()
     );
-    // Every file passed when this test was written; a module that stops passing `Init` is a
-    // regression in the Host API (or an upstream change to look at), listed with its error.
+    // Every file passed when this was written; a failing `Init` is a Host API regression.
     outcome.unwrap();
 }

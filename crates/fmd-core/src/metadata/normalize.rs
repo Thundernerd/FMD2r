@@ -13,7 +13,6 @@ use unicode_normalization::char::canonical_combining_class;
 static BRACKETS: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"[\(\[\{（【][^\)\]\}）】]*[\)\]\}）】]").ok());
 static NON_WORD: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(r"[^\w]+").ok());
-/// What separates names in an authors or artists field.
 static NAME_SEPARATORS: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"[,;/、]| and ").ok());
 static WEBTOONS_TITLE_NO: LazyLock<Option<Regex>> =
@@ -38,12 +37,11 @@ pub(crate) fn norm(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Python's `str.casefold` for the letters where it differs from lower-casing.
+/// Python's `str.casefold` where it differs from lower-casing.
 fn casefold(s: &str) -> String {
     s.to_lowercase().replace('ß', "ss").replace('ς', "σ")
 }
 
-/// `s` with its bracketed decorations replaced by spaces.
 fn strip_brackets(s: &str) -> String {
     match BRACKETS.as_ref() {
         Some(re) => re.replace_all(s, " ").into_owned(),
@@ -51,7 +49,7 @@ fn strip_brackets(s: &str) -> String {
     }
 }
 
-/// The normalised title, and the normalised title without its decorations when that differs.
+/// The normalised title, plus the version without decorations when that differs.
 pub(crate) fn title_keys(title: &str) -> Vec<String> {
     let mut keys = Vec::with_capacity(2);
     let full = norm(title);
@@ -65,8 +63,7 @@ pub(crate) fn title_keys(title: &str) -> Vec<String> {
     keys
 }
 
-/// The people in a list of names, each as its words sorted and joined, so the order of family
-/// and given name does not matter ("Togawa Hanamaru" is "Hanamaru Togawa").
+/// Each name's words sorted and joined, so family/given name order does not matter.
 pub(crate) fn person_keys(names: &str) -> BTreeSet<String> {
     let parts: Vec<&str> = match NAME_SEPARATORS.as_ref() {
         Some(re) => re.split(names).collect(),
@@ -83,7 +80,6 @@ pub(crate) fn person_keys(names: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// Whether any person of `a` is a person of `b`.
 pub(crate) fn people_agree<'a>(
     a: impl IntoIterator<Item = &'a String>,
     b: &BTreeSet<String>,
@@ -91,8 +87,8 @@ pub(crate) fn people_agree<'a>(
     a.into_iter().any(|x| b.iter().any(|y| same_person(x, y)))
 }
 
-/// Whether two person keys name the same person, allowing for romanisation differences
-/// (Hyun-woo / Hyeon-woo) and syllables in another order (Soboro / Boroso).
+/// Allows for romanisation differences (Hyun-woo / Hyeon-woo) and reordered syllables
+/// (Soboro / Boroso).
 fn same_person(x: &str, y: &str) -> bool {
     if x == y || ratio(x, y) >= SAME_PERSON_RATIO {
         return true;
@@ -104,9 +100,8 @@ fn same_person(x: &str, y: &str) -> bool {
     xs.len() >= 4 && xs == ys
 }
 
-/// Python's `difflib.SequenceMatcher(None, x, y).ratio()`: twice the characters in matching
-/// blocks over the characters in both. Names are far below the 200 characters at which difflib
-/// starts treating frequent characters as junk.
+/// Python's `difflib.SequenceMatcher(None, x, y).ratio()`, without the junk heuristic (names
+/// are far below its 200-character threshold).
 fn ratio(x: &str, y: &str) -> f64 {
     let a: Vec<char> = x.chars().collect();
     let b: Vec<char> = y.chars().collect();
@@ -118,8 +113,7 @@ fn ratio(x: &str, y: &str) -> f64 {
     2.0 * matched as f64 / total as f64
 }
 
-/// The characters in the blocks Ratcliff/Obershelp matching finds: the longest common run,
-/// then the same on each side of it (`SequenceMatcher.get_matching_blocks`).
+/// Characters in `SequenceMatcher.get_matching_blocks`.
 fn matching_chars(a: &[char], b: &[char]) -> usize {
     let mut matched = 0;
     let mut queue = vec![(0, a.len(), 0, b.len())];
@@ -139,9 +133,7 @@ fn matching_chars(a: &[char], b: &[char]) -> usize {
     matched
 }
 
-/// `SequenceMatcher.find_longest_match` without junk: the longest common run of
-/// `a[alo..ahi]` and `b[blo..bhi]`, the earliest in `a` (then in `b`) of equally long ones, as
-/// `(start in a, start in b, length)`.
+/// `SequenceMatcher.find_longest_match` without junk, as `(start in a, start in b, length)`.
 fn longest_match(
     a: &[char],
     b: &[char],
@@ -171,7 +163,7 @@ fn longest_match(
     (besti, bestj, bestk)
 }
 
-/// A site-independent key for a link to a site whose IDs are stable: `webtoons:<title_no>`.
+/// A key for links to sites with stable IDs: `webtoons:<title_no>`.
 pub(crate) fn link_key(url: &str) -> Option<String> {
     let caps = WEBTOONS_TITLE_NO.as_ref()?.captures(url)?;
     Some(format!("webtoons:{}", caps.get(1)?.as_str()))

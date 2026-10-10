@@ -20,7 +20,6 @@ struct Inner {
 }
 
 impl TerminateToken {
-    /// A token that has not been terminated.
     pub fn new() -> Self {
         Self::default()
     }

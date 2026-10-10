@@ -8,24 +8,18 @@ use rusqlite::Connection;
 
 use crate::error::{Result, StoreError};
 
-/// How long a writer waits on a lock held by another connection before failing with `SQLITE_BUSY`.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// One SQLite connection shared behind a mutex.
-///
-/// Every repository call locks the mutex for the duration of one statement or one transaction, so
-/// a `Db` can be cloned freely and used from worker threads directly, or from async code inside
-/// `tokio::task::spawn_blocking`. A single connection per file keeps writes serialised (SQLite only
-/// allows one writer anyway); WAL mode lets other processes (e.g. `sqlite3` while debugging) read
-/// concurrently.
+/// One SQLite connection per file behind a mutex, locked per statement or transaction. SQLite
+/// allows one writer anyway; WAL lets other processes read concurrently.
 #[derive(Clone)]
 pub(crate) struct Db {
     conn: Arc<Mutex<Connection>>,
 }
 
 impl Db {
-    /// Opens (creating if needed) the database at `path`, applies the connection pragmas and runs
-    /// every pending migration in `migrations` (index `i` upgrades the schema to version `i + 1`).
+    /// Opens or creates the database and runs pending `migrations` (index `i` upgrades to
+    /// version `i + 1`).
     pub(crate) fn open(path: &Path, name: &'static str, migrations: &[&str]) -> Result<Self> {
         let mut conn = Connection::open(path)?;
         conn.busy_timeout(BUSY_TIMEOUT)?;
@@ -38,8 +32,8 @@ impl Db {
         })
     }
 
-    /// Locks the connection. A panic while the lock was held cannot leave a transaction half
-    /// applied (an unfinished `Transaction` rolls back on drop), so poisoning is ignored.
+    /// Ignores poisoning: an unfinished `Transaction` rolls back on drop, so a panic leaves
+    /// nothing half applied.
     pub(crate) fn lock(&self) -> MutexGuard<'_, Connection> {
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -53,9 +47,8 @@ fn user_version(conn: &Connection) -> Result<u32> {
     Ok(conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
 }
 
-/// Applies migrations `user_version..migrations.len()`, each in its own transaction together with
-/// the `user_version` bump. Migrations are forward-only: a database newer than this build is an
-/// error rather than something to downgrade.
+/// Applies each pending migration in a transaction with its `user_version` bump. Forward-only:
+/// a newer database is an error.
 fn migrate(conn: &mut Connection, name: &'static str, migrations: &[&str]) -> Result<()> {
     let supported = u32::try_from(migrations.len()).unwrap_or(u32::MAX);
     let found = user_version(conn)?;

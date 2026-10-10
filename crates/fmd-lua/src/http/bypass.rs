@@ -37,9 +37,8 @@ struct Scripts {
     /// `checkantibot_state` (:53).
     check_lua: Lua,
     check: Function,
-    /// The `HTTP` objects built in `check_lua`, by the address of their state. The values are
-    /// weak, so an object (and the session it holds) lives until the next collection only;
-    /// rebuilding it for every check would cost more than the check itself.
+    /// The `HTTP` objects built in `check_lua`, by the address of their state. Weak values, so
+    /// they live until the next collection; rebuilding per check would cost more than the check.
     objects: Table,
     /// Checks since the last full collection (`checkantibot_count`, :44).
     checks: Cell<u32>,
@@ -53,11 +52,9 @@ struct Loaded {
 }
 
 thread_local! {
-    /// The scripts of every `websitebypass/` folder used on this thread, or `None` for a folder
-    /// without them. FMD2 keeps one check state per process behind a lock (:41-43, :95) and
-    /// loads it once (:45-75); `HTTP` objects are bound to their thread here, so each thread
-    /// keeps its own, and loads it again once the package cache was cleared, so an updated
-    /// script applies without a restart.
+    /// The scripts of every `websitebypass/` folder used on this thread (`None` without them).
+    /// FMD2 keeps one locked check state per process (:41-43, :95); `HTTP` objects are
+    /// thread-bound here, so each thread keeps its own, reloaded when the package cache clears.
     static SCRIPTS: RefCell<HashMap<PathBuf, Loaded>> = RefCell::default();
 }
 
@@ -212,9 +209,8 @@ pub(super) fn request(
         guard.leave();
         result = answer?;
     } else {
-        // Another thread is bypassing for this module. FMD2 re-sends right away (:199-202);
-        // FMD2r waits for that bypass to finish first, so the re-sent request carries what it
-        // obtained instead of meeting the challenge again.
+        // Another thread is bypassing. FMD2 re-sends right away (:199-202); waiting first lets
+        // the re-sent request carry what that bypass obtained.
         guard.enter();
         guard.leave();
         let mut object = borrow(http)?;

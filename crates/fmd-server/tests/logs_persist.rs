@@ -1,6 +1,4 @@
-//! Persisted logs: `GET /api/logs` across a simulated restart (a new `LogBuffer` and `AppState`
-//! over the same log directory), driven through `build_router` with `oneshot`, and the rotation
-//! of the public `LogWriter`.
+//! Persisted logs: `GET /api/logs` across a simulated restart, and `LogWriter` rotation.
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 

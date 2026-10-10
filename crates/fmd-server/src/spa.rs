@@ -40,9 +40,8 @@ const PLACEHOLDER: &str = "<!doctype html>\n<html><head><meta charset=\"utf-8\">
 <body><h1>FMD2r</h1><p>The web UI has not been built. Run <code>npm run build</code> in <code>web/</code> \
 and rebuild the server. The API is available under <code>/api</code>.</p></body></html>\n";
 
-/// Serves the file at the request path, or `index.html` for any other path so client-side routes
-/// work on reload.
-/// Paths whose last segment has an extension are files: a missing one is a 404, not the app.
+/// Falls back to `index.html` so client-side routes work on reload, except for paths with an
+/// extension: a missing file is a 404, not the app.
 pub(crate) async fn serve(State(state): State<AppState>, method: Method, uri: Uri) -> Response {
     if method != Method::GET && method != Method::HEAD {
         return ApiError::MethodNotAllowed.into_response();

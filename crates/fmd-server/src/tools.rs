@@ -67,8 +67,8 @@ impl SystemTools {
     /// `"msg": "FlareSolverr is ready!"` (lua/websitebypass/cloudflare.lua:346-356).
     fn flaresolverr_check(&self) -> ToolCheck {
         let (host, port) = self.flaresolverr_addr();
-        // On its own thread, so a slow name lookup or a trickling answer cannot hold the check
-        // past its deadline; a thread still stuck then ends with its socket timeouts.
+        // On its own thread so a slow name lookup cannot hold the check past its deadline; a
+        // thread still stuck then ends with its socket timeouts.
         let (tx, rx) = mpsc::channel();
         let (h, deadline) = (host.clone(), Instant::now() + PROBE_TIMEOUT);
         std::thread::spawn(move || {
@@ -113,8 +113,7 @@ impl ToolProbe for SystemTools {
     }
 }
 
-/// Reports no tools: the default for an [`crate::AppState`] that was not given a probe, so
-/// nothing spawns processes or dials out unless asked to.
+/// The default, so nothing spawns processes or dials out unless asked to.
 pub(crate) struct NoTools;
 
 impl ToolProbe for NoTools {
@@ -191,7 +190,6 @@ fn run_with_timeout(name: &str, arg: &str) -> Result<String, ProbeError> {
     }
 }
 
-/// The FlareSolverr keys of `websitebypass_config.json`.
 #[derive(Deserialize)]
 struct BypassConfig {
     flaresolverr_ip: Option<String>,

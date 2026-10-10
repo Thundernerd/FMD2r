@@ -1,6 +1,4 @@
-//! Services later tickets plug into [`crate::AppState`], kept behind traits so the server does
-//! not drive the Lua runtime or the download engine itself; it only sees `fmd-core`'s view of
-//! them.
+//! The services behind [`crate::AppState`], as traits over `fmd-core`'s view of them.
 
 use fmd_core::download::{
     DownloadManager, EngineError, EngineEvent, NewDownload, TaskId, TaskInfo, TaskStatus,
@@ -15,13 +13,12 @@ use utoipa::ToSchema;
 
 use crate::covers::{CoverModules, CoverSession};
 
-/// The download engine (`fmd_core::download::DownloadManager`, T20) as the queue endpoints
-/// drive it: FMD2's `TDownloadManager` operations (baseunits/uDownloadsManager.pas:1769-2045).
+/// FMD2's `TDownloadManager` operations (baseunits/uDownloadsManager.pas:1769-2045).
 pub trait DownloadEngine: Send + Sync + 'static {
     /// Every task in queue order.
     fn list(&self) -> BoxFuture<'_, Result<Vec<TaskInfo>, EngineError>>;
 
-    /// Queues `download` at the end of the queue (`btDownloadClick`,
+    /// Appends to the queue (`btDownloadClick`,
     /// mangadownloader/forms/frmMain.pas:2646-2795).
     fn add(&self, download: NewDownload) -> BoxFuture<'_, Result<TaskId, EngineError>>;
 
@@ -133,8 +130,7 @@ impl DownloadEngine for DownloadManager {
     }
 }
 
-/// The loaded website modules (T06, T14) and their upstream sync state (T29), for
-/// `GET /api/about` and the per-module settings.
+/// The loaded website modules and their upstream sync state.
 pub trait ModuleCatalog: Send + Sync + 'static {
     /// Must be cheap: it is called on the async threads.
     fn report(&self) -> ModulesReport;
@@ -144,13 +140,11 @@ pub trait ModuleCatalog: Send + Sync + 'static {
         Vec::new()
     }
 
-    /// The loaded module with ID `id`.
     fn module(&self, id: &str) -> Option<ModuleInfo> {
         self.modules().into_iter().find(|m| m.id == id)
     }
 
-    /// The info of the series at `link` (relative to the module's `RootURL`) from module `id`'s
-    /// `OnGetInfo`, cleaned up with `options` (`fmd_core::info::get_info`).
+    /// Runs the module's `OnGetInfo` (`fmd_core::info::get_info`).
     fn get_info(
         &self,
         id: &str,
@@ -162,11 +156,9 @@ pub trait ModuleCatalog: Send + Sync + 'static {
     }
 }
 
-/// The favorites check (`fmd_core::favorites::FavoritesChecker`), for `POST /api/favorites/check`
-/// and `POST /api/favorites/{id}/check-missing`.
+/// The favorites check (`fmd_core::favorites::FavoritesChecker`).
 pub trait FavoritesJobs: Send + Sync + 'static {
-    /// Starts checking the favorites in `scope` for `mode` chapters and returns without waiting;
-    /// fails when a check is running.
+    /// Returns without waiting; fails when a check is running.
     fn check(&self, scope: CheckScope, mode: CheckMode) -> Result<(), CheckError>;
 }
 
@@ -198,8 +190,7 @@ pub struct LoadFailure {
     pub inbox_id: Option<String>,
 }
 
-/// Stand-in until the real services exist: no tasks (and no modules to queue one with), no
-/// modules (so no covers).
+/// Stand-in when the real services are missing: no tasks, no modules, no covers.
 pub struct Idle;
 
 impl DownloadEngine for Idle {

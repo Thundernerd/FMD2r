@@ -13,10 +13,9 @@ pub(crate) struct Health {
     status: &'static str,
     /// Whether the API requires the password (as a bearer token or a login session).
     auth: bool,
-    /// Whether the server listens on a loopback address only, out of other machines' reach.
+    /// Whether the server listens on a loopback address only.
     loopback: bool,
-    /// The settings the command line or environment overrides (`--bind`, `--password`, …), as
-    /// dotted paths such as `server.bind`.
+    /// Settings overridden by the command line or environment, as dotted paths (`server.bind`).
     overridden: Vec<&'static str>,
 }
 

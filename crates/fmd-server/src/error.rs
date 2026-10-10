@@ -24,8 +24,7 @@ pub enum ApiError {
     MethodNotAllowed,
     #[error("{0}")]
     BadRequest(String),
-    /// A well-formed request with a value that fails validation; `field` names the offending
-    /// setting (dotted path) so the UI can show the error next to it.
+    /// A value fails validation; `field` is the setting's dotted path, for the UI to show it there.
     #[error("{detail}")]
     Invalid {
         field: Option<String>,
@@ -65,9 +64,8 @@ pub struct Problem {
     pub title: String,
     pub status: u16,
     pub detail: String,
-    /// The setting a validation error (422) is about, as a dotted path such as
-    /// `connections.timeout_secs` or `options.server`.
-    /// Kept for clients that read one field: the first of `fields`.
+    /// The first of `fields`, for clients that read one: a dotted path such as
+    /// `connections.timeout_secs`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
     /// Every setting a validation error (422) is about, each with why it was rejected.
@@ -104,10 +102,9 @@ impl ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
-        // Server errors go to the log in full; clients only learn that something failed.
+        // Server errors are logged in full but hidden from clients, except failing sites and
+        // unconfigured services, which are routine.
         let detail = if let Self::BadGateway(msg) | Self::Unavailable(msg) = &self {
-            // Sites failing and services not configured are routine, not server faults: the
-            // client may see why.
             tracing::debug!(target: "fmd_server", "{msg}");
             msg.clone()
         } else if status.is_server_error() {

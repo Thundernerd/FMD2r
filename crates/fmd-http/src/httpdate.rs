@@ -37,7 +37,6 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     )
 }
 
-/// `+hhmm` or `-hhmm`.
 fn is_zone(token: &str) -> bool {
     token.len() == 5 && (token.starts_with('+') || token.starts_with('-'))
 }

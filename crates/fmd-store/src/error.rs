@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-/// Errors returned by every `fmd-store` repository.
 #[derive(Debug, Error)]
 pub enum StoreError {
     #[error("sqlite: {0}")]

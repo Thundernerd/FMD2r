@@ -1,7 +1,5 @@
-//! Matching list titles against MangaBaka's database offline, by T71's rules
-//! (docs/research/metadata-sources.md, "Matching"; `match_dump` and `decide` in
-//! docs/research/metadata-probe/probe.py): the site link, then cross-site IDs, then the title
-//! and the people.
+//! Matches list titles against MangaBaka's database by T71's rules
+//! (docs/research/metadata-sources.md, "Matching"; docs/research/metadata-probe/probe.py).
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::LazyLock;
@@ -17,12 +15,10 @@ use super::{Metadata, MetadataError, USER_AGENT};
 
 /// A title matching more series than this ("Love", "Blue") is too generic to tell them apart.
 const MAX_TITLE_CANDIDATES: usize = 50;
-/// Titles per MangaDex request (`ids[]`), MangaDex's page limit.
+/// MangaDex's page limit for `ids[]`.
 const MANGADEX_BATCH: usize = 100;
-/// The time between two MangaDex requests: under its ~5 requests a second
-/// (https://api.mangadex.org/docs/2-limitations/).
+/// Stays under ~5 requests a second (https://api.mangadex.org/docs/2-limitations/).
 const MANGADEX_INTERVAL: Duration = Duration::from_millis(250);
-/// Matches stored per transaction.
 const STORE_BATCH: usize = 500;
 /// MangaDex's `attributes.links` keys and the MangaBaka `source` sites they name.
 const MANGADEX_LINKS: [(&str, &str); 5] = [
@@ -36,36 +32,28 @@ const MANGADEX_LINKS: [(&str, &str); 5] = [
 static MANGADEX_UUID: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"title/([0-9a-fA-F-]{36})").ok());
 
-/// A module whose list is matched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListModule {
     pub id: String,
-    /// The module's `RootURL`, which its list's links are relative to.
+    /// The list's links are relative to it.
     pub root_url: String,
 }
 
-/// Which titles of a list to match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchScope {
-    /// Titles not matched yet, or changed since: after a list update or FMD2-DB import.
+    /// Titles not matched yet, or changed since.
     Changed,
-    /// Every title: after the database was refreshed, since MangaBaka's titles and IDs change
-    /// too.
+    /// After a refresh, since MangaBaka's titles and IDs change too.
     All,
 }
 
-/// What matching a list did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MatchReport {
-    /// Titles matched.
     pub examined: u64,
-    /// Of those, titles with an accepted match.
     pub accepted: u64,
-    /// Whether it was terminated before matching every title.
     pub cancelled: bool,
 }
 
-/// Reads the cross-site IDs of MangaDex titles from MangaDex's API.
 pub struct MangaDexLinks {
     http: HttpClient,
     last: std::sync::Mutex<Option<Instant>>,
@@ -79,9 +67,8 @@ impl MangaDexLinks {
         }
     }
 
-    /// The MangaBaka `(site, id)` pairs MangaDex links each title of `uuids` to: one
-    /// `GET /manga?ids[]=...` per 100 titles, spaced to stay under MangaDex's rate limit. After a
-    /// request fails, the rest are not asked and count as unanswered.
+    /// The MangaBaka `(site, id)` pairs MangaDex links each title to. After a request fails,
+    /// the rest count as unanswered.
     fn links(&self, uuids: &[String], terminate: &TerminateToken) -> CrossIds {
         let mut out = CrossIds::default();
         let mut batches = uuids.chunks(MANGADEX_BATCH);
@@ -103,7 +90,6 @@ impl MangaDexLinks {
         out
     }
 
-    /// The links of one batch of at most 100 titles, by UUID.
     fn batch(
         &self,
         batch: &[String],
@@ -160,7 +146,6 @@ impl MangaDexLinks {
         Ok(out)
     }
 
-    /// Waits until [`MANGADEX_INTERVAL`] has passed since the last request.
     fn wait(&self, terminate: &TerminateToken) {
         let mut last = self.last.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(at) = *last {
@@ -173,18 +158,15 @@ impl MangaDexLinks {
     }
 }
 
-/// Matches the titles of `lists.db` against MangaBaka's database and stores the results there.
 pub struct Matcher {
     lists: ListsDb,
     mangadex: MangaDexLinks,
 }
 
-/// What MangaDex said about a list's titles.
 #[derive(Default)]
 struct CrossIds {
-    /// The MangaBaka `(site, id)` pairs of each title MangaDex answered for, by UUID.
+    /// By UUID.
     links: HashMap<String, Vec<(String, String)>>,
-    /// The titles MangaDex could not be asked about.
     unanswered: HashSet<String>,
 }
 
@@ -193,9 +175,7 @@ impl Matcher {
         Self { lists, mangadex }
     }
 
-    /// Matches the titles of `module`'s list that `scope` picks against `meta`, and stores one
-    /// match per title. Blocks (MangaDex requests), so call it from a thread outside any tokio
-    /// runtime.
+    /// Blocking (MangaDex requests).
     pub fn match_module(
         &self,
         meta: &Metadata,
@@ -220,8 +200,8 @@ impl Matcher {
         } else {
             CrossIds::default()
         };
-        // A title MangaDex could not be asked about still matches by its title now, and is
-        // stored as changed, so the next run asks again.
+        // Unanswered titles match by title now and are stored as changed, so the next run asks
+        // again.
         for input in &mut inputs {
             if mangadex_uuid(&input.link).is_some_and(|u| cross_ids.unanswered.contains(&u)) {
                 input.fingerprint.clear();
@@ -257,8 +237,7 @@ impl Matcher {
     }
 }
 
-/// The match of one list title: its site link, then its cross-site IDs, then its titles and
-/// people.
+/// By site link, then cross-site IDs, then titles and people.
 fn decide(
     meta: &Metadata,
     module: &ListModule,
@@ -348,8 +327,8 @@ fn narrow(candidates: Vec<MetadataSeries>, want: &HashSet<String>) -> Vec<Metada
 }
 
 /// The title and its alt titles. Sites separate alt titles differently (MangaDex ", ",
-/// MangaFire "; ", Asura Scans " • "); the strongest separator present splits them, since
-/// titles themselves contain commas.
+/// MangaFire "; ", Asura Scans " • "); the strongest separator present wins, since titles
+/// themselves contain commas.
 fn entry_titles(input: &MatchInput) -> Vec<&str> {
     let alts = input.alttitles.as_str();
     let sep = ["\n", "•", ";"]
@@ -393,7 +372,7 @@ fn format_of(kind: &str) -> &'static str {
     }
 }
 
-/// Discover's publication facet value for MangaBaka's `status`; `None` when it does not say.
+/// Discover's publication facet value for MangaBaka's `status`.
 fn publication_of(status: &str) -> Option<&'static str> {
     match status {
         "releasing" => Some("ongoing"),
@@ -404,7 +383,7 @@ fn publication_of(status: &str) -> Option<&'static str> {
     }
 }
 
-/// `link` made absolute against `root`, like `MaybeFillHost` (baseunits/uBaseUnit.pas).
+/// `MaybeFillHost` (baseunits/uBaseUnit.pas).
 fn absolute(root: &str, link: &str) -> String {
     if link.contains("://") {
         link.to_owned()
@@ -415,7 +394,6 @@ fn absolute(root: &str, link: &str) -> String {
     }
 }
 
-/// Whether `root_url` is MangaDex's.
 fn is_mangadex(root_url: &str) -> bool {
     let host = root_url
         .split("://")
@@ -428,7 +406,7 @@ fn is_mangadex(root_url: &str) -> bool {
     host == "mangadex.org" || host.ends_with(".mangadex.org")
 }
 
-/// The MangaDex title UUID in a MangaDex list link (`title/<uuid>`).
+/// From a `title/<uuid>` link.
 fn mangadex_uuid(link: &str) -> Option<String> {
     let caps = MANGADEX_UUID.as_ref()?.captures(link)?;
     Some(caps.get(1)?.as_str().to_lowercase())

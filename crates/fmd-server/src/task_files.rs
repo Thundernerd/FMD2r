@@ -1,5 +1,4 @@
-//! `GET /api/tasks/{id}/files`: the "Get files" button. Streams a task's single packed chapter
-//! as it is, or a zip of everything the task saved.
+//! `GET /api/tasks/{id}/files`: the "Get files" button.
 
 use std::fs::File;
 use std::io::{self, Seek, Write};
@@ -38,9 +37,8 @@ enum Saved {
     Pages(PathBuf),
 }
 
-/// What the task's chapters left in `save_to`: each chapter's archive, else its folder. Saved
-/// without chapter folders (`chapter_folders` off), a task with downloaded chapters that has
-/// neither saved its pages straight into `save_to`, among those of other tasks of the series.
+/// Each chapter's archive, else its folder. Without chapter folders, downloaded pages sit straight
+/// in `save_to`, mixed with other tasks' of the series.
 fn saved(save_to: &Path, chapters: &[TaskChapter], chapter_folders: bool) -> Vec<Saved> {
     let mut found = Vec::new();
     for chapter in chapters {
@@ -125,9 +123,8 @@ fn file_name(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// Zips `saved` into an anonymous temporary file, gone once closed. Archives and chapter
-/// folders keep their names; the series folder adds its contents at the top. Pages and
-/// archives are compressed already, so they are stored as they are.
+/// Into an anonymous temp file. Entries are stored, not deflated: pages and archives are
+/// compressed already.
 fn zip_all(saved: &[Saved]) -> io::Result<File> {
     let mut zip = ZipWriter::new(tempfile::tempfile()?);
     for item in saved {
@@ -146,7 +143,6 @@ fn zip_all(saved: &[Saved]) -> io::Result<File> {
     Ok(file)
 }
 
-/// The entries of `dir`, by name.
 fn sorted_entries(dir: &Path) -> io::Result<Vec<PathBuf>> {
     let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)?
         .map(|e| e.map(|e| e.path()))

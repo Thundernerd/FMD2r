@@ -1,6 +1,6 @@
+// Each test binary uses a different subset of these helpers.
 #![allow(dead_code)]
-// each test binary uses a different subset of these helpers
-// Test helpers live outside #[test] fns, which clippy.toml exempts; unwrap is fine in tests/.
+// unwrap is fine in tests/, but clippy.toml's exemption misses helpers outside #[test] fns.
 #![allow(clippy::unwrap_used)]
 
 use std::collections::VecDeque;
@@ -60,8 +60,8 @@ pub fn response(
     })
 }
 
-/// An axum server on 127.0.0.1 running on its own runtime, so test threads stay
-/// outside any tokio context (as Lua worker threads are).
+/// An axum server on its own runtime, so test threads stay outside any tokio context
+/// like Lua worker threads.
 pub struct TestServer {
     pub base: String,
     _runtime: tokio::runtime::Runtime,

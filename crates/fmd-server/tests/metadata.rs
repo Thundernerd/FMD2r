@@ -1,6 +1,5 @@
 //! The MangaBaka database through the HTTP API (docs/tickets/T73-mangabaka-metadata.md, "Seams
-//! under test"): Discover's format and publication filters, and the database job's events. The
-//! dump is the recorded fixture of fmd-core (crates/fmd-core/tests/fixtures/mangabaka).
+//! under test"), over fmd-core's recorded dump (crates/fmd-core/tests/fixtures/mangabaka).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

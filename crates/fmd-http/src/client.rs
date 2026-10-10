@@ -30,8 +30,7 @@ pub(crate) struct ClientInner {
 }
 
 impl Drop for ClientInner {
-    /// The last clone may be dropped on an async thread, where a blocking runtime
-    /// shutdown would panic.
+    /// The last clone may be dropped on an async thread, where a blocking shutdown panics.
     fn drop(&mut self) {
         if let Some(runtime) = self.runtime.take() {
             runtime.shutdown_background();
@@ -39,10 +38,8 @@ impl Drop for ClientInner {
     }
 }
 
-/// A setting stamped with when it was last changed, so the newer of a session's own
-/// value and the client default wins. This reproduces FMD2's `Set…AndApply`, which
-/// pushes a changed default into every live session
-/// (baseunits/httpsendthread.pas:347-392).
+/// A setting stamped with when it last changed, so the newer of a session's value and the
+/// client default wins, like FMD2's `Set…AndApply` (baseunits/httpsendthread.pas:347-392).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Setting<T> {
     pub(crate) value: T,
@@ -50,7 +47,6 @@ pub(crate) struct Setting<T> {
 }
 
 impl<T: Clone> Setting<T> {
-    /// The newer of `self` (a session's value) and `default`.
     pub(crate) fn effective(&self, default: &Setting<T>) -> T {
         if self.generation >= default.generation {
             self.value.clone()
@@ -70,7 +66,7 @@ pub(crate) struct Defaults {
 }
 
 impl HttpClient {
-    /// A client that sends over the network with [`ReqwestTransport`] on its own runtime.
+    /// A client using [`ReqwestTransport`] on its own runtime.
     pub fn new() -> Result<Self, HttpError> {
         Self::with_transport(Arc::new(ReqwestTransport::new()))
     }
@@ -139,7 +135,6 @@ impl HttpClient {
             .unwrap_or_else(|e| e.into_inner())
     }
 
-    /// A fresh stamp for a changed setting.
     pub(crate) fn next_generation(&self) -> u64 {
         self.inner.generation.fetch_add(1, Ordering::SeqCst)
     }

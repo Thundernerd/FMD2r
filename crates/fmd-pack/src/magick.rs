@@ -47,14 +47,13 @@ pub fn magick_available(opts: &MagickOptions) -> bool {
         .is_ok_and(|s| s.success())
 }
 
-/// Converts the `files` in `dir` that are not already `save_as` images with one `magick`
-/// call, deletes each original whose converted file exists, and returns the resulting paths
-/// in input order (`TTaskThread.Convert`, baseunits/uDownloadsManager.pas:613-711).
+/// Converts the non-`save_as` `files` in `dir` with one `magick` call, deleting each original
+/// that was converted; returns the paths in input order (`TTaskThread.Convert`,
+/// baseunits/uDownloadsManager.pas:613-711).
 ///
-/// JPEG XL uses `magick mogrify -path <dir> <files>` as FMD2 does; FMD2 first copies the
-/// files to a temporary folder and passes a wildcard, which the explicit file list makes
-/// unnecessary. Other formats pass a quoted file list as `@list` and name the outputs with
-/// `-set filename:name %t` (`ConvertImage`, baseunits/imagemagickmanager.pas:651-682).
+/// JPEG XL uses `magick mogrify -path <dir> <files>`; FMD2 copies to a temp folder and passes a
+/// wildcard instead, which the explicit list makes unnecessary. Other formats pass an `@list` file
+/// and `-set filename:name %t` (`ConvertImage`, baseunits/imagemagickmanager.pas:651-682).
 pub fn magick_convert(
     dir: &Path,
     files: &[PathBuf],
@@ -158,7 +157,7 @@ fn run(mut command: Command, timeout: Duration) -> Result<(), PackError> {
     )))
 }
 
-/// An anonymous temporary file collecting the process output.
+/// Temporary file collecting the process output; removed on drop.
 struct OutputFile(File, PathBuf);
 
 impl OutputFile {

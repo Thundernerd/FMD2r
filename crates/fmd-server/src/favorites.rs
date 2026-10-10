@@ -1,6 +1,4 @@
-//! `/api/favorites`: the library (FMD2's favorites tab), and starting its new-chapter and
-//! missing-chapter checks. The check's progress is the `favorites` job (`GET /api/jobs/favorites`)
-//! and the `job.favorites.*` events.
+//! `/api/favorites`: the library (FMD2's favorites tab) and its new/missing-chapter checks.
 
 use axum::Json;
 use axum::body::Bytes;
@@ -35,9 +33,8 @@ pub struct FavoriteView {
     pub cover_url: Option<String>,
     /// Chapters on the site at the last check (FMD2's `currentchapter`).
     pub current_chapter: u32,
-    /// Chapters on the site at the last check that are not downloaded, compared by link. A
-    /// favorite not checked since its links were kept (or imported from FMD2) has only the
-    /// count, so until its next check this is the chapter count less the downloaded ones.
+    /// Chapters on the site at the last check that are not downloaded, compared by link. Until
+    /// its first check with links kept (e.g. imported from FMD2), the count less the downloaded.
     pub new_chapters: u32,
     /// RFC 3339.
     pub date_added: String,
@@ -108,8 +105,7 @@ pub struct AddFavorite {
     pub module_id: String,
     /// The series link relative to the module's `RootURL`.
     pub link: String,
-    /// The download directory; the default one when missing. The manga folder is added when
-    /// generated.
+    /// The download directory; the default one when missing. The generated manga folder is added.
     pub save_to: Option<String>,
 }
 
@@ -302,7 +298,7 @@ fn start(state: &AppState, scope: CheckScope, mode: CheckMode) -> Result<StatusC
     Ok(StatusCode::ACCEPTED)
 }
 
-/// The module's name, or its ID when it is not loaded.
+/// The module's name, or its ID when not loaded.
 fn website(state: &AppState, module_id: &str) -> String {
     state
         .modules
@@ -310,7 +306,6 @@ fn website(state: &AppState, module_id: &str) -> String {
         .map_or_else(|| module_id.to_owned(), |m| m.name)
 }
 
-/// Every favorite as the Library shows it.
 async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
     let rows = state
         .blocking(|db| -> Result<_, ApiError> {

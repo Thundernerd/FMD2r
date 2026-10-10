@@ -1,12 +1,8 @@
-//! Blocking HTTP façade with Synapse semantics on top of reqwest (gzip/br/zstd, socks/http proxy, cookie jar per module, per-module connection queue).
+//! Blocking HTTP façade with Synapse semantics on top of reqwest.
 //!
-//! # Threading contract
-//!
-//! [`HttpClient`] owns (or borrows) a multi-threaded tokio runtime. An [`HttpSession`]'s
-//! request methods block the calling thread with [`tokio::runtime::Handle::block_on`] while
-//! the exchange runs on that runtime. They are meant for the dedicated Lua worker threads
-//! (OS threads outside any runtime) and refuse to run on a thread that is inside a tokio
-//! runtime context: they return [`HttpError::InsideRuntime`] instead of blocking it.
+//! [`HttpSession`] requests block the calling thread on the client's tokio runtime. They are
+//! meant for Lua worker threads and return [`HttpError::InsideRuntime`] when called from
+//! inside a runtime.
 
 mod client;
 mod cookies;
@@ -37,8 +33,7 @@ pub use transport::{
 };
 pub use url::split_url_bytes;
 
-/// Errors from the `fmd-http` API itself. Network failures are not errors: like FMD2,
-/// they make a request return `false`.
+/// Errors from the `fmd-http` API itself; like FMD2, network failures just return `false`.
 #[derive(Debug, thiserror::Error)]
 pub enum HttpError {
     #[error("blocking HTTP call made from inside a tokio runtime")]

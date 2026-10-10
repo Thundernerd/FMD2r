@@ -2,9 +2,8 @@
 //! (docs/tickets/T34-native-xpath-backend.md, "Seams under test"): T08's cases plus the
 //! internettools extensions upstream modules use (docs/xpath-extensions.md).
 //!
-//! Expected values come from FMD2's engine (internettools, configured as in
-//! baseunits/XQueryEngineHTML.pas:384-400): the `fpc` backend runs FMD2's own code, so a case
-//! passing there pins FMD2's behaviour, and the `native` backend must match it.
+//! Expected values come from FMD2's engine (baseunits/XQueryEngineHTML.pas:384-400): passing on
+//! the `fpc` backend pins FMD2's behaviour, which `native` must match.
 
 /// Expands to the whole suite as `#[test]` functions over the backend `$engine`.
 macro_rules! suite {
@@ -152,7 +151,6 @@ macro_rules! suite {
 
         #[test]
         fn lookups_read_objects_and_arrays() {
-            // The ticket's example.
             assert_eq!(items("", r#"json('{"a":{"b":[1,2]}}')?a?b?*"#), ["1", "2"]);
             assert_eq!(items(API, "json(*)?data?tags?*?name"), ["a", "b"]);
             assert_eq!(items(API, "json(*)?data?tags?2?name"), ["b"]);
@@ -219,7 +217,6 @@ macro_rules! suite {
         #[test]
         fn css_selects_like_internettools() {
             let html = r#"<div class="x"><a href="1">A</a><p><a href="2">B</a></p></div><div class="y"><a href="3">C</a></div>"#;
-            // The ticket's example.
             assert_eq!(items(html, "css('div.x > a')"), ["A"]);
             assert_eq!(items(html, "css('div.X a')/@href"), ["1", "2"]);
             assert_eq!(items(html, "css('a:first-child, .y a')"), ["A", "B", "C"]);

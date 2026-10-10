@@ -1,13 +1,10 @@
 //! The typed settings tree and its FMD2 defaults.
 //!
-//! Groups follow FMD2's options dialog and `settings.json` sections. Defaults come from
-//! `TMainForm.LoadOptions` (mangadownloader/forms/frmMain.pas:5803-5980) where it passes a literal
-//! default, otherwise from the `Option*` variables it falls back to (baseunits/FMDOptions.pas).
-//! Where the two disagree (`GenerateMangaFolder`, `PDFQuality`), `LoadOptions` wins because that
-//! is what a fresh FMD2 install shows. Settings with no FMD2 counterpart say so.
+//! Defaults come from `TMainForm.LoadOptions` (mangadownloader/forms/frmMain.pas:5803-5980),
+//! else from the `Option*` variables (baseunits/FMDOptions.pas); `LoadOptions` wins where they
+//! disagree, as that is what a fresh FMD2 install shows.
 //!
-//! Every group is `#[serde(default)]`, so a stored group missing a field (written by an older
-//! build) gets that field's default.
+//! Every group is `#[serde(default)]` so groups stored by older builds still load.
 
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -47,12 +44,10 @@ pub struct GeneralSettings {
     pub add_as_stopped: bool,
     /// Load manga covers (`view/LoadMangaCover`, mangadownloader/forms/frmMain.pas:5831).
     pub load_covers: bool,
-    /// The websites Discover lists and searches, by module ID (`general/MangaListSelect`,
-    /// comma-separated, mangadownloader/forms/frmMain.pas:5990-6004). IDs of modules that are
-    /// not loaded are kept but ignored, so a module that comes back is still selected; FMD2
-    /// drops them on load (mangadownloader/forms/frmMain.pas:6464-6470). Empty on a fresh
-    /// install: FMD2 defaults to `config.json`'s `default_selected_websites`
-    /// (baseunits/FMDOptions.pas:94, :250), which FMD2r does not ship.
+    /// Module IDs Discover lists and searches (`general/MangaListSelect`,
+    /// mangadownloader/forms/frmMain.pas:5990-6004). IDs of unloaded modules are kept but
+    /// ignored; FMD2 drops them (mangadownloader/forms/frmMain.pas:6464-6470). Empty by default:
+    /// FMD2r does not ship `default_selected_websites` (baseunits/FMDOptions.pas:94, :250).
     pub selected_websites: Vec<String>,
 }
 
@@ -186,15 +181,13 @@ pub const DEFAULT_FILENAME_CUSTOMRENAME: &str = "%FILENAME%";
 #[serde(default)]
 pub struct SaveToSettings {
     /// The default destination's path (`saveto/SaveTo`, `DEFAULT_PATH`,
-    /// baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for API
-    /// clients that predate [`Self::destinations`]: it always mirrors the default's path, and
-    /// a patch that changes it alone moves the default destination there. Empty resets it to
-    /// the default.
+    /// baseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for
+    /// clients predating [`Self::destinations`]. Patching it alone moves the default
+    /// destination; empty resets it.
     pub default_dir: String,
-    /// The named download folders a download can go to, one of them the default. No FMD2
-    /// counterpart: FMD2 has one folder (`saveto/SaveTo`) plus a per-website override
-    /// (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names are
-    /// unique (ignoring case and surrounding spaces) and not empty; paths are not empty.
+    /// Named download folders, one of them the default. FMD2 has one folder plus a per-website
+    /// override (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names
+    /// are non-empty and unique (ignoring case and surrounding spaces); paths are non-empty.
     pub destinations: Vec<Destination>,
     /// `saveto/GenerateMangaFolder`, default true (mangadownloader/forms/frmMain.pas:5893).
     pub generate_manga_folder: bool,
@@ -228,8 +221,7 @@ pub struct SaveToSettings {
     #[schema(minimum = 1, maximum = 10)]
     pub digit_chapter_length: u32,
     /// Which characters are stripped from names. FMD2 always strips the Windows set
-    /// (`RemoveSymbols`, baseunits/uBaseUnit.pas:1382); FMD2r runs on Linux and defaults to
-    /// POSIX.
+    /// (`RemoveSymbols`, baseunits/uBaseUnit.pas:1382); FMD2r defaults to POSIX.
     pub illegal_chars: SymbolMode,
 }
 
@@ -260,8 +252,8 @@ impl Default for SaveToSettings {
 }
 
 impl SaveToSettings {
-    /// The default destination's path, or [`Self::default_dir`] when none is marked (settings
-    /// are validated, so only before they are).
+    /// The default destination's path, or [`Self::default_dir`] when none is marked (only
+    /// possible before validation).
     pub fn default_path(&self) -> &str {
         self.destinations
             .iter()
@@ -521,12 +513,11 @@ impl Default for ModuleUpdaterSettings {
 pub struct ServerSettings {
     /// Socket address to listen on, from the next start. `--bind` / `FMD2R_BIND` overrides it.
     pub bind: String,
-    /// A salted hash of the password/bearer token clients must present; `None` disables auth.
-    /// A patch sets it to a password, which is hashed before it is stored; the API only shows
-    /// whether it is set. `--password` / `FMD2R_PASSWORD` overrides it.
+    /// Salted hash of the password/bearer token clients must present; `None` disables auth.
+    /// A patch passes the plain password, hashed before storing; the API only shows whether it
+    /// is set. `--password` / `FMD2R_PASSWORD` overrides it.
     pub auth_token: Option<String>,
-    /// Days a login session may go unused before it ends; every authorized request restarts
-    /// the count.
+    /// Days a login session may go unused; every authorized request restarts the count.
     #[schema(minimum = 1, maximum = 365)]
     pub session_idle_days: u32,
     /// Days a login session lasts at most, however often it is used.
@@ -574,8 +565,7 @@ pub struct CoverSettings {
     /// Hours a cached cover is served before the site is asked whether it changed; 0 asks every
     /// time.
     pub revalidate_after_hours: u32,
-    /// Size cap of the cover cache in MiB; least recently used covers are evicted past it.
-    /// Minimum 1.
+    /// Cover cache size cap in MiB; least recently used covers are evicted past it.
     #[schema(minimum = 1)]
     pub cache_size_mb: u32,
 }

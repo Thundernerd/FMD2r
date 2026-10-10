@@ -33,7 +33,6 @@ export function formatLine(l: LogLine): string {
 	return `${l.time} ${l.level.padEnd(5)} ${module}${l.target}: ${l.message}`;
 }
 
-/** How many log lines the UI keeps by default. */
 export const MAX_LOG_LINES = 10_000;
 
 export interface LogFeedOptions {
@@ -69,7 +68,6 @@ export class LogFeed {
 		if (this.#queue.push(line) === 1) this.#schedule(() => this.flush());
 	}
 
-	/** Applies the queued live lines now. */
 	flush(): void {
 		const queued = this.#queue;
 		this.#queue = [];

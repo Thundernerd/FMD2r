@@ -11,7 +11,6 @@ use utoipa::ToSchema;
 
 use crate::{ApiError, AppState, Problem};
 
-/// How many inbox items `GET /api/inbox` returns at most.
 const INBOX_LIMIT: u32 = 200;
 
 /// How urgent an inbox item is.
@@ -55,9 +54,8 @@ impl From<Event> for InboxItem {
     }
 }
 
-/// Renders an event body as text a person can read: a string as-is, the module
-/// updater's `{file, names}` and `{file, error}` reports as a sentence and the
-/// raw error (line breaks intact), anything else as `key: value` lines.
+/// A string as-is, the module updater's `{file, names}` / `{file, error}` reports as a sentence
+/// or the raw error, anything else as `key: value` lines.
 fn readable_body(kind: &str, body: &Value) -> String {
     if kind == module_updater::EVENT_KIND {
         if let Some(Value::String(error)) = body.get("error") {

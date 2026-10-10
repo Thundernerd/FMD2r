@@ -1,5 +1,4 @@
-//! Reading MangaBaka's dump (`series.jsonl.zst`: one series per JSON line, zstd-compressed) into
-//! a [`MetadataBuilder`], streaming: nothing holds more than one line at a time.
+//! Streams MangaBaka's dump (`series.jsonl.zst`) into a [`MetadataBuilder`] line by line.
 
 use std::io::{BufRead, BufReader, Read};
 
@@ -10,35 +9,29 @@ use serde_json::{Map, Value};
 use super::MetadataError;
 use super::normalize::{link_key, person_keys, title_keys};
 
-/// Fields every series must have. A field missing (not just `null`) means MangaBaka changed
-/// its schema in a way matching cannot follow.
+/// A missing (not just `null`) field means MangaBaka changed its schema.
 const REQUIRED: &[&str] = &["id", "state"];
-/// Fields an active or merged series must have: what matching reads.
+/// Fields matching reads from an active or merged series.
 const REQUIRED_FOR_MATCHING: &[&str] = &[
     "title", "type", "titles", "authors", "artists", "links", "source",
 ];
 /// Series between two progress reports and cancellation checks.
 const REPORT_EVERY: u64 = 1000;
 
-/// How far a build is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildProgress {
-    /// Compressed bytes downloaded and read.
+    /// Compressed.
     pub bytes: u64,
-    /// The download's size, when the server says.
     pub total_bytes: Option<u64>,
-    /// Series read.
     pub series: u64,
 }
 
-/// What a finished build holds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BuildSummary {
-    /// Active series kept.
     pub series: u64,
     /// Merged series whose titles and IDs now point at another.
     pub merged: u64,
-    /// Deleted (or otherwise inactive) series left out.
+    /// Deleted or otherwise inactive.
     pub skipped: u64,
 }
 
@@ -62,8 +55,7 @@ impl<R: Read> Read for Counting<R> {
     }
 }
 
-/// Reads the decompressed JSON lines of `jsonl` into `builder`. `progress` hears how far it is
-/// every [`REPORT_EVERY`] series, with the compressed bytes read so far from `bytes`.
+/// `progress` hears the series count every [`REPORT_EVERY`] series.
 pub(super) fn read_dump(
     jsonl: impl Read,
     builder: &mut MetadataBuilder,
@@ -119,8 +111,8 @@ fn read_error(e: std::io::Error, terminate: &TerminateToken) -> MetadataError {
     }
 }
 
-/// Adds one dump record: an active series with its titles, links and IDs; a merged one's titles,
-/// links and IDs (for the series it was merged into); nothing for any other state.
+/// A merged series' titles, links and IDs point at the series it was merged into; other
+/// inactive states are skipped.
 fn add_record(
     record: &Map<String, Value>,
     line: u64,
@@ -221,8 +213,6 @@ fn add_record(
     Ok(())
 }
 
-/// Every title MangaBaka has for a series: main, native, romanized, in other languages, and
-/// the secondary ones.
 fn titles(record: &Map<String, Value>) -> Vec<&str> {
     let mut out: Vec<&str> = ["title", "native_title", "romanized_title"]
         .into_iter()
@@ -243,7 +233,7 @@ fn titles(record: &Map<String, Value>) -> Vec<&str> {
     out
 }
 
-/// A string field; empty when absent, `null` or not a string.
+/// Empty when absent or not a string.
 fn str_field<'a>(record: &'a Map<String, Value>, field: &str) -> &'a str {
     record
         .get(field)
@@ -251,7 +241,6 @@ fn str_field<'a>(record: &'a Map<String, Value>, field: &str) -> &'a str {
         .unwrap_or_default()
 }
 
-/// The strings of an array field; none when absent or `null`.
 fn strings(value: Option<&Value>) -> impl Iterator<Item = &str> {
     value
         .and_then(Value::as_array)

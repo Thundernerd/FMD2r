@@ -34,7 +34,6 @@ impl<T> Pending<T> {
         }
     }
 
-    /// The same job with its result passed through `f`.
     pub(super) fn map<U>(
         mut self,
         f: impl FnOnce(T) -> Result<U, JobError> + Send + 'static,
@@ -69,7 +68,6 @@ impl<T> Pending<T> {
     }
 }
 
-/// The job's result, passed through `map`.
 fn finish<T>(
     map: Option<Map<T>>,
     result: Result<Result<JobResult, JobError>, JobError>,

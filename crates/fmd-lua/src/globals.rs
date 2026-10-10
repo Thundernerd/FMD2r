@@ -19,19 +19,15 @@ pub struct Globals {
 /// How often a `sleep` checks whether its worker was terminated.
 const SLEEP_POLL: Duration = Duration::from_millis(10);
 
-/// Installs the globals into `lua`.
 pub(crate) fn install(lua: &Lua, globals: Globals) -> mlua::Result<()> {
     let g = lua.globals();
     let terminate = globals.terminate;
     g.set(
         "sleep",
         lua.create_function(move |lua, ms: Value| {
-            // `lua_tointeger` (baseunits/lua/LuaBase.pas:70) yields 0 for anything that is not
-            // an integer or a string holding one. FPC's `Sleep` takes a Cardinal, so a negative
-            // value would wrap to weeks; it is 0 here instead.
+            // `lua_tointeger` (baseunits/lua/LuaBase.pas:70). FPC's `Sleep` takes a Cardinal,
+            // so a negative value would wrap to weeks; it is 0 here instead.
             let ms = lua.coerce_integer(ms).ok().flatten().unwrap_or(0);
-            // Without a token of its own, `sleep` stops with the runtime's job
-            // (`Runtime::set_terminate_token`).
             let job = || {
                 lua.app_data_ref::<crate::duktape::JsSettings>()
                     .map(|s| s.terminate.clone())
@@ -191,11 +187,10 @@ const STATUSES: [(&str, &str); 4] = [
 ];
 
 /// `lua_mangainfostatusifpos` (baseunits/lua/LuaBaseUnit.pas:32-50) over `MangaInfoStatusIfPos`
-/// (baseunits/uBaseUnit.pas:2793-2850): only 1 to 5 arguments return a value. That is `''` for
-/// an empty search, otherwise the code of the first status with an alternative (`|`-separated)
-/// found in the search, all compared lowercased, or `RS_InfoStatus_Unknown`
-/// (mangadownloader/forms/frmMain.pas:1010) when none matches. Missing status arguments take
-/// their defaults; an explicit `nil` reads as `''`, which never matches.
+/// (baseunits/uBaseUnit.pas:2793-2850): only 1 to 5 arguments return a value: `''` for an empty
+/// search, else the code of the first status with a `|`-separated alternative found in it
+/// (lowercased), or `RS_InfoStatus_Unknown` (mangadownloader/forms/frmMain.pas:1010). Missing
+/// status arguments take their defaults; an explicit `nil` reads as `''` and never matches.
 fn manga_info_status_if_pos(lua: &Lua, args: Variadic<Value>) -> mlua::Result<Variadic<LuaString>> {
     if !(1..=5).contains(&args.len()) {
         return Ok(Variadic::new());
@@ -269,7 +264,6 @@ fn to_pascal_string(lua: &Lua, value: Value) -> Vec<u8> {
     }
 }
 
-/// Strips the bytes matching `strip` from both ends of `s`.
 fn trim_by(s: &[u8], strip: impl Fn(u8) -> bool) -> &[u8] {
     let start = s.iter().position(|&b| !strip(b)).unwrap_or(s.len());
     let end = s.iter().rposition(|&b| !strip(b)).map_or(start, |i| i + 1);

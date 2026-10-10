@@ -1,6 +1,5 @@
-//! `fmd.duktape.ExecJS` compared with FMD2's own engine: each Lua snippet runs a script through
-//! the public runtime and through `fmd-duktape-ref` (Duktape 2.3.0, as FMD2 bundles it) and
-//! expects the same bytes back (docs/tickets/T50-js-engine-verification.md).
+//! `fmd.duktape.ExecJS` compared byte for byte with `fmd-duktape-ref`, the Duktape 2.3.0 FMD2
+//! bundles (docs/tickets/T50-js-engine-verification.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -11,10 +10,9 @@ use std::sync::Arc;
 use fmd_http::{HttpClient, ReplayOptions, ReplayTransport};
 use fmd_lua::{Globals, LuaHttp, ModuleRegistry, Runtime};
 
-/// A runtime on the upstream Lua tree whose Lua code also has `same(code)`: asserts that
-/// `fmd.duktape.ExecJS(code)` returns what FMD2's `lua_execjs` returns on Duktape
-/// (baseunits/lua/LuaDuktape.pas:14-24): the result up to its first NUL, or no value when the
-/// script fails.
+/// A runtime on the upstream Lua tree with a Lua `same(code)` asserting that `ExecJS` returns
+/// what `lua_execjs` does on Duktape (baseunits/lua/LuaDuktape.pas:14-24): the result up to its
+/// first NUL, or nothing on failure.
 fn runtime() -> Runtime {
     runtime_in(fmd_testkit::corpus_root())
 }
@@ -63,9 +61,8 @@ fn runtime_in(lua_dir: PathBuf) -> Runtime {
     runtime
 }
 
-/// Strings in a script and in its result cross as UTF-8 bytes (baseunits/Duktape.pas:92-94,
-/// baseunits/lua/LuaDuktape.pas:18); characters outside the BMP are where the engines'
-/// string representations differ.
+/// Strings cross as UTF-8 (baseunits/Duktape.pas:92-94, baseunits/lua/LuaDuktape.pas:18); non-BMP
+/// characters are where the engines' string representations differ.
 #[test]
 fn non_bmp_strings_round_trip_like_duktape() {
     runtime()
@@ -93,16 +90,14 @@ fn non_bmp_strings_round_trip_like_duktape() {
         .unwrap();
 }
 
-/// `fixtures/<path>`.
 fn fixtures(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures")
         .join(path)
 }
 
-/// A runtime set up to run a callback of the upstream module in `module_file` the way the
-/// worker does, with `HTTP` replaying the recording in `fixtures/<recording>` and every
-/// `ExecJS` the module makes checked with `same`.
+/// A runtime for a callback of the upstream `module_file`, with `HTTP` replaying
+/// `fixtures/<recording>` and every `ExecJS` checked with `same`.
 fn module_runtime(module_file: &str, recording: &str) -> Runtime {
     let runtime = runtime();
     let lua_dir = fmd_testkit::corpus_root();
@@ -128,11 +123,9 @@ fn module_runtime(module_file: &str, recording: &str) -> Runtime {
     runtime
 }
 
-/// modules/acqqcom.lua:20-35 on a chapter recorded from ac.qq.com. The nonce and `DATA`
-/// scripts run as on Duktape. The module no longer finds the packed chapter script (the site
-/// now writes `eval(function (p, ...` where it looks for `eval (function(p, ...`), so its third
-/// `ExecJS` gets a broken script and fails on both engines; the test then runs that step with
-/// the site's current spelling, so the packed script itself is compared too.
+/// modules/acqqcom.lua:20-35 on a recorded ac.qq.com chapter. The site now writes
+/// `eval(function (p, ...` where the module looks for `eval (function(p, ...`, so the module's
+/// third `ExecJS` fails on both engines; the test reruns that step with the current spelling.
 #[test]
 fn acqqcom_chapter_scripts_evaluate_like_duktape() {
     let runtime = module_runtime("acqqcom.lua", "js/acqqcom");
@@ -177,9 +170,8 @@ fn fanfox_page_scripts_evaluate_like_duktape() {
         .unwrap();
 }
 
-/// modules/ReadComicOnline.lua:105-353 on a reader page archived by the Wayback Machine (the
-/// site no longer resolves): the module's link decoder runs over the page's scripts as on
-/// Duktape.
+/// modules/ReadComicOnline.lua:105-353 on a Wayback Machine copy of a reader page (the site no
+/// longer resolves).
 #[test]
 fn readcomiconline_page_decoder_evaluates_like_duktape() {
     let runtime = module_runtime("ReadComicOnline.lua", "js/readcomiconline");
@@ -196,10 +188,8 @@ fn readcomiconline_page_decoder_evaluates_like_duktape() {
         .unwrap();
 }
 
-/// websitebypass/cloudflare.lua:31-92 on Cloudflare IUAM ("I'm Under Attack Mode") challenge
-/// pages captured in 2020 (fixtures/js/README.md): the challenge script, wrapped in the
-/// handler's DOM stand-ins, yields the same `jschl_answer` as on Duktape. The handler cannot
-/// solve the third page on either engine.
+/// websitebypass/cloudflare.lua:31-92 on 2020 Cloudflare IUAM pages (fixtures/js/README.md):
+/// same `jschl_answer` as on Duktape. Neither engine solves the third page.
 #[test]
 fn cloudflare_iuam_challenges_evaluate_like_duktape() {
     let runtime = runtime();
@@ -362,9 +352,9 @@ function atob(s) {return new TextDecoder().decode(Duktape.dec('base64', s));};
         .unwrap();
 }
 
-/// The global object and the built-ins have the members Duktape 2.3 has and no others, so
-/// scripts that detect features (`typeof Symbol`, `Array.prototype.find || polyfill`) take the
-/// same branch. Members Duktape has and QuickJS lacks are in docs/duktape-differences.md.
+/// The globals and built-ins have exactly Duktape 2.3's members, so feature detection
+/// (`typeof Symbol`, `Array.prototype.find || polyfill`) takes the same branch. Members QuickJS
+/// lacks are in docs/duktape-differences.md.
 #[test]
 fn builtin_members_match_duktape() {
     runtime()
@@ -512,9 +502,9 @@ fn function_to_string_matches_duktape() {
         .unwrap();
 }
 
-/// Dates print and parse as in FMD2's Windows build of Duktape, which has no platform date
-/// formatter or parser: everything is Duktape's ISO 8601 form (duk__format_parts_iso8601,
-/// duk__parse_string_iso8601_subset), and a time without an offset is UTC.
+/// Dates print and parse as in FMD2's Windows Duktape, which lacks a platform formatter/parser:
+/// ISO 8601 only (duk__format_parts_iso8601, duk__parse_string_iso8601_subset), offsetless
+/// times are UTC.
 #[test]
 fn dates_match_duktape() {
     runtime()

@@ -1,8 +1,5 @@
-//! MemoryStream objects (`HTTP.Document`), exercised through Lua snippets run on the public
-//! runtime and through the public Rust handle that owns the stream
-//! (docs/tickets/T04-tstrings-memorystream.md, "Seams under test").
-//!
-//! Expected values come from FPC 3.2.2's `TMemoryStream`, probed with a Pascal program.
+//! MemoryStream objects (`HTTP.Document`) (docs/tickets/T04-tstrings-memorystream.md). Expected
+//! values were probed from FPC 3.2.2's `TMemoryStream`.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -33,8 +30,7 @@ fn write_string_is_binary_safe() {
 
 #[test]
 fn write_string_overwrites_from_the_position() {
-    // The read-transform-write pattern of e.g. lua/modules/MangaPlus.lua:212-217 on a document
-    // whose position the HTTP layer left at 0.
+    // lua/modules/MangaPlus.lua:212-217's read-transform-write, position left at 0 by HTTP.
     let (rt, stream) = runtime_with_stream();
     stream.stream().borrow_mut().write(b"hello");
     stream.stream().borrow_mut().set_position(0);

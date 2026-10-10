@@ -1,6 +1,5 @@
 import type { FavoriteView } from '#lib/api/types.ts';
 
-/** The Library's state chips. */
 export type Chip = 'all' | 'new' | 'ongoing' | 'completed' | 'disabled';
 
 export const CHIPS: { id: Chip; label: string }[] = [
@@ -22,7 +21,6 @@ export const SORTS: { id: Sort; label: string }[] = [
 	{ id: 'added', label: 'Date added' }
 ];
 
-/** What the Library shows. */
 export interface LibraryFilters {
 	chip: Chip;
 	/** Module ID; empty for every website. */

@@ -28,14 +28,14 @@ struct Cli {
 enum Command {
     /// Serve the REST API and the web UI.
     Serve(ServeArgs),
-    /// Print the OpenAPI document of the REST API (the web client is generated from it).
+    /// Print the REST API's OpenAPI document (the web client is generated from it).
     Openapi {
         /// Write to this file instead of stdout.
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Import an FMD2 installation's userdata (queue, favorites, downloaded chapters, module
-    /// settings and accounts, settings). Run it while the server is stopped.
+    /// Import FMD2's userdata (queue, favorites, downloaded chapters, module settings, accounts,
+    /// settings). Run it while the server is stopped.
     Import(ImportArgs),
     /// Exercise website modules from the command line.
     #[command(subcommand)]
@@ -53,16 +53,15 @@ struct ServeArgs {
     /// Directory holding the databases.
     #[arg(long, env = "FMD2R_DATA_DIR", default_value = "data")]
     data_dir: PathBuf,
-    /// Password/token required for the API; overrides the `server.auth_token` setting. Without
-    /// either, the API is open.
+    /// Password/token required for the API; overrides `server.auth_token`. Without either, the
+    /// API is open.
     #[arg(long, env = "FMD2R_PASSWORD", hide_env_values = true)]
     password: Option<String>,
-    /// FlareSolverr's URL (e.g. http://flaresolverr:8191) for Cloudflare-protected sites; overrides
-    /// the `connections.flaresolverr_url` setting for this run. An empty value turns FlareSolverr off.
+    /// FlareSolverr URL (e.g. http://flaresolverr:8191) for Cloudflare-protected sites; overrides
+    /// `connections.flaresolverr_url`. Empty turns FlareSolverr off.
     #[arg(long, env = "FMD2R_FLARESOLVERR_URL")]
     flaresolverr_url: Option<String>,
-    /// Don't sync the Lua modules with upstream (no `modules` job); the modules already in
-    /// `<data dir>/lua` are still loaded for downloads.
+    /// Don't sync Lua modules with upstream; those already in `<data dir>/lua` still load.
     #[arg(long, env = "FMD2R_NO_MODULE_UPDATES")]
     no_module_updates: bool,
 }
@@ -78,15 +77,15 @@ struct ImportArgs {
     /// Report what would be imported without writing anything.
     #[arg(long)]
     dry_run: bool,
-    /// Rewrite save-to paths under FROM to TO, e.g. 'C:\Manga=/data/manga'. Repeatable; the
-    /// longest matching FROM wins.
+    /// Rewrite save-to paths under FROM to TO, e.g. 'C:\Manga=/data/manga'. Repeatable; longest
+    /// FROM wins.
     #[arg(long, value_name = "FROM=TO")]
     map_path: Vec<PathMap>,
     /// Queue tasks FMD2 was running as waiting, so they resume, instead of stopped.
     #[arg(long)]
     resume: bool,
-    /// The IANA time zone FMD2 ran in, e.g. 'Europe/Amsterdam': FMD2 stores local times without a
-    /// zone. This machine's zone by default.
+    /// IANA time zone FMD2 ran in (it stores zone-less local times), e.g. 'Europe/Amsterdam'.
+    /// Defaults to this machine's.
     #[arg(long, value_name = "ZONE")]
     timezone: Option<TimeZone>,
 }

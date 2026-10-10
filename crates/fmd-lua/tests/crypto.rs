@@ -1,5 +1,4 @@
-//! `fmd.crypto` known-answer vectors, run as Lua snippets on the public runtime
-//! (docs/tickets/T11-fmd-crypto.md, "Seams under test").
+//! `fmd.crypto` known-answer vectors (docs/tickets/T11-fmd-crypto.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]

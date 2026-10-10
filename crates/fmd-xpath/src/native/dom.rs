@@ -1,10 +1,8 @@
-//! The document tree: html5ever's parse, reshaped into the tree internettools' XPath sees.
+//! The document tree: html5ever's parse, reshaped into the tree internettools' XPath sees
+//! (`pmHTML`, baseunits/XQueryEngineHTML.pas:384-400; README.md, "Known differences").
 //!
-//! FMD2 parses with `pmHTML`, repairing missing tags, keeping whitespace, and dropping comments
-//! and processing instructions (baseunits/XQueryEngineHTML.pas:384-400). html5ever's repair
-//! follows the HTML5 algorithm, which internettools approximates (README.md, "Known
-//! differences"). Comments and processing instructions never enter the tree, so the text around
-//! a comment is one text node, as in internettools.
+//! Comments and processing instructions never enter the tree, so the text around a comment is
+//! one text node, as in internettools.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -17,7 +15,6 @@ use html5ever::{Attribute, LocalName, Namespace, QualName, ns};
 /// its children).
 pub(crate) type NodeId = usize;
 
-/// What a node is.
 pub(crate) enum NodeKind {
     Document,
     Element(String),
@@ -25,7 +22,6 @@ pub(crate) enum NodeKind {
     Text(String),
 }
 
-/// One node of a [`Dom`].
 pub(crate) struct Node {
     pub(crate) kind: NodeKind,
     pub(crate) parent: Option<NodeId>,
@@ -43,7 +39,6 @@ pub(crate) struct Node {
 }
 
 impl Node {
-    /// A node with id `id` and no attributes, children or namespace yet.
     fn new(kind: NodeKind, parent: Option<NodeId>, id: NodeId) -> Node {
         Node {
             kind,
@@ -70,7 +65,6 @@ pub(crate) struct Ns {
 
 /// The XML namespace, bound to `xml:` without a declaration.
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
-/// The XMLNS namespace of namespace declarations.
 const XMLNS_NAMESPACE: &str = "http://www.w3.org/2000/xmlns/";
 /// The XHTML namespace, whose elements serialize as HTML.
 const XHTML_NAMESPACE: &str = "http://www.w3.org/1999/xhtml";
@@ -343,7 +337,6 @@ struct Serializer<'a> {
     known: Option<Vec<(&'a str, &'a str)>>,
 }
 
-/// An element being serialized.
 struct Open<'a> {
     id: NodeId,
     name: &'a str,
@@ -721,7 +714,6 @@ impl Default for Sink {
     }
 }
 
-/// An element name handed back to html5ever.
 #[derive(Debug)]
 struct Name(QualName);
 
@@ -842,11 +834,9 @@ fn freeze(nodes: &[SinkNode], dom: &mut Dom) {
     resolve_namespaces(dom);
 }
 
-/// Gives elements and attributes their namespaces as internettools' HTML parser does
-/// (`TTreeParser.enterTagCommon`, internettools data/simplehtmltreeparser.pas:2436-2479):
-/// `xmlns` and `xmlns:p` attributes declare namespaces for the element and its descendants,
-/// an unprefixed element is in the default namespace in scope, and a prefixed name is in its
-/// prefix's namespace, or, when the prefix isn't declared, loses the prefix and is in none.
+/// Gives elements and attributes their namespaces (`TTreeParser.enterTagCommon`, internettools
+/// data/simplehtmltreeparser.pas:2436-2479): an unprefixed element takes the default namespace
+/// in scope; an undeclared prefix is dropped, leaving the name in no namespace.
 fn resolve_namespaces(dom: &mut Dom) {
     // Parents come before their children.
     for id in 0..dom.nodes.len() {
@@ -892,9 +882,8 @@ fn resolve_namespaces(dom: &mut Dom) {
     }
 }
 
-/// Puts the node `id` with a prefixed name in the namespace its prefix names at the element
-/// `scope` (`TTreeParser.findNamespace`, internettools data/simplehtmltreeparser.pas:
-/// 2736-2747). An unknown prefix is dropped from the name, leaving it in no namespace.
+/// Puts a prefixed node in its prefix's namespace at `scope` (`TTreeParser.findNamespace`,
+/// internettools data/simplehtmltreeparser.pas:2736-2747); an unknown prefix is dropped.
 fn resolve_prefix(dom: &mut Dom, scope: NodeId, id: NodeId) {
     let Some((prefix, local)) = dom.name(id).split_once(':') else {
         return;
@@ -910,8 +899,8 @@ fn resolve_prefix(dom: &mut Dom, scope: NodeId, id: NodeId) {
     dom.nodes[id].namespace = namespace;
 }
 
-/// The namespace `prefix` names at the element `scope`: the innermost declaration on it or
-/// its ancestors; `xml` needs none (internettools data/simplehtmltreeparser.pas:2736-2747).
+/// The innermost declaration of `prefix` at `scope`; `xml` needs none (internettools
+/// data/simplehtmltreeparser.pas:2736-2747).
 fn find_namespace(dom: &mut Dom, scope: NodeId, prefix: &str) -> Option<NsId> {
     let mut element = Some(scope);
     while let Some(e) = element {
@@ -932,7 +921,6 @@ fn find_namespace(dom: &mut Dom, scope: NodeId, prefix: &str) -> Option<NsId> {
     None
 }
 
-/// The namespace of namespace declarations.
 fn xmlns_namespace(dom: &mut Dom) -> NsId {
     reserved_namespace(dom, "xmlns", XMLNS_NAMESPACE)
 }

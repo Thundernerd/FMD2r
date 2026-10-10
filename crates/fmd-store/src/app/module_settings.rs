@@ -1,7 +1,6 @@
-//! Per-module settings: what FMD2 keeps per module in `modules.json`
-//! (baseunits/WebsiteModules.pas:545-696) and `TWebsiteModuleSettings`
-//! (baseunits/WebsiteModulesSettings.pas:94-171). The JSON columns are opaque here; their shape
-//! belongs to the settings model (T18).
+//! Per-module settings: FMD2's per-module `modules.json` (baseunits/WebsiteModules.pas:545-696)
+//! and `TWebsiteModuleSettings` (baseunits/WebsiteModulesSettings.pas:94-171). The JSON columns
+//! are opaque here.
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::{Map, Value};
@@ -10,28 +9,24 @@ use crate::crypto::Cipher;
 use crate::db::Db;
 use crate::error::Result;
 
-/// A module's stored settings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleSettings {
     pub module_id: String,
     /// Whether the per-module overrides apply (FMD2's `Settings.Enabled`).
     pub enabled: bool,
-    /// Values of the options declared with `AddOption*`, keyed by option name (`Options` in
-    /// `modules.json`).
+    /// Values of options declared with `AddOption*`, by name (`Options` in `modules.json`).
     pub options: Value,
-    /// HTTP overrides: user agent, cookies, proxy (`Settings.HTTP` in `modules.json`).
+    /// User agent, cookies, proxy (`Settings.HTTP` in `modules.json`).
     pub http: Value,
-    /// Limit overrides such as the connection limit.
+    /// E.g. the connection limit.
     pub limits: Value,
     /// Serialised cookie jar (FMD2's per-module `Cookies` array).
     pub cookie_jar: Option<Vec<u8>>,
-    /// The module's download folder, empty for the default one
-    /// (`Settings.OverrideSettings.SaveToPath`).
+    /// Download folder, empty for the default (`Settings.OverrideSettings.SaveToPath`).
     pub save_to: String,
 }
 
 impl ModuleSettings {
-    /// Settings for a module that has none stored yet.
     pub fn new(module_id: impl Into<String>) -> Self {
         Self {
             module_id: module_id.into(),
@@ -45,7 +40,7 @@ impl ModuleSettings {
     }
 }
 
-/// Columns as read from the database, before the JSON columns are parsed.
+/// Before the JSON columns are parsed.
 struct RawSettings {
     enabled: bool,
     options: String,
@@ -69,10 +64,7 @@ fn raw_from_row(row: &Row<'_>) -> rusqlite::Result<RawSettings> {
 const SELECT: &str = "SELECT enabled, options, http, limits, cookie_jar, save_to FROM module_settings \
      WHERE module_id = ?1";
 
-/// Repository for per-module settings. Obtain it with [`crate::AppDb::module_settings`].
-///
-/// `option`/`set_option` and `cookie_jar`/`set_cookie_jar` are the operations behind fmd-lua's
-/// `ModuleSettingsStore` (T06).
+/// `option`/`set_option` and `cookie_jar`/`set_cookie_jar` back fmd-lua's `ModuleSettingsStore`.
 pub struct ModuleSettingsRepo<'a> {
     db: &'a Db,
     cipher: &'a dyn Cipher,
@@ -83,13 +75,11 @@ impl<'a> ModuleSettingsRepo<'a> {
         Self { db, cipher }
     }
 
-    /// The database's cipher, for the settings model to encrypt the secrets in the opaque
-    /// JSON columns with ([`crate::AppDb::cipher`]).
+    /// For the settings model to encrypt secrets in the opaque JSON columns.
     pub fn cipher(&self) -> &'a dyn Cipher {
         self.cipher
     }
 
-    /// The IDs of every module with stored settings.
     pub fn module_ids(&self) -> Result<Vec<String>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare("SELECT module_id FROM module_settings ORDER BY module_id")?;
@@ -119,7 +109,6 @@ impl<'a> ModuleSettingsRepo<'a> {
         .transpose()
     }
 
-    /// Inserts or replaces all of the module's settings.
     pub fn upsert(&self, settings: &ModuleSettings) -> Result<()> {
         let options = serde_json::to_string(&settings.options)?;
         let http = serde_json::to_string(&settings.http)?;
@@ -146,8 +135,7 @@ impl<'a> ModuleSettingsRepo<'a> {
         Ok(())
     }
 
-    /// Stores the module's options, HTTP and limit overrides, download folder and `enabled`
-    /// flag, keeping its cookie jar.
+    /// Stores everything except the cookie jar.
     pub(crate) fn put_overrides(conn: &Connection, settings: &ModuleSettings) -> Result<()> {
         conn.execute(
             "INSERT INTO module_settings (module_id, enabled, options, http, limits, save_to)
@@ -167,7 +155,6 @@ impl<'a> ModuleSettingsRepo<'a> {
         Ok(())
     }
 
-    /// The stored value of option `name`, or `None` when it was never set.
     pub fn option(&self, module_id: &str, name: &str) -> Result<Option<Value>> {
         let options: Option<String> = {
             let conn = self.db.lock();
@@ -185,7 +172,6 @@ impl<'a> ModuleSettingsRepo<'a> {
         Ok(options.get_mut(name).map(Value::take))
     }
 
-    /// Stores option `name`, keeping the module's other options.
     pub fn set_option(&self, module_id: &str, name: &str, value: &Value) -> Result<()> {
         let mut conn = self.db.lock();
         let tx = conn.transaction()?;
@@ -225,7 +211,7 @@ impl<'a> ModuleSettingsRepo<'a> {
             .flatten())
     }
 
-    /// Stores (or with `None` clears) the module's serialised cookie jar.
+    /// `None` clears it.
     pub fn set_cookie_jar(&self, module_id: &str, jar: Option<&[u8]>) -> Result<()> {
         let conn = self.db.lock();
         conn.execute(

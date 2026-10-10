@@ -61,7 +61,7 @@ pub(crate) struct ImportQuery {
 }
 
 impl ImportQuery {
-    /// Parses the query string; `map_path` may repeat.
+    /// Parsed by hand because `map_path` may repeat.
     fn parse(query: Option<&str>) -> Result<Self, ApiError> {
         let mut out = Self::default();
         for (key, value) in url::form_urlencoded::parse(query.unwrap_or_default().as_bytes()) {
@@ -180,7 +180,6 @@ pub(crate) async fn import(
     .map(Json)
 }
 
-/// Extracts and imports the upload in `scratch`.
 async fn import_upload(
     state: &AppState,
     scratch: TempDir,
@@ -202,8 +201,7 @@ async fn import_upload(
     })
     .await??;
     if !report.dry_run {
-        // The tasks went straight into app.db; the engine starts the waiting ones now rather than
-        // at the next start.
+        // The tasks bypassed the engine; start the waiting ones now, not at the next start.
         if let Err(e) = state.engine.activate_waiting().await {
             tracing::warn!(target: "fmd_server", "starting imported tasks: {e}");
         }
@@ -211,8 +209,7 @@ async fn import_upload(
     Ok(report)
 }
 
-/// An unreadable FMD2 file is the upload's fault: say which (by name, not by its temp path) and
-/// why.
+/// An unreadable FMD2 file is the upload's fault: name it (not its temp path) and say why.
 fn import_error(e: ImportError) -> ApiError {
     let name = |path: &Path| {
         path.file_name()
@@ -231,8 +228,7 @@ fn import_error(e: ImportError) -> ApiError {
     }
 }
 
-/// Saves the request body as [`UPLOAD`] in a new upload folder in `data_dir`, refusing more than
-/// `limit` bytes.
+/// Saves the body as [`UPLOAD`] in a new folder in `data_dir`, refusing more than `limit` bytes.
 async fn receive(body: Body, data_dir: &Path, limit: u64) -> Result<TempDir, ApiError> {
     let saving = |e: io::Error| ApiError::Internal(format!("saving the upload: {e}"));
     let scratch = tempfile::Builder::new()
@@ -271,8 +267,8 @@ fn too_large(what: &str, limit: u64) -> ApiError {
     ApiError::PayloadTooLarge(format!("{what} is larger than {limit}"))
 }
 
-/// Extracts the uploaded zip in `scratch` and returns the `userdata` folder in it, refusing to
-/// unpack more than `limit` bytes or [`MAX_ENTRIES`] entries.
+/// Returns the extracted `userdata` folder, refusing more than `limit` bytes or [`MAX_ENTRIES`]
+/// entries.
 fn extract(scratch: &TempDir, limit: u64) -> Result<PathBuf, ApiError> {
     let bad = |e: zip::result::ZipError| ApiError::BadRequest(format!("not a zip file: {e}"));
     let upload = File::open(scratch.path().join(UPLOAD)).map_err(io_error)?;
@@ -350,8 +346,7 @@ fn userdata_folder(mut dir: PathBuf) -> PathBuf {
     }
 }
 
-/// The `import` job: the System page shows the last import and its progress. It only runs
-/// through `POST /api/import`, which brings the upload.
+/// The `import` job, for the System page; it only runs through `POST /api/import`.
 #[derive(Clone)]
 pub(crate) struct ImportJob(Arc<Mutex<JobStatus>>);
 
@@ -434,8 +429,7 @@ struct RunInner {
 }
 
 impl ImportRun {
-    /// Marks the import job running, registering it on its first run; a conflict if an import is
-    /// already running.
+    /// Registers the job on its first run; a conflict if an import is running.
     fn start(state: &AppState) -> Result<Self, ApiError> {
         let job = state.import_job.clone();
         job.try_begin()?;
@@ -457,7 +451,6 @@ impl ImportRun {
         self.0.registry.changed(ImportJob::ID);
     }
 
-    /// Ends the run, failed with `error` if there is one.
     fn finish(&self, error: Option<&ApiError>) {
         self.0.end(error.map(ToString::to_string));
     }

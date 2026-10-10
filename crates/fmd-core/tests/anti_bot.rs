@@ -1,6 +1,5 @@
-//! What the anti-bot hook persists: a module's HTTP settings in `app.db`
-//! (docs/tickets/T30-anti-bot.md), and the `websitebypass_config.json` written from the
-//! settings.
+//! What the anti-bot hook persists: module HTTP settings and `websitebypass_config.json`
+//! (docs/tickets/T30-anti-bot.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

@@ -1,9 +1,7 @@
 //! `CreateTXQuery`, the TXQuery object and `IXQValue` (baseunits/lua/LuaXQuery.pas,
 //! baseunits/lua/LuaIXQValue.pas) over an [`XPathEngine`].
 //!
-//! Every argument list is read as a whole, so overloads dispatch on the argument count and
-//! Lua types exactly like the Pascal's `lua_gettop` cases. A bound method gets its arguments
-//! without the object (crate::class), so the counts match FMD2's dot calls.
+//! Overloads dispatch on argument count and Lua types like the Pascal's `lua_gettop` cases.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -200,7 +198,6 @@ fn href_all(
     Ok(())
 }
 
-/// Evaluates `expr` against the document, or against `context` when given.
 fn eval_in(q: &TXQuery, expr: &str, context: Option<&Value>) -> mlua::Result<Box<dyn XPathValue>> {
     match context {
         Some(context) => {
@@ -319,9 +316,8 @@ fn push_value(lua: &Lua, value: Box<dyn XPathValue>) -> mlua::Result<AnyUserData
 /// `Get(i)` / `Get()` (baseunits/lua/LuaIXQValue.pas:110-132).
 ///
 /// With any argument: the item at `lua_tointeger` of the first one, 1-based (a non-integer is
-/// 0, an empty value). Without: an iterator over the items, one that yields nothing when the
-/// value is empty (:117-121). FMD2 also returns the iterator's registry reference as a second
-/// value (:124-127); that is an implementation detail no `for` loop sees, so it is left out.
+/// 0, an empty value). Without: an iterator over the items (:117-121). The registry reference
+/// FMD2 also returns (:124-127) is left out; no `for` loop sees it.
 fn value_get(lua: &Lua, v: &mut XQValue, args: &[Value]) -> mlua::Result<MultiValue> {
     let Some(arg) = args.first() else {
         if v.value.count() == 0 {
@@ -412,10 +408,9 @@ fn arg_string(lua: &Lua, args: &[Value], i: usize) -> mlua::Result<String> {
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
-/// The whole content of a memory stream argument whatever its position, like this unit's
-/// `StreamToString` (baseunits/XQueryEngineHTML.pas:118-128). (The MemoryStream's own
-/// `ToString` reads from the position instead.) FMD2 reads any userdata as a stream and crashes
-/// on anything else (`luaToUserData`, baseunits/lua/LuaUtils.pas:201); here that is a Lua error.
+/// The whole content of a memory stream argument whatever its position, like
+/// `StreamToString` (baseunits/XQueryEngineHTML.pas:118-128). FMD2 crashes on a non-userdata
+/// (`luaToUserData`, baseunits/lua/LuaUtils.pas:201); here that is a Lua error.
 fn stream_bytes(value: &Value) -> mlua::Result<Vec<u8>> {
     let stream = match value {
         Value::UserData(object) => LuaMemoryStream::from_lua(object),

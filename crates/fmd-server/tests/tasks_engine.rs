@@ -152,7 +152,6 @@ async fn add(state: &AppState, links: &[&str]) -> i64 {
     body_json(res).await["id"].as_i64().unwrap()
 }
 
-/// Waits until task `id` shows `status`, answering the task.
 async fn wait_for(state: &AppState, id: i64, status: &str) -> Value {
     let mut last = Value::Null;
     let wait = async {

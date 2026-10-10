@@ -1,13 +1,11 @@
 //! XPath 3.1 with internettools' extensions, parsed into an [`Expr`] tree.
 //!
-//! The parser follows the options `TXQueryEngine.Create` sets (internettools
-//! data/xquery.pas:8376-8414): XPath 3.1, JSONiq object literals and `true`/`false`/`null`
-//! literals, and the "unambiguous" dot notation, where `.name` reads a JSON property after a
-//! closing parenthesis or bracket (`json(*).data.items`) but `$var.name` is a variable name.
+//! Options as `TXQueryEngine.Create` sets them (internettools data/xquery.pas:8376-8414):
+//! JSONiq object and `true`/`false`/`null` literals, and "unambiguous" dot notation, where
+//! `.name` reads a property after `)` or `]` (`json(*).data.items`) but `$var.name` is a name.
 
 use super::value::{XResult, err};
 
-/// One token.
 #[derive(Clone, Debug, PartialEq)]
 enum Tok {
     /// An NCName or QName; names may contain `.` and `-`.
@@ -164,7 +162,7 @@ fn lex(src: &str) -> XResult<Vec<Tok>> {
             i = end;
             continue;
         }
-        // Dot notation: `.name` right after `)`, `]` or `}`.
+        // Dot notation.
         if c == '.'
             && matches!(toks.last(), Some(Tok::Sym(")" | "]" | "}")))
             && chars.get(i + 1).is_some_and(|&c| is_name_start(c))
@@ -210,7 +208,6 @@ fn lex(src: &str) -> XResult<Vec<Tok>> {
     Ok(toks)
 }
 
-/// An axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Axis {
     Child,
@@ -259,7 +256,6 @@ impl Axis {
     }
 }
 
-/// A node test.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum NodeTest {
     /// A name (ASCII case-insensitive, like internettools on HTML); `*` matches any.
@@ -268,15 +264,12 @@ pub(crate) enum NodeTest {
     /// internettools data/xquery.pas:1729-1731).
     LocalName(String),
     AnyName,
-    /// `node()`.
     Node,
-    /// `text()`.
     Text,
     /// `element()` or `element(name)`.
     Element(Option<String>),
     /// `attribute()` or `attribute(name)`.
     AttributeTest(Option<String>),
-    /// `document-node()`.
     Document,
     /// `comment()` and `processing-instruction()`: the tree has neither.
     Nothing,
@@ -302,7 +295,6 @@ pub(crate) enum Key {
     Expr(Box<Expr>),
 }
 
-/// Binary operators.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BinOp {
     Or,
@@ -346,7 +338,6 @@ pub(crate) struct SeqType {
     pub(crate) occurrence: Option<char>,
 }
 
-/// An expression.
 #[derive(Clone, Debug)]
 pub(crate) enum Expr {
     Str(String),
@@ -390,7 +381,6 @@ pub(crate) enum Expr {
     Castable(Box<Expr>, SeqType),
 }
 
-/// Parses an expression.
 pub(crate) fn parse(src: &str) -> XResult<Expr> {
     let toks = lex(src)?;
     let mut parser = Parser { toks, pos: 0 };

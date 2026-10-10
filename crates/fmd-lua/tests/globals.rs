@@ -1,6 +1,5 @@
-//! The global helper functions every module calls without a `require`, exercised through Lua
-//! snippets run on the public runtime (docs/tickets/T05-global-helpers.md, "Seams under test").
-//! Expected values follow the Pascal sources each test cites.
+//! The global helper functions modules call without a `require`
+//! (docs/tickets/T05-global-helpers.md). Expected values follow the Pascal sources each test cites.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

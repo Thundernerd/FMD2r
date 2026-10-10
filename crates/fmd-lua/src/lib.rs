@@ -66,14 +66,12 @@ impl From<Error> for mlua::Error {
     }
 }
 
-/// Result type of the `fmd-lua` crate.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// The `lua/` directory of a runtime, stored as app data on its Lua state.
 #[derive(Clone, Default)]
 struct LuaDir(PathBuf);
 
-/// A copy of the runtime's app data of type `T`, or its default when none is set.
 fn app_data_or_default<T: Clone + Default + 'static>(lua: &mlua::Lua) -> T {
     lua.app_data_ref::<T>()
         .map(|data| data.clone())
@@ -103,15 +101,12 @@ pub(crate) fn default_xpath_engine() -> Option<Rc<dyn XPathEngine>> {
 }
 
 impl Runtime {
-    /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs` in
-    /// FMD2's base state (baseunits/lua/LuaBase.pas:123), with the `fmd.*` Host API libraries
-    /// implemented so far (`fmd.env`, `fmd.strings`, [`crypto`], `fmd.duktape`, gzip, fileutil, logger,
-    /// subprocess, imagepuzzle, mangafoxwatermark and the pcre2 stub) behind FMD2's package searcher
-    /// (:125), and the `pb` C module in `package.preload`.
+    /// Creates a Lua 5.4 state with every standard library opened, like `luaL_openlibs`
+    /// (baseunits/lua/LuaBase.pas:123), the `fmd.*` Host API libraries behind FMD2's package
+    /// searcher (:125), and the `pb` C module in `package.preload`.
     pub fn new() -> Result<Runtime> {
-        // SAFETY: FMD2 opens every standard library, including `debug` (used by e.g.
-        // lua/modules/MangaPlus.lua), which mlua only loads in unsafe mode. Later tickets also
-        // need C modules (`pb`), which the safe mode forbids.
+        // SAFETY: FMD2 opens `debug` too (lua/modules/MangaPlus.lua), which mlua only loads in
+        // unsafe mode, and safe mode forbids C modules like `pb`.
         let lua =
             unsafe { mlua::Lua::unsafe_new_with(mlua::StdLib::ALL, mlua::LuaOptions::default()) };
         package::register(&lua)?;
@@ -121,8 +116,7 @@ impl Runtime {
         lua.set_app_data(duktape::JsSettings::default());
         duktape::register(&lua)?;
         libs::register(&lua)?;
-        // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199) over the default backend; with
-        // none built in, the global is missing.
+        // `CreateTXQuery` (baseunits/lua/LuaXQuery.pas:196-199); missing with no backend built in.
         if let Some(engine) = default_xpath_engine() {
             xquery::register(&lua, engine)?;
         }

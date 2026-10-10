@@ -1,15 +1,10 @@
 //! A download killed with SIGKILL resumes when the engine is opened again
-//! (docs/tickets/T44-download-hard-crash-resume.md, "Seams under test").
+//! (docs/tickets/T44-download-hard-crash-resume.md).
 //!
-//! The engine runs in a child process: this test binary run again with [`CHILD_DIR`] set,
-//! which makes [`child`] open a `DownloadManager` on that directory's `app.db` and fixture
-//! module, queue the download if the queue is empty, and run until the task ends. The parent
-//! kills it at a point of the download, starts it again, and checks the task through
-//! `TaskRepo` and the files on disk.
-//!
-//! Expected values come from FMD2's resume at startup (`CheckAndActiveTaskAtStartup` and
-//! `CheckForExists`, baseunits/uDownloadsManager.pas:1003-1064, :1859-1893): the page list
-//! saved before the crash is used again, and pages on disk are not downloaded again.
+//! The engine runs in a child process (this test binary with [`CHILD_DIR`] set, see [`child`]),
+//! which the parent kills and restarts. Expected values: `CheckAndActiveTaskAtStartup` and
+//! `CheckForExists` (baseunits/uDownloadsManager.pas:1003-1064, :1859-1893) reuse the saved page
+//! list and skip pages on disk.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
@@ -94,8 +89,8 @@ impl Transport for StubTransport {
     }
 }
 
-/// The child process: downloads chapter `/c/3` of module `t` as a CBZ in `$CHILD_DIR`, and
-/// returns once the task has finished or failed. Does nothing in a normal test run.
+/// The child process: downloads chapter `/c/3` of module `t` as a CBZ in `$CHILD_DIR` until the
+/// task ends. Does nothing in a normal test run.
 #[tokio::test(flavor = "multi_thread")]
 async fn child() {
     let Some(dir) = std::env::var_os(CHILD_DIR).map(PathBuf::from) else {
@@ -188,13 +183,12 @@ fn wait_until(child: &mut Child, what: &str, mut check: impl FnMut() -> bool) {
     }
 }
 
-/// Kills `child` with SIGKILL and reaps it.
 fn kill(mut child: Child) {
     child.kill().unwrap();
     child.wait().unwrap();
 }
 
-/// Runs a child in `dir` until it exits, which it does once the task ended.
+/// Runs a child in `dir` until the task ends.
 fn run_to_end(dir: &Path) {
     let mut child = spawn_child(dir, None);
     let started = Instant::now();
@@ -227,7 +221,6 @@ fn status(dir: &Path) -> Option<TaskStatus> {
     tasks.first().map(|t| t.status)
 }
 
-/// Checks the task in `dir` finished with a CBZ of the chapter's three whole pages.
 fn assert_finished_with_whole_pages(dir: &Path) {
     assert_eq!(status(dir), Some(TaskStatus::Finished));
     let archive = dir.join("out/Manga/One.cbz");

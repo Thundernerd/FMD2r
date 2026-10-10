@@ -20,7 +20,7 @@ use crate::settings::{
     effective_limits,
 };
 
-/// How many events a slow listener may fall behind before it misses some.
+/// How far a slow listener may fall behind before it misses events.
 const EVENTS_CAPACITY: usize = 1024;
 
 /// The archive extensions a chapter may have been packed under (`FMDSupportedPackedOutputExt`,
@@ -42,22 +42,22 @@ struct State {
     running: HashMap<TaskId, Running>,
 }
 
-/// A running task's thread (`TTaskContainer.TaskThread`).
+/// `TTaskContainer.TaskThread`.
 struct Running {
     module: Arc<Module>,
     terminate: TerminateToken,
     thread: Option<JoinHandle<()>>,
-    /// `TTaskThread.IsForDelete`: the task is being deleted, its status no longer matters.
+    /// `TTaskThread.IsForDelete`.
     deleting: bool,
 }
 
-/// The last progress reported for a task, to throttle and to compute speed.
+/// For throttling progress reports and computing speed.
 struct ProgressClock {
     last: Progress,
     at: Instant,
 }
 
-/// Progress reports per task per second, at most.
+/// Minimum time between a task's progress reports.
 const PROGRESS_INTERVAL_MS: u128 = 250;
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -80,7 +80,6 @@ impl Inner {
     }
 
     pub(super) fn emit(&self, event: EngineEvent) {
-        // No listener is not an error.
         let _ = self.events.send(event);
     }
 
@@ -96,8 +95,6 @@ impl Inner {
         self.exiting.load(Ordering::SeqCst)
     }
 
-    /// The limits for `module`'s downloads: its declared ones, the user's overrides and the
-    /// global connection settings (`effective_limits`).
     pub(super) fn limits(&self, module: &Module) -> EffectiveLimits {
         let def = module.def();
         let overrides = ModuleOverrides::load(&self.config.db.module_settings(), &def.id)
@@ -110,8 +107,8 @@ impl Inner {
         )
     }
 
-    /// Sets a task's status and announces it; nothing happens when it already has it
-    /// (`TTaskContainer.SetStatus`, baseunits/uDownloadsManager.pas:1376-1382).
+    /// A no-op when unchanged (`TTaskContainer.SetStatus`,
+    /// baseunits/uDownloadsManager.pas:1376-1382).
     pub(super) fn set_status(
         &self,
         id: TaskId,
@@ -161,9 +158,8 @@ impl Inner {
         self.emit(EngineEvent::Progress(progress));
     }
 
-    /// Queues a new task (`AddToDownload`, mangadownloader/forms/frmMain.pas:2653-2790): the
-    /// manga folder and chapter names are made with `CustomRename` from the templates in the
-    /// settings, as FMD2 does when it queues chapters.
+    /// `AddToDownload` (mangadownloader/forms/frmMain.pas:2653-2790): names are rendered from
+    /// the templates when queued.
     pub(super) fn add_task(
         self: &Arc<Self>,
         download: &NewDownload,
@@ -219,9 +215,9 @@ impl Inner {
         Ok(task.id)
     }
 
-    /// `CheckAndActiveTask` (baseunits/uDownloadsManager.pas:1784-1833): starts waiting tasks
-    /// in queue order while fewer than `max_parallel_tasks` run and their module can take
-    /// another (`CanCreateTask`, baseunits/WebsiteModules.pas:414-420).
+    /// `CheckAndActiveTask` (baseunits/uDownloadsManager.pas:1784-1833): starts waiting tasks in
+    /// queue order while their module can take another (`CanCreateTask`,
+    /// baseunits/WebsiteModules.pas:414-420).
     pub(super) fn check_and_active_task(self: &Arc<Self>) -> Result<(), EngineError> {
         if self.is_exiting() {
             return Ok(());
@@ -258,8 +254,7 @@ impl Inner {
         max == 0 || module.active_task_count() < i32::try_from(max).unwrap_or(i32::MAX)
     }
 
-    /// `StartTask` (baseunits/uDownloadsManager.pas:1895-1898): a new task thread, which counts
-    /// towards its module's active tasks (`TTaskThread.Create`, :461-483).
+    /// `StartTask` (baseunits/uDownloadsManager.pas:1895-1898, `TTaskThread.Create` :461-483).
     fn start_task(
         self: &Arc<Self>,
         state: &mut State,
@@ -296,9 +291,8 @@ impl Inner {
         Ok(())
     }
 
-    /// `TTaskThread.Destroy` (baseunits/uDownloadsManager.pas:485-528): a task that ended
-    /// neither finished nor failed is Stopped (Disabled when it was disabled meanwhile), unless
-    /// it is being deleted or the manager is exiting; then waiting tasks get its slot.
+    /// `TTaskThread.Destroy` (baseunits/uDownloadsManager.pas:485-528): an unfinished task
+    /// becomes Stopped (or Disabled) unless deleting or exiting.
     fn task_ended(self: &Arc<Self>, id: TaskId) {
         let deleting = {
             let mut state = lock(&self.state);
@@ -339,10 +333,8 @@ impl Inner {
         }
     }
 
-    /// `CheckAndActiveTaskAtStartup` (baseunits/uDownloadsManager.pas:1859-1893). FMD2
-    /// resumes Downloading, Preparing and Waiting tasks; a process killed while converting or
-    /// packing leaves its task Converting or Compressing, so those resume too
-    /// (docs/tickets/T44-download-hard-crash-resume.md).
+    /// `CheckAndActiveTaskAtStartup` (baseunits/uDownloadsManager.pas:1859-1893). Converting
+    /// and Compressing tasks, left by a killed process, resume too (T44).
     pub(super) fn check_and_active_task_at_startup(self: &Arc<Self>) -> Result<(), EngineError> {
         let max = self.settings().connections.max_parallel_tasks;
         let mut started = 0;
@@ -414,8 +406,7 @@ impl Inner {
         self.check_and_active_task()
     }
 
-    /// `StopTask` (baseunits/uDownloadsManager.pas:1900-1920) on one task, with the queue
-    /// locked.
+    /// `StopTask` (baseunits/uDownloadsManager.pas:1900-1920).
     fn stop_locked(&self, state: &State, id: TaskId) -> Result<(), EngineError> {
         let task = self
             .config
@@ -423,8 +414,7 @@ impl Inner {
             .tasks()
             .get(id)?
             .ok_or(EngineError::NoTask(id))?;
-        // A task thread shows Waiting until its first chapter starts, so a running task is
-        // terminated whatever its status says; FMD2 checks the status first.
+        // A task thread shows Waiting until its first chapter starts, so ignore the status.
         if let Some(running) = state.running.get(&id) {
             running.terminate.terminate();
         } else if task.status == TaskStatus::Waiting {
@@ -459,8 +449,8 @@ impl Inner {
         self.check_and_active_task()
     }
 
-    /// `StopAllTasks` (baseunits/uDownloadsManager.pas:1943-1955): with the queue locked, so a
-    /// task that ends meanwhile cannot start one about to be stopped.
+    /// `StopAllTasks` (baseunits/uDownloadsManager.pas:1943-1955). Holds the queue lock so a
+    /// task ending meanwhile cannot start one about to be stopped.
     pub(super) fn stop_all(self: &Arc<Self>) -> Result<(), EngineError> {
         let state = lock(&self.state);
         for task in self.config.db.tasks().list()? {
@@ -469,8 +459,8 @@ impl Inner {
         Ok(())
     }
 
-    /// `DisableTask`/`EnableTask` (baseunits/uDownloadsManager.pas:2022-2045). FMD2 keeps a
-    /// disabled task's status; here it shows as Disabled, and as Stopped once enabled again.
+    /// `DisableTask`/`EnableTask` (baseunits/uDownloadsManager.pas:2022-2045). Unlike FMD2,
+    /// the status becomes Disabled, then Stopped once enabled.
     pub(super) fn set_enabled(
         self: &Arc<Self>,
         id: TaskId,
@@ -532,8 +522,7 @@ impl Inner {
         self.check_and_active_task()
     }
 
-    /// Deletes a task, terminating and waiting for its thread first
-    /// (miDownloadDeleteTaskClick, mangadownloader/forms/frmMain.pas:2214-2310).
+    /// `miDownloadDeleteTaskClick` (mangadownloader/forms/frmMain.pas:2214-2310).
     pub(super) fn delete(
         self: &Arc<Self>,
         id: TaskId,
@@ -578,8 +567,8 @@ impl Inner {
             .collect()
     }
 
-    /// `StopAllDownloadTasksForExit` (baseunits/uDownloadsManager.pas:1957-1977): terminates
-    /// every task and waits for it, leaving statuses as they are.
+    /// `StopAllDownloadTasksForExit` (baseunits/uDownloadsManager.pas:1957-1977); statuses
+    /// are kept.
     pub(super) fn shutdown(&self) {
         self.exiting.store(true, Ordering::SeqCst);
         let threads: Vec<JoinHandle<()>> = {
@@ -599,9 +588,8 @@ impl Inner {
     }
 }
 
-/// Deletes the chapters' folders and archives in `save_to`, then `save_to` when empty
-/// (mangadownloader/forms/frmMain.pas:2264-2285).
-/// Files that cannot be removed are logged and left; the task is deleted anyway, as in FMD2.
+/// Then `save_to` when empty (mangadownloader/forms/frmMain.pas:2264-2285). Failures are only
+/// logged, as in FMD2.
 fn delete_task_files(save_to: &Path, chapters: &[fmd_store::TaskChapter]) {
     let removed = |path: &Path, result: std::io::Result<()>| {
         if let Err(e) = result {
@@ -626,8 +614,7 @@ fn delete_task_files(save_to: &Path, chapters: &[fmd_store::TaskChapter]) {
     let _ = std::fs::remove_dir(save_to);
 }
 
-/// Logs a step of task `id`'s lifecycle at `info`, naming the manga, so `/api/logs` shows
-/// what the downloads did.
+/// At `info`, so `/api/logs` shows what the downloads did.
 pub(super) fn log_task(id: TaskId, title: &str, what: impl std::fmt::Display) {
     tracing::info!(target: "fmd_core", "task {} {title:?}: {what}", id.0);
 }
@@ -638,7 +625,6 @@ fn now_ms() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
-/// `CustomRename`'s options from the save-to settings.
 pub(crate) fn rename_options(saveto: &SaveToSettings) -> fmd_pack::RenameOptions {
     fmd_pack::RenameOptions {
         symbols: match saveto.illegal_chars {
@@ -661,8 +647,7 @@ pub(crate) fn rename_options(saveto: &SaveToSettings) -> fmd_pack::RenameOptions
     }
 }
 
-/// A chapter's name: the chapter template with `%NUMBERING%` as four digits
-/// (mangadownloader/forms/frmMain.pas:2666-2675).
+/// `%NUMBERING%` is four digits (mangadownloader/forms/frmMain.pas:2666-2675).
 pub(super) fn chapter_name(
     saveto: &SaveToSettings,
     website: &str,
@@ -683,8 +668,7 @@ pub(super) fn chapter_name(
     custom_rename(&saveto.chapter_rename, &ctx, &rename_options(saveto))
 }
 
-/// The manga folder's name: the manga template renamed for the download
-/// (mangadownloader/forms/frmMain.pas:2694-2703).
+/// mangadownloader/forms/frmMain.pas:2694-2703.
 pub(super) fn manga_folder(
     saveto: &SaveToSettings,
     website: &str,
@@ -700,10 +684,10 @@ pub(super) fn manga_folder(
     custom_rename(&saveto.manga_rename, &ctx, &rename_options(saveto))
 }
 
-/// The task's directory: the given download directory, else the website's (`website_dir`,
-/// `OverrideSaveTo`, mangadownloader/forms/frmMain.pas:5631-5643), else the default
-/// destination's (`FillSaveTo`), plus the manga folder when generated and not already part of
-/// it, without trailing dots (mangadownloader/forms/frmMain.pas:2685-2710).
+/// The task's directory: the given one, else `website_dir` (`OverrideSaveTo`,
+/// mangadownloader/forms/frmMain.pas:5631-5643), else the default destination (`FillSaveTo`),
+/// plus the manga folder when generated and not already part of it, without trailing dots
+/// (mangadownloader/forms/frmMain.pas:2685-2710).
 pub fn save_to(
     saveto: &SaveToSettings,
     website: &str,
@@ -724,7 +708,6 @@ pub fn save_to(
     dir.trim_end_matches('.').to_owned()
 }
 
-/// Whether the output format packs chapters into a file.
 pub(super) fn pack_format(format: OutputFormat) -> Option<fmd_pack::PackFormat> {
     match format {
         OutputFormat::Folder => None,

@@ -21,8 +21,7 @@
 
   // Defines `value` on `target` like a built-in property: writable, configurable, not
   // enumerable. Functions are passed as methods (`{ name() {} }.name`), which like Duktape's
-  // native functions have no `prototype`; this file only runs on QuickJS, so ES2015 syntax is
-  // fine.
+  // native functions have no `prototype`.
   function builtin(target, name, value) {
     if (typeof value === 'function') {
       native(value);

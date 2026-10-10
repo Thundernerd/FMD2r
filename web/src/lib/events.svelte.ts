@@ -30,14 +30,10 @@ export interface EventStoreOptions {
 	maxLogLines?: number;
 	/** Where `task.*` frames go; a queue that never refetches when omitted. */
 	queue?: QueueStore;
-	/**
-	 * Called when the stream fails. An `EventSource` hides the status, so this is where a caller
-	 * can find out whether the session ended.
-	 */
+	/** Called when the stream fails; `EventSource` hides the status, so the caller checks the session. */
 	onDisconnect?: () => void;
 }
 
-/** The `job.lists.<kind>` events the server sends. */
 const LIST_EVENT_KINDS: ListEventKind[] = [
 	'started',
 	'progress',
@@ -46,7 +42,6 @@ const LIST_EVENT_KINDS: ListEventKind[] = [
 	'failed'
 ];
 
-/** The `job.favorites.<kind>` events the server sends. */
 const FAVORITES_EVENT_KINDS: FavoritesEventKind[] = [
 	'started',
 	'progress',
@@ -55,7 +50,6 @@ const FAVORITES_EVENT_KINDS: FavoritesEventKind[] = [
 	'failed'
 ];
 
-/** The `job.metadata.<kind>` events the server sends. */
 const METADATA_EVENT_KINDS: MetadataEventKind[] = [
 	'started',
 	'progress',

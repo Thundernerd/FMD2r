@@ -4,14 +4,9 @@
 //! cookies from FlareSolverr.
 //!
 //! The script cannot run on Linux: it locates its folder as `Path(__file__) / '..'`
-//! (lua/websitebypass/cloudflare.py:17-21), which only Windows resolves when `__file__` is a
-//! file, so writing `temp_cloudflare.json` there fails before it prints anything (:76). So
-//! [`SystemSpawner`](super::subprocess::SystemSpawner) answers that command itself, speaking
-//! FlareSolverr's protocol the way the script does and printing the same JSON.
-//!
-//! It talks to FlareSolverr over a plain `TcpStream` rather than `fmd-http`, like the separate
-//! process it replaces: a module session would add FMD2's retries, default headers and cookie
-//! handling, and the spawner has no `HttpClient` to hand.
+//! (lua/websitebypass/cloudflare.py:17-21), which only Windows resolves, so it fails before
+//! printing anything (:76). It talks to FlareSolverr over a plain `TcpStream`, like the separate
+//! process it replaces, to avoid a module session's retries, headers and cookies.
 //!
 //! Not reproduced: the `rookiepy` fallback that reads cookies out of local desktop browsers
 //! (:127-162; reported as not installed, as without the package), the `--testing` re-check of
@@ -248,7 +243,6 @@ fn parse_response(response: &[u8]) -> Option<(u16, Value)> {
     Some((status, serde_json::from_slice(&body).unwrap_or(Value::Null)))
 }
 
-/// Decodes a chunked transfer encoding.
 fn dechunk(mut body: &[u8]) -> Option<Vec<u8>> {
     let mut out = Vec::new();
     loop {

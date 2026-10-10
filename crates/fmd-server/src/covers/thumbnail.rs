@@ -9,9 +9,8 @@ use image::{ImageFormat, ImageResult};
 /// JPEG quality of thumbnails of JPEG covers.
 const JPEG_QUALITY: u8 = 85;
 
-/// `body` scaled down to `width` pixels wide, keeping its aspect ratio, with its content type:
-/// JPEG covers stay JPEG, others become PNG. `None` when the image is no wider than `width` or
-/// not an image the `image` crate decodes; the cover itself is served then.
+/// JPEG covers stay JPEG, others become PNG. `None` (serve the cover itself) when the image is no
+/// wider than `width` or not decodable.
 pub(crate) fn thumbnail(body: &[u8], width: u32) -> ImageResult<Option<(Vec<u8>, &'static str)>> {
     let Ok(format) = image::guess_format(body) else {
         return Ok(None);

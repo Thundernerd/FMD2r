@@ -1,12 +1,10 @@
 name: Release
 
-# On a version tag: the multi-arch container image (linux/amd64 and linux/arm64, each smoke-tested,
-# then pushed to GHCR) and a Linux tarball per architecture with the binary, attached to a GitHub
-# release with SHA-256 checksums. fmd2r uses the native XPath backend only, so neither ships
-# libfmdxpath.so. arm64 cross-compiles; only its smoke tests run under QEMU.
+# On a version tag: the amd64/arm64 container image (smoke-tested, then pushed to GHCR) and a
+# Linux tarball per architecture, attached to a GitHub release with SHA-256 checksums. arm64
+# cross-compiles; only its smoke tests run under QEMU.
 #
-# PRs that change the release plumbing, and manual runs, are a dry run: everything builds and is
-# smoke-tested, but nothing is pushed or released.
+# PRs that change the release plumbing, and manual runs, are dry runs: nothing is pushed or released.
 
 on:
   push:

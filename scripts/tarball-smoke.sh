@@ -1,7 +1,6 @@
 #!/bin/sh
 # Smoke-tests a release tarball: it holds fmd2r, README.md and LICENSE but no libfmdxpath.so, and
-# the binary runs `--version` and loads the bundled Lua modules with `module init`. The release
-# workflow runs it on each tarball, the arm64 one under QEMU.
+# the binary runs `--version` and loads the bundled Lua modules with `module init`.
 #
 # Usage: scripts/tarball-smoke.sh TARBALL [LUA_DIR]   (default LUA_DIR: fixtures/lua)
 # FMD2R_RUNNER prefixes each fmd2r command, e.g. FMD2R_RUNNER='qemu-aarch64 -L /usr/aarch64-linux-gnu'.

@@ -1,33 +1,12 @@
 //! `require 'fmd.crypto'`: FMD2's hashing, encoding and cipher library
 //! (baseunits/lua/LuaCrypto.pas), byte-for-byte compatible with the Pascal it ports.
 //!
-//! Every function is binary-safe: arguments are read with their explicit length and results
-//! pushed with theirs (`GetLuaString`/`PushLuaString`, baseunits/lua/LuaCrypto.pas:15-31).
-//! Digests return raw bytes; the `*Hex` variants return lower-case hex, while `StrToHexStr`
-//! returns upper case like FPC's `BinToHex`.
+//! Binary-safe like `GetLuaString`/`PushLuaString` (baseunits/lua/LuaCrypto.pas:15-31). All 54
+//! functions of FMD2's method tables (baseunits/lua/LuaCrypto.pas:391-451) are implemented.
 //!
-//! [`encrypt_string`] and [`decrypt_string`] are also public Rust API, for reading the
-//! account passwords FMD2 stores with them.
-//!
-//! # Coverage
-//!
-//! All 54 functions of FMD2's method tables (baseunits/lua/LuaCrypto.pas:391-451) are
-//! implemented; none is missing.
-//!
-//! | Tier | Functions |
-//! |------|-----------|
-//! | 1 | `HTMLEncode`, `DecodeBase64`, `EncodeURLElement`, `EncodeBase64`, `SHA256`, `MD5`, `HexToStr`, `HMAC_SHA256`, `DecodeBase64URL`, `SHA512`, `SHA1`, `DecodeURL`, `EncodeURL`, `RC4`, `AESCTR`, `HTMLDecode`, `HMAC_SHA256Hex`, `AESDecryptGCM`, `AESDecryptCBCSHA256Base64Pkcs7`, `EncodeBase64URL` |
-//! | 2 | `X25519_PublicKey`, `X25519_SharedSecret`, `SecretStream_InitPull`, `SecretStream_Pull` |
-//! | 3 | `StrToHexStr`, `MD5Hex`, `SHA1Hex`, `SHA256Hex`, `SHA512Hex`, `HMAC_SHA1`, `HMAC_SHA1Hex`, `HMAC_SHA512`, `HMAC_SHA512Hex`, `HMAC_MD5`, `MD4`, `MD5LongHash`, `SHA1LongHash`, `CRC16`, `CRC32`, `EncodeUU`, `DecodeUU`, `AESEncryptCBC`, `AESDecryptCBC`, `AESEncryptECBPkcs7`, `AESDecryptECBPkcs7`, `AESCFB`, `AESOFB`, `AESEncryptGCM`, `AESEncryptCBCSHA256Base64Pkcs7`, `AESDecryptCBCMD5Base64ZerosPadding`, `AESDecryptCBCHexBase64ZerosPadding`, `PBKDF2SHA256`, `EncryptString`, `DecryptString` |
-//!
-//! # Deliberate differences
-//!
-//! Where the Pascal's result is undefined (uninitialised memory, reads past a buffer) a
-//! defined result is chosen; each case is documented on the function:
-//! `AESEncryptECBPkcs7`/`AESDecryptECBPkcs7` process every block (the Pascal only the first),
-//! `HTMLDecode` copies undecodable entities through, and short hex IVs are zero-padded.
-//! A Pascal exception that escapes to Lua (bad hex in `HexToStr`, an invalid GCM or RC4 key
-//! size, `*LongHash` of '') is a Lua error naming the function.
+//! Where the Pascal's result is undefined (uninitialised memory, reads past a buffer) a defined
+//! result is chosen, documented on each function. A Pascal exception that escapes to Lua is a
+//! Lua error naming the function.
 
 mod base;
 mod dcp;
@@ -84,7 +63,6 @@ pub fn decrypt_string(s: &[u8]) -> Vec<u8> {
 /// Upper-case hex digits, as FPC's `IntToHex` and `BinToHex` write them.
 const HEX_UPPER: &[u8; 16] = b"0123456789ABCDEF";
 
-/// The value of one hex digit, either case.
 fn hex_value(c: u8) -> Option<u8> {
     char::from(c).to_digit(16).map(|d| d as u8)
 }
@@ -115,13 +93,11 @@ type Fn3 = fn(&[u8], &[u8], &[u8]) -> Vec<u8>;
 /// An AES-GCM function: `(s, key, iv, aad)`.
 type GcmFn = fn(&[u8], &[u8], &[u8], &[u8]) -> Result<Vec<u8>, Error>;
 
-/// Registers a one-argument byte-string function.
 fn add1(lua: &Lua, t: &Table, name: &str, f: fn(&[u8]) -> Vec<u8>) -> mlua::Result<()> {
     let func = lua.create_function(move |lua, a: Bytes| lua.create_string(f(&a.as_bytes())))?;
     t.set(name, func)
 }
 
-/// Registers a two-argument byte-string function.
 fn add2(lua: &Lua, t: &Table, name: &str, f: fn(&[u8], &[u8]) -> Vec<u8>) -> mlua::Result<()> {
     let func = lua.create_function(move |lua, (a, b): (Bytes, Bytes)| {
         lua.create_string(f(&a.as_bytes(), &b.as_bytes()))
@@ -129,7 +105,6 @@ fn add2(lua: &Lua, t: &Table, name: &str, f: fn(&[u8], &[u8]) -> Vec<u8>) -> mlu
     t.set(name, func)
 }
 
-/// Registers a three-argument byte-string function.
 fn add3(lua: &Lua, t: &Table, name: &str, f: Fn3) -> mlua::Result<()> {
     let func = lua.create_function(move |lua, (a, b, c): (Bytes, Bytes, Bytes)| {
         lua.create_string(f(&a.as_bytes(), &b.as_bytes(), &c.as_bytes()))
@@ -137,7 +112,6 @@ fn add3(lua: &Lua, t: &Table, name: &str, f: Fn3) -> mlua::Result<()> {
     t.set(name, func)
 }
 
-/// Registers a one-argument byte-string function that may fail.
 fn add1_try(
     lua: &Lua,
     t: &Table,
@@ -166,9 +140,9 @@ fn add_long_hash(
     t.set(name, func)
 }
 
-/// Registers an AES-GCM function: `(s, key, iv[, aad])`. Only a missing fourth argument
-/// means an empty AAD; a fourth argument that is present (even `nil`) must be a string, as the
-/// Pascal checks `lua_gettop(L) >= 4` (baseunits/lua/LuaCrypto.pas:304-328).
+/// Registers an AES-GCM function: `(s, key, iv[, aad])`. A present fourth argument (even
+/// `nil`) must be a string, as the Pascal checks `lua_gettop(L) >= 4`
+/// (baseunits/lua/LuaCrypto.pas:304-328).
 fn add_gcm(lua: &Lua, t: &Table, name: &'static str, f: GcmFn) -> mlua::Result<()> {
     let func = lua.create_function(move |lua, args: mlua::MultiValue| {
         let has_aad = args.len() >= 4;
@@ -186,7 +160,7 @@ fn add_gcm(lua: &Lua, t: &Table, name: &'static str, f: GcmFn) -> mlua::Result<(
     t.set(name, func)
 }
 
-/// Builds the library table, like `luaopen_crypto` (baseunits/lua/LuaCrypto.pas:453-457).
+/// `luaopen_crypto` (baseunits/lua/LuaCrypto.pas:453-457).
 fn open(lua: &Lua) -> mlua::Result<Table> {
     let t = lua.create_table()?;
     add1(lua, &t, "EncodeBase64", synacode::encode_base64)?;

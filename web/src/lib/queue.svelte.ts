@@ -93,7 +93,6 @@ export class QueueStore {
 		this.#historySize = historySize;
 	}
 
-	/** Replaces the queue with a fresh list. */
 	load(tasks: TaskSummary[]): void {
 		this.tasks = tasks;
 	}
@@ -107,7 +106,6 @@ export class QueueStore {
 		if (this.#inFlight) this.#inFlight[task.id] = task;
 	}
 
-	/** A `task.progress` frame. */
 	progress(p: TaskProgress): void {
 		const { id, chapters, status, done, total, bytes_per_sec } = p;
 		this.#patch(id, { chapters, status, done, total, bytes_per_sec });
@@ -121,13 +119,11 @@ export class QueueStore {
 		this.resync();
 	}
 
-	/** A `task.removed` frame. */
 	removed(id: number): void {
 		this.tasks = this.tasks.filter((t) => t.id !== id);
 		if (this.#inFlight) this.#inFlight[id] = null;
 	}
 
-	/** A `task.reordered` frame. */
 	reordered(): void {
 		this.resync();
 	}

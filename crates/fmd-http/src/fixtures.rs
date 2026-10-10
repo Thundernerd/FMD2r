@@ -1,5 +1,4 @@
-//! HTTP fixtures: a [`Transport`] that records every exchange to a directory, and one that
-//! serves them back offline. The format is documented in `docs/fixtures.md`.
+//! Recording and replaying HTTP fixtures; the format is in `docs/fixtures.md`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -11,14 +10,13 @@ use serde::{Deserialize, Serialize};
 use crate::decode::decode;
 use crate::transport::{BoxFuture, Transport, TransportError, WireRequest, WireResponse};
 
-/// The version of the fixture format `index.json` declares.
+/// The fixture format version in `index.json`.
 pub const FIXTURE_FORMAT: u32 = 1;
 
 const INDEX_FILE: &str = "index.json";
 const EXCHANGES_DIR: &str = "exchanges";
 const BODIES_DIR: &str = "bodies";
 
-/// Errors reading or writing a fixture directory.
 #[derive(Debug, thiserror::Error)]
 pub enum FixtureError {
     #[error("{path}: {source}")]
@@ -42,21 +40,20 @@ fn io_error(path: &Path) -> impl FnOnce(std::io::Error) -> FixtureError + '_ {
     }
 }
 
-/// `index.json`: every exchange, in the order they were sent.
+/// `index.json`.
 #[derive(Debug, Serialize, Deserialize)]
 struct Index {
     format: u32,
     exchanges: Vec<IndexEntry>,
 }
 
-/// One exchange in the index, enough to find it by eye.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct IndexEntry {
-    /// The exchange's file in `exchanges/`, without its `.json` extension.
+    /// File stem in `exchanges/`.
     id: String,
     method: String,
     url: String,
-    /// The response status; `None` for a transport error.
+    /// `None` for a transport error.
     status: Option<u16>,
 }
 
@@ -73,7 +70,7 @@ struct RecordedRequest {
     method: String,
     url: String,
     headers: Vec<(String, String)>,
-    /// The body's file, relative to the fixture directory; `None` for no body.
+    /// Relative to the fixture directory.
     body: Option<String>,
 }
 
@@ -81,7 +78,6 @@ struct RecordedRequest {
 #[serde(rename_all = "snake_case")]
 enum Outcome {
     Response(RecordedResponse),
-    /// The transport failed with this message.
     Error(String),
 }
 
@@ -89,16 +85,14 @@ enum Outcome {
 struct RecordedResponse {
     status: u16,
     reason: String,
-    /// The headers as received, `Content-Encoding` included.
+    /// As received, `Content-Encoding` included.
     headers: Vec<(String, String)>,
-    /// The body's file, relative to the fixture directory; `None` for no body.
+    /// Relative to the fixture directory.
     body: Option<String>,
-    /// The `Content-Encoding` the body was decoded from before it was stored; `None` when it
-    /// is stored as received.
+    /// The `Content-Encoding` the stored body was decoded from.
     decoded_from: Option<String>,
 }
 
-/// The first value of header `name`, ignoring ASCII case.
 fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
     headers
         .iter()
@@ -111,9 +105,8 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// Sends through another transport and writes every exchange to a fixture directory.
-///
-/// Response bodies are stored decoded, as `fmd-http` decodes them after the exchange
-/// (baseunits/httpsendthread.pas:681-710), so fixtures stay readable and diffable.
+/// Bodies are stored decoded so fixtures stay diffable; the session decodes after the
+/// exchange anyway (baseunits/httpsendthread.pas:681-710).
 pub struct RecordingTransport {
     inner: Arc<dyn Transport>,
     state: Arc<Recorder>,
@@ -126,8 +119,7 @@ struct Recorder {
 }
 
 impl RecordingTransport {
-    /// Records the exchanges `inner` sends into `dir`, replacing the `index.json`,
-    /// `exchanges/` and `bodies/` a previous recording left there.
+    /// Replaces any previous recording in `dir`.
     pub fn new(dir: impl Into<PathBuf>, inner: Arc<dyn Transport>) -> Result<Self, FixtureError> {
         let dir = dir.into();
         for sub in [EXCHANGES_DIR, BODIES_DIR] {
@@ -159,7 +151,6 @@ impl Recorder {
         write_json(&self.dir.join(INDEX_FILE), &index)
     }
 
-    /// Writes `body` as `bodies/<id>.<kind>`; `None` for an empty body.
     fn write_body(
         &self,
         id: &str,
@@ -252,7 +243,7 @@ impl Transport for RecordingTransport {
         &self,
         request: WireRequest,
     ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
-        // Numbered when sent, so the index lists exchanges in the order they started.
+        // Numbered when sent, so the index keeps start order.
         let id = format!("{:04}", self.state.next.fetch_add(1, Ordering::SeqCst));
         let sent = self.inner.send(request.clone());
         let state = self.state.clone();
@@ -269,18 +260,14 @@ impl Transport for RecordingTransport {
 /// How a [`ReplayTransport`] matches a request to a recorded exchange.
 #[derive(Debug, Clone, Default)]
 pub struct ReplayOptions {
-    /// Request headers whose values must match too, compared by name ignoring ASCII case and
-    /// by value with surrounding blanks trimmed. Method, URL and body always match exactly;
-    /// every other header is ignored.
+    /// Headers that must match too (name case-insensitive, value trimmed); method, URL and
+    /// body always match, other headers are ignored.
     pub match_headers: Vec<String>,
 }
 
-/// Serves the exchanges of a fixture directory instead of the network.
-///
-/// A request is answered by the recorded exchanges with its method, URL, body and
-/// [`match_headers`](ReplayOptions::match_headers), in recording order; once they are used up
-/// the last one answers again. A request with no recorded exchange fails like a transport error
-/// and is listed in [`misses`](Self::misses).
+/// Serves a fixture directory instead of the network. Matching exchanges answer in
+/// recording order, the last one repeating; an unmatched request fails like a transport
+/// error and is listed in [`misses`](Self::misses).
 pub struct ReplayTransport {
     options: ReplayOptions,
     exchanges: HashMap<Key, Vec<Replayed>>,
@@ -288,7 +275,6 @@ pub struct ReplayTransport {
     misses: Mutex<Vec<String>>,
 }
 
-/// What a request is matched by.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Key {
     method: String,
@@ -321,7 +307,6 @@ enum Replayed {
 }
 
 impl ReplayTransport {
-    /// Loads the fixture directory `dir`.
     pub fn open(dir: impl AsRef<Path>, options: ReplayOptions) -> Result<Self, FixtureError> {
         let dir = dir.as_ref();
         let index_path = dir.join(INDEX_FILE);
@@ -356,8 +341,7 @@ impl ReplayTransport {
             let replayed = match exchange.outcome {
                 Outcome::Response(response) => {
                     let mut headers = response.headers;
-                    // The body is stored decoded: serve it without the encoding header, so the
-                    // session does not decode it again.
+                    // Stored decoded: drop the header so the session doesn't decode again.
                     if response.decoded_from.is_some() {
                         headers.retain(|(n, _)| !n.eq_ignore_ascii_case("Content-Encoding"));
                     }
@@ -380,7 +364,7 @@ impl ReplayTransport {
         })
     }
 
-    /// Every request that had no recorded exchange, as `METHOD URL`, in the order they came.
+    /// Unmatched requests as `METHOD URL`.
     pub fn misses(&self) -> Vec<String> {
         lock(&self.misses).clone()
     }
@@ -413,7 +397,6 @@ impl ReplayTransport {
     }
 }
 
-/// The values of the headers `options` matches on, in its order.
 fn header_values(options: &ReplayOptions, headers: &[(String, String)]) -> Vec<Option<String>> {
     options
         .match_headers

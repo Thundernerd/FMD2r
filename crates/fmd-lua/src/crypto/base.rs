@@ -253,10 +253,9 @@ pub fn aes_ofb(s: &[u8], key: &[u8], iv: &[u8]) -> Vec<u8> {
     out
 }
 
-/// `AESEncryptECBPkcs7(s, key)` (baseunits/BaseCrypto.pas:541-568). The Pascal calls
-/// `EncryptECB` once, so only the first block of a 16+ byte input is encrypted and the rest of
-/// its result is uninitialised memory; this encrypts every block, which agrees with it on
-/// inputs under 16 bytes and is what callers of a "PKCS#7 ECB" function expect.
+/// `AESEncryptECBPkcs7(s, key)` (baseunits/BaseCrypto.pas:541-568). The Pascal encrypts only
+/// the first block, leaving the rest uninitialised; this encrypts every block, which agrees on
+/// inputs under 16 bytes.
 pub fn aes_encrypt_ecb_pkcs7(s: &[u8], key: &[u8]) -> Vec<u8> {
     if s.is_empty() {
         return Vec::new();
@@ -270,9 +269,8 @@ pub fn aes_encrypt_ecb_pkcs7(s: &[u8], key: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-/// `AESDecryptECBPkcs7(s, key)` (baseunits/BaseCrypto.pas:570-596). Like the encrypt side it
-/// decrypts every block where the Pascal decrypts only the first (and reads past a short
-/// input); a length that is not a whole number of blocks gives ''.
+/// `AESDecryptECBPkcs7(s, key)` (baseunits/BaseCrypto.pas:570-596). Decrypts every block where
+/// the Pascal decrypts only the first; a partial block gives ''.
 pub fn aes_decrypt_ecb_pkcs7(s: &[u8], key: &[u8]) -> Vec<u8> {
     if s.is_empty() || !s.len().is_multiple_of(16) {
         return Vec::new();
@@ -287,7 +285,6 @@ pub fn aes_decrypt_ecb_pkcs7(s: &[u8], key: &[u8]) -> Vec<u8> {
     )
 }
 
-/// Copies a 16-byte chunk into a block.
 fn to_block(b: &[u8]) -> Block {
     let mut out = [0u8; 16];
     out.copy_from_slice(b);
@@ -319,9 +316,8 @@ pub fn aes_decrypt_cbc_sha256_base64_pkcs7(s: &[u8], key: &[u8], iv: &[u8]) -> V
 }
 
 /// `InitStr(key, TDCP_sha256)` then `SetIV(ivb[0])` from `HexToBytes(iv)`
-/// (baseunits/BaseCrypto.pas:132-134, 159-161). An IV that decodes
-/// to nothing faults on `ivb[0]` (''); a short one is zero-padded where the Pascal would read
-/// past it.
+/// (baseunits/BaseCrypto.pas:132-134, 159-161). An empty IV faults on `ivb[0]` (''); a short
+/// one is zero-padded where the Pascal would read past it.
 fn sha256_keyed(s: &[u8], key: &[u8], iv: &[u8]) -> Option<Rijndael> {
     if s.is_empty() || key.is_empty() || iv.is_empty() {
         return None;
@@ -343,10 +339,9 @@ pub fn aes_decrypt_cbc_md5_base64_zeros_padding(s: &[u8], key: &[u8], iv: &[u8])
 }
 
 /// `AESDecryptCBCHexBase64ZerosPadding(s, key, iv)`: hex key and IV, Base64 data, trailing
-/// NULs stripped (baseunits/BaseCrypto.pas:246-273). Bad hex in the key or IV is an error, as
-/// `HexToBytes` runs before the `try` (:254-255); an invalid key size gives ''. An IV that
-/// decodes to nothing passes a nil pointer, so DCPcrypt's default IV applies; a short one is
-/// zero-padded where the Pascal would read past it.
+/// NULs stripped (baseunits/BaseCrypto.pas:246-273). Bad hex is an error, as `HexToBytes` runs
+/// before the `try` (:254-255); an invalid key size gives ''. An empty IV means DCPcrypt's
+/// default; a short one is zero-padded where the Pascal would read past it.
 pub fn aes_decrypt_cbc_hex_base64_zeros_padding(
     s: &[u8],
     key: &[u8],

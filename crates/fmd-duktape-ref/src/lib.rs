@@ -1,7 +1,5 @@
-//! A test-only reference for `fmd.duktape`: FMD2's `ExecJS` (baseunits/Duktape.pas:77-104) on
-//! the Duktape 2.3.0 that FMD2 bundles (`DUK_VERSION = 20300`, baseunits/Duktape.Api.pas:431),
-//! built from the vendored release sources. Tests run the same script here and through
-//! `fmd-lua` and compare the results.
+//! Test-only reference for `fmd.duktape`: FMD2's `ExecJS` (baseunits/Duktape.pas:77-104) on the
+//! Duktape 2.3.0 FMD2 bundles (`DUK_VERSION = 20300`, baseunits/Duktape.Api.pas:431).
 
 use std::ffi::{CString, c_char, c_int};
 use std::path::Path;
@@ -26,14 +24,12 @@ pub enum DuktapeError {
     /// The heap or the result buffer could not be allocated.
     #[error("Failed to create a Duktape heap.")]
     Heap,
-    /// The library directory holds a NUL, so it cannot be passed to C.
     #[error("the library directory contains a NUL byte")]
     LibDir,
 }
 
 /// `ExecJS(text)` (baseunits/Duktape.pas:77-104) with `lib_dir` as `DukLibDir`: the completion
-/// value as `duk_safe_to_string` bytes, read back as a Pascal string (so up to the first NUL),
-/// and `""` when that is `"undefined"`.
+/// value up to the first NUL (a Pascal string), `""` for `"undefined"`.
 pub fn exec_js(text: &[u8], lib_dir: &Path) -> Result<Vec<u8>, DuktapeError> {
     let lib_dir =
         CString::new(lib_dir.as_os_str().as_encoded_bytes()).map_err(|_| DuktapeError::LibDir)?;

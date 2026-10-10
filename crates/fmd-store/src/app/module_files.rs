@@ -1,11 +1,10 @@
-//! Lua files synced from upstream by the module updater (T29).
+//! Lua files synced from upstream by the module updater.
 
 use rusqlite::{OptionalExtension, Row, params};
 
 use crate::db::Db;
 use crate::error::Result;
 
-/// A synced Lua file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleFile {
     /// Path relative to the Lua directory.
@@ -26,7 +25,6 @@ fn file_from_row(row: &Row<'_>) -> rusqlite::Result<ModuleFile> {
     })
 }
 
-/// Repository for synced module files. Obtain it with [`crate::AppDb::module_files`].
 pub struct ModuleFileRepo<'a> {
     db: &'a Db,
 }
@@ -47,7 +45,6 @@ impl<'a> ModuleFileRepo<'a> {
             .optional()?)
     }
 
-    /// Every file, ordered by path.
     pub fn list(&self) -> Result<Vec<ModuleFile>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare_cached(

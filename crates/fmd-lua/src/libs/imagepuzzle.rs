@@ -139,9 +139,8 @@ fn set(lua: &Lua, items: &mut [i32], i: i64, value: Value) -> mlua::Result<()> {
 fn object(lua: &Lua, puzzle: Puzzle) -> mlua::Result<AnyUserData> {
     let class = crate::LuaClass::new(Rc::new(RefCell::new(puzzle)))
         // baseunits/lua/LuaImagePuzzle.pas:28-34: does nothing unless both are streams
-        // (baseunits/ImagePuzzle.pas:159-162). The whole input is read whatever its position
-        // (`memStream.LoadFromStream(input)`, :180); the output is emptied and rewritten from
-        // the start, on failure left empty and the reason logged (:151-156, :294-296).
+        // (baseunits/ImagePuzzle.pas:159-162). Reads the whole input (:180); the output is
+        // rewritten, or left empty with the reason logged (:151-156, :294-296).
         .method(
             "DeScramble",
             |_, p: &mut Puzzle, (input, output): (Value, Value)| {

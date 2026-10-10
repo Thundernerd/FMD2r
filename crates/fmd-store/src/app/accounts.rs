@@ -1,6 +1,5 @@
-//! Module accounts, with username, password and cookies encrypted at rest. FMD2 keeps the same
-//! fields in `modules.json`, encrypted with `EncryptString` (baseunits/WebsiteModules.pas:614-620,
-//! :671-678).
+//! Module accounts with credentials encrypted at rest, like FMD2's `EncryptString` fields in
+//! `modules.json` (baseunits/WebsiteModules.pas:614-620, :671-678).
 
 use rusqlite::{OptionalExtension, params};
 
@@ -19,8 +18,7 @@ text_enum! {
     }
 }
 
-/// A module's account, in plaintext. Its `Debug` output leaves the credentials and cookies out,
-/// so they never reach a log.
+/// A module's account, in plaintext. `Debug` omits the secrets so they never reach a log.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Account {
     pub module_id: String,
@@ -41,7 +39,6 @@ impl std::fmt::Debug for Account {
     }
 }
 
-/// Repository for accounts. Obtain it with [`crate::AppDb::accounts`].
 pub struct AccountRepo<'a> {
     db: &'a Db,
     cipher: &'a dyn Cipher,
@@ -88,7 +85,6 @@ impl<'a> AccountRepo<'a> {
         .transpose()
     }
 
-    /// Inserts or replaces the module's account.
     pub fn upsert(&self, account: &Account) -> Result<()> {
         let username = self.cipher.encrypt(account.username.as_bytes())?;
         let password = self.cipher.encrypt(account.password.as_bytes())?;

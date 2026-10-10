@@ -1,9 +1,8 @@
-//! Module accounts and login through `AccountService`, over the ticket's fixture module
-//! (docs/tickets/T31-accounts-login.md, "Seams under test").
+//! Module accounts and login through `AccountService` (docs/tickets/T31-accounts-login.md).
 //!
-//! Expected values come from FMD2's account check (`TAccountCheckThread.Execute`,
-//! mangadownloader/forms/frmAccountManager.pas:124-134), `DoLogin`/`DoAccountState`
-//! (baseunits/lua/LuaWebsiteModules.pas:412-447) and the account fields FMD2 saves encrypted
+//! Expected values: `TAccountCheckThread.Execute`
+//! (mangadownloader/forms/frmAccountManager.pas:124-134), `DoLogin`/`DoAccountState`
+//! (baseunits/lua/LuaWebsiteModules.pas:412-447), encrypted account fields
 //! (baseunits/WebsiteModules.pas:600-615, :665-675).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.

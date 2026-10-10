@@ -1,5 +1,4 @@
-//! `app.db`: application state (tasks, favorites, settings, accounts, events, module files,
-//! login sessions).
+//! `app.db`: application state.
 
 pub(crate) mod accounts;
 pub(crate) mod downloaded_chapters;
@@ -34,10 +33,9 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/app_v4.sql"),
 ];
 
-/// The path SQLite opens as a private in-memory database.
 const IN_MEMORY: &str = ":memory:";
 
-/// Handle to `app.db`. Clone it to share between threads.
+/// Handle to `app.db`.
 #[derive(Clone)]
 pub struct AppDb {
     db: Db,
@@ -45,11 +43,8 @@ pub struct AppDb {
 }
 
 impl AppDb {
-    /// Opens `app.db` at `path`, creating it and running pending migrations.
-    ///
-    /// Secrets in the database are encrypted with the key in [`ACCOUNTS_KEY_FILE`] next to it,
-    /// which is created when missing. An in-memory database (`:memory:`) gets a random key that
-    /// lives as long as the process.
+    /// Opens or creates `app.db` and runs pending migrations. Secrets are encrypted with the
+    /// [`ACCOUNTS_KEY_FILE`] next to it; `:memory:` gets a random key.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let cipher = if path.as_os_str() == IN_MEMORY {
@@ -64,13 +59,12 @@ impl AppDb {
         })
     }
 
-    /// Encrypts and decrypts the secrets stored in this database: the key of
-    /// [`ACCOUNTS_KEY_FILE`] next to it.
+    /// The cipher for this database's secrets.
     pub fn cipher(&self) -> &dyn Cipher {
         self.cipher.as_ref()
     }
 
-    /// The schema version recorded in the database (`PRAGMA user_version`).
+    /// `PRAGMA user_version`.
     pub fn schema_version(&self) -> Result<u32> {
         self.db.schema_version()
     }
@@ -85,7 +79,6 @@ impl AppDb {
         DownloadedChaptersRepo::new(&self.db)
     }
 
-    /// Module accounts; credentials are encrypted and decrypted with `cipher`.
     pub fn accounts<'a>(&'a self, cipher: &'a dyn Cipher) -> AccountRepo<'a> {
         AccountRepo::new(&self.db, cipher)
     }
@@ -100,13 +93,12 @@ impl AppDb {
         ModuleSettingsRepo::new(&self.db, self.cipher.as_ref())
     }
 
-    /// Application settings (key → JSON).
+    /// Key → JSON.
     pub fn settings(&self) -> SettingsRepo<'_> {
         SettingsRepo::new(&self.db)
     }
 
-    /// Stores application settings (key → JSON) and modules' overrides in one transaction:
-    /// either all are written or none. The modules' cookie jars are kept.
+    /// Stores settings and modules' overrides atomically, keeping the modules' cookie jars.
     pub fn save_settings(
         &self,
         settings: &[(&str, &serde_json::Value)],
@@ -134,7 +126,7 @@ impl AppDb {
         ModuleFileRepo::new(&self.db)
     }
 
-    /// Favorites (the library).
+    /// The library.
     pub fn favorites(&self) -> FavoriteRepo<'_> {
         FavoriteRepo::new(&self.db)
     }

@@ -1,4 +1,4 @@
-//! Where the dump comes from: [`DumpSource`], and [`HttpDumpSource`] for MangaBaka's server.
+//! Where the MangaBaka dump is downloaded from.
 
 use std::io::Read;
 use std::sync::Arc;
@@ -9,32 +9,28 @@ use fmd_http::TerminateToken;
 use super::MetadataError;
 use crate::settings::{ProxyType, SettingsService};
 
-/// How long connecting to the dump's server may take. Reading has no overall limit: the dump is
-/// a few hundred megabytes.
+/// Reading has no overall limit: the dump is a few hundred megabytes.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// The User-Agent FMD2r sends to MangaBaka and MangaDex: who is asking, honestly.
+/// Sent to MangaBaka and MangaDex.
 pub const USER_AGENT: &str = concat!(
     "FMD2r/",
     env!("CARGO_PKG_VERSION"),
     " (+https://github.com/Thundernerd/FMD2r)"
 );
 
-/// An opened download.
 pub struct Download {
-    /// The body as it arrives, still compressed.
+    /// Still compressed.
     pub reader: Box<dyn Read + Send>,
-    /// The body's size, when the server says.
     pub length: Option<u64>,
 }
 
-/// Opens the dump's download.
 pub trait DumpSource: Send + Sync + 'static {
-    /// Starts downloading `url`. Blocks until the response headers arrive.
+    /// Blocks until the response headers arrive.
     fn open(&self, url: &str, terminate: &TerminateToken) -> Result<Download, MetadataError>;
 }
 
-/// Downloads over HTTP, through the global proxy (`connections.proxy`), streaming the body.
+/// Downloads over HTTP through the global proxy.
 pub struct HttpDumpSource {
     settings: Arc<SettingsService>,
 }

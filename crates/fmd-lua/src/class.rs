@@ -33,10 +33,8 @@ const BIND_KEY: &str = "fmd.luaclass.bind";
 
 /// Binds `f` to object `u`, like FMD2's C closures with the userdata as upvalue
 /// (baseunits/lua/LuaClass.pas:297). A leading argument that is the object itself is dropped,
-/// so `obj:Method(a)` behaves like `obj.Method(a)`. This is a deliberate divergence asked for by
-/// docs/plan.md: FMD2 only drops a leading object for functions that lack the upvalue
-/// (baseunits/lua/LuaClass.pas:303-308), so colon calls on its bound methods see the object as
-/// their first argument.
+/// so `obj:Method(a)` behaves like `obj.Method(a)`: a deliberate divergence (docs/plan.md), as
+/// FMD2 only drops it for functions without the upvalue (baseunits/lua/LuaClass.pas:303-308).
 const BIND_SOURCE: &str = r#"
 local f, u = ...
 return function(...)
@@ -64,9 +62,8 @@ end
 /// Registry key of the Lua function that makes an object's `self` method.
 const SELF_KEY: &str = "fmd.luaclass.self";
 
-/// Makes `obj.self()`, returning the object (baseunits/lua/LuaClass.pas:232). FMD2 returns a
-/// light userdata wrapping the same Pascal object; here it is the object itself, so
-/// `obj.self() == obj` holds.
+/// Makes `obj.self()`, returning the object itself (baseunits/lua/LuaClass.pas:232) rather than
+/// FMD2's light userdata, so `obj.self() == obj` holds.
 const SELF_SOURCE: &str = r#"
 local u = ...
 return function() return u end
@@ -85,13 +82,12 @@ fn cached_chunk(lua: &Lua, key: &str, source: &str) -> mlua::Result<Function> {
     Ok(chunk)
 }
 
-/// Returns `f` bound to `object` (see [`BIND_SOURCE`]).
+/// See [`BIND_SOURCE`].
 fn bind(lua: &Lua, f: Function, object: &AnyUserData) -> mlua::Result<Function> {
     cached_chunk(lua, BIND_KEY, BIND_SOURCE)?.call((f, object))
 }
 
-/// Wraps a callback over the object's state as a Lua function; the state is borrowed for the
-/// duration of each call.
+/// Wraps a callback as a Lua function that borrows the state for the duration of each call.
 fn state_fn<T, A, R, F>(lua: &Lua, state: &Rc<RefCell<T>>, f: F) -> mlua::Result<Function>
 where
     T: 'static,
@@ -141,9 +137,8 @@ impl<T: 'static> LuaClass<T> {
         self
     }
 
-    /// Adds a bound method that gets the object itself and its shared state instead of a
-    /// borrow of the state, for a method that runs Lua code which may call the object again
-    /// (the anti-bot hook of the `HTTP` object). It borrows the state only where it needs to.
+    /// Adds a bound method that gets the object and its unborrowed state, for methods that run
+    /// Lua code which may re-enter the object (the `HTTP` anti-bot hook).
     pub fn method_with_object<A, R, F>(mut self, name: &str, f: F) -> Self
     where
         A: FromLuaMulti,
@@ -215,9 +210,8 @@ impl<T: 'static> LuaClass<T> {
     /// Adds a string property backed by the byte field `field` returns; strings are kept
     /// binary-safe (baseunits/lua/LuaClass.pas:464-474, :520).
     ///
-    /// Like `luaToString` (baseunits/lua/LuaUtils.pas:206), assigning a number stores its
-    /// string form and assigning any other non-string stores an empty string.
-    /// FMD2 truncates at the first NUL there; this does not, so binary data survives.
+    /// Like `luaToString` (baseunits/lua/LuaUtils.pas:206), a number stores its string form and
+    /// any other non-string an empty string; unlike it, NUL bytes don't truncate.
     pub fn string_property<F>(self, name: &str, field: F) -> Self
     where
         F: Fn(&mut T) -> &mut Vec<u8> + Clone + 'static,
@@ -236,9 +230,8 @@ impl<T: 'static> LuaClass<T> {
     /// Adds an integer property backed by the 32-bit field `field` returns
     /// (baseunits/lua/LuaClass.pas:476-486, :526).
     ///
-    /// Assignment converts like `lua_tointeger`: integral floats and numeric strings convert,
-    /// anything else stores 0. Like the Pascal `Integer` it reproduces, only the low 32 bits
-    /// are kept.
+    /// Assignment converts like `lua_tointeger` (anything else stores 0) and keeps only the low
+    /// 32 bits, like the Pascal `Integer`.
     pub fn integer_property<F>(self, name: &str, field: F) -> Self
     where
         F: Fn(&mut T) -> &mut i32 + Clone + 'static,
@@ -248,7 +241,6 @@ impl<T: 'static> LuaClass<T> {
             name,
             move |_, state| Ok(*get_field(state)),
             move |lua, state, value: Value| {
-                // Keeping only the low 32 bits is the behaviour being reproduced.
                 let value = lua.coerce_integer(value)?.unwrap_or(0) as i32;
                 *field(state) = value;
                 Ok(())
@@ -361,7 +353,6 @@ impl<T: 'static> LuaClass<T> {
         self
     }
 
-    /// Creates the Lua object.
     pub fn build(self, lua: &Lua) -> crate::Result<AnyUserData> {
         let object = lua.create_userdata(LuaObject {
             state: self.state.clone(),
@@ -403,13 +394,11 @@ pub(crate) fn to_bytes(lua: &Lua, value: Value) -> mlua::Result<Vec<u8>> {
 
 /// The userdata behind every `LuaClass` object; its members live in its user value.
 struct LuaObject {
-    /// The object's state, for [`LuaClass::state`].
     state: Rc<dyn Any>,
 }
 
 /// Converts a number key to its string form, as `lua_tostring` does in place on the key's
-/// stack slot (baseunits/lua/LuaClass.pas:104, :140, :175, :191). Other keys are unchanged, so
-/// handlers further down see the converted key just as FMD2's do.
+/// stack slot (baseunits/lua/LuaClass.pas:104, :140, :175, :191), so later handlers see it too.
 fn string_key(lua: &Lua, key: Value) -> mlua::Result<Value> {
     match key {
         Value::Integer(_) | Value::Number(_) => Ok(match lua.coerce_string(key.clone())? {
@@ -420,7 +409,6 @@ fn string_key(lua: &Lua, key: Value) -> mlua::Result<Value> {
     }
 }
 
-/// Whether `key` is the string `name`.
 fn is_key(key: &Value, name: &str) -> bool {
     matches!(key, Value::String(s) if s.as_bytes() == name.as_bytes())
 }
@@ -436,10 +424,8 @@ fn lookup_member(members: &Table, key: &Value) -> mlua::Result<Value> {
 
 impl UserData for LuaObject {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        // `__index` (baseunits/lua/LuaClass.pas:94): a property yields its getter's value, an
-        // array property its indexable table, any other member (method, sub-object) yields
-        // itself, and an unknown key goes to the default array property, or yields nil when
-        // there is none.
+        // `__index` (baseunits/lua/LuaClass.pas:94): unknown keys go to the default array
+        // property, else nil.
         methods.add_meta_function(
             MetaMethod::Index,
             |lua, (object, key): (AnyUserData, Value)| {
@@ -458,10 +444,8 @@ impl UserData for LuaObject {
                 }
             },
         );
-        // `__newindex` (baseunits/lua/LuaClass.pas:131): a property with a setter takes the
-        // value, an unknown key goes to the default array property, and everything else
-        // (read-only properties, methods, sub-objects, unknown keys without a default array
-        // property) is silently ignored.
+        // `__newindex` (baseunits/lua/LuaClass.pas:131): anything without a setter or default
+        // array property is silently ignored.
         methods.add_meta_function(
             MetaMethod::NewIndex,
             |lua, (object, key, value): (AnyUserData, Value, Value)| {

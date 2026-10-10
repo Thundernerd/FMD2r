@@ -62,10 +62,9 @@ fn poschar(c: u8, s: &[u8], offset: usize, escape: &[u8]) -> usize {
     0
 }
 
-/// `SplitURL` (baseunits/httpsendthread.pas:191-276) with protocol and port included:
-/// splits a URL into `(host, path)` where host is `proto://host[:port]` (`https://` when
-/// the URL has no scheme) and path starts with `/`. Either may be empty. A host is only
-/// recognised when it contains a dot or comes with a scheme or port.
+/// `SplitURL` (baseunits/httpsendthread.pas:191-276) into `(proto://host[:port], /path)`,
+/// either possibly empty; `https` when there's no scheme. A host is only recognised with a
+/// dot, a scheme or a port.
 pub(crate) fn split_url(url: &str) -> (String, String) {
     let (host, path) = split_url_bytes(url.as_bytes());
     (

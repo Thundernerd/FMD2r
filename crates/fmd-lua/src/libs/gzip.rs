@@ -54,17 +54,14 @@ impl Reader<'_> {
     }
 }
 
-/// Little-endian `u32` at `pos`.
 fn u32_at(data: &[u8], pos: usize) -> Option<u32> {
     Some(u32::from_le_bytes(data.get(pos..pos + 4)?.try_into().ok()?))
 }
 
 /// Splits `data` into its deflate stream and trailer, sniffing the format like unzipStream
-/// (baseunits/GZIPUtils.pas:172-235). The checks are loose bit masks, reproduced as they are:
-/// any first byte with the bits of `0x78` set counts as a zlib header, so a raw stream
-/// starting with such a byte is misread as zlib, as in FMD2.
-///
-/// `None` stands for the stream read errors FMD2 raises on truncated input.
+/// (baseunits/GZIPUtils.pas:172-235), with its loose bit masks: a raw stream whose first byte
+/// has the bits of `0x78` set is misread as zlib, as in FMD2. `None` is FMD2's stream read
+/// error on truncated input.
 fn split(data: &[u8]) -> Option<(&[u8], Trailer)> {
     let mut reader = Reader { data, pos: 0 };
     let header = reader.u32()?;
@@ -104,9 +101,8 @@ fn split(data: &[u8]) -> Option<(&[u8], Trailer)> {
     }
 }
 
-/// Inflates a raw deflate stream until it ends or fails, keeping what was inflated so far, like
-/// the `while inflate(...) = Z_OK` loop whose result only depends on `inflateEnd`
-/// (baseunits/GZIPUtils.pas:247-255). A corrupt raw stream therefore yields partial output.
+/// Inflates until the stream ends or fails, keeping the partial output, like the
+/// `while inflate(...) = Z_OK` loop (baseunits/GZIPUtils.pas:247-255).
 fn inflate_raw(input: &[u8]) -> Vec<u8> {
     // The output grows by the input size rounded up to 256 bytes each round (:240-253).
     let delta = (input.len() + 255) & !255;
@@ -125,7 +121,6 @@ fn inflate_raw(input: &[u8]) -> Vec<u8> {
     }
 }
 
-/// Adler-32 of `data`, as zlib's `adler32` computes it.
 fn adler32(data: &[u8]) -> u32 {
     const MOD: u32 = 65521;
     let (mut a, mut b) = (1u32, 0u32);

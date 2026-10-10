@@ -10,13 +10,11 @@ use crate::{Document, Kind, XPathEngine, XPathValue};
 /// A value as the differential runner compares it: what a module can observe of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Normalized {
-    /// Why the value couldn't be computed (the document didn't parse), if it couldn't.
+    /// Set when the document didn't parse.
     pub error: Option<String>,
-    /// The number of items.
     pub count: i64,
     /// The whole value's string (`XPathString`).
     pub string: String,
-    /// Each item.
     pub items: Vec<NormalizedItem>,
 }
 
@@ -30,7 +28,6 @@ pub struct NormalizedItem {
 }
 
 impl Normalized {
-    /// Normalises `value`.
     pub fn of(value: &dyn XPathValue) -> Normalized {
         let count = value.count();
         Normalized {
@@ -90,7 +87,7 @@ pub struct Mismatch {
 /// The outcome of a [`diff`].
 #[derive(Debug, Clone, Default)]
 pub struct Report {
-    /// The number of entries compared.
+    /// Entries compared.
     pub entries: usize,
     pub mismatches: Vec<Mismatch>,
 }
@@ -280,7 +277,6 @@ impl ParsedCorpus {
         Ok(document.eval(&entry.expression, context.as_deref(), entry.css))
     }
 
-    /// The value `origin` describes.
     fn origin_value(&self, origin: &Origin) -> Result<Box<dyn XPathValue>, String> {
         let mut value = self.value_of(&origin.entry)?;
         for step in &origin.path {

@@ -1,5 +1,4 @@
-//! The settings model: typed application settings with FMD2's defaults, persisted in `app.db`,
-//! plus per-module overrides and FMD2's limit precedence.
+//! Typed application settings with FMD2's defaults, per-module overrides and limit precedence.
 
 mod model;
 mod module_overrides;

@@ -65,7 +65,6 @@
 		cancelled: 'Cancelled',
 		unknown: 'Status unknown'
 	};
-	/** MangaBaka's formats. */
 	const FORMAT: Record<string, string> = {
 		manga: 'Manga',
 		manhwa: 'Manhwa',

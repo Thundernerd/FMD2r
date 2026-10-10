@@ -163,7 +163,6 @@ export interface Api {
 	 * downloads to `saveTo` (the website's or the default destination when empty), in its manga folder.
 	 */
 	addFavorite(module: string, link: string, saveTo?: string): Promise<FavoriteView>;
-	/** Changes the given fields of a favorite. */
 	updateFavorite(id: number, patch: FavoritePatch): Promise<FavoriteView>;
 	deleteFavorite(id: number): Promise<void>;
 	/**

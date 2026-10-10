@@ -1,9 +1,5 @@
-//! The `HTTP` object, exercised through Lua snippets on the public runtime with an `HTTP` global
-//! bound to a session over a stub transport (docs/tickets/T10-http-lua-object.md, "Seams under
-//! test").
-//!
-//! Expected values come from FMD2's `THTTPSendThread` (baseunits/httpsendthread.pas) and its Lua
-//! wrapper (baseunits/lua/LuaHTTPSend.pas).
+//! The `HTTP` object over a stub transport (docs/tickets/T10-http-lua-object.md). Expected values
+//! come from baseunits/httpsendthread.pas and baseunits/lua/LuaHTTPSend.pas.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -68,7 +64,6 @@ fn response(status: u16, headers: &[(&str, &str)], body: &[u8]) -> WireResponse 
     }
 }
 
-/// The value of header `name` in `request`.
 fn header<'a>(request: &'a WireRequest, name: &str) -> Option<&'a str> {
     request
         .headers
@@ -77,8 +72,7 @@ fn header<'a>(request: &'a WireRequest, name: &str) -> Option<&'a str> {
         .map(|(_, v)| v.as_str())
 }
 
-/// A runtime with an `HTTP` global over a session (not bound to a module) of a client that
-/// answers from `responses`.
+/// A runtime with an `HTTP` global over a session not bound to a module.
 fn runtime_with_http(responses: Vec<WireResponse>) -> (Runtime, Arc<StubTransport>) {
     let stub = StubTransport::new(responses);
     let client = HttpClient::with_transport(stub.clone()).unwrap();

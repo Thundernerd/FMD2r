@@ -1,5 +1,4 @@
-//! FMD2's package searcher and `fmd.env`, exercised through `require` on the public runtime
-//! (docs/tickets/T06-module-loader-module-object.md, "Seams under test").
+//! FMD2's package searcher and `fmd.env` (docs/tickets/T06-module-loader-module-object.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]

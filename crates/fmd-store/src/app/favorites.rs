@@ -1,5 +1,5 @@
-//! Favorites (the library), replacing FMD2's `favorites` table (baseunits/FavoritesDB.pas:55-71).
-//! FMD2's `downloadedchapterlist` column lives in `downloaded_chapters` instead.
+//! Favorites (the library), replacing FMD2's `favorites` table (baseunits/FavoritesDB.pas:55-71);
+//! its `downloadedchapterlist` lives in `downloaded_chapters`.
 
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -7,11 +7,9 @@ use crate::db::Db;
 use crate::error::Result;
 use crate::sql::{next_sort_order, now_ms, reorder};
 
-/// Primary key of a favorite.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FavoriteId(pub i64);
 
-/// Fields supplied when adding a favorite.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewFavorite {
     pub module_id: String,
@@ -21,14 +19,13 @@ pub struct NewFavorite {
     pub cover_url: Option<String>,
 }
 
-/// A stored favorite.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Favorite {
     pub id: FavoriteId,
     pub module_id: String,
     pub link: String,
     pub title: String,
-    /// The manga's publication status as the module reports it.
+    /// As the module reports it.
     pub status: String,
     /// Number of chapters seen at the last check (FMD2's `currentchapter`).
     pub current_chapter: u32,
@@ -44,7 +41,6 @@ pub struct Favorite {
     pub cover_url: Option<String>,
 }
 
-/// A favorite with its state and dates, as an importer restores it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportedFavorite {
     pub favorite: NewFavorite,
@@ -80,7 +76,6 @@ fn favorite_from_row(row: &Row<'_>) -> rusqlite::Result<Favorite> {
     })
 }
 
-/// Repository for favorites. Obtain it with [`crate::AppDb::favorites`].
 pub struct FavoriteRepo<'a> {
     db: &'a Db,
 }
@@ -90,8 +85,7 @@ impl<'a> FavoriteRepo<'a> {
         Self { db }
     }
 
-    /// Adds an enabled favorite at the end of the list, stamped with the current time. Fails if
-    /// the module already has a favorite with this link.
+    /// Appends an enabled favorite; fails on a duplicate module and link.
     pub fn create(&self, new: &NewFavorite) -> Result<Favorite> {
         let conn = self.db.lock();
         Ok(conn.query_row(
@@ -113,8 +107,7 @@ impl<'a> FavoriteRepo<'a> {
         )?)
     }
 
-    /// Adds a favorite at the end of the list with its state and dates kept as given. Fails if
-    /// the module already has a favorite with this link.
+    /// Appends with state and dates as given; fails on a duplicate module and link.
     pub fn import(&self, imported: &ImportedFavorite) -> Result<Favorite> {
         let conn = self.db.lock();
         let new = &imported.favorite;
@@ -155,7 +148,6 @@ impl<'a> FavoriteRepo<'a> {
             .optional()?)
     }
 
-    /// The favorite with exactly this module id and link.
     pub fn find(&self, module_id: &str, link: &str) -> Result<Option<Favorite>> {
         let conn = self.db.lock();
         Ok(conn
@@ -167,7 +159,7 @@ impl<'a> FavoriteRepo<'a> {
             .optional()?)
     }
 
-    /// Every favorite in display order.
+    /// In display order.
     pub fn list(&self) -> Result<Vec<Favorite>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare_cached(&format!(
@@ -177,8 +169,7 @@ impl<'a> FavoriteRepo<'a> {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Overwrites the stored favorite with `favorite.id`. `sort_order` and `date_added` are left
-    /// as stored; use [`Self::reorder`] to move favorites.
+    /// Leaves `sort_order` and `date_added` as stored; see [`Self::reorder`].
     pub fn update(&self, favorite: &Favorite) -> Result<()> {
         let conn = self.db.lock();
         conn.execute(
@@ -203,14 +194,12 @@ impl<'a> FavoriteRepo<'a> {
         Ok(())
     }
 
-    /// Puts the given favorites first, in the given order; the others keep their relative order
-    /// after them.
+    /// Puts `ids` first; the rest keep their relative order.
     pub fn reorder(&self, ids: &[FavoriteId]) -> Result<()> {
         reorder(&mut self.db.lock(), "favorites", ids.iter().map(|id| id.0))
     }
 
-    /// Replaces the chapter links the site listed at the favorite's last check, in the site's
-    /// order; nothing when there is no such favorite. FMD2 keeps only their count
+    /// The links the site listed at the last check, in its order. FMD2 keeps only their count
     /// (`currentchapter`, baseunits/FavoritesDB.pas:64).
     pub fn set_chapter_links(&self, id: FavoriteId, links: &[&str]) -> Result<()> {
         let mut conn = self.db.lock();
@@ -232,8 +221,6 @@ impl<'a> FavoriteRepo<'a> {
         Ok(())
     }
 
-    /// The chapter links stored by [`Self::set_chapter_links`], in the site's order; empty when
-    /// none are stored.
     pub fn chapter_links(&self, id: FavoriteId) -> Result<Vec<String>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare_cached(
@@ -243,10 +230,8 @@ impl<'a> FavoriteRepo<'a> {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// How many chapters the favorite has that are not in `downloaded_chapters`: the stored
-    /// chapter links with no mark, matched case-insensitively like that table's key. A favorite
-    /// with no stored links (not checked since they were kept, or imported from FMD2) has only
-    /// its chapter count, so it gets that count less its marks.
+    /// Stored chapter links not in `downloaded_chapters` (case-insensitive, like its key). With
+    /// no stored links (e.g. imported from FMD2), the chapter count less the marks.
     pub fn new_chapter_count(&self, favorite: &Favorite) -> Result<u32> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare_cached(

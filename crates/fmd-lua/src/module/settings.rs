@@ -24,38 +24,32 @@ pub enum OptionValue {
 pub struct SettingsStoreError(Box<dyn std::error::Error + Send + Sync>);
 
 impl SettingsStoreError {
-    /// Wraps the store's own error.
     pub fn new(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Self {
         SettingsStoreError(error.into())
     }
 }
 
 /// Per-module option values, cookies and accounts, keyed by module ID. Options are keyed by
-/// [`ModuleOption::settings_key`](super::ModuleOption::settings_key), as in FMD2's `modules.json`. Cookies are the module's cookie jar as JSON
-/// ([`fmd_http::CookieJar::to_json`]).
+/// [`ModuleOption::settings_key`](super::ModuleOption::settings_key) as in FMD2's
+/// `modules.json`; cookies are the jar as JSON ([`fmd_http::CookieJar::to_json`]).
 pub trait ModuleSettingsStore: Send + Sync {
-    /// The stored value of option `name`, if any.
     fn option(
         &self,
         module_id: &str,
         name: &str,
     ) -> Result<Option<OptionValue>, SettingsStoreError>;
-    /// Stores the value of option `name`.
     fn set_option(
         &self,
         module_id: &str,
         name: &str,
         value: OptionValue,
     ) -> Result<(), SettingsStoreError>;
-    /// The stored cookie jar, if any.
     fn cookies(&self, module_id: &str) -> Result<Option<String>, SettingsStoreError>;
-    /// Stores the cookie jar.
     fn set_cookies(&self, module_id: &str, cookies: &str) -> Result<(), SettingsStoreError>;
-    /// The stored account, if any. FMD2 keeps it with the module's settings in `modules.json`
-    /// (baseunits/WebsiteModules.pas:600-615).
+    /// FMD2 keeps it in `modules.json` (baseunits/WebsiteModules.pas:600-615).
     fn account(&self, module_id: &str) -> Result<Option<AccountState>, SettingsStoreError>;
-    /// Stores the account (baseunits/WebsiteModules.pas:665-675). A store should keep the
-    /// credentials and cookies encrypted, as FMD2 does with `EncryptString`.
+    /// (baseunits/WebsiteModules.pas:665-675). Keep credentials and cookies encrypted, as FMD2
+    /// does with `EncryptString`.
     fn set_account(
         &self,
         module_id: &str,
@@ -72,7 +66,6 @@ pub struct MemorySettingsStore {
 }
 
 impl MemorySettingsStore {
-    /// An empty store.
     pub fn new() -> Self {
         MemorySettingsStore::default()
     }

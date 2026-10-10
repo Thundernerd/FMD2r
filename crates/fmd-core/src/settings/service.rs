@@ -89,15 +89,12 @@ pub struct SettingsService {
 }
 
 impl SettingsService {
-    /// Reads the stored settings, filling every missing group or field with its default.
+    /// Reads the stored settings, defaulting every missing group or field.
     ///
-    /// A stored value this build cannot read (an enum value from a newer build, a wrong type)
-    /// falls back to its default instead of failing the load; the group's other fields are kept.
-    /// The unreadable value stays in the table until that group is next updated.
-    ///
-    /// Secrets are stored encrypted (see `secrets.rs`); plain ones an older build stored, in
-    /// these groups or in a module's HTTP overrides, are encrypted here. The server password is
-    /// stored hashed (see `password.rs`); one an older build stored is hashed here.
+    /// A stored value this build cannot read (e.g. an enum value from a newer build) falls back
+    /// to its default rather than failing the load; it stays stored until the group is next
+    /// updated. Plain secrets and an unhashed server password from older builds are
+    /// encrypted/hashed here.
     pub fn load(db: AppDb) -> Result<Self, SettingsError> {
         let mut tree = serde_json::to_value(Settings::default())?;
         let keys: Vec<String> = tree
@@ -132,24 +129,20 @@ impl SettingsService {
         })
     }
 
-    /// The current settings.
     pub fn get(&self) -> Arc<Settings> {
         self.tx.borrow().clone()
     }
 
-    /// A receiver that sees every successful update that changed something, for live
-    /// reconfiguration. Each update notifies once, however many settings it touched.
+    /// Notified once per update that changed something, for live reconfiguration.
     pub fn subscribe(&self) -> watch::Receiver<Arc<Settings>> {
         self.tx.subscribe()
     }
 
-    /// Applies `patch`, a JSON merge patch (RFC 7386) over the serialised [`Settings`]: objects
-    /// merge key by key, other values replace, and `null` resets a setting to its default.
+    /// Applies `patch`, a JSON merge patch (RFC 7386) over the serialised [`Settings`]; `null`
+    /// resets a setting to its default.
     ///
-    /// The result is validated before anything is stored; on error nothing changes and the
-    /// error lists every rejected value. Only the groups the patch changed are written, in one
-    /// transaction, and subscribers are notified once. Blocking: call it from `spawn_blocking`
-    /// in async code.
+    /// On error nothing changes and the error lists every rejected value. Only changed groups
+    /// are written, in one transaction. Blocking.
     pub fn update(&self, patch: Value) -> Result<Arc<Settings>, SettingsError> {
         let _guard = self.write.lock().unwrap_or_else(|e| e.into_inner());
         let current = self.get();
@@ -163,10 +156,9 @@ impl SettingsService {
         Ok(next)
     }
 
-    /// On the first start of a build with `general.selected_websites` (none is stored yet),
-    /// selects every module that has a list in `lists`, so an existing install's Discover page
-    /// keeps the websites it already had. A fresh install has no lists and selects none. Later
-    /// starts change nothing. Blocking.
+    /// On the first start with `general.selected_websites` (none stored yet), selects every
+    /// module that has a list, so an upgraded install's Discover page keeps its websites.
+    /// Blocking.
     pub fn select_listed_websites(&self, lists: &ListsDb) -> Result<(), SettingsError> {
         let _guard = self.write.lock().unwrap_or_else(|e| e.into_inner());
         let repo = self.db.settings();
@@ -213,9 +205,8 @@ impl SettingsService {
     }
 
     /// Applies `patch` like [`Self::update`] and each module's patch like
-    /// [`ModuleOverrides::apply_patch`], all or nothing: everything is validated before anything
-    /// is stored, and everything is stored in one transaction. The error lists every rejected
-    /// value, the settings' prefixed `settings.` and a module's `modules.<id>.`.
+    /// [`ModuleOverrides::apply_patch`], all or nothing in one transaction. Rejected fields are
+    /// prefixed `settings.` or `modules.<id>.`.
     pub fn update_with_modules(
         &self,
         patch: Value,
@@ -266,7 +257,7 @@ impl SettingsService {
     }
 
     /// The groups that differ between `old` and `new`, each merged over what is stored so keys
-    /// this build does not know (written by a newer one) survive.
+    /// unknown to this build survive.
     fn changed_groups(
         &self,
         old: &Settings,
@@ -443,9 +434,8 @@ pub(super) fn merge_patch_reporting<T: serde::de::DeserializeOwned>(
     deserialize_reporting(tree, &base, errors)
 }
 
-/// Deserialises `tree`, reporting every value that does not parse rather than only the first:
-/// each one is reported and put back to its value in `base` (which parses), then the rest is
-/// tried again. `None` when a value cannot be put back.
+/// Deserialises `tree`, reporting every value that does not parse, not just the first: each is
+/// reset to its value in `base` and the rest retried. `None` when a value cannot be reset.
 fn deserialize_reporting<T: serde::de::DeserializeOwned>(
     mut tree: Value,
     base: &Value,

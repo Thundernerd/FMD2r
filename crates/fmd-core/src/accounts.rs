@@ -1,27 +1,13 @@
-//! Module accounts: listing and editing the accounts of modules with `AccountSupport`, and logging
-//! in through the module's `OnLogin` (FMD2's account manager,
+//! Module accounts and logins through `OnLogin` (FMD2's account manager,
 //! mangadownloader/forms/frmAccountManager.pas).
 //!
-//! The module's `MODULE.Account` is the account: [`AccountService`] reads and writes it, and every
-//! change, from here or from Lua, is written to the module's settings store
-//! ([`crate::modules::StoreModuleSettings`]), which keeps it in `app.db` encrypted.
+//! No automatic login: like FMD2, `OnLogin` only runs on request
+//! (mangadownloader/forms/frmAccountManager.pas:271-290); modules needing a session log in from
+//! their own callbacks (e.g. lua/modules/ProjectTime.lua:67).
 //!
-//! # When logins run
-//!
-//! FMD2 runs `OnLogin` only from its account manager: when the user checks an account or saves
-//! new credentials (mangadownloader/forms/frmAccountManager.pas:271-290). It never logs in before
-//! a task or an info call; modules that need a session call their own login function from their
-//! callbacks instead (e.g. `CheckAuth` in lua/modules/Madokami.lua, lua/modules/ProjectTime.lua:67).
-//! FMD2r does the same, so there is no automatic login here: what such a callback writes to
-//! `MODULE.Account` is persisted like any other change.
-//!
-//! # Threat model
-//!
-//! Usernames, passwords and cookies are encrypted at rest with XChaCha20-Poly1305 under a random
-//! key in the data directory (`accounts.key`, mode 0600). That protects copies of `app.db`, such
-//! as backups or a database shared for debugging, as long as the key file does not travel with
-//! them. It does not protect against anyone who can read the data directory or the running
-//! process: they hold the key, and the server needs the plaintext to log in.
+//! Threat model: credentials and cookies are encrypted at rest under `accounts.key` (mode 0600),
+//! protecting copies of `app.db` without the key file, not anyone who can read the data
+//! directory or the process.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -31,11 +17,11 @@ use fmd_store::AccountStatus;
 use thiserror::Error;
 use tokio::sync::broadcast;
 
-/// How many account changes a slow listener may fall behind before it misses some.
+/// How far a slow listener may fall behind before it misses changes.
 const CHANGES_CAPACITY: usize = 64;
 
-/// The ordinal of `status` in `TAccountStatus = (asUnknown, asChecking, asValid, asInvalid)`
-/// (baseunits/WebsiteModules.pas:78), the value `MODULE.Account.Status` holds.
+/// The ordinal in `TAccountStatus = (asUnknown, asChecking, asValid, asInvalid)`
+/// (baseunits/WebsiteModules.pas:78), as `MODULE.Account.Status` holds it.
 pub fn status_ordinal(status: AccountStatus) -> i32 {
     match status {
         AccountStatus::Unknown => 0,
@@ -45,8 +31,8 @@ pub fn status_ordinal(status: AccountStatus) -> i32 {
     }
 }
 
-/// The status `MODULE.Account.Status` holds (baseunits/WebsiteModules.pas:78). A value outside
-/// `TAccountStatus` counts as unknown.
+/// Inverse of [`status_ordinal`]; out-of-range values are unknown
+/// (baseunits/WebsiteModules.pas:78).
 pub fn status_of(ordinal: i32) -> AccountStatus {
     match ordinal {
         1 => AccountStatus::Checking,
@@ -56,19 +42,18 @@ pub fn status_of(ordinal: i32) -> AccountStatus {
     }
 }
 
-/// A module's account as the UI sees it: the password and cookies are never part of it.
+/// A module's account without the password and cookies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccountView {
     pub module_id: String,
     pub module_name: String,
     pub enabled: bool,
     pub username: String,
-    /// Whether a password is set.
     pub has_password: bool,
     pub status: AccountStatus,
 }
 
-/// The fields of an account to change; `None` leaves a field as it is.
+/// `None` leaves a field as it is.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct AccountUpdate {
     pub username: Option<String>,
@@ -77,7 +62,7 @@ pub struct AccountUpdate {
 }
 
 impl std::fmt::Debug for AccountUpdate {
-    /// Leaves the credentials out, so they never reach a log.
+    /// Leaves the credentials out of logs.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AccountUpdate")
             .field("enabled", &self.enabled)
@@ -85,14 +70,12 @@ impl std::fmt::Debug for AccountUpdate {
     }
 }
 
-/// An account's status changed: a login started or finished.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccountChange {
     pub module_id: String,
     pub status: AccountStatus,
 }
 
-/// Why an account request failed.
 #[derive(Debug, Error)]
 pub enum AccountError {
     #[error("no module {0}")]
@@ -103,8 +86,7 @@ pub enum AccountError {
     /// (baseunits/lua/LuaWebsiteModules.pas:578-579).
     #[error("module {0} has no login callback")]
     NoLogin(String),
-    /// A login or an edit of the account is running. FMD2 ignores a check while one runs
-    /// (mangadownloader/forms/frmAccountManager.pas:288).
+    /// FMD2 ignores a check while one runs (mangadownloader/forms/frmAccountManager.pas:288).
     #[error("the account of module {0} is busy with a login")]
     Checking(String),
     #[error(transparent)]
@@ -113,30 +95,23 @@ pub enum AccountError {
     Pool(#[from] JobError),
 }
 
-/// Lists, edits and logs in the accounts of the loaded modules.
-///
-/// Every method blocks (on the store, and for [`login`](Self::login) on the module's callbacks):
-/// call them from a blocking thread, never from inside a tokio runtime.
+/// Lists, edits and logs in the accounts of the loaded modules. Every method blocks.
 pub struct AccountService {
-    /// The loaded modules, read anew for every request so a hot reload is followed.
+    /// Read anew for every request so a hot reload is followed.
     current_modules: Box<CurrentModules>,
     pool: Arc<WorkerPool>,
-    /// Modules whose login is running.
     checking: Mutex<HashSet<String>>,
     changes: broadcast::Sender<AccountChange>,
 }
 
-/// Returns the registry of the modules loaded now.
 type CurrentModules = dyn Fn() -> Arc<ModuleRegistry> + Send + Sync;
 
 impl AccountService {
-    /// The accounts of the modules in `registry`.
     pub fn new(registry: Arc<ModuleRegistry>, pool: Arc<WorkerPool>) -> Self {
         Self::following(move || registry.clone(), pool)
     }
 
-    /// The accounts of the modules `current` returns at the time of each request, e.g. the
-    /// registry the module updater last reloaded.
+    /// Follows the registry `current` returns at each request.
     pub fn following(
         current: impl Fn() -> Arc<ModuleRegistry> + Send + Sync + 'static,
         pool: Arc<WorkerPool>,
@@ -149,13 +124,12 @@ impl AccountService {
         }
     }
 
-    /// Status changes from now on: the start and the end of every login.
+    /// The start and end of every login.
     pub fn subscribe(&self) -> broadcast::Receiver<AccountChange> {
         self.changes.subscribe()
     }
 
-    /// The accounts of every module with account support, by module ID
-    /// (mangadownloader/forms/frmAccountManager.pas:168-182).
+    /// By module ID (mangadownloader/forms/frmAccountManager.pas:168-182).
     pub fn list(&self) -> Vec<AccountView> {
         let mut accounts: Vec<AccountView> = (self.current_modules)()
             .modules()
@@ -166,18 +140,15 @@ impl AccountService {
         accounts
     }
 
-    /// The account of module `module_id`.
     pub fn account(&self, module_id: &str) -> Result<AccountView, AccountError> {
         let module = self.module(module_id)?;
         view(&module).ok_or_else(|| AccountError::NoAccountSupport(module_id.to_owned()))
     }
 
-    /// Changes the account's fields. New credentials make the status unknown until the next
-    /// login; FMD2 checks them right away instead (mangadownloader/forms/frmAccountManager.pas:
-    /// 271-277), which here is up to the caller. Turning the account on or off runs
-    /// `OnAccountState` when the module has one, as ticking it in FMD2's account list does
-    /// (mangadownloader/forms/frmAccountManager.pas:292-300). Refused while a login runs, so it
-    /// cannot overwrite what the login stores.
+    /// New credentials make the status unknown; unlike FMD2
+    /// (mangadownloader/forms/frmAccountManager.pas:271-277), checking them is up to the caller.
+    /// Toggling runs `OnAccountState` (:292-300). Refused while a login runs, so it cannot
+    /// overwrite what the login stores.
     pub fn update(
         &self,
         module_id: &str,
@@ -209,8 +180,8 @@ impl AccountService {
         self.account(module_id)
     }
 
-    /// Clears the account's credentials and cookies and turns it off. FMD2 cannot delete an
-    /// account (the module owns it); this leaves it as a new one is. Refused while a login runs.
+    /// Resets the account to a new one's state (the module owns it, so it cannot be removed).
+    /// Refused while a login runs.
     pub fn delete(&self, module_id: &str) -> Result<AccountView, AccountError> {
         let module = self.module(module_id)?;
         let _busy = self.start_check(module_id)?;
@@ -222,17 +193,13 @@ impl AccountService {
         self.account(module_id)
     }
 
-    /// Logs in. Like FMD2's account check (`TAccountCheckThread.Execute`,
-    /// mangadownloader/forms/frmAccountManager.pas:125-136), the status turns `asChecking`, then
-    /// `OnLogin` runs with a new `HTTP` session for the module. Then, as the ticket asks (FMD2's
-    /// check does not), `OnAccountState` runs when the module has one, so a module like
-    /// Madokami loads the new cookies. The status the module leaves is stored, announced and
-    /// returned with the account. A login whose callback fails is logged and leaves the status
-    /// the module set; one that leaves it `asChecking` makes it unknown, as FMD2 does on its next
-    /// start (baseunits/WebsiteModules.pas:612-613).
+    /// `TAccountCheckThread.Execute` (mangadownloader/forms/frmAccountManager.pas:125-136),
+    /// then, unlike FMD2, `OnAccountState` so a module like Madokami loads the new cookies. A
+    /// status left `asChecking` becomes unknown, as FMD2 does on its next start
+    /// (baseunits/WebsiteModules.pas:612-613).
     pub fn login(&self, module_id: &str) -> Result<AccountView, AccountError> {
         let module = self.module(module_id)?;
-        // A module without account support is reported as such before a missing login.
+        // Report missing account support before a missing login.
         let credentials = self.state(&module)?;
         if module.def().on_login.is_none() {
             return Err(AccountError::NoLogin(module_id.to_owned()));
@@ -259,7 +226,7 @@ impl AccountService {
         self.account(module_id)
     }
 
-    /// Ends a check: a status still `asChecking` becomes unknown, and the result is announced.
+    /// A status still `asChecking` becomes unknown.
     fn finish_check(&self, module: &Arc<Module>, module_id: &str) -> Result<(), AccountError> {
         module.update_account(|state| {
             if state.status == AccountState::CHECKING {
@@ -271,9 +238,8 @@ impl AccountService {
         Ok(())
     }
 
-    /// Runs `OnAccountState` when the module has one (`DoAccountState`,
-    /// baseunits/lua/LuaWebsiteModules.pas:431-447). Like FMD2, its result is not used and a
-    /// failure is only logged.
+    /// `DoAccountState` (baseunits/lua/LuaWebsiteModules.pas:431-447): the result is unused and
+    /// a failure only logged.
     fn account_state(&self, module: &Arc<Module>, affinity: Option<fmd_lua::Affinity>) {
         if module.def().on_account_state.is_none() {
             return;
@@ -293,14 +259,13 @@ impl AccountService {
     }
 
     fn announce(&self, module_id: &str, status: AccountStatus) {
-        // Nobody listening is fine.
         let _ = self.changes.send(AccountChange {
             module_id: module_id.to_owned(),
             status,
         });
     }
 
-    /// Marks `module_id` as busy (a login or an edit running) until the guard drops.
+    /// Marks `module_id` busy until the guard drops.
     fn start_check(&self, module_id: &str) -> Result<CheckGuard<'_>, AccountError> {
         let mut checking = self.checking.lock().unwrap_or_else(PoisonError::into_inner);
         if !checking.insert(module_id.to_owned()) {
@@ -327,7 +292,6 @@ impl AccountService {
     }
 }
 
-/// Removes its module from the modules being checked when dropped.
 struct CheckGuard<'a> {
     service: &'a AccountService,
     module_id: String,
@@ -343,8 +307,7 @@ impl Drop for CheckGuard<'_> {
     }
 }
 
-/// `message` with the account's username, password and cookies masked, for a module error that
-/// quotes them, so credentials never reach the log.
+/// Masks the account's credentials and cookies in a module error before it is logged.
 fn redact(message: &str, account: &AccountState) -> String {
     let mut message = message.to_owned();
     for secret in [&account.password, &account.cookies, &account.username] {
@@ -355,7 +318,6 @@ fn redact(message: &str, account: &AccountState) -> String {
     message
 }
 
-/// The account of `module`, when it supports accounts.
 fn view(module: &Module) -> Option<AccountView> {
     let state = module.account()?.state();
     let def = module.def();

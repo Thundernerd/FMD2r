@@ -1,7 +1,5 @@
-//! The composed server: `serve(ServeConfig)` on a temp data dir whose Lua tree holds a fixture
-//! module for a stub site on a local socket (docs/tickets/T37-serve-wire-catalog-covers-xpath.md
-//! docs/tickets/T38-serve-wire-accounts-lists-favorites.md and
-//! docs/tickets/T54-apply-connection-settings.md, "Seams under test").
+//! The composed server: `serve(ServeConfig)` with a fixture module for a stub site on a local
+//! socket ("Seams under test" of docs/tickets/T37, T38 and T54).
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
@@ -169,8 +167,7 @@ impl Server {
             .update(settings.clone())
             .unwrap();
         let bind = free_port();
-        // Tests never reach the network: the module updater runs only on request, and none is
-        // made.
+        // Tests never reach the network: the updater runs only on request.
         let module_updates = settings["module_updater"]["auto_update"] == false;
         tokio::spawn(serve(ServeConfig {
             bind: Some(bind),
@@ -239,7 +236,6 @@ async fn json_of(res: reqwest::Response) -> Value {
     serde_json::from_slice(&res.bytes().await.unwrap()).unwrap()
 }
 
-/// A port nothing listens on right now.
 fn free_port() -> SocketAddr {
     TcpListener::bind("127.0.0.1:0")
         .unwrap()
@@ -445,7 +441,6 @@ impl Server {
         assert_eq!(res.status(), 201);
     }
 
-    /// Runs the new-chapter check and waits for it to end.
     async fn check_favorites(&self) {
         let res = self
             .client
@@ -635,7 +630,6 @@ struct StubProxy {
 }
 
 impl StubProxy {
-    /// Starts the proxy; returns its port.
     async fn start(&self) -> u16 {
         let proxy = self.clone();
         let app = axum::Router::new().fallback(

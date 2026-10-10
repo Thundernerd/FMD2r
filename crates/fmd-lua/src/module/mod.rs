@@ -180,7 +180,7 @@ pub struct AccountState {
 }
 
 impl AccountState {
-    /// `asChecking`, the ordinal of `TAccountStatus.asChecking` (baseunits/WebsiteModules.pas:78).
+    /// `asChecking` (baseunits/WebsiteModules.pas:78).
     pub const CHECKING: i32 = 1;
     /// `asUnknown` (baseunits/WebsiteModules.pas:78).
     pub const UNKNOWN: i32 = 0;
@@ -196,17 +196,14 @@ impl std::fmt::Debug for AccountState {
 }
 
 impl Account {
-    /// A copy of the account's fields.
     pub fn state(&self) -> AccountState {
         lock(&self.state).clone()
     }
 
-    /// Replaces the account's fields.
     pub fn set_state(&self, state: AccountState) {
         *lock(&self.state) = state;
     }
 
-    /// The account's `Guardian` critical section.
     pub fn guardian(&self) -> &Arc<CriticalSection> {
         &self.guardian
     }
@@ -242,10 +239,8 @@ impl Default for Storage {
     }
 }
 
-/// One website module: its [`ModuleDef`] and the state every Lua state running it shares, the
-/// way all of FMD2's threads share one `TModuleContainer` and `TLuaWebsiteModule`. Every
-/// `MODULE` object built over the same `Module` reads and writes the same properties, options,
-/// cookies, `Storage`, `Guardian` and `Account`.
+/// One website module: its [`ModuleDef`] and the state every Lua state running it shares, as
+/// FMD2's threads share one `TModuleContainer` and `TLuaWebsiteModule`.
 pub struct Module {
     def: RwLock<ModuleDef>,
     storage: Mutex<Storage>,
@@ -279,9 +274,8 @@ impl Module {
         self.def_read().clone()
     }
 
-    /// The limits the module declares, as its `MODULE` object holds them now. The user's
-    /// overrides and the global limits apply on top in `fmd_core::settings::effective_limits`,
-    /// with FMD2's precedence (`GetMaxTaskLimit`, `GetMaxThreadPerTaskLimit`,
+    /// The limits the module declares now; overrides apply in
+    /// `fmd_core::settings::effective_limits` (`GetMaxTaskLimit`, `GetMaxThreadPerTaskLimit`,
     /// baseunits/WebsiteModules.pas:398-412).
     pub fn limits(&self) -> ModuleLimits {
         let def = self.def_read();
@@ -303,7 +297,6 @@ impl Module {
         &self.http
     }
 
-    /// The module's `Guardian` critical section.
     pub fn guardian(&self) -> &Arc<CriticalSection> {
         &self.guardian
     }
@@ -337,9 +330,8 @@ impl Module {
         self.active_task_count.fetch_sub(1, Ordering::SeqCst);
     }
 
-    /// Changes the account's fields with `change`, under the account's lock so a concurrent
-    /// write from Lua is not lost, and writes them to the settings store. Does nothing when the
-    /// module has no account.
+    /// Changes the account's fields under its lock, so a concurrent Lua write isn't lost, and
+    /// saves them. Does nothing without an account.
     pub fn update_account(
         &self,
         change: impl FnOnce(&mut AccountState),
@@ -351,7 +343,6 @@ impl Module {
         self.save_account()
     }
 
-    /// Writes the account to the settings store, after a Lua call or the host changed it.
     fn save_account(&self) -> Result<(), SettingsStoreError> {
         let id = self.def_read().id.clone();
         match (self.settings(), self.account()) {
@@ -407,8 +398,7 @@ impl Module {
         self.settings.get()
     }
 
-    /// Attaches the settings store the module's options, cookies and account live in, loading
-    /// the saved cookies into its jar and the saved account into its `Account`, as FMD2 loads
+    /// Attaches the settings store and loads the saved cookies and account, as FMD2 loads
     /// `modules.json` after the scan.
     fn attach_settings(&self, store: Arc<dyn ModuleSettingsStore>) -> Result<(), String> {
         let id = self.def_read().id.clone();
@@ -432,7 +422,6 @@ impl Module {
         Ok(())
     }
 
-    /// Writes the cookie jar to the settings store, after a Lua call changed it.
     fn save_cookies(&self) -> Result<(), SettingsStoreError> {
         let id = self.def_read().id.clone();
         match self.settings() {

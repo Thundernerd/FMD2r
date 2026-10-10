@@ -1,4 +1,4 @@
-// Helpers outside #[test] fns are not covered by clippy.toml's test exemption; unwrap is fine in tests/.
+// unwrap is fine in tests/, but clippy.toml's exemption misses helpers outside #[test] fns.
 #![allow(clippy::unwrap_used)]
 
 mod common;
@@ -22,8 +22,7 @@ fn proxy(kind: ProxyKind, host: &str, port: &str) -> Proxy {
 
 #[test]
 fn http_proxy_receives_the_request() {
-    // The test server plays the proxy: it gets the absolute-form request for a host
-    // that does not exist and routes it by path.
+    // The test server plays the proxy and routes the absolute-form request by path.
     let server = TestServer::start(Router::new().route("/echo", any(echo)));
     let port = server.base.rsplit(':').next().unwrap().to_string();
     let client = HttpClient::new().unwrap();

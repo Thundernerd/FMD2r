@@ -1,4 +1,4 @@
-// Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
+// unwrap is fine in tests/, but clippy.toml's exemption misses helpers outside #[test] fns.
 #![allow(clippy::unwrap_used)]
 
 use fmd_store::{ListsDb, MangaListing, PageRequest, SearchFilters};

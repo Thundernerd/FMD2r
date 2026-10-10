@@ -186,9 +186,8 @@ impl Queue {
     }
 }
 
-/// Runs module callbacks on dedicated OS threads. Each thread owns one Lua state (which, being
-/// `!Send`, never leaves it) and keeps it while its jobs target the same module, so globals
-/// persist between callbacks of that module on that thread.
+/// Runs module callbacks on dedicated OS threads, each owning one `!Send` Lua state that it
+/// keeps while its jobs target the same module, so globals persist between those callbacks.
 pub struct WorkerPool {
     shared: Arc<Shared>,
     queue: Arc<Queue>,
@@ -524,7 +523,6 @@ impl Caller<'_> {
     }
 }
 
-/// What every worker shares.
 struct Shared {
     lua_dir: PathBuf,
     http: HttpClient,
@@ -559,7 +557,6 @@ impl Shared {
         self.stamps.fetch_add(1, Ordering::SeqCst)
     }
 
-    /// Whether something of module `id` made at `stamp` was invalidated since.
     fn is_stale(&self, id: &str, stamp: u64) -> bool {
         let stale = lock(&self.stale);
         let since = stale.modules.get(id).copied().unwrap_or(0).max(stale.all);

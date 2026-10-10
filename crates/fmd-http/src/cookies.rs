@@ -61,7 +61,6 @@ impl CookieJar {
         self.cookies.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// All stored cookies.
     pub fn cookies(&self) -> Vec<Cookie> {
         self.lock().clone()
     }
@@ -109,9 +108,8 @@ impl CookieJar {
     }
 
     /// `SetCookies` (baseunits/httpcookiemanager.pas:218-289): drops expired cookies and
-    /// copies those matching `url` into `target` (`Cookies.Values[name] := value`).
-    /// Domains match exactly or as a dot-separated suffix; paths match as FMD2 does,
-    /// which only accepts a prefix when the cookie path ends in `/`. `Secure` is ignored.
+    /// copies those matching `url` into `target`. Domains match exactly or as a dot suffix;
+    /// a path prefix only matches when the cookie path ends in `/`. `Secure` is ignored.
     pub(crate) fn set_cookies(&self, url: &str, target: &mut NameValueList) {
         let Some((protocol, host, path)) = parse_url(url) else {
             return;

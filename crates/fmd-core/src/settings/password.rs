@@ -1,7 +1,5 @@
-//! The server password (`server.auth_token`) is stored as a salted Argon2id hash in PHC string
-//! form, never as the password: a patch that sets it is hashed before it is merged, and a
-//! password an older build stored (plain, or encrypted as the other secrets are) is hashed on
-//! load. No FMD2 counterpart: FMD2 has no web server.
+//! The server password (`server.auth_token`), stored as a salted Argon2id PHC hash. No FMD2
+//! counterpart.
 
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
@@ -12,10 +10,8 @@ use serde_json::Value;
 use super::secrets::unseal;
 use super::service::SettingsError;
 
-/// The key of the password inside the `server` group.
 const PASSWORD_KEY: &str = "auth_token";
 
-/// A salted hash of `password`.
 fn hash(password: &str) -> Result<String, SettingsError> {
     let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
@@ -24,8 +20,7 @@ fn hash(password: &str) -> Result<String, SettingsError> {
         .map_err(|e| SettingsError::Hash(e.to_string()))
 }
 
-/// Whether `candidate` is the password `hash` was made from. Slow by design: call it off the
-/// async threads.
+/// Slow by design: call it off the async threads.
 pub fn verify_password(hash: &str, candidate: &str) -> bool {
     PasswordHash::new(hash).is_ok_and(|hash| {
         Argon2::default()
@@ -39,8 +34,7 @@ fn is_hash(value: &str) -> bool {
     PasswordHash::new(value).is_ok_and(|h| h.algorithm == ARGON2ID_IDENT)
 }
 
-/// Replaces the password a merge patch sets with its hash. An empty one is left as it is: it
-/// clears the password.
+/// Hashes the password a merge patch sets; an empty one (clearing it) is left as is.
 pub(super) fn hash_patched(patch: &mut Value) -> Result<(), SettingsError> {
     let slot = patch
         .get_mut("server")
@@ -62,12 +56,10 @@ fn hash_in_place(
     Ok(())
 }
 
-/// Hashes the password in the stored `server` group when an older build stored it plain or
-/// encrypted; whether `group` changed.
+/// Hashes a password an older build stored plain or encrypted; whether `group` changed.
 ///
-/// An encrypted one that cannot be decrypted (a lost or replaced key file) is replaced by the
-/// hash of a random password nobody knows, so the API stays locked instead of turning open;
-/// `--password` / `FMD2R_PASSWORD` gets in to set a new one.
+/// One that cannot be decrypted (lost key file) becomes the hash of a random password, so the
+/// API stays locked instead of turning open.
 pub(super) fn hash_stored(cipher: &dyn Cipher, group: &mut Value) -> Result<bool, SettingsError> {
     let before = group.clone();
     let encrypted = group.get(PASSWORD_KEY).is_some_and(Value::is_object);

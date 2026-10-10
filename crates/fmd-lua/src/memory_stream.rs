@@ -17,7 +17,6 @@ pub struct MemoryStream {
 }
 
 impl MemoryStream {
-    /// An empty stream.
     pub fn new() -> Self {
         MemoryStream::default()
     }
@@ -27,12 +26,11 @@ impl MemoryStream {
         &self.data
     }
 
-    /// The read/write position; it may lie past the end.
+    /// May lie past the end.
     pub fn position(&self) -> usize {
         self.position
     }
 
-    /// Moves the read/write position; it may lie past the end.
     pub fn set_position(&mut self, position: usize) {
         self.position = position;
     }
@@ -44,8 +42,7 @@ impl MemoryStream {
     }
 
     /// Truncates or zero-extends the stream to `size` bytes, moving the position back to the
-    /// end when it lay beyond it (`TMemoryStream.SetSize`). Fails when the memory cannot be
-    /// allocated.
+    /// end when it lay beyond it (`TMemoryStream.SetSize`).
     pub fn set_size(&mut self, size: usize) -> Result<(), std::collections::TryReserveError> {
         self.data
             .try_reserve(size.saturating_sub(self.data.len()))?;
@@ -63,15 +60,14 @@ impl MemoryStream {
         Ok(())
     }
 
-    /// Empties the stream and moves the position to 0 (`TMemoryStream.Clear`).
+    /// `TMemoryStream.Clear`.
     pub fn clear(&mut self) {
         self.data.clear();
         self.position = 0;
     }
 
-    /// Writes `bytes` at the position, overwriting what is there and growing the stream as
-    /// needed, then moves the position past them (`TMemoryStream.Write`). Writing past the end
-    /// fills the gap with zeros.
+    /// Writes `bytes` at the position and moves past them (`TMemoryStream.Write`). Writing past
+    /// the end fills the gap with zeros.
     pub fn write(&mut self, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
@@ -85,20 +81,18 @@ impl MemoryStream {
     }
 }
 
-/// A shareable handle to a [`MemoryStream`] that can be exposed to Lua as a MemoryStream
-/// object, so a Host API object (e.g. HTTP) can own the stream that modules read and write.
+/// A shared [`MemoryStream`] exposed to Lua as a MemoryStream object, so a Host API object
+/// (e.g. HTTP) can own the stream modules read and write.
 #[derive(Debug, Clone, Default)]
 pub struct LuaMemoryStream {
     stream: Rc<RefCell<MemoryStream>>,
 }
 
 impl LuaMemoryStream {
-    /// A handle to a new, empty stream.
     pub fn new() -> Self {
         LuaMemoryStream::default()
     }
 
-    /// The shared stream.
     pub fn stream(&self) -> &Rc<RefCell<MemoryStream>> {
         &self.stream
     }

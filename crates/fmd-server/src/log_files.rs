@@ -148,16 +148,14 @@ fn append(path: &Path) -> io::Result<File> {
     OpenOptions::new().create(true).append(true).open(path)
 }
 
-/// The log files in `dir`, oldest first.
 fn files_oldest_first(dir: &Path) -> io::Result<Vec<PathBuf>> {
     let mut files = indexed_files(dir)?;
     files.sort_by_key(|(index, _)| std::cmp::Reverse(*index));
     Ok(files.into_iter().map(|(_, path)| path).collect())
 }
 
-/// The newest `count` (or more) lines in the log files in `dir`, oldest first, read from the
-/// newest file back, and the highest sequence number among them. Lines that don't parse (a
-/// partial line left by a crash) are skipped.
+/// The newest `count` (or more) lines, oldest first, and their highest sequence number. Lines
+/// that don't parse (a crash's partial line) are skipped.
 pub(crate) fn read_tail(dir: &Path, count: usize) -> io::Result<(Vec<LogLine>, u64)> {
     let mut tail: Vec<LogLine> = Vec::new();
     for path in files_oldest_first(dir)?.into_iter().rev() {

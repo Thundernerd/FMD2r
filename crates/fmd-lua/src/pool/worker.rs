@@ -19,9 +19,8 @@ use crate::{
     SettingsStoreError, XPathBackend, create_http,
 };
 
-/// Calls a function under `xpcall`, returning the traceback taken where it failed (or `''`),
-/// then `xpcall`'s results. It holds the standard functions it uses, so a module that
-/// replaces them cannot break it.
+/// Calls a function under `xpcall`, returning the traceback where it failed (or `''`), then
+/// `xpcall`'s results. Captures the standard functions so a module replacing them can't break it.
 const INVOKE: &str = r#"
 local xpcall, traceback, pack, unpack = xpcall, debug.traceback, table.pack, table.unpack
 return function(f)
@@ -72,12 +71,10 @@ struct Loaded {
     invoke: Function,
     /// Callbacks run since the last full collection (`FCallFunctionCount`).
     calls: u32,
-    /// The values FMD2 would find at the top and bottom of the state's stack, which it never
-    /// clears: a callback that returns nothing reads whatever is on top
-    /// (e.g. `lua_toboolean(L.Handle, -1)`, baseunits/lua/LuaWebsiteModules.pas:165).
-    /// Not modelled: FMD2's anti-bot bypass runs in the same state and clears its stack
-    /// afterwards (`L.ClearStack`, baseunits/lua/LuaWebsiteBypass.pas:139), so there a
-    /// callback that went through the bypass and returns nothing reads `nil`.
+    /// The values at the top and bottom of FMD2's never-cleared stack: a callback that returns
+    /// nothing reads whatever is on top (e.g. `lua_toboolean(L.Handle, -1)`,
+    /// baseunits/lua/LuaWebsiteModules.pas:165). Not modelled: the bypass's `L.ClearStack`
+    /// (baseunits/lua/LuaWebsiteBypass.pas:139), after which such a callback reads `nil`.
     top: Value,
     bottom: Option<Value>,
     runtime: Runtime,
@@ -151,10 +148,9 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
     let def = module.def();
     let runtime = Runtime::new().map_err(|e| plain(format!("new Lua state: {e}")))?;
     runtime.set_lua_dir(&shared.lua_dir);
-    // FMD2 runs in its own directory, the parent of `lua/` (`LUA_REPO_FOLDER`,
-    // baseunits/FMDOptions.pas:297), which upstream's relative paths assume, e.g.
-    // `lua\websitebypass\websitebypass_config.json` (lua/websitebypass/cloudflare.lua:272).
-    // A bare `lua` has an empty parent: the current directory, the default.
+    // FMD2 runs in the parent of `lua/` (`LUA_REPO_FOLDER`, baseunits/FMDOptions.pas:297),
+    // which upstream's relative paths assume (lua/websitebypass/cloudflare.lua:272). A bare
+    // `lua` has an empty parent, i.e. the current directory.
     if let Some(dir) = shared
         .lua_dir
         .parent()
@@ -172,8 +168,6 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
             terminate: None,
         })
         .map_err(|e| plain(format!("new Lua state: {e}")))?;
-    // The XPath backend of `CreateTXQuery`: the configured one, else the runtime's default;
-    // wrapped to record into the differential corpus when one is set.
     let xpath_backend = *lock(&shared.xpath_backend);
     if xpath_backend.is_some() || shared.xpath_corpus.is_some() {
         let engine = match xpath_backend {
@@ -226,8 +220,7 @@ fn build(shared: &Shared, module: &Arc<Module>) -> Result<Loaded, (String, Strin
     })
 }
 
-/// The compiled chunk of the module file, from the pool's bytecode cache when it was compiled
-/// after the module was last invalidated, else read and compiled now.
+/// The module file's compiled chunk, from the pool's cache unless invalidated since.
 fn bytecode(
     shared: &Shared,
     lua: &Lua,
@@ -308,9 +301,8 @@ impl Ctx<'_> {
     }
 
     /// Sets the global `HTTP` (`L.LoadObject('HTTP', ...)`) over the job's session, or a new
-    /// one for the module (`CreateHTTP` and `PrepareHTTP`, baseunits/WebsiteModules.pas:382-387, :353-380), tied to the
-    /// job's termination. Its requests run the module's anti-bot hook
-    /// (`WebsiteBypassHTTPRequest`, baseunits/WebsiteModules.pas:272-276).
+    /// one (`CreateHTTP` and `PrepareHTTP`, baseunits/WebsiteModules.pas:382-387, :353-380),
+    /// with the anti-bot hook (`WebsiteBypassHTTPRequest`, baseunits/WebsiteModules.pas:272-276).
     pub(super) fn set_http(&mut self) -> mlua::Result<()> {
         let settings: Arc<dyn ModuleHttpSettings> = match &self.shared.http_settings {
             Some(source) => source(self.module),
@@ -342,10 +334,9 @@ impl Ctx<'_> {
     }
 
     /// `CallFunction` (baseunits/lua/LuaHandler.pas:134-144) over `LuaCallFunction`
-    /// (baseunits/lua/LuaBase.pas:132-144): after 16 calls, two full collections; then the
-    /// global the callback names is called without arguments. Returns the value then on top
-    /// of FMD2's stack: the callback's last result, or what was on top before when it returned
-    /// none. A call that fails does not count towards the collection.
+    /// (baseunits/lua/LuaBase.pas:132-144): after 16 calls, two full collections. Returns the
+    /// value then on top of FMD2's stack: the callback's last result, or the previous top when
+    /// it returned none. A failed call doesn't count towards the collection.
     pub(super) fn call(&mut self, callback: Callback) -> Result<Value, JobError> {
         let name = callback
             .function(&self.module.def())

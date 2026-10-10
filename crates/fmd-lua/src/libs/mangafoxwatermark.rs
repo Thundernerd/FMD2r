@@ -40,9 +40,8 @@ static REMOVER: Mutex<Remover> = Mutex::new(Remover {
 });
 
 /// How FMD2 reads and rewrites an image format, picked by sniffing its content
-/// (baseunits/ImgInfos.pas:634-639): GIF is rewritten as PNG. WebP has no reader there, so
-/// FMD2 cannot handle it either. TIFF, which FMD2 does handle, is left out here: FMD2r builds
-/// the `image` crate without TIFF support, and the watermarked site serves JPEG.
+/// (baseunits/ImgInfos.pas:634-639): GIF is rewritten as PNG; FMD2 has no WebP reader. TIFF is
+/// left out: the `image` crate is built without it, and the watermarked site serves JPEG.
 fn handler(format: ImageFormat) -> Option<(ImageFormat, &'static str)> {
     match format {
         ImageFormat::Jpeg => Some((ImageFormat::Jpeg, "jpg")),

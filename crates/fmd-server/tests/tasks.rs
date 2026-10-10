@@ -597,7 +597,6 @@ async fn body_bytes(res: Response) -> Vec<u8> {
     res.into_body().collect().await.unwrap().to_bytes().to_vec()
 }
 
-/// The names and contents of the files in a zip.
 fn unzip(bytes: Vec<u8>) -> Vec<(String, Vec<u8>)> {
     use std::io::Read;
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();

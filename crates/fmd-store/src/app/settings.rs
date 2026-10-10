@@ -1,5 +1,4 @@
-//! Application settings: a key → JSON value table. What the keys mean is up to the settings model
-//! (T18).
+//! Application settings: a key → JSON value table.
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
@@ -8,7 +7,6 @@ use serde::de::DeserializeOwned;
 use crate::db::Db;
 use crate::error::Result;
 
-/// Repository for settings. Obtain it with [`crate::AppDb::settings`].
 pub struct SettingsRepo<'a> {
     db: &'a Db,
 }
@@ -18,7 +16,6 @@ impl<'a> SettingsRepo<'a> {
         Self { db }
     }
 
-    /// The value stored under `key`, deserialised as `T`; `None` when the key is unset.
     pub fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
         let json: Option<String> = {
             let conn = self.db.lock();
@@ -30,14 +27,13 @@ impl<'a> SettingsRepo<'a> {
         Ok(json.map(|j| serde_json::from_str(&j)).transpose()?)
     }
 
-    /// Stores `value` (serialised as JSON) under `key`, replacing any previous value.
     pub fn set<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
         let json = serde_json::to_string(value)?;
         let conn = self.db.lock();
         put(&conn, key, &json)
     }
 
-    /// Stores every `(key, value)` pair in one transaction: either all are written or none.
+    /// All or nothing.
     pub fn set_many<T: Serialize>(&self, entries: &[(&str, T)]) -> Result<()> {
         let entries = entries
             .iter()
@@ -59,7 +55,6 @@ impl<'a> SettingsRepo<'a> {
     }
 }
 
-/// Stores the JSON `json` under `key`, replacing any previous value.
 pub(crate) fn put(conn: &Connection, key: &str, json: &str) -> Result<()> {
     conn.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2)

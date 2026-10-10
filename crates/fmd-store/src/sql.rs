@@ -2,7 +2,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Current time as Unix milliseconds, the timestamp unit of every table.
+/// Unix milliseconds, the timestamp unit of every table.
 pub(crate) fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -59,14 +59,13 @@ macro_rules! text_enum {
 }
 pub(crate) use text_enum;
 
-/// SQL expression for the `sort_order` that appends a row to the end of `table`.
+/// SQL expression for a `sort_order` that appends to `table`.
 pub(crate) fn next_sort_order(table: &str) -> String {
     format!("(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM {table})")
 }
 
-/// Rewrites `sort_order` of `table` so `first` come first in the given order (repeats ignored)
-/// and every other row keeps its relative order after them. `table` is always a constant from this
-/// crate.
+/// Puts `first` at the front of `table`'s `sort_order`, keeping the other rows' relative order.
+/// `table` is always a crate constant, never user input.
 pub(crate) fn reorder(
     conn: &mut rusqlite::Connection,
     table: &str,

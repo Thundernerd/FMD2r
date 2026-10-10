@@ -104,8 +104,7 @@ async fn start_upstream(up: Upstream) -> String {
     format!("http://{addr}")
 }
 
-/// Website modules as the composition root would expose them: each with its root URL, shared
-/// HTTP state (cookie jar, connection queue) and user agent override.
+/// Website modules as the composition root exposes them.
 struct Modules {
     client: HttpClient,
     modules: HashMap<String, (String, ModuleHttp)>,

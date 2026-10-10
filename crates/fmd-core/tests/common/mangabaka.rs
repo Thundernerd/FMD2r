@@ -47,7 +47,6 @@ impl FixtureSource {
         })
     }
 
-    /// Serves `records` from now on.
     pub fn set(&self, records: &[Value]) {
         *self.body.lock().unwrap() = compress(records);
     }

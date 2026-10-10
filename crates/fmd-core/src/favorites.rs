@@ -1,9 +1,5 @@
 //! The library's new-chapter check, mirroring FMD2's `TFavoriteManager`, `TFavoriteTask` and
 //! `TFavoriteThread` (baseunits/uFavoritesManager.pas:302-1178).
-//!
-//! A run asks each enabled favorite's module for the series' info (`OnGetInfo`), diffs the
-//! chapters against what was downloaded, stores the favorite's new status and chapter count, and
-//! then queues what it found or reports it in the inbox.
 
 use std::collections::HashSet;
 use std::future::Future;
@@ -35,27 +31,21 @@ use crate::settings::{OutputFormat, SaveToSettings, SettingsService};
 /// `MangaInfo_StatusCompleted` (baseunits/uBaseUnit.pas:230).
 const STATUS_COMPLETED: &str = "0";
 
-/// What the checker runs on.
 #[derive(Clone)]
 pub struct CheckerConfig {
     pub db: AppDb,
-    /// Runs the modules' `OnGetInfo`.
     pub pool: Arc<WorkerPool>,
     pub modules: Arc<ModuleLookup>,
     pub settings: Arc<SettingsService>,
-    /// Where found chapters are queued when `favorites.auto_download` is on; without one they
-    /// are reported in the inbox.
+    /// Used when `favorites.auto_download` is on; without one, finds go to the inbox.
     pub queue: Option<Arc<dyn TaskQueue>>,
-    /// Where the `favorites` job announces its changes.
     pub jobs: JobRegistry,
 }
 
-/// What [`TaskQueue::add_task`] returns.
 pub type QueueFuture<'a> = Pin<Box<dyn Future<Output = Result<TaskId, EngineError>> + Send + 'a>>;
 
-/// Where found chapters are queued: the [`DownloadManager`].
+/// Where found chapters are queued (the [`DownloadManager`]).
 pub trait TaskQueue: Send + Sync + 'static {
-    /// Queues `download` as a new task.
     fn add_task(&self, download: NewDownload) -> QueueFuture<'_>;
 }
 
@@ -65,9 +55,8 @@ impl TaskQueue for DownloadManager {
     }
 }
 
-/// The directory a series added to the library from `info` downloads to: `dir`, or the
-/// website's directory `website_dir` (`OverrideSaveTo`) or the default destination's when empty,
-/// plus the manga folder when one is generated and not already part of it
+/// A new favorite's directory: `dir`, else `website_dir` (`OverrideSaveTo`), else the default
+/// destination, plus the manga folder when generated and not already part of it
 /// (`btAddToFavoritesClick`, mangadownloader/forms/frmMain.pas:2804-2827).
 pub fn favorite_save_to(
     saveto: &SaveToSettings,
@@ -86,10 +75,8 @@ pub fn favorite_save_to(
     save_to(saveto, website, website_dir, &download)
 }
 
-/// Which favorites a run checks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CheckScope {
-    /// Every enabled favorite.
     All,
     /// These favorites, when enabled.
     Only(Vec<FavoriteId>),
@@ -107,7 +94,6 @@ pub enum CheckMode {
     Missing,
 }
 
-/// A chapter a run found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoundChapter {
     pub name: String,
@@ -117,7 +103,6 @@ pub struct FoundChapter {
     pub number: u32,
 }
 
-/// The chapters a run found for one favorite.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FavoriteFound {
     pub favorite: FavoriteId,
@@ -127,27 +112,22 @@ pub struct FavoriteFound {
     pub website: String,
     pub link: String,
     pub save_to: String,
-    /// As the module reports them, for the chapter names.
+    /// For the chapter names.
     pub authors: String,
     pub artists: String,
     pub chapters: Vec<FoundChapter>,
 }
 
-/// What a run did.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CheckReport {
-    /// Favorites whose info was read.
     pub checked: u64,
     /// Favorites with new (or missing) chapters.
     pub found: Vec<FavoriteFound>,
-    /// Completed series with nothing new (`MangaInfo_StatusCompleted`); removed when
-    /// `favorites.remove_completed` is on.
+    /// Completed series with nothing new; removed when `favorites.remove_completed` is on.
     pub completed: Vec<FavoriteId>,
-    /// The tasks the found chapters were queued in.
     pub queued: Vec<TaskId>,
-    /// The inbox item reporting what was found, when it was not queued.
+    /// Set when found chapters were reported rather than queued.
     pub inbox: Option<Event>,
-    /// The run was cancelled before it reported anything.
     pub cancelled: bool,
 }
 
@@ -194,15 +174,12 @@ impl FavoritesEvent {
     }
 }
 
-/// What the checker reports while it runs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CheckerEvent {
     Job(FavoritesEvent),
-    /// A new inbox item was stored.
     Inbox(Event),
 }
 
-/// Why a run could not run.
 #[derive(Debug, Error)]
 pub enum CheckError {
     #[error("a favorites check is already running")]
@@ -216,8 +193,8 @@ pub enum CheckError {
     Join(String),
 }
 
-/// Checks favorites for new chapters (`TFavoriteManager`), one run at a time, as the
-/// `favorites` background job. Cheap to clone; clones share the runs.
+/// Checks favorites for new chapters (`TFavoriteManager`) as the `favorites` background job.
+/// Clones share the runs.
 #[derive(Clone)]
 pub struct FavoritesChecker {
     inner: Arc<Inner>,
@@ -227,20 +204,18 @@ struct Inner {
     config: CheckerConfig,
     on_event: Box<dyn Fn(CheckerEvent) + Send + Sync>,
     status: Mutex<JobStatus>,
-    /// `Terminated`: set to stop the run going on.
+    /// `Terminated`.
     cancelled: AtomicBool,
     /// Counts the runs that ended, so a scheduled check can wait for a manual one.
     ended: watch::Sender<u64>,
 }
 
-/// A completed series with nothing new.
 struct CompletedSeries {
     id: FavoriteId,
     title: String,
     website: String,
 }
 
-/// What checking one favorite found.
 enum Checked {
     Found(FavoriteFound),
     Completed(CompletedSeries),
@@ -248,10 +223,8 @@ enum Checked {
 }
 
 impl FavoritesChecker {
-    /// The job's id in `/api/jobs/{id}`.
     pub const ID: &str = "favorites";
 
-    /// A checker passing every event to `on_event`.
     pub fn new(
         config: CheckerConfig,
         on_event: impl Fn(CheckerEvent) + Send + Sync + 'static,
@@ -274,8 +247,8 @@ impl FavoritesChecker {
         }
     }
 
-    /// Starts checking the favorites in `scope` in the background, unless a run is going
-    /// (`CheckForNewChapter`/`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:832-928).
+    /// Starts a background run unless one is going (`CheckForNewChapter`/
+    /// `CheckForMissingChapters`, baseunits/uFavoritesManager.pas:832-928).
     pub fn start(&self, scope: CheckScope, mode: CheckMode) -> Result<(), CheckError> {
         let runtime = tokio::runtime::Handle::try_current().map_err(|_| CheckError::NoRuntime)?;
         self.begin()?;
@@ -287,7 +260,7 @@ impl FavoritesChecker {
         Ok(())
     }
 
-    /// Checks the favorites in `scope` and waits for the run to end, unless a run is going.
+    /// Like [`Self::start`], but waits for the run to end.
     pub async fn check(
         &self,
         scope: CheckScope,
@@ -299,14 +272,10 @@ impl FavoritesChecker {
         result
     }
 
-    /// Runs the checks FMD2's timers run, following setting changes: one at startup when
-    /// `favorites.check_at_startup` is on (`tmStartupTimer`,
-    /// mangadownloader/forms/frmMain.pas:2078-2082), then one every
-    /// `favorites.check_interval_minutes` after the last ended while
-    /// `favorites.check_on_interval` is on (`tmCheckFavorites`, :1871-1881, :6335, re-armed when
-    /// a check ends, baseunits/uFavoritesManager.pas:597). A check already going when one is due
-    /// counts as that one, and the interval runs from its end, so runs never overlap. Never
-    /// returns.
+    /// Runs FMD2's timed checks, following setting changes: at startup (`tmStartupTimer`,
+    /// mangadownloader/forms/frmMain.pas:2078-2082), then every interval after the last ended
+    /// (`tmCheckFavorites`, :1871-1881, :6335, re-armed at baseunits/uFavoritesManager.pas:597).
+    /// A check already going counts as the due one, so runs never overlap. Never returns.
     pub async fn schedule(self) {
         let settings = self.inner.config.settings.clone();
         let mut changes = settings.subscribe();
@@ -340,8 +309,7 @@ impl FavoritesChecker {
         }
     }
 
-    /// A scheduled check of every favorite (`isAuto`), waiting for it to end. A check already
-    /// going (started from the API) counts as this one: it waits for that to end instead.
+    /// A scheduled check (`isAuto`); a check already going counts as this one.
     async fn scheduled_check(&self) {
         let mut ended = self.inner.ended.subscribe();
         ended.mark_unchanged();
@@ -352,12 +320,12 @@ impl FavoritesChecker {
         }
     }
 
-    /// Records when the scheduler runs the job next, in Unix milliseconds.
+    /// Unix milliseconds.
     fn set_next_run(&self, at: Option<i64>) {
         self.update(|status| status.next_run = at);
     }
 
-    /// Marks a run as going, unless one already is (`isRunning`).
+    /// `isRunning`.
     fn begin(&self) -> Result<(), CheckError> {
         {
             let mut status = lock(&self.inner.status);
@@ -375,7 +343,6 @@ impl FavoritesChecker {
         Ok(())
     }
 
-    /// Ends the run with `result`.
     fn end(&self, mode: CheckMode, result: &Result<CheckReport, CheckError>) {
         let (kind, new_chapters, error) = match result {
             Ok(report) if report.cancelled => (FavoritesEventKind::Cancelled, None, None),
@@ -416,9 +383,8 @@ impl FavoritesChecker {
         self.inner.config.jobs.changed(Self::ID);
     }
 
-    /// `TFavoriteTask.Execute` (baseunits/uFavoritesManager.pas:607-667): checks the favorites
-    /// on at most `connections.max_favorite_threads` at once (`GetNext`, :711-742), then shows
-    /// the result unless it was terminated.
+    /// `TFavoriteTask.Execute` (baseunits/uFavoritesManager.pas:607-667), on at most
+    /// `connections.max_favorite_threads` at once (`GetNext`, :711-742).
     async fn run_checks(
         &self,
         scope: CheckScope,
@@ -480,8 +446,7 @@ impl FavoritesChecker {
             let checked = match result {
                 Ok(Some(checked)) => checked,
                 Ok(None) => continue,
-                // One favorite's failure leaves the others' results standing, as FMD2's
-                // per-favorite `ExceptionHandle` (baseunits/uFavoritesManager.pas:391-394).
+                // Per-favorite `ExceptionHandle` (baseunits/uFavoritesManager.pas:391-394).
                 Err(e) => {
                     tracing::warn!(target: "fmd_core", "favorites check: {e}");
                     continue;
@@ -506,9 +471,7 @@ impl FavoritesChecker {
         Ok(report)
     }
 
-    /// Checks one favorite (`DoCheck`/`DoCheckMissing`, baseunits/uFavoritesManager.pas:329-531).
-    /// A favorite whose info cannot be read is logged and skipped (`None`), as FMD2's
-    /// `ExceptionHandle`.
+    /// `DoCheck`/`DoCheckMissing` (baseunits/uFavoritesManager.pas:329-531).
     async fn check_one(
         &self,
         favorite: &Favorite,
@@ -528,7 +491,7 @@ impl FavoritesChecker {
         if self.inner.cancelled.load(Ordering::SeqCst) {
             return Ok(None);
         }
-        // The favorite as stored now: it may have been edited, or removed, during the check.
+        // Re-read: it may have been edited or removed during the check.
         let Some(favorite) = self
             .store_checked(favorite.id, &info, !chapters.is_empty())
             .await?
@@ -560,14 +523,13 @@ impl FavoritesChecker {
         Ok(Some(Checked::Nothing))
     }
 
-    /// The module's name, or its ID when it is gone.
+    /// The module's name, or its ID when gone.
     fn website(&self, module_id: &str) -> String {
         (self.inner.config.modules)(module_id)
             .map_or_else(|| module_id.to_owned(), |m| m.def().name)
     }
 
-    /// Removes `completed` when `favorites.remove_completed` is on, and
-    /// reports it in the inbox in place of FMD2's confirmation dialog (`ShowResult`,
+    /// Removes and reports `completed` in place of FMD2's confirmation dialog (`ShowResult`,
     /// baseunits/uFavoritesManager.pas:997-1043).
     async fn remove_completed(&self, completed: &[CompletedSeries]) -> Result<(), CheckError> {
         if completed.is_empty() || !self.inner.config.settings.get().favorites.remove_completed {
@@ -592,7 +554,6 @@ impl FavoritesChecker {
         Ok(())
     }
 
-    /// Stores `event` in the inbox and announces it.
     async fn notify(&self, event: NewEvent) -> Result<Event, CheckError> {
         let db = self.inner.config.db.clone();
         let stored = blocking(move || db.events().push(&event)).await?;
@@ -600,8 +561,7 @@ impl FavoritesChecker {
         Ok(stored)
     }
 
-    /// Queues what the run found when `favorites.auto_download` is on, or else reports it in
-    /// one inbox item in place of FMD2's new-chapter dialog (`ShowResult`,
+    /// Queues the finds, or reports them in place of FMD2's new-chapter dialog (`ShowResult`,
     /// baseunits/uFavoritesManager.pas:1047-1073).
     async fn show_result(
         &self,
@@ -627,9 +587,8 @@ impl FavoritesChecker {
         Ok(())
     }
 
-    /// Queues `found`'s chapters as a new task and adds them to the downloaded list at once
-    /// (`ShowResult`, baseunits/uFavoritesManager.pas:1087-1129). A task that cannot be queued
-    /// is logged; its chapters stay new, so the next check finds them again.
+    /// Queues `found` and marks it downloaded (`ShowResult`,
+    /// baseunits/uFavoritesManager.pas:1087-1129). A failure is logged; the chapters stay new.
     async fn queue(
         &self,
         queue: &dyn TaskQueue,
@@ -670,12 +629,9 @@ impl FavoritesChecker {
         Ok(Some(task))
     }
 
-    /// Stores what a check learned: the chapter count and status at once (`DoCheck`,
-    /// baseunits/uFavoritesManager.pas:351-353), the check time, and the update time when it
-    /// found chapters (:373-378). Beyond FMD2, it also replaces the stored chapter links, which
-    /// the new-chapter badge compares with the downloaded ones. The other fields are left as
-    /// stored now, so edits made during the check stay. Returns the updated favorite, or `None`
-    /// when it was removed meanwhile.
+    /// Stores chapter count and status (`DoCheck`, baseunits/uFavoritesManager.pas:351-353),
+    /// check time, and update time when chapters were found (:373-378); beyond FMD2, also the
+    /// chapter links for the new-chapter badge. `None` when the favorite was removed meanwhile.
     async fn store_checked(
         &self,
         id: FavoriteId,
@@ -687,8 +643,7 @@ impl FavoritesChecker {
         let status = info.status.clone();
         let links: Vec<String> = info.chapters.iter().map(|c| c.link.clone()).collect();
         let db = self.inner.config.db.clone();
-        // The repositories lock the connection per statement; this read-modify-write races
-        // only with another write to the same favorite in between, which a PATCH would redo.
+        // Not atomic: it only races with another write to this favorite, which a PATCH redoes.
         blocking(move || {
             let Some(mut favorite) = db.favorites().get(id)? else {
                 return Ok(None);
@@ -733,9 +688,8 @@ impl FavoritesChecker {
         get_info(&config.pool, &module, &favorite.link, options).await
     }
 
-    /// The chapters of `info` that are not in the downloaded list (`DoCheck`,
-    /// baseunits/uFavoritesManager.pas:357-371): FMD2 looks each link up in a sorted,
-    /// case-insensitive `TStringList`.
+    /// Chapters not in the downloaded list, compared case-insensitively (`DoCheck`,
+    /// baseunits/uFavoritesManager.pas:357-371).
     async fn new_chapters(
         &self,
         favorite: &Favorite,
@@ -755,10 +709,9 @@ impl FavoritesChecker {
             .collect())
     }
 
-    /// The chapters of `info` with no file or folder in the favorite's directory
-    /// (`DoCheckMissing`, baseunits/uFavoritesManager.pas:425-511): each chapter's name is made
-    /// as a download would name it, and looked for as the kind of chapter the directory holds
-    /// most of, or else as the output format says.
+    /// Chapters with no file or folder in the favorite's directory, looked for as the format
+    /// the directory holds most of, else the output format (`DoCheckMissing`,
+    /// baseunits/uFavoritesManager.pas:425-511).
     async fn missing_chapters(
         &self,
         favorite: &Favorite,
@@ -822,9 +775,8 @@ fn found_chapter(index: usize, chapter: &crate::info::Chapter) -> FoundChapter {
     }
 }
 
-/// The kind of chapter `dir` holds most of: folders, unless more `.cbz`, `.zip`, `.pdf` or
-/// `.epub` files (checked in that order, a later kind winning only with more); `None` when it
-/// holds none (`DoCheckMissing`, baseunits/uFavoritesManager.pas:430-473).
+/// The chapter format `dir` holds most of; ties go to the earlier of folder, `.cbz`, `.zip`,
+/// `.pdf`, `.epub` (`DoCheckMissing`, baseunits/uFavoritesManager.pas:430-473).
 fn detect_format(dir: &Path) -> Option<OutputFormat> {
     let (mut dirs, mut cbz, mut zip, mut pdf, mut epub) = (0, 0, 0, 0, 0);
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
@@ -860,9 +812,8 @@ fn detect_format(dir: &Path) -> Option<OutputFormat> {
     Some(format)
 }
 
-/// Whether the chapter at `path` (without extension) was downloaded as `format`. A folder next
-/// to an archive means packing was interrupted, so it counts as missing
-/// (baseunits/uFavoritesManager.pas:490-505).
+/// `path` is without extension. A folder next to an archive means packing was interrupted, so
+/// it counts as missing (baseunits/uFavoritesManager.pas:490-505).
 fn chapter_exists(path: &Path, format: OutputFormat) -> bool {
     let extension = match format {
         OutputFormat::Folder => return path.is_dir(),
@@ -877,8 +828,7 @@ fn chapter_exists(path: &Path, format: OutputFormat) -> bool {
     Path::new(&file).is_file() && !path.is_dir()
 }
 
-/// The inbox item listing `found`, worded as FMD2's dialog: its caption as the title, its label
-/// and memo as the body (`RS_*`, baseunits/uFavoritesManager.pas:176-181).
+/// Worded as FMD2's dialog (`RS_*`, baseunits/uFavoritesManager.pas:176-181).
 fn inbox_item(found: &[FavoriteFound], mode: CheckMode) -> NewEvent {
     let chapters: usize = found.iter().map(|f| f.chapters.len()).sum();
     let (kind, title, label, line) = match mode {
@@ -933,7 +883,6 @@ impl Job for FavoritesChecker {
         lock(&self.inner.status).clone()
     }
 
-    /// Checks every favorite for new chapters.
     fn run(&self) -> Result<(), JobError> {
         self.start(CheckScope::All, CheckMode::New)
             .map_err(|e| match e {
@@ -964,14 +913,12 @@ fn now_ms() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
-/// `at` in Unix milliseconds.
 fn unix_ms(at: Instant) -> i64 {
     let wall = SystemTime::now() + at.saturating_duration_since(Instant::now());
     wall.duration_since(UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
-/// Runs store work on the blocking thread pool.
 async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, StoreError> + Send + 'static,
 ) -> Result<T, CheckError> {

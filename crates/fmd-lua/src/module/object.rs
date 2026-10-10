@@ -62,15 +62,13 @@ pub(crate) fn build_module(lua: &Lua, module: &Arc<Module>) -> mlua::Result<AnyU
                 Ok(())
             },
         )
-        // `ConnectionsQueue.ActiveConnections` (baseunits/lua/LuaWebsiteModules.pas:1005). FMD2
-        // lets modules overwrite the queue's counter; here assigning is ignored, so a module
-        // cannot break the connection limit.
+        // `ConnectionsQueue.ActiveConnections` (baseunits/lua/LuaWebsiteModules.pas:1005).
+        // Read-only, unlike FMD2, so a module cannot break the connection limit.
         .read_only_property("ActiveConnectionCount", |_, m| {
             Ok(i64::from(m.http.active_connections()))
         })
         // `lua_getaccountsupport`/`lua_setaccountsupport` (baseunits/lua/LuaWebsiteModules.pas:
-        // 951-962, :1029) over `SetAccountSupport` (baseunits/WebsiteModules.pas:258-270): turning it on
-        // creates the account, turning it off drops it.
+        // 951-962, :1029) over `SetAccountSupport` (baseunits/WebsiteModules.pas:258-270).
         .property(
             "AccountSupport",
             |_, m| Ok(m.def_read().account_support),
@@ -182,10 +180,9 @@ fn add_methods(class: Class) -> Class {
 
 /// `TLuaWebsiteModule.AddOption` (baseunits/lua/LuaWebsiteModules.pas:757-766).
 ///
-/// FMD2 keeps the options in a sorted, case-insensitive `TStringList` that ignores duplicates:
-/// adding a name again finds the existing entry and replaces its caption, kind and default.
-/// An option without a name is kept, so `GetOption('')` finds it, though it never reaches the
-/// settings (baseunits/WebsiteModules.pas:427).
+/// FMD2 keeps options in a sorted, case-insensitive `TStringList` ignoring duplicates, so
+/// re-adding a name replaces the entry. A nameless option is kept for `GetOption('')` but never
+/// reaches the settings (baseunits/WebsiteModules.pas:427).
 fn add_option(
     lua: &Lua,
     module: &mut Arc<Module>,
@@ -213,9 +210,8 @@ fn add_option(
     Ok(())
 }
 
-/// The two string arguments of the cookie methods, which branch on `lua_gettop(L) = 2`: with
-/// two arguments they are taken as given; otherwise the first argument is the second string
-/// when `first_is_second`, else the first (the other one is empty).
+/// The two string arguments of the cookie methods, which branch on `lua_gettop(L) = 2`; with
+/// any other count the lone argument fills the second slot when `first_is_second`.
 fn one_or_two(
     lua: &Lua,
     args: Variadic<Value>,
@@ -247,8 +243,8 @@ fn build_storage(lua: &Lua, module: &Arc<Module>) -> mlua::Result<AnyUserData> {
             let _ = storage.values.delete(i);
             Ok(())
         })
-        // `Free` and `Destroy` (:106-110, :145-146) free the storage in FMD2, leaving every state that
-        // shares the module with a dangling object; here they do nothing.
+        // `Free` and `Destroy` (:106-110, :145-146) do nothing: in FMD2 they leave every
+        // state sharing the module with a dangling object.
         .method("Free", |_, _, ()| Ok(()))
         .method("Destroy", |_, _, ()| Ok(()))
         // `Values[name]` (:42-45, :62-70, :112-122), FPC's `TStrings.Values`.
@@ -326,9 +322,8 @@ fn build_guardian(lua: &Lua, guardian: &Arc<CriticalSection>) -> mlua::Result<An
 }
 
 /// `Account` (`luaWebsiteModuleAccountAddMetaTable`, baseunits/lua/LuaWebsiteModules.pas:977-989).
-/// FMD2 saves the account with the rest of `modules.json` when it saves the settings
-/// (baseunits/WebsiteModules.pas:665-675); here every assignment is written to the module's
-/// settings store right away, so what a callback sets survives a restart.
+/// FMD2 saves it with `modules.json` (baseunits/WebsiteModules.pas:665-675); here every
+/// assignment is saved right away, so it survives a restart.
 fn build_account(
     lua: &Lua,
     module: &Arc<Module>,
@@ -385,7 +380,6 @@ fn build_account(
         .map_err(mlua::Error::from)
 }
 
-/// The state behind an `Account` object: the module it belongs to and the account itself.
 type AccountRef = (Arc<Module>, Arc<Account>);
 
 type StringField = fn(&mut ModuleDef) -> &mut String;
@@ -438,9 +432,7 @@ const CALLBACK_PROPERTIES: &[(&str, CallbackField)] = &[
     ("OnCheckSite", |d| &mut d.on_check_site),
 ];
 
-/// A string property (`luaClassAddStringProperty`, baseunits/lua/LuaClass.pas:520-524,
-/// accessors :464-474):
-/// assigning converts like `luaToString`.
+/// `luaClassAddStringProperty` (baseunits/lua/LuaClass.pas:520-524, accessors :464-474).
 fn string_property(class: Class, name: &str, field: StringField) -> Class {
     class.property(
         name,
@@ -453,9 +445,7 @@ fn string_property(class: Class, name: &str, field: StringField) -> Class {
     )
 }
 
-/// An integer property (`luaClassAddIntegerProperty`, baseunits/lua/LuaClass.pas:526-530,
-/// accessors :476-486):
-/// assigning converts like `lua_tointeger`.
+/// `luaClassAddIntegerProperty` (baseunits/lua/LuaClass.pas:526-530, accessors :476-486).
 fn integer_property(class: Class, name: &str, field: IntegerField) -> Class {
     class.property(
         name,
@@ -468,9 +458,7 @@ fn integer_property(class: Class, name: &str, field: IntegerField) -> Class {
     )
 }
 
-/// A boolean property (`luaClassAddBooleanProperty`, baseunits/lua/LuaClass.pas:532-536,
-/// accessors :488-498):
-/// assigning converts like `lua_toboolean`.
+/// `luaClassAddBooleanProperty` (baseunits/lua/LuaClass.pas:532-536, accessors :488-498).
 fn boolean_property(class: Class, name: &str, field: BooleanField) -> Class {
     class.property(
         name,
@@ -508,10 +496,8 @@ fn to_string(lua: &Lua, value: Value) -> mlua::Result<String> {
     Ok(String::from_utf8_lossy(&to_bytes(lua, value)?).into_owned())
 }
 
-/// `lua_tointeger`: integral numbers and numeric strings convert, anything else is 0. Like the
-/// Pascal `Integer` it lands in, only the low 32 bits are kept.
+/// `lua_tointeger` (anything else is 0), keeping the low 32 bits like the Pascal `Integer`.
 fn to_integer(lua: &Lua, value: Value) -> mlua::Result<i32> {
-    // Keeping only the low 32 bits is the behaviour being reproduced.
     Ok(lua.coerce_integer(value)?.unwrap_or(0) as i32)
 }
 

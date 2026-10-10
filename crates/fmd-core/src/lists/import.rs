@@ -1,6 +1,5 @@
-//! Bootstrapping a module's list from FMD2-DB's prebuilt dumps, as FMD2's `TDBUpdaterThread`
-//! does (baseunits/DBUpdater.pas:110-202): download `<module id>.7z`, extract the
-//! `<module id>.db` it holds, and make its rows the module's list.
+//! Imports a module's list from FMD2-DB's prebuilt dumps (`TDBUpdaterThread`,
+//! baseunits/DBUpdater.pas:110-202).
 
 use std::io::{Cursor, Read, Write};
 
@@ -11,17 +10,15 @@ use thiserror::Error;
 
 use super::ListFailureReason;
 
-/// The largest database extracted from a dump. The biggest FMD2-DB dumps hold a few hundred
-/// thousand titles, well under this.
+/// Well above the biggest FMD2-DB dumps.
 const MAX_DB_BYTES: u64 = 2 << 30;
 
-/// Why an FMD2-DB import failed. The module's list is left as it was.
+/// The module's list is left as it was.
 #[derive(Debug, Error)]
 pub enum ImportError {
     #[error("HTTP: {0}")]
     Http(#[from] HttpError),
-    /// The download did not succeed (`HTTP.GET(...) and (HTTP.ResultCode < 300)`,
-    /// baseunits/DBUpdater.pas:125).
+    /// `HTTP.GET(...) and (HTTP.ResultCode < 300)` (baseunits/DBUpdater.pas:125).
     #[error("downloading {url} failed with HTTP status {status}")]
     Download { url: String, status: i32 },
     #[error("the download was cancelled")]
@@ -39,11 +36,10 @@ pub enum ImportError {
 }
 
 impl ImportError {
-    /// What kind of failure this is.
     pub fn reason(&self) -> ListFailureReason {
         match self {
             Self::Download { status: 404, .. } => ListFailureReason::NoDump,
-            // A success status with no body (`HTTP.GET` is false on an empty document).
+            // `HTTP.GET` is false on an empty document.
             Self::Download {
                 status: 200..300, ..
             }
@@ -58,10 +54,9 @@ impl ImportError {
     }
 }
 
-/// `GetDBURL` (baseunits/DBUpdater.pas:56-63): `<website>` in `template` (any case) replaced
-/// by the module ID. FMD2's fallback that appends the ID never runs, as its guard
-/// `Pos(...) <> -1` is always true (`Pos` returns 0 when nothing is found), so a template
-/// without `<website>` is used as it is.
+/// `GetDBURL` (baseunits/DBUpdater.pas:56-63): replaces `<website>` (any case). FMD2's
+/// append-the-ID fallback never runs (its guard `Pos(...) <> -1` is always true), so neither
+/// does it here.
 pub fn db_url(template: &str, module_id: &str) -> String {
     const PLACEHOLDER: &str = "<website>";
     let lower = template.to_ascii_lowercase();
@@ -76,7 +71,6 @@ pub fn db_url(template: &str, module_id: &str) -> String {
     url
 }
 
-/// Imports FMD2-DB dumps into `lists.db`.
 pub struct DbImporter {
     http: HttpClient,
     lists: ListsDb,
@@ -87,11 +81,8 @@ impl DbImporter {
         Self { http, lists }
     }
 
-    /// Downloads module `module_id`'s dump from [`db_url`]`(url_template, module_id)` and
-    /// imports it with [`DbImporter::import_archive`]. Blocks, so call it from a thread outside
-    /// any tokio runtime. `status` hears each step, as FMD2's status bar shows it
-    /// (`RS_Downloading`, `RS_Extracting`, baseunits/DBUpdater.pas:123, :166). Returns the
-    /// number of titles imported.
+    /// Downloads and imports the dump; returns the titles imported. Blocking. `status` hears
+    /// each step (`RS_Downloading`, `RS_Extracting`, baseunits/DBUpdater.pas:123, :166).
     pub fn import(
         &self,
         module_id: &str,
@@ -115,10 +106,8 @@ impl DbImporter {
         self.import_archive(module_id, http.document())
     }
 
-    /// Makes the rows of the FMD2 database in the 7z `archive` the list of module
-    /// `module_id`, replacing what it listed, as FMD2 overwrites `<module id>.db` with the
-    /// extracted one (baseunits/DBUpdater.pas:157-177). The archive's `<module id>.db` is
-    /// used, or else its first `.db` file. Returns the number of titles imported.
+    /// Replaces the module's list with the archive's `<module id>.db`, else its first `.db`
+    /// (baseunits/DBUpdater.pas:157-177). Returns the titles imported.
     pub fn import_archive(&self, module_id: &str, archive: &[u8]) -> Result<u64, ImportError> {
         let db = extract_db(module_id, archive)?;
         let rows = read_fmd2_list(db.path())?;
@@ -128,7 +117,6 @@ impl DbImporter {
     }
 }
 
-/// Extracts the database of `archive` to a temporary file.
 fn extract_db(module_id: &str, archive: &[u8]) -> Result<tempfile::NamedTempFile, ImportError> {
     let len = archive.len() as u64;
     let archive_error = |e: sevenz_rust::Error| ImportError::Archive(e.to_string());

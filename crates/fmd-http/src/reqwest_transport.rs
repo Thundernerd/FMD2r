@@ -10,16 +10,15 @@ use crate::transport::{
     BoxFuture, ConnectTo, Proxy, ProxyKind, Transport, TransportError, WireRequest, WireResponse,
 };
 
-/// Sends requests with reqwest, configured to stay out of the way of the Synapse
-/// semantics layered on top: no automatic redirects, no automatic decompression,
-/// no cookie store, HTTP/1.1 with title-cased header names.
+/// reqwest without redirects, decompression or cookie store, on HTTP/1.1 with title-cased
+/// headers, so the Synapse semantics on top stay in charge.
 ///
-/// reqwest itself adds `Accept: */*` when the request has no `Accept` header; Synapse
-/// would send none. Synapse's `Connection: keep-alive` (baseunits/synapse/httpsend.pas:502-509)
-/// is implied by HTTP/1.1 and not sent. FMD2's `Reset` always sets `Accept` (baseunits/httpsendthread.pas:928).
+/// reqwest adds `Accept: */*` when none is set, unlike Synapse, but FMD2's `Reset` always
+/// sets one (baseunits/httpsendthread.pas:928). Synapse's `Connection: keep-alive`
+/// (baseunits/synapse/httpsend.pas:502-509) is implied by HTTP/1.1.
 #[derive(Default)]
 pub struct ReqwestTransport {
-    // One reqwest client per proxy/timeout combination: both are client-level settings.
+    // Proxy and timeout are client-level settings in reqwest.
     clients: Mutex<HashMap<(Option<Proxy>, Duration), reqwest::Client>>,
 }
 
@@ -28,9 +27,8 @@ impl ReqwestTransport {
         Self::default()
     }
 
-    /// The client for `request`: shared per proxy/timeout, or a fresh one when the request is
-    /// pinned to an address. A pinned client is not reused, since its connections (pooled by
-    /// host) must never serve the same host unpinned or pinned elsewhere.
+    /// A pinned request gets a fresh client: its host-pooled connections must never serve
+    /// the host unpinned or pinned elsewhere.
     fn client(&self, request: &WireRequest) -> Result<reqwest::Client, TransportError> {
         let proxy = request.proxy.as_ref().filter(|p| !p.host.is_empty());
         if proxy.is_none()
@@ -55,7 +53,6 @@ impl ReqwestTransport {
     }
 }
 
-/// A reqwest client with `proxy` and `timeout`, resolving `pin`'s host to its address.
 fn build_client(
     proxy: Option<&Proxy>,
     timeout: Duration,
@@ -78,8 +75,7 @@ fn build_client(
     builder.build().map_err(|e| TransportError(e.to_string()))
 }
 
-/// Maps `SetProxy` settings onto reqwest. Synapse resolves host names through a
-/// SOCKS proxy (`SocksResolver`), hence `socks5h`/`socks4a`.
+/// `socks5h`/`socks4a` because Synapse resolves host names through the proxy (`SocksResolver`).
 fn reqwest_proxy(proxy: &Proxy) -> Result<reqwest::Proxy, TransportError> {
     let scheme = match proxy.kind {
         ProxyKind::Http => "http",

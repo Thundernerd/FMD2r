@@ -135,13 +135,10 @@ pub(crate) fn fetch(
 }
 
 /// The SSRF guard: only http(s), and no private-network target unless it is the module's own host
-/// (a module for a site on the LAN may fetch its covers there). Returns the checked address to
-/// connect to when the host is a name, so a DNS server that answers differently the second time
-/// (DNS rebinding) cannot send the request elsewhere, and the host is looked up once per request.
-/// The module's own host is neither checked nor pinned: it may resolve to anything anyway.
+/// (a LAN site's module may fetch its covers there; that host is neither checked nor pinned).
+/// Returns the checked address to pin a domain to, so DNS rebinding cannot redirect the request.
 ///
-/// With a proxy set on the module's session the proxy resolves and connects, so the guard then
-/// only checks where the proxy is asked to go, not where it ends up.
+/// Behind a module proxy, only where the proxy is asked to go is checked, not where it ends up.
 fn guard(
     resolver: &dyn CoverResolver,
     url: &Url,

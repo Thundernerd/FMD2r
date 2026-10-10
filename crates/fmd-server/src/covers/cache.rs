@@ -73,8 +73,7 @@ impl DiskCache {
         self.dir.join(format!("{key}.{ext}"))
     }
 
-    /// The entry stored under `key`, marking it as recently used; `None` when there is none (or
-    /// it is unreadable, which the next store repairs).
+    /// Marks the entry as recently used; an unreadable one is `None` until the next store.
     pub(crate) fn load(&self, key: &str) -> Option<Entry> {
         let meta = fs::read(self.path(key, META)).ok()?;
         let meta: Meta = serde_json::from_slice(&meta).ok()?;
@@ -100,8 +99,7 @@ impl DiskCache {
         write_atomic(&self.path(key, META), &meta)
     }
 
-    /// Removes the least recently used entries until the cache fits its cap, after clearing out
-    /// leftovers: temporary files of interrupted writes and halves of entries.
+    /// LRU eviction, after clearing leftovers of interrupted writes (temp files, half entries).
     fn evict(&self) -> io::Result<()> {
         let mut entries = Vec::new();
         let mut total = 0u64;

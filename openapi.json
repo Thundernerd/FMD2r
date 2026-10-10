@@ -165,7 +165,7 @@
         "tags": [
           "accounts"
         ],
-        "summary": "Log in with the module's `OnLogin`, then its `OnAccountState`; answers once the login is\ndone, with the status the module set. `account.state` events announce the start and the end.",
+        "summary": "Log in with the module's `OnLogin`, then `OnAccountState`; answers once done. `account.state`\nevents announce the start and the end.",
         "operationId": "loginAccount",
         "parameters": [
           {
@@ -217,7 +217,7 @@
         "tags": [
           "settings"
         ],
-        "summary": "Check whether folders exist and are writable by the server (T74), for the destinations'\nwarnings. Relative paths resolve against the server's working directory, as downloads do.",
+        "summary": "Check whether folders exist and are writable by the server. Relative paths resolve against\nthe server's working directory, as downloads do.",
         "operationId": "checkFolders",
         "requestBody": {
           "content": {
@@ -2194,7 +2194,7 @@
         "tags": [
           "settings"
         ],
-        "summary": "Update the settings and any modules' settings together, all or nothing. Nothing is stored\nunless every patch is valid, and everything is stored in one transaction.",
+        "summary": "Update the settings and any modules' settings together in one transaction, all or nothing.",
         "operationId": "patchAllSettings",
         "requestBody": {
           "content": {
@@ -2949,7 +2949,7 @@
       },
       "AccountRequest": {
         "type": "object",
-        "description": "The fields to change; a missing field keeps its value. Not `Debug`, so the password cannot\nbe logged.",
+        "description": "The fields to change; a missing field keeps its value. Not `Debug`, so the password is never\nlogged.",
         "properties": {
           "enabled": {
             "type": [
@@ -3019,7 +3019,7 @@
               "string",
               "null"
             ],
-            "description": "The download directory; the default one when missing. The manga folder is added when\ngenerated."
+            "description": "The download directory; the default one when missing. The generated manga folder is added."
           }
         }
       },
@@ -3170,7 +3170,7 @@
           "cache_size_mb": {
             "type": "integer",
             "format": "int32",
-            "description": "Size cap of the cover cache in MiB; least recently used covers are evicted past it.\nMinimum 1.",
+            "description": "Cover cache size cap in MiB; least recently used covers are evicted past it.",
             "default": 256,
             "minimum": 1
           },
@@ -3366,7 +3366,7 @@
           "new_chapters": {
             "type": "integer",
             "format": "int32",
-            "description": "Chapters on the site at the last check that are not downloaded, compared by link. A\nfavorite not checked since its links were kept (or imported from FMD2) has only the\ncount, so until its next check this is the chapter count less the downloaded ones.",
+            "description": "Chapters on the site at the last check that are not downloaded, compared by link. Until\nits first check with links kept (e.g. imported from FMD2), the count less the downloaded.",
             "minimum": 0
           },
           "save_to": {
@@ -3481,7 +3481,7 @@
               "string",
               "null"
             ],
-            "description": "Why downloads can't be saved there now, or `None` when they can. A missing folder is\ncreated by the first download into it, so this is a warning, not an error: a disk may be\nunmounted for a while."
+            "description": "Why downloads can't be saved there now. A warning, not an error: the first download\ncreates a missing folder, and a disk may be unmounted for a while."
           }
         }
       },
@@ -3533,7 +3533,7 @@
             "items": {
               "type": "string"
             },
-            "description": "The websites Discover lists and searches, by module ID (`general/MangaListSelect`,\ncomma-separated, mangadownloader/forms/frmMain.pas:5990-6004). IDs of modules that are\nnot loaded are kept but ignored, so a module that comes back is still selected; FMD2\ndrops them on load (mangadownloader/forms/frmMain.pas:6464-6470). Empty on a fresh\ninstall: FMD2 defaults to `config.json`'s `default_selected_websites`\n(baseunits/FMDOptions.pas:94, :250), which FMD2r does not ship.",
+            "description": "Module IDs Discover lists and searches (`general/MangaListSelect`,\nmangadownloader/forms/frmMain.pas:5990-6004). IDs of unloaded modules are kept but\nignored; FMD2 drops them (mangadownloader/forms/frmMain.pas:6464-6470). Empty by default:\nFMD2r does not ship `default_selected_websites` (baseunits/FMDOptions.pas:94, :250).",
             "default": []
           }
         }
@@ -3553,14 +3553,14 @@
           },
           "loopback": {
             "type": "boolean",
-            "description": "Whether the server listens on a loopback address only, out of other machines' reach."
+            "description": "Whether the server listens on a loopback address only."
           },
           "overridden": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "The settings the command line or environment overrides (`--bind`, `--password`, …), as\ndotted paths such as `server.bind`."
+            "description": "Settings overridden by the command line or environment, as dotted paths (`server.bind`)."
           },
           "status": {
             "type": "string",
@@ -3782,7 +3782,7 @@
       },
       "JobState": {
         "type": "object",
-        "description": "A background job and its progress (`job.state`, and the items of `GET /api/jobs`): favorites\ncheck, list update, module update, or any other registered job.",
+        "description": "A background job and its progress (`job.state`, and the items of `GET /api/jobs`).",
         "required": [
           "id",
           "title",
@@ -4581,13 +4581,13 @@
           },
           "save_to": {
             "type": "string",
-            "description": "The folder the website's downloads go to when the user picks none; empty for the default\ndestination (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50).\nApplies whether or not `enabled` is set."
+            "description": "The website's download folder when the user picks none; empty for the default\n(`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Applies even\nwhen not `enabled`."
           }
         }
       },
       "ModuleSummary": {
         "type": "object",
-        "description": "A loaded module, for the module pickers.\n\nIDs can repeat: FMD2's loader keeps every module a file's `Init` creates without checking\nIDs (baseunits/lua/LuaWebsiteModules.pas:523-589), and upstream `lua/modules/Manga1001.lua:18-19`\nregisters two websites under one ID. `root_url` tells such entries apart; they share the\nID's settings, which FMD2 keys by ID (baseunits/WebsiteModules.pas:545-700).",
+        "description": "A loaded module, for the module pickers.\n\nIDs can repeat: FMD2's loader does not check them (baseunits/lua/LuaWebsiteModules.pas:523-589),\nand `lua/modules/Manga1001.lua:18-19` registers two websites under one ID. `root_url` tells\nthem apart; they share the ID's settings (baseunits/WebsiteModules.pas:545-700).",
         "required": [
           "id",
           "name",
@@ -4608,7 +4608,7 @@
           },
           "customized": {
             "type": "boolean",
-            "description": "Whether its settings differ from the defaults: an option's value is not the one it\ndeclares, or its overrides are on (`Settings.Enabled`,\nbaseunits/WebsiteModulesSettings.pas:80) and change a limit or HTTP setting, or it has\nits own download folder."
+            "description": "Whether its settings differ from the defaults: a changed option, enabled overrides\n(`Settings.Enabled`, baseunits/WebsiteModulesSettings.pas:80) that change a limit or HTTP\nsetting, or its own download folder."
           },
           "id": {
             "type": "string"
@@ -4818,7 +4818,7 @@
               "string",
               "null"
             ],
-            "description": "The setting a validation error (422) is about, as a dotted path such as\n`connections.timeout_secs` or `options.server`.\nKept for clients that read one field: the first of `fields`."
+            "description": "The first of `fields`, for clients that read one: a dotted path such as\n`connections.timeout_secs`."
           },
           "fields": {
             "type": "array",
@@ -4961,7 +4961,7 @@
           },
           "path": {
             "type": "string",
-            "description": "Where the first page ends up: its file, or the chapter's archive when chapters are\npacked."
+            "description": "The first page's file, or the chapter's archive when chapters are packed."
           }
         }
       },
@@ -5102,7 +5102,7 @@
           },
           "default_dir": {
             "type": "string",
-            "description": "The default destination's path (`saveto/SaveTo`, `DEFAULT_PATH`,\nbaseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for API\nclients that predate [`Self::destinations`]: it always mirrors the default's path, and\na patch that changes it alone moves the default destination there. Empty resets it to\nthe default.",
+            "description": "The default destination's path (`saveto/SaveTo`, `DEFAULT_PATH`,\nbaseunits/FMDOptions.pas:283, mangadownloader/forms/frmMain.pas:5882-5886), kept for\nclients predating [`Self::destinations`]. Patching it alone moves the default\ndestination; empty resets it.",
             "default": "downloads"
           },
           "destinations": {
@@ -5110,7 +5110,7 @@
             "items": {
               "$ref": "#/components/schemas/Destination"
             },
-            "description": "The named download folders a download can go to, one of them the default. No FMD2\ncounterpart: FMD2 has one folder (`saveto/SaveTo`) plus a per-website override\n(`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names are\nunique (ignoring case and surrounding spaces) and not empty; paths are not empty.",
+            "description": "Named download folders, one of them the default. FMD2 has one folder plus a per-website\noverride (`OverrideSettings.SaveToPath`, baseunits/WebsiteModulesSettings.pas:50). Names\nare non-empty and unique (ignoring case and surrounding spaces); paths are non-empty.",
             "default": [
               {
                 "default": true,
@@ -5154,7 +5154,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/SymbolMode",
-                "description": "Which characters are stripped from names. FMD2 always strips the Windows set\n(`RemoveSymbols`, baseunits/uBaseUnit.pas:1382); FMD2r runs on Linux and defaults to\nPOSIX."
+                "description": "Which characters are stripped from names. FMD2 always strips the Windows set\n(`RemoveSymbols`, baseunits/uBaseUnit.pas:1382); FMD2r defaults to POSIX."
               }
             ],
             "default": "posix"
@@ -5377,7 +5377,7 @@
           "session_idle_days": {
             "type": "integer",
             "format": "int32",
-            "description": "Days a login session may go unused before it ends; every authorized request restarts\nthe count.",
+            "description": "Days a login session may go unused; every authorized request restarts the count.",
             "maximum": 365,
             "minimum": 1
           },

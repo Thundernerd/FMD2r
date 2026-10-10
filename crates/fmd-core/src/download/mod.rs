@@ -3,12 +3,9 @@
 //!
 //! # Threads
 //!
-//! Like FMD2, every running task is a dedicated OS thread (`TTaskThread`) that runs the
-//! per-chapter pipeline, and downloads its pages on further OS threads (`TDownloadThread`).
-//! Module callbacks run on the [`WorkerPool`]'s Lua threads; page `GET`s run on the page
-//! threads with a blocking [`fmd_http::HttpSession`]. No Lua or HTTP work runs on a tokio
-//! thread: the async [`DownloadManager`] methods only touch `app.db`, inside
-//! `spawn_blocking`.
+//! Like FMD2, each running task is an OS thread (`TTaskThread`) with page threads
+//! (`TDownloadThread`); callbacks run on the [`WorkerPool`]. No Lua or HTTP work runs on a tokio
+//! thread.
 //!
 //! # Status transitions
 //!
@@ -28,9 +25,8 @@
 //! | any | Disabled / Stopped | `disable` / `enable` | `TTaskContainer.SetEnabled` (:1384-1397) |
 //! | Downloading, Preparing, Waiting (and Converting, Compressing: a killed process) at startup | running, or Waiting; Stopped when the module is gone | [`DownloadManager::open`] | `CheckAndActiveTaskAtStartup` (:1859-1893) |
 //!
-//! A task still running when the manager is dropped keeps its status, so the next
-//! [`DownloadManager::open`] resumes it (`StopAllDownloadTasksForExit`, :1957-1977, and
-//! `isReadyForExit` in :494).
+//! A task running when the manager is dropped keeps its status, so the next
+//! [`DownloadManager::open`] resumes it (`StopAllDownloadTasksForExit`, :1957-1977).
 
 mod files;
 mod manager;
@@ -53,23 +49,19 @@ pub use manager::save_to;
 pub use fmd_store::{ChapterStatus, Task, TaskChapter, TaskId, TaskStatus};
 pub use preview::{PagePlacement, SampleChapter, first_page};
 
-/// Finds a loaded module by ID.
 pub type ModuleLookup = dyn Fn(&str) -> Option<Arc<Module>> + Send + Sync;
 
-/// What the engine runs on.
 #[derive(Clone)]
 pub struct EngineConfig {
     pub db: AppDb,
-    /// Runs the module callbacks.
     pub pool: Arc<WorkerPool>,
     pub modules: Arc<ModuleLookup>,
     pub settings: Arc<SettingsService>,
-    /// The client the page `GET`s are made with when a module has no `OnDownloadImage`.
+    /// For page `GET`s when a module has no `OnDownloadImage`.
     pub http: HttpClient,
 }
 
 impl EngineConfig {
-    /// An engine over the modules of `registry`.
     pub fn new(
         db: AppDb,
         pool: Arc<WorkerPool>,
@@ -87,50 +79,45 @@ impl EngineConfig {
     }
 }
 
-/// A download to queue: chapters of one manga.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NewDownload {
     pub module_id: String,
-    /// The manga's link, as the module's `OnGetInfo` was given it.
+    /// As given to `OnGetInfo`.
     pub manga_link: String,
     pub title: String,
     pub authors: String,
     pub artists: String,
     pub chapters: Vec<ChapterSpec>,
-    /// The directory the manga's folder is made in; the configured download directory when
-    /// empty.
+    /// Parent of the manga's folder; the default destination when empty.
     pub save_to: String,
 }
 
-/// One chapter of a [`NewDownload`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ChapterSpec {
     pub link: String,
     pub title: String,
-    /// The chapter's position in the manga's chapter list, for `%NUMBERING%`.
+    /// Position in the chapter list, for `%NUMBERING%`.
     pub number: u32,
 }
 
-/// What the engine reports, for the event stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineEvent {
     Added {
         task: TaskId,
     },
-    /// The task's status changed; `chapter` is the chapter it is at.
+    /// `chapter` is the chapter the task is at.
     Status {
         task: TaskId,
         status: TaskStatus,
         chapter: u32,
         error: Option<String>,
     },
-    /// A chapter was downloaded or failed.
     Chapter {
         task: TaskId,
         chapter: u32,
         status: ChapterStatus,
     },
-    /// Progress of the chapter being downloaded, at most a few times a second.
+    /// At most a few times a second.
     Progress(Progress),
     Enabled {
         task: TaskId,
@@ -139,31 +126,27 @@ pub enum EngineEvent {
     Deleted {
         task: TaskId,
     },
-    /// The queue order changed.
     Reordered,
 }
 
-/// How far a running task's current chapter is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Progress {
     pub task: TaskId,
     pub chapter: u32,
-    /// Pages done of the current phase (page links or images), FMD2's `DownCounter`.
+    /// Pages done in the current phase, FMD2's `DownCounter`.
     pub pages_done: u32,
     pub pages_total: u32,
-    /// Bytes downloaded by the task since it started.
+    /// Since the task started.
     pub bytes: u64,
-    /// Download speed over the last report interval.
+    /// Over the last report interval.
     pub bytes_per_sec: u64,
 }
 
-/// A task as the queue lists it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskInfo {
     pub task: Task,
     pub chapters: Vec<TaskChapter>,
     pub running: bool,
-    /// The last progress of a running task.
     pub progress: Option<Progress>,
 }
 
@@ -185,9 +168,8 @@ pub enum EngineError {
     Thread(String),
 }
 
-/// The download queue. Tasks run on their own threads; dropping the manager terminates them
-/// and waits for them, leaving their status as it was so [`DownloadManager::open`] resumes
-/// them.
+/// The download queue. Dropping it terminates running tasks but keeps their status, so
+/// [`DownloadManager::open`] resumes them.
 pub struct DownloadManager {
     inner: Arc<Inner>,
 }
@@ -215,8 +197,7 @@ impl DownloadManager {
             .map_err(|e| EngineError::Thread(e.to_string()))?
     }
 
-    /// Queues `download` as a new task at the end of the queue and starts it when a slot is
-    /// free.
+    /// Queues at the end and starts it when a slot is free.
     pub async fn add_task(&self, download: NewDownload) -> Result<TaskId, EngineError> {
         self.blocking(move |inner| inner.add_task(&download)).await
     }
@@ -227,15 +208,14 @@ impl DownloadManager {
         self.blocking(move |inner| inner.start(id)).await
     }
 
-    /// Stops a waiting or running task (`StopTask`, baseunits/uDownloadsManager.pas:1900-1920).
-    /// A running task becomes Stopped once its thread has ended, which terminating its HTTP
-    /// requests and Lua waits makes prompt.
+    /// `StopTask` (baseunits/uDownloadsManager.pas:1900-1920). A running task becomes Stopped
+    /// once its thread has ended.
     pub async fn stop(&self, id: TaskId) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.stop(id)).await
     }
 
-    /// `CheckAndActiveTask` (baseunits/uDownloadsManager.pas:1784-1833): starts waiting tasks
-    /// while there are free slots, e.g. tasks queued straight into `app.db` by an import.
+    /// `CheckAndActiveTask` (baseunits/uDownloadsManager.pas:1784-1833), e.g. after an import
+    /// queued tasks straight into `app.db`.
     pub async fn activate_waiting(&self) -> Result<(), EngineError> {
         self.blocking(Inner::check_and_active_task).await
     }
@@ -250,50 +230,45 @@ impl DownloadManager {
         self.blocking(Inner::stop_all).await
     }
 
-    /// Removes a task, stopping it first; with `delete_files`, also its chapters' folders and
-    /// archives (`Delete`, baseunits/uDownloadsManager.pas:1979-1985).
+    /// `Delete` (baseunits/uDownloadsManager.pas:1979-1985); `delete_files` also removes the
+    /// chapters' folders and archives.
     pub async fn delete(&self, id: TaskId, delete_files: bool) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.delete(id, delete_files))
             .await
     }
 
-    /// Re-enables a disabled task, which becomes Stopped.
+    /// The task becomes Stopped.
     pub async fn enable(&self, id: TaskId) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.set_enabled(id, true))
             .await
     }
 
-    /// Stops a task and sets it Disabled; start and start-all skip it until it is enabled.
+    /// Start and start-all skip it until it is enabled.
     pub async fn disable(&self, id: TaskId) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.set_enabled(id, false))
             .await
     }
 
-    /// Downloads every chapter of a task again (`RedownloadTask`,
-    /// baseunits/uDownloadsManager.pas:1846-1857). Pages and archives already on disk are
-    /// still skipped.
+    /// `RedownloadTask` (baseunits/uDownloadsManager.pas:1846-1857). Pages and archives on
+    /// disk are still skipped.
     pub async fn redownload(&self, id: TaskId) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.redownload(id)).await
     }
 
-    /// Puts `ids` first in the queue, in that order; waiting tasks start in queue order.
+    /// Puts `ids` first in the queue, in that order.
     pub async fn reorder(&self, ids: Vec<TaskId>) -> Result<(), EngineError> {
         self.blocking(move |inner| inner.reorder(&ids)).await
     }
 
-    /// Every task in queue order.
     pub async fn list(&self) -> Result<Vec<TaskInfo>, EngineError> {
         self.blocking(Inner::list).await
     }
 
-    /// The engine's events from now on.
     pub fn subscribe(&self) -> broadcast::Receiver<EngineEvent> {
         self.inner.subscribe()
     }
 
-    /// Terminates every running task and waits for its thread on a blocking thread, leaving
-    /// statuses as they are, so the next [`DownloadManager::open`] resumes them. Dropping the
-    /// manager does the same but waits on the dropping thread, which blocks a tokio worker.
+    /// Like dropping the manager, but waits on a blocking thread instead of a tokio worker.
     pub async fn shutdown(self) -> Result<(), EngineError> {
         self.blocking(|inner| {
             inner.shutdown();

@@ -1,8 +1,6 @@
-//! Rebuilds the crate when the web UI build (`web/build`, embedded by rust-embed) appears or
-//! changes; rust-embed alone does not notice a folder that was missing at the last build.
-//!
-//! Also records the git commit as `FMD2R_GIT_REVISION` for `GET /api/about`: taken from that
-//! environment variable when set (builds without a `.git`, e.g. Docker), otherwise from git.
+//! Rebuilds when `web/build` appears or changes (rust-embed misses a folder that was missing at
+//! the last build), and records the git commit as `FMD2R_GIT_REVISION`: from that env var when
+//! set (builds without `.git`, e.g. Docker), otherwise from git.
 
 use std::process::Command;
 

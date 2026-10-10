@@ -64,10 +64,9 @@ enum Token<'a> {
 
 /// Lists the Host API names a Lua source references: `OBJECT.Member` for members of the
 /// injected objects, the bare name for host globals, and `fmd.<lib>` for required host
-/// libraries. Names inside comments and strings, fields of other tables (`self.HTTP`), table
-/// constructor keys (`{ URL = 1 }`) and the name declared right after `local` or `function`
-/// are not references. There is no scope analysis: a later use of a local that shadows a
-/// host global, or a parameter with a host global's name, still counts.
+/// libraries. Comments, strings, fields of other tables (`self.HTTP`), table constructor keys
+/// and names right after `local`/`function` don't count. No scope analysis: later uses of a
+/// shadowing local or parameter still count.
 pub fn scan_host_api_names(source: &str) -> BTreeSet<String> {
     let tokens = tokenize(source);
     let mut names = BTreeSet::new();
@@ -85,7 +84,6 @@ pub fn scan_host_api_names(source: &str) -> BTreeSet<String> {
             prev,
             Some(Token::Punct('.' | ':') | Token::Name("local" | "function"))
         ) {
-            // A field of some other table (`self.HTTP`) or a declaration.
             continue;
         }
         let field_start = match prev {
@@ -94,14 +92,13 @@ pub fn scan_host_api_names(source: &str) -> BTreeSet<String> {
             _ => false,
         };
         if field_start && next == Some(&Token::Punct('=')) {
-            // A key in a table constructor.
             continue;
         }
         if HOST_GLOBALS.contains(name) {
             names.insert((*name).to_string());
         } else if HOST_OBJECTS.contains(name) {
-            // Colon calls reach the same method: LuaClass strips the redundant self argument
-            // (baseunits/lua/LuaClass.pas:307), so both spellings name one Host API member.
+            // Colon calls reach the same member: LuaClass strips the redundant self
+            // (baseunits/lua/LuaClass.pas:307).
             if let (Some(Token::Punct('.' | ':')), Some(Token::Name(member))) =
                 (next, tokens.get(i + 2))
             {

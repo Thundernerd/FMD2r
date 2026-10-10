@@ -26,10 +26,7 @@
 		selected: string | null;
 		/** The selected module's settings as last saved, once loaded. */
 		view: ModuleSettingsView | null;
-		/**
-		 * Edits to `view`: `enabled`, `limits`, `http`, `save_to` and `options` keyed by option
-		 * key.
-		 */
+		/** Edits to `view`, with `options` keyed by option key. */
 		draft: Draft<object> | null;
 		loading: boolean;
 		/** The configured destinations (possibly unsaved), for the website's own. */
@@ -52,10 +49,7 @@
 	const repeated = $derived(repeatedNames(modules));
 
 	let list: HTMLUListElement | undefined = $state();
-	/**
-	 * Arrow keys move the focus through the modules, from the search box into the list; Home and
-	 * End jump to the first and last. Enter selects the focused one, as it presses any button.
-	 */
+	/** Arrow keys, Home and End move the focus from the search box through the modules. */
 	function navigate(event: KeyboardEvent) {
 		if (!list) return;
 		const picks = [...list.querySelectorAll<HTMLButtonElement>('.pick')];
@@ -77,10 +71,9 @@
 
 	/** The module last brought into view, so searching later doesn't scroll back to it. */
 	let shownSelected: string | null = null;
-	// Bring the selected module into view once it is listed, e.g. when the page opens with
-	// `?module=` before the modules have loaded.
+	// Scroll to the selected module once listed, e.g. `?module=` before the modules load.
 	$effect(() => {
-		void groups; // Re-run when the list changes, e.g. once the modules have loaded.
+		void groups; // Re-run when the list changes.
 		if (!selected || !list || selected === shownSelected) return;
 		const pick = list.querySelector<HTMLElement>('.pick[aria-pressed="true"]');
 		if (!pick) return;
@@ -103,9 +96,8 @@
 
 	/**
 	 * Tasks and threads fall back to the module's limit while the override is 0
-	 * (baseunits/WebsiteModules.pas:398-412). The connection override has no such state: while
-	 * overrides are on it replaces the module's limit, 0 meaning unlimited
-	 * (baseunits/WebsiteModulesSettings.pas:126-155).
+	 * (baseunits/WebsiteModules.pas:398-412); the connection override replaces it, 0 meaning
+	 * unlimited (baseunits/WebsiteModulesSettings.pas:126-155).
 	 */
 	const LIMITS = [
 		{ key: 'max_task_limit', label: 'Max downloads at once', fallsBack: true },

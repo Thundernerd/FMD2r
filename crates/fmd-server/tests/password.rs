@@ -1,7 +1,5 @@
-//! The password from the settings (docs/tickets/T64-password-and-bind-settings.md, "Seams under
-//! test"): set through `PATCH /api/settings` it is required from the next request on, the
-//! `--password` / `FMD2R_PASSWORD` one wins over it, only a hash of it is stored, and changing it
-//! ends the login sessions.
+//! The password setting through `PATCH /api/settings`
+//! (docs/tickets/T64-password-and-bind-settings.md, "Seams under test").
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 
@@ -34,7 +32,7 @@ async fn send(state: &AppState, req: Request<Body>) -> Response {
     build_router(state.clone()).oneshot(req).await.unwrap()
 }
 
-/// `GET /api/inbox` (a protected route) with `header` set, if any.
+/// `GET /api/inbox`, a protected route.
 async fn inbox(state: &AppState, header: Option<(&str, &str)>) -> StatusCode {
     let mut req = Request::get("/api/inbox");
     if let Some((name, value)) = header {
@@ -47,7 +45,6 @@ async fn inbox_with_bearer(state: &AppState, token: &str) -> StatusCode {
     inbox(state, Some(("authorization", &format!("Bearer {token}")))).await
 }
 
-/// Patches the password to `password`, authorized by `auth` (a header), if any.
 async fn set_password(state: &AppState, password: &str, auth: Option<(&str, &str)>) -> StatusCode {
     let mut req = Request::patch("/api/settings").header("content-type", "application/json");
     if let Some((name, value)) = auth {

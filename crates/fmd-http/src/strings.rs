@@ -73,7 +73,7 @@ impl NameValueList {
         self.lines.iter().position(|l| l.eq_ignore_ascii_case(line))
     }
 
-    /// The value for `name`, or `""` (`Values[name]`).
+    /// `Values[name]`.
     pub fn value(&self, name: &str) -> &str {
         self.index_of_name(name).map_or("", |i| self.value_at(i))
     }

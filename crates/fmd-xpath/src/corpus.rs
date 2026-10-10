@@ -16,9 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Query;
 
-/// The entries file of a corpus directory.
 const ENTRIES: &str = "entries.jsonl";
-/// The documents directory of a corpus directory.
 const DOCUMENTS: &str = "documents";
 
 /// Failure to read or write a corpus.
@@ -45,7 +43,6 @@ pub struct Entry {
     pub document: u64,
     /// The expression or CSS selector.
     pub expression: String,
-    /// Whether `expression` is a CSS selector.
     #[serde(default, skip_serializing_if = "is_false")]
     pub css: bool,
     /// Where the context value came from; the document itself when `None`.
@@ -127,7 +124,6 @@ mod hex_hash {
     }
 }
 
-/// The path of a document's body in a corpus directory.
 fn document_path(dir: &Path, hash: u64) -> PathBuf {
     dir.join(DOCUMENTS).join(format!("{hash:016x}.html"))
 }
@@ -184,12 +180,10 @@ impl Corpus {
         &self.entries
     }
 
-    /// The body of the document with this hash.
     pub fn document(&self, hash: u64) -> Option<&[u8]> {
         self.documents.get(&hash).map(Vec::as_slice)
     }
 
-    /// Every document, with its hash.
     pub fn documents(&self) -> impl Iterator<Item = (u64, &[u8])> {
         self.documents
             .iter()
@@ -197,9 +191,8 @@ impl Corpus {
     }
 }
 
-/// Records evaluations into a corpus directory, adding to what is there: an entry already in
-/// the corpus isn't written again, nor is a document. Clones share one writer, so every worker
-/// thread of a process can record through it.
+/// Records evaluations into a corpus directory, skipping entries and documents already there.
+/// Clones share one writer, so every worker thread can record through it.
 #[derive(Clone)]
 pub struct CorpusWriter {
     state: Arc<Mutex<WriterState>>,
@@ -215,7 +208,7 @@ struct WriterState {
 }
 
 impl CorpusWriter {
-    /// Opens (creating it if needed) the corpus in `dir` for recording.
+    /// Opens the corpus in `dir`, creating it if needed.
     pub fn open(dir: impl Into<PathBuf>) -> Result<CorpusWriter, CorpusError> {
         let dir = dir.into();
         let documents = dir.join(DOCUMENTS);

@@ -1,7 +1,5 @@
-//! Settings secrets at rest (docs/tickets/T63-settings-secrets.md): the proxy passwords, the
-//! GitHub token and the server password are not stored in plain text in `app.db` (the server
-//! password is hashed, docs/tickets/T64-password-and-bind-settings.md), and plain values an
-//! older build stored are encrypted on the next start.
+//! Settings secrets are never stored in plain text in `app.db`, and an older build's plain
+//! values are encrypted on the next start (docs/tickets/T63-settings-secrets.md).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]

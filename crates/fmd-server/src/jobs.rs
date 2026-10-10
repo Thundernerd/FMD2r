@@ -1,6 +1,4 @@
-//! `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/jobs/{id}/run` and
-//! `POST /api/jobs/{id}/cancel`: the registered background jobs, for the System page; and
-//! `POST /api/modules/update`, which runs the module updater.
+//! `/api/jobs`: the registered background jobs, and `POST /api/modules/update`.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -85,8 +83,7 @@ pub(crate) async fn cancel(
     control(&state, &id, |job| job.cancel()).await
 }
 
-/// Applies `action` to job `id` off the async threads (a job may take a lock to start or stop)
-/// and answers with its state afterwards.
+/// Off the async threads: a job may take a lock to start or stop.
 async fn control(
     state: &AppState,
     id: &str,

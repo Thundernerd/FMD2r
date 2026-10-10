@@ -1,10 +1,6 @@
-//! Optional single-user auth: a configured password/token, sent as `Authorization: Bearer` or
-//! traded for a session cookie at `POST /api/login`.
-//!
-//! Sessions live in `app.db` and end after `server.session_idle_days` without use, after
-//! `server.session_lifetime_days` in any case, at `POST /api/logout`, at
-//! `POST /api/sessions/revoke-all`, and when the password changes. No FMD2 counterpart: FMD2 has
-//! no web server.
+//! Optional single-user auth: a password sent as `Authorization: Bearer` or traded for a session
+//! cookie at `POST /api/login`. Sessions (in `app.db`) end on idle/lifetime limits, logout,
+//! revoke-all, or a password change. No FMD2 counterpart.
 
 use std::sync::{Arc, Mutex};
 
@@ -36,8 +32,8 @@ const VERIFIED_TOKENS: usize = 16;
 /// any client can ask for one.
 const CONCURRENT_HASHES: usize = 2;
 
-/// Where the password comes from: `--password` / `FMD2R_PASSWORD` when given, which wins, else
-/// the `server.auth_token` setting (a hash), read at every request so a change applies at once.
+/// The password: `--password` / `FMD2R_PASSWORD` when given, else the `server.auth_token` hash,
+/// read per request so a change applies at once.
 pub(crate) struct Auth {
     fixed: Option<String>,
     verified: Mutex<Verified>,
@@ -54,7 +50,6 @@ struct Verified {
 }
 
 impl Auth {
-    /// Auth from the setting only.
     pub(crate) fn from_settings() -> Arc<Self> {
         Arc::new(Self::new(None))
     }
@@ -85,8 +80,7 @@ impl Auth {
         }
     }
 
-    /// Whether `candidate` is the password. A hash is checked on the blocking pool, a few at a
-    /// time.
+    /// A hash is checked on the blocking pool, a few at a time.
     async fn matches(&self, secret: &Secret, candidate: &str) -> Result<bool, ApiError> {
         match secret {
             Secret::Plain(secret) => Ok(ct_eq(candidate, secret)),
@@ -102,8 +96,7 @@ impl Auth {
         }
     }
 
-    /// Whether the request's bearer token is known to be `secret` without hashing: it is the
-    /// command line one, or one verified before.
+    /// Whether the bearer token matches without hashing: the plain secret, or verified before.
     fn bearer_known(&self, secret: &Secret, headers: &HeaderMap) -> bool {
         let Some(token) = bearer_token(headers) else {
             return false;
@@ -117,8 +110,7 @@ impl Auth {
         }
     }
 
-    /// Whether the request's bearer token is the password `hash` was made from; remembers it
-    /// when it is.
+    /// Checks the bearer token against the hash; remembers it when it matches.
     async fn bearer_verifies(
         &self,
         secret: &Secret,
@@ -165,16 +157,14 @@ pub(crate) enum Secret {
 }
 
 impl Secret {
-    /// What sessions are bound to: the password, or the stored hash (with its own salt, so
-    /// setting a password again also ends them).
+    /// The password, or the stored hash (its own salt means re-setting the password ends sessions).
     fn binding(&self) -> &str {
         match self {
             Secret::Plain(s) | Secret::Hash(s) => s,
         }
     }
 
-    /// What `app.db` stores for the session cookie `token`: a hash bound to the secret, so a
-    /// password change leaves every stored session unmatched.
+    /// Bound to the secret, so a password change leaves every stored session unmatched.
     fn token_hash(&self, token: &str) -> Vec<u8> {
         let binding = self.binding();
         let mut hash = Sha256::new();
@@ -194,7 +184,6 @@ impl Secret {
     }
 }
 
-/// The token of an `Authorization: Bearer` header.
 fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     headers
         .get(header::AUTHORIZATION)
@@ -209,7 +198,6 @@ fn ct_eq(a: &str, b: &str) -> bool {
     bool::from(a.as_bytes().ct_eq(b.as_bytes()))
 }
 
-/// The session cookie values sent with a request.
 fn session_cookies(headers: &HeaderMap) -> Vec<String> {
     headers
         .get_all(header::COOKIE)
@@ -221,7 +209,7 @@ fn session_cookies(headers: &HeaderMap) -> Vec<String> {
         .collect()
 }
 
-/// A fresh random session token (256 bits, hex).
+/// 256 bits, hex.
 fn new_token() -> Result<String, ApiError> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -234,8 +222,7 @@ fn unix_ms(at: SystemTime) -> i64 {
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
-/// The session limits as of now (Unix ms): the oldest last use and creation a live session may
-/// have, and how long a new session lasts at most.
+/// Session limits as of now, in Unix ms.
 struct SessionCutoffs {
     now: i64,
     seen_since: i64,
@@ -265,7 +252,7 @@ impl SessionCutoffs {
     }
 }
 
-/// Whether a session cookie in `headers` names a live session; renews the ones that do.
+/// Renews the live sessions among the cookies.
 async fn session_authorizes(
     state: &AppState,
     secret: &Secret,
@@ -310,8 +297,7 @@ pub(crate) async fn require(State(state): State<AppState>, req: Request, next: N
     }
 }
 
-/// Whether the client reached us over HTTPS, directly or through a proxy that says so
-/// (`X-Forwarded-Proto` or `Forwarded: proto=`).
+/// Per `X-Forwarded-Proto` or `Forwarded: proto=`.
 fn over_https(req_headers: &HeaderMap) -> bool {
     let forwarded_proto = req_headers
         .get("x-forwarded-proto")
@@ -333,7 +319,6 @@ fn over_https(req_headers: &HeaderMap) -> bool {
     forwarded_proto || forwarded
 }
 
-/// A `Set-Cookie` header for the session cookie holding `value` for `max_age`.
 fn session_cookie(value: &str, max_age: Duration, secure: bool) -> Result<HeaderValue, ApiError> {
     let secure = if secure { "; Secure" } else { "" };
     let cookie = format!(
@@ -343,7 +328,6 @@ fn session_cookie(value: &str, max_age: Duration, secure: bool) -> Result<Header
     HeaderValue::from_str(&cookie).map_err(|e| ApiError::Internal(e.to_string()))
 }
 
-/// A response that tells the browser to drop the session cookie.
 fn clearing_cookie(status: StatusCode, headers: &HeaderMap) -> Result<Response, ApiError> {
     let cookie = session_cookie("", Duration::ZERO, over_https(headers))?;
     Ok((status, [(header::SET_COOKIE, cookie)]).into_response())
