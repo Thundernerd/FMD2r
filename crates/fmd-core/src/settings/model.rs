@@ -49,6 +49,14 @@ pub struct GeneralSettings {
     /// ignored; FMD2 drops them (mangadownloader/forms/frmMain.pas:6464-6470). Empty by default:
     /// FMD2r does not ship `default_selected_websites` (baseunits/FMDOptions.pas:94, :250).
     pub selected_websites: Vec<String>,
+    /// Whether the setup wizard has been finished; while false the web UI shows it before
+    /// anything else. No FMD2 setting. A fresh install starts with it false, one that already
+    /// has data is marked set up on its first start
+    /// ([`SettingsService::mark_existing_install_set_up`](super::SettingsService::mark_existing_install_set_up)).
+    pub setup_completed: bool,
+    /// The id of the setup step to resume at, saved with each step's settings; empty for the
+    /// first. No FMD2 setting.
+    pub setup_step: String,
 }
 
 impl Default for GeneralSettings {
@@ -60,6 +68,8 @@ impl Default for GeneralSettings {
             add_as_stopped: false,
             load_covers: true,
             selected_websites: Vec::new(),
+            setup_completed: false,
+            setup_step: String::new(),
         }
     }
 }

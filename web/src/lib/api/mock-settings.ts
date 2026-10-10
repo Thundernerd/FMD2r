@@ -25,7 +25,9 @@ export const defaultSettings = (): Settings => ({
 		language: 'en',
 		add_as_stopped: false,
 		load_covers: true,
-		selected_websites: []
+		selected_websites: [],
+		setup_completed: false,
+		setup_step: ''
 	},
 	connections: {
 		max_parallel_tasks: 1,
@@ -422,7 +424,8 @@ interface Stored {
 	modules: Record<string, Overrides>;
 }
 
-function load(): Stored {
+/** `setUp`: whether the install was set up, or is fresh and shows the setup wizard. */
+function load(setUp: boolean): Stored {
 	try {
 		const raw = globalThis.sessionStorage?.getItem(STORAGE_KEY);
 		if (raw) return JSON.parse(raw) as Stored;
@@ -433,6 +436,7 @@ function load(): Stored {
 	// them all.
 	const settings = defaultSettings();
 	settings.general.selected_websites = [...new Set(MODULES.map((m) => m.summary.id))];
+	settings.general.setup_completed = setUp;
 	return { settings, modules: {} };
 }
 
@@ -469,8 +473,8 @@ function previewRename(draft: RenamePreviewRequest): RenamePreview {
 	return { manga, chapter, filename, page, path: path.filter(Boolean).join('/') };
 }
 
-export function createMockSettings() {
-	const state = load();
+export function createMockSettings(setUp = true) {
+	const state = load(setUp);
 	const save = () => {
 		try {
 			globalThis.sessionStorage?.setItem(STORAGE_KEY, JSON.stringify(state));

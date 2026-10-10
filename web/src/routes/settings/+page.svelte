@@ -243,6 +243,13 @@
 	function onBeforeUnload(event: BeforeUnloadEvent) {
 		if (dirty) event.preventDefault();
 	}
+
+	/** Opens the setup at its first step; it doesn't redirect other pages, as it was finished. */
+	async function runSetupAgain() {
+		// Where a run left off before is stale now.
+		await api.patchSettings({ general: { setup_step: '' } }).catch(() => {});
+		await goto('/setup');
+	}
 </script>
 
 <svelte:head><title>Settings · FMD2r</title></svelte:head>
@@ -325,6 +332,18 @@
 						{/each}
 						{#if section.id === 'metadata'}
 							<MangaBakaPanel {api} store={events} />
+						{/if}
+						{#if section.id === 'general'}
+							<p class="setup-again">
+								<button class="btn" type="button" disabled={dirty} onclick={runSetupAgain}>
+									Run setup again
+								</button>
+								<span class="small muted">
+									{dirty
+										? 'Save or discard your changes first.'
+										: 'Goes through the setup with the current values.'}
+								</span>
+							</p>
 						{/if}
 						{#if section.id === 'saveto'}
 							<p class="preview small" aria-live="polite">
@@ -501,5 +520,12 @@
 			bottom: calc(var(--sp-4) + var(--safe-bottom));
 			padding: 10px 14px;
 		}
+	}
+	.setup-again {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--sp-2);
+		margin: var(--sp-3) 0 0;
 	}
 </style>

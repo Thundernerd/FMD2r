@@ -328,12 +328,18 @@ export interface MockOptions {
 	moduleSettingsDelayMs?: number;
 	/** Start with a MangaBaka database downloaded, so list titles carry formats and statuses. */
 	mangabaka?: boolean;
+	/**
+	 * Whether the install was set up; `false` is a fresh install, which shows the setup wizard.
+	 * Defaults to true unless `sessionStorage['fmd2r.mock.fresh-install']` is set.
+	 */
+	setUp?: boolean;
 }
 
 const PASSWORD_KEY = 'fmd2r.mock.password';
 const SESSION_KEY = 'fmd2r.mock.session';
 const SERIES_DELAY_KEY = 'fmd2r.mock.series-delay-ms';
 const MODULE_SETTINGS_DELAY_KEY = 'fmd2r.mock.module-settings-delay-ms';
+const FRESH_INSTALL_KEY = 'fmd2r.mock.fresh-install';
 
 /** A sessionStorage item, or `null` without storage (tests, private mode). */
 const stored = (key: string): string | null => {
@@ -358,7 +364,8 @@ export function createMockBackend({
 	password = stored(PASSWORD_KEY),
 	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0),
 	moduleSettingsDelayMs = Number(stored(MODULE_SETTINGS_DELAY_KEY) ?? 0),
-	mangabaka = false
+	mangabaka = false,
+	setUp = stored(FRESH_INSTALL_KEY) === null
 }: MockOptions = {}): MockBackend {
 	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
 	let loggedIn = stored(SESSION_KEY) !== null;
@@ -518,7 +525,7 @@ export function createMockBackend({
 		return URL.createObjectURL(blob);
 	};
 
-	const settings = createMockSettings();
+	const settings = createMockSettings(setUp);
 	const metadata = createMockMetadata(mangabaka);
 	const lists = createMockLists(
 		() => settings.getSettings().general.selected_websites,

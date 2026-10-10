@@ -4,7 +4,7 @@
 use fmd_core::settings::{
     OutputFormat, SettingsError, SettingsService, SymbolMode, WebpSaveAs, XPathBackend,
 };
-use fmd_store::{AppDb, ListsDb, MangaListing};
+use fmd_store::{AppDb, ListsDb, MangaListing, NewFavorite, NewTask, TaskStatus};
 use serde_json::json;
 
 fn open_db() -> (tempfile::TempDir, AppDb) {
@@ -321,4 +321,112 @@ fn another_general_change_before_the_first_start_does_not_skip_the_upgrade() {
 
     assert_eq!(service.get().general.selected_websites, ["a"]);
     assert!(service.get().general.add_as_stopped);
+}
+
+fn first_start_setup_completed(db: &AppDb, lists: &ListsDb) -> bool {
+    let service = SettingsService::load(db.clone()).unwrap();
+    service.mark_existing_install_set_up(lists).unwrap();
+    let completed = service.get().general.setup_completed;
+    // Stored, so a reload sees the same.
+    assert_eq!(
+        SettingsService::load(db.clone())
+            .unwrap()
+            .get()
+            .general
+            .setup_completed,
+        completed
+    );
+    completed
+}
+
+#[test]
+fn a_fresh_install_is_not_set_up() {
+    let (dir, db) = open_db();
+    let lists = lists_with(dir.path(), &[]);
+
+    assert!(!first_start_setup_completed(&db, &lists));
+}
+
+#[test]
+fn an_install_with_stored_settings_is_set_up() {
+    let (dir, db) = open_db();
+    db.settings()
+        .set("output", &json!({ "format": "cbz" }))
+        .unwrap();
+    let lists = lists_with(dir.path(), &[]);
+
+    assert!(first_start_setup_completed(&db, &lists));
+}
+
+#[test]
+fn an_install_with_library_series_is_set_up() {
+    let (dir, db) = open_db();
+    db.favorites()
+        .create(&NewFavorite {
+            module_id: "site".into(),
+            link: "/manga".into(),
+            title: "Manga".into(),
+            save_to: "downloads".into(),
+            cover_url: None,
+        })
+        .unwrap();
+    let lists = lists_with(dir.path(), &[]);
+
+    assert!(first_start_setup_completed(&db, &lists));
+}
+
+#[test]
+fn an_install_with_tasks_is_set_up() {
+    let (dir, db) = open_db();
+    db.tasks()
+        .create(&NewTask {
+            module_id: "site".into(),
+            link: "/manga".into(),
+            title: "Manga".into(),
+            save_to: "downloads".into(),
+            status: TaskStatus::Stopped,
+            enabled: true,
+        })
+        .unwrap();
+    let lists = lists_with(dir.path(), &[]);
+
+    assert!(first_start_setup_completed(&db, &lists));
+}
+
+#[test]
+fn an_install_with_lists_is_set_up() {
+    let (dir, db) = open_db();
+    let lists = lists_with(dir.path(), &["a"]);
+
+    assert!(first_start_setup_completed(&db, &lists));
+}
+
+#[test]
+fn a_stored_setup_state_is_never_overwritten() {
+    let (dir, db) = open_db();
+    let empty = lists_with(dir.path(), &[]);
+    assert!(!first_start_setup_completed(&db, &empty));
+
+    // Data that came later (e.g. an FMD2 import during setup) does not finish the setup.
+    let listed = lists_with(dir.path(), &["a"]);
+    assert!(!first_start_setup_completed(&db, &listed));
+
+    SettingsService::load(db.clone())
+        .unwrap()
+        .update(json!({ "general": { "setup_completed": true } }))
+        .unwrap();
+    assert!(first_start_setup_completed(&db, &empty));
+}
+
+#[test]
+fn a_settings_change_before_the_first_start_does_not_decide_the_setup() {
+    let (dir, db) = open_db();
+    // e.g. `fmd2r import` before `serve` runs: the install has data by the first start.
+    SettingsService::load(db.clone())
+        .unwrap()
+        .update(json!({ "general": { "add_as_stopped": true } }))
+        .unwrap();
+    let lists = lists_with(dir.path(), &[]);
+
+    assert!(first_start_setup_completed(&db, &lists));
 }
