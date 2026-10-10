@@ -3,7 +3,7 @@
 	import { ApiError } from '#lib/api/client.ts';
 	import type { Settings } from '#lib/api/types.ts';
 	import type { EventStore } from '#lib/events.svelte.ts';
-	import { isObject } from '#lib/settings/draft.svelte.ts';
+	import { getPath, isObject } from '#lib/settings/draft.svelte.ts';
 	import type { SetupStep, StepExports } from '#lib/setup/steps.ts';
 
 	let {
@@ -27,12 +27,16 @@
 	let saving = $state(false);
 	let saveError = $state<string | null>(null);
 	let current = $state<StepExports | undefined>();
+	/** The settings paths an FMD2 import during this setup changed. */
+	let fromFmd2 = $state<string[]>([]);
 	/** The steps this server needs; fixed once loaded, so finishing a step can't hide it. */
 	let steps = $state.raw<SetupStep[]>([]);
 
 	const step = $derived(steps[index]);
 	const last = $derived(index === steps.length - 1);
 	const ready = $derived(current?.ready?.() ?? true);
+	const busy = $derived(saving || (current?.busy?.() ?? false));
+	const startsFromFmd2 = $derived(step?.paths?.some((p) => fromFmd2.includes(p)) ?? false);
 	const nextLabel = $derived(current?.nextLabel?.() ?? 'Next');
 
 	$effect(() => {
@@ -54,6 +58,17 @@
 	function message(e: unknown): string {
 		if (e instanceof ApiError && e.detail) return e.detail;
 		return e instanceof Error ? e.message : String(e);
+	}
+
+	/** Reloads the settings an FMD2 import changed, noting which of the steps' settings changed. */
+	async function reloadSettings() {
+		const before = settings;
+		const after = await api.getSettings();
+		const same = (path: string) =>
+			JSON.stringify(getPath(before, path)) === JSON.stringify(getPath(after, path));
+		const changed = steps.flatMap((s) => s.paths ?? []).filter((p) => !same(p));
+		fromFmd2 = [...new Set([...fromFmd2, ...changed])];
+		settings = after;
 	}
 
 	function go(to: number) {
@@ -111,8 +126,18 @@
 
 		<section class="card step" aria-labelledby="setup-step-title">
 			<h2 id="setup-step-title">{step.title}</h2>
+			{#if startsFromFmd2}
+				<p class="small muted">These start from your FMD2 settings; change what you like.</p>
+			{/if}
 			{#key step.id}
-				<step.component bind:this={current} {api} {store} {settings} finish={advance} />
+				<step.component
+					bind:this={current}
+					{api}
+					{store}
+					{settings}
+					finish={advance}
+					{reloadSettings}
+				/>
 			{/key}
 			{#if saveError}
 				<p class="error" role="alert">{saveError}</p>
@@ -121,16 +146,11 @@
 
 		<div class="actions">
 			{#if index > 0}
-				<button class="btn" type="button" disabled={saving} onclick={() => go(index - 1)}>
+				<button class="btn" type="button" disabled={busy} onclick={() => go(index - 1)}>
 					Back
 				</button>
 			{/if}
-			<button
-				class="btn primary"
-				type="button"
-				disabled={!ready || saving}
-				onclick={() => advance()}
-			>
+			<button class="btn primary" type="button" disabled={!ready || busy} onclick={() => advance()}>
 				{last ? 'Finish' : nextLabel}
 			</button>
 		</div>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { USERDATA_ZIP } from './userdata.ts';
 
 /** Makes the mock backend a fresh install, which has not been through setup yet. */
 const freshInstall = (page: Page) =>
@@ -6,9 +7,13 @@ const freshInstall = (page: Page) =>
 
 const wizard = (page: Page) => page.getByRole('heading', { level: 1, name: 'Set up FMD2r' });
 
-/** Goes from the welcome to the websites step, keeping the defaults and skipping MangaBaka. */
+/**
+ * Goes from the welcome to the websites step, skipping the import and MangaBaka and keeping the
+ * defaults.
+ */
 async function toWebsites(page: Page) {
 	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Skip' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Skip' }).click();
@@ -39,18 +44,20 @@ test('a fresh install goes through setup first, and only once', async ({ page })
 
 	await page.goto('/');
 	await expect(wizard(page)).toBeVisible();
-	await expect(page.getByText('Step 1 of 6')).toBeVisible();
+	await expect(page.getByText('Step 1 of 7')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 2 of 6')).toBeVisible();
+	await expect(page.getByText('Step 2 of 7')).toBeVisible();
+	await page.getByRole('button', { name: 'Skip' }).click();
+	await expect(page.getByText('Step 3 of 7')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 3 of 6')).toBeVisible();
+	await expect(page.getByText('Step 4 of 7')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 4 of 6')).toBeVisible();
+	await expect(page.getByText('Step 5 of 7')).toBeVisible();
 	await page.getByRole('button', { name: 'Skip' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 5 of 6')).toBeVisible();
+	await expect(page.getByText('Step 6 of 7')).toBeVisible();
 	await pastWebsites(page);
-	await expect(page.getByText('Step 6 of 6')).toBeVisible();
+	await expect(page.getByText('Step 7 of 7')).toBeVisible();
 	await page.getByRole('button', { name: 'Finish' }).click();
 
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
@@ -66,11 +73,11 @@ test('a reload during setup resumes at the step it was on', async ({ page }) => 
 	await freshInstall(page);
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 2 of 6')).toBeVisible();
+	await expect(page.getByText('Step 2 of 7')).toBeVisible();
 
 	await page.reload();
-	await expect(page.getByText('Step 2 of 6')).toBeVisible();
-	await expect(page.getByRole('heading', { level: 2, name: 'Download folders' })).toBeVisible();
+	await expect(page.getByText('Step 2 of 7')).toBeVisible();
+	await expect(page.getByRole('heading', { level: 2, name: 'Import from FMD2' })).toBeVisible();
 });
 
 test('an existing install never sees setup', async ({ page }) => {
@@ -85,7 +92,7 @@ test('setup can be run again from Settings without redirecting other pages', asy
 	await page.goto('/settings#section-general');
 	await page.getByRole('button', { name: 'Run setup again' }).click();
 	await expect(wizard(page)).toBeVisible();
-	await expect(page.getByText('Step 1 of 6')).toBeVisible();
+	await expect(page.getByText('Step 1 of 7')).toBeVisible();
 
 	await page.goto('/discover');
 	await expect(page).toHaveURL(/\/discover$/);
@@ -108,6 +115,7 @@ test('download folders added during setup show in Settings → Save to', async (
 	await freshInstall(page);
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Skip' }).click();
 	const step = page.getByRole('region', { name: 'Download folders' });
 	await expect(step.getByRole('group', { name: 'Downloads' })).toBeVisible();
 	await step.getByRole('button', { name: 'Add destination' }).click();
@@ -137,6 +145,7 @@ test('the download format picked during setup shows in Settings → Output', asy
 	await freshInstall(page);
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Skip' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Download format' })).toBeVisible();
 	await expect(page.getByRole('radio', { name: /^Folder of images/ })).toBeChecked();
@@ -156,6 +165,7 @@ test('the MangaBaka database downloads in the background while setup goes on', a
 	await freshInstall(page);
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Skip' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByText('390 MB')).toBeVisible();
@@ -214,9 +224,9 @@ test('an open server can set a password during setup without logging out', async
 	await freshInstall(page);
 	await openServer(page);
 	await page.goto('/');
-	await expect(page.getByText('Step 1 of 7')).toBeVisible();
+	await expect(page.getByText('Step 1 of 8')).toBeVisible();
 	await toPassword(page);
-	await expect(page.getByText('Step 6 of 7')).toBeVisible();
+	await expect(page.getByText('Step 7 of 8')).toBeVisible();
 	await page.getByRole('textbox', { name: 'Password', exact: true }).fill('hunter2');
 	await page.getByLabel('Confirm password').fill('hunter2');
 	await page.getByRole('button', { name: 'Next' }).click();
@@ -239,4 +249,81 @@ test('skipping the password step leaves the open server warning', async ({ page 
 
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
 	await expect(banner(page)).toBeVisible();
+});
+
+test('an FMD2 import during setup brings its settings to the later steps', async ({ page }) => {
+	await freshInstall(page);
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Next' }).click();
+	const step = page.getByRole('region', { name: 'Import from FMD2' });
+	await expect(step.getByText('Coming from FMD2? Import your library and settings.')).toBeVisible();
+
+	await step.getByRole('button', { name: 'Import' }).click();
+	await step.getByLabel('FMD2 userdata folder, zipped').setInputFiles(USERDATA_ZIP);
+	await step.getByLabel('Path maps').fill('C:\\Manga=/data/manga');
+	await expect(step.getByRole('button', { name: 'Import', exact: true })).toBeDisabled();
+	await step.getByRole('button', { name: 'Check' }).click();
+	await expect(step.getByRole('status')).toContainText('nothing was written');
+	await expect(step.getByRole('table', { name: 'Import report' })).toBeVisible();
+
+	await step.getByRole('button', { name: 'Import', exact: true }).click();
+	await expect(step.getByRole('status')).toContainText('Imported');
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	// The later steps start from FMD2's download folder, format and websites, and say so.
+	const fromFmd2 = page.getByText('These start from your FMD2 settings');
+	const folders = page.getByRole('region', { name: 'Download folders' });
+	await expect(
+		folders.getByRole('group', { name: 'Downloads' }).getByRole('textbox', { name: 'Folder' })
+	).toHaveValue('/data/manga');
+	await expect(fromFmd2).toBeVisible();
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	await expect(page.getByRole('heading', { level: 2, name: 'Download format' })).toBeVisible();
+	await expect(page.getByRole('radio', { name: /^CBZ/ })).toBeChecked();
+	await expect(fromFmd2).toBeVisible();
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	await expect(page.getByRole('heading', { level: 2, name: 'Metadata' })).toBeVisible();
+	await expect(fromFmd2).toHaveCount(0);
+	await page.getByRole('button', { name: 'Skip' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	await expect(page.getByRole('heading', { level: 2, name: 'Websites' })).toBeVisible();
+	await expect(page.getByRole('checkbox', { name: 'MangaDex' })).toBeChecked();
+	await expect(page.getByRole('checkbox', { name: 'ComicK' })).toBeChecked();
+	await expect(page.getByRole('checkbox', { name: 'Webtoons' })).not.toBeChecked();
+	await expect(fromFmd2).toBeVisible();
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	const summary = page.getByRole('region', { name: 'Finish' });
+	await expect(summary.getByText('CBZ', { exact: true })).toBeVisible();
+	await expect(summary.getByText('2 selected')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Finish' }).click();
+	await expect(
+		page.getByRole('list', { name: 'Favorites' }).getByRole('link', { name: /One Piece/ })
+	).toBeVisible();
+});
+
+test('a failed import keeps the user on the step, able to retry or skip', async ({ page }) => {
+	await freshInstall(page);
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Next' }).click();
+	const step = page.getByRole('region', { name: 'Import from FMD2' });
+	await step.getByRole('button', { name: 'Import' }).click();
+	await step.getByLabel('FMD2 userdata folder, zipped').setInputFiles({
+		name: 'userdata.rar',
+		mimeType: 'application/octet-stream',
+		buffer: Buffer.from('Rar!')
+	});
+	await step.getByRole('button', { name: 'Check' }).click();
+	await expect(step.getByRole('alert')).toContainText('not a zip file');
+	await expect(page.getByText('Step 2 of 7')).toBeVisible();
+
+	await step.getByLabel('FMD2 userdata folder, zipped').setInputFiles(USERDATA_ZIP);
+	await step.getByRole('button', { name: 'Check' }).click();
+	await expect(step.getByRole('status')).toContainText('nothing was written');
+	await page.getByRole('button', { name: 'Skip' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Download folders' })).toBeVisible();
 });

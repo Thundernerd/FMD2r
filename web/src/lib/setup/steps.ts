@@ -12,12 +12,16 @@ export interface StepProps {
 	settings: Settings;
 	/** Saves the step and finishes the setup, then opens `to`, e.g. a Settings section. */
 	finish: (to: string) => Promise<void>;
+	/** Reloads the settings after an FMD2 import changed them, for the later steps. */
+	reloadSettings: () => Promise<void>;
 }
 
 /** What a step's component may export. */
 export interface StepExports {
 	/** Whether Next is allowed yet (always, without it). Read reactively. */
 	ready?: () => boolean;
+	/** Whether the step's own work runs, e.g. an import; Back and Next wait for it. Read reactively. */
+	busy?: () => boolean;
 	/** What Next reads instead, e.g. "Skip" while nothing was entered. Read reactively. */
 	nextLabel?: () => string | undefined;
 	/**
@@ -33,6 +37,11 @@ export interface SetupStep {
 	id: string;
 	title: string;
 	component: Component<StepProps, StepExports>;
+	/**
+	 * The settings the step edits, as paths such as `output.format`. When an FMD2 import during
+	 * this setup changed one of them, the step says it starts from the FMD2 settings.
+	 */
+	paths?: string[];
 	/** Whether the step applies to this server (always, without it). Asked once, as setup opens. */
 	shows?: (health: Health) => boolean;
 }

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { USERDATA_ZIP } from './userdata.ts';
 
 test('the library shows its favorites as a cover grid that chips filter', async ({ page }) => {
 	await page.goto('/');
@@ -60,13 +61,6 @@ test('a series in the library can be checked for missing chapters', async ({ pag
 	await page.getByRole('button', { name: 'Check missing chapters' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'missing chapters' })).toBeVisible();
 });
-
-/** A file that starts like a zip, as the mock backend checks. */
-const USERDATA_ZIP = {
-	name: 'userdata.zip',
-	mimeType: 'application/zip',
-	buffer: Buffer.from('PK\u0003\u0004 userdata')
-};
 
 test('an FMD2 userdata zip is checked with a dry run, then imported', async ({ page }) => {
 	await page.goto('/');
