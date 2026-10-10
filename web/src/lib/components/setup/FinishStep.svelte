@@ -73,6 +73,18 @@
 		</div>
 	{/each}
 </dl>
+<p>
+	Each website's list still has to be fetched before Discover shows its series: pick the website in
+	<!-- Finishes first, like the links above. -->
+	<a
+		href="/discover"
+		onclick={(e) => {
+			e.preventDefault();
+			finish('/discover');
+		}}>Discover</a
+	>
+	and press “Get ready-made list”, or “Update list” to build it from the website.
+</p>
 <p class="small muted">Finish opens your library.</p>
 
 <style>

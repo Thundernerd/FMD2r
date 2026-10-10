@@ -6,6 +6,29 @@ const freshInstall = (page: Page) =>
 
 const wizard = (page: Page) => page.getByRole('heading', { level: 1, name: 'Set up FMD2r' });
 
+/** Goes from the welcome to the websites step, keeping the defaults and skipping MangaBaka. */
+async function toWebsites(page: Page) {
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Skip' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Websites' })).toBeVisible();
+}
+
+/** Chooses MangaDex on the websites step and goes on to the finish. */
+async function pastWebsites(page: Page) {
+	await page.getByRole('checkbox', { name: 'MangaDex' }).check();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Finish' })).toBeVisible();
+}
+
+/** Goes from the welcome to the finish. */
+async function toFinish(page: Page) {
+	await toWebsites(page);
+	await pastWebsites(page);
+}
+
 test('a fresh install goes through setup first, and only once', async ({ page }) => {
 	await freshInstall(page);
 	await page.goto('/discover');
@@ -16,16 +39,18 @@ test('a fresh install goes through setup first, and only once', async ({ page })
 
 	await page.goto('/');
 	await expect(wizard(page)).toBeVisible();
-	await expect(page.getByText('Step 1 of 5')).toBeVisible();
+	await expect(page.getByText('Step 1 of 6')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 2 of 5')).toBeVisible();
+	await expect(page.getByText('Step 2 of 6')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 3 of 5')).toBeVisible();
+	await expect(page.getByText('Step 3 of 6')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 4 of 5')).toBeVisible();
+	await expect(page.getByText('Step 4 of 6')).toBeVisible();
 	await page.getByRole('button', { name: 'Skip' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 5 of 5')).toBeVisible();
+	await expect(page.getByText('Step 5 of 6')).toBeVisible();
+	await pastWebsites(page);
+	await expect(page.getByText('Step 6 of 6')).toBeVisible();
 	await page.getByRole('button', { name: 'Finish' }).click();
 
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
@@ -41,10 +66,10 @@ test('a reload during setup resumes at the step it was on', async ({ page }) => 
 	await freshInstall(page);
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 2 of 5')).toBeVisible();
+	await expect(page.getByText('Step 2 of 6')).toBeVisible();
 
 	await page.reload();
-	await expect(page.getByText('Step 2 of 5')).toBeVisible();
+	await expect(page.getByText('Step 2 of 6')).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Download folders' })).toBeVisible();
 });
 
@@ -60,7 +85,7 @@ test('setup can be run again from Settings without redirecting other pages', asy
 	await page.goto('/settings#section-general');
 	await page.getByRole('button', { name: 'Run setup again' }).click();
 	await expect(wizard(page)).toBeVisible();
-	await expect(page.getByText('Step 1 of 5')).toBeVisible();
+	await expect(page.getByText('Step 1 of 6')).toBeVisible();
 
 	await page.goto('/discover');
 	await expect(page).toHaveURL(/\/discover$/);
@@ -70,11 +95,7 @@ test('setup can be run again from Settings without redirecting other pages', asy
 test("the finish step's links to Settings finish the setup first", async ({ page }) => {
 	await freshInstall(page);
 	await page.goto('/');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Skip' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
+	await toFinish(page);
 	await page.getByRole('link', { name: 'Change Download format in Settings' }).click();
 
 	await expect(page).toHaveURL(/\/settings#section-output$/);
@@ -98,6 +119,7 @@ test('download folders added during setup show in Settings → Save to', async (
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Skip' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await pastWebsites(page);
 	await page.getByRole('button', { name: 'Finish' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
 
@@ -122,6 +144,7 @@ test('the download format picked during setup shows in Settings → Output', asy
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Skip' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await pastWebsites(page);
 	await page.getByRole('button', { name: 'Finish' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
 
@@ -140,6 +163,7 @@ test('the MangaBaka database downloads in the background while setup goes on', a
 	await expect(page.getByRole('progressbar', { name: 'Download progress' })).toBeVisible();
 
 	await page.getByRole('button', { name: 'Next' }).click();
+	await pastWebsites(page);
 	await expect(page.getByRole('heading', { level: 2, name: 'Finish' })).toBeVisible();
 	await expect(page.getByText('Still downloading')).toBeVisible();
 	await page.getByRole('link', { name: 'Change MangaBaka database in Settings' }).click();
@@ -147,4 +171,27 @@ test('the MangaBaka database downloads in the background while setup goes on', a
 	await expect(page).toHaveURL(/\/settings#section-metadata$/);
 	await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
 	await expect(page.getByRole('progressbar', { name: 'Download progress' })).toBeVisible();
+});
+
+test('the websites chosen during setup are the ones Discover lists', async ({ page }, info) => {
+	test.skip(info.project.name === 'phone', 'the filters are a drawer on a phone');
+	await freshInstall(page);
+	await page.goto('/');
+	await toWebsites(page);
+	await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
+	await page.getByRole('checkbox', { name: 'MangaDex' }).check();
+	await page.getByRole('checkbox', { name: 'Webtoons' }).check();
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	// The finish step points to Discover, where each website's list is fetched; going there
+	// finishes the setup.
+	await expect(page.getByRole('heading', { level: 2, name: 'Finish' })).toBeVisible();
+	await page.getByRole('link', { name: 'Discover' }).click();
+	await expect(page).toHaveURL(/\/discover$/);
+	await expect(wizard(page)).toHaveCount(0);
+
+	const website = page
+		.getByRole('complementary', { name: 'Filters' })
+		.getByRole('combobox', { name: 'Website' });
+	await expect(website.getByRole('option')).toHaveText(['All websites', 'MangaDex', 'Webtoons']);
 });
