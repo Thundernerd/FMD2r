@@ -4,6 +4,9 @@
 @import '@fontsource/schibsted-grotesk/600.css';
 @import '@fontsource/schibsted-grotesk/700.css';
 @import '@fontsource/schibsted-grotesk/800.css';
+@import '@fontsource/literata/600.css';
+@import '@fontsource/literata/700.css';
+@import '@fontsource/literata/800.css';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import './tokens.css';
@@ -34,7 +37,7 @@ button {
 	cursor: pointer;
 }
 :focus-visible {
-	outline: 2px solid var(--accent);
+	outline: var(--focus-w) solid var(--accent);
 	outline-offset: 1px;
 }
 h1,

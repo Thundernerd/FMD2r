@@ -33,6 +33,7 @@ export type NewTask = Schemas['NewTask'];
 export type OutputFormat = Schemas['OutputFormat'];
 export type AppearanceSettings = Schemas['AppearanceSettings'];
 export type Accent = Schemas['Accent'];
+export type Theme = Schemas['Theme'];
 export type ModuleCapabilities = Schemas['ModuleCapabilities'];
 export type SearchPage = Schemas['SearchPage'];
 export type ListItem = Schemas['ListItem'];

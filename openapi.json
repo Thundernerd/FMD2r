@@ -3065,6 +3065,15 @@
               }
             ],
             "default": "normal"
+          },
+          "theme": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Theme",
+                "description": "The built-in theme: a complete look, in light and dark (T90)."
+              }
+            ],
+            "default": "default"
           }
         }
       },
@@ -5498,7 +5507,8 @@
             "default": {
               "accent": "teal",
               "mode": "system",
-              "text_size": "normal"
+              "text_size": "normal",
+              "theme": "default"
             }
           },
           "connections": {
@@ -6193,6 +6203,16 @@
           "normal",
           "large",
           "larger"
+        ]
+      },
+      "Theme": {
+        "type": "string",
+        "description": "The built-in themes, each a set of style tokens (`data-style` in `web/src/lib/styles/tokens.css`)\nwith a light and a dark variant; the layout is the same in all of them.",
+        "enum": [
+          "default",
+          "high-contrast",
+          "warm",
+          "compact"
         ]
       },
       "ThemeMode": {

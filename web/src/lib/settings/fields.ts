@@ -17,8 +17,26 @@ export type Control =
 	| { kind: 'secret' }
 	| { kind: 'number'; min: number; max: number; nullable?: boolean }
 	| { kind: 'select'; choices: Choice[] }
-	/** A row of colour swatches, one per accent (`data-accent` in tokens.css) of `choices`. */
-	| { kind: 'swatches'; choices: Choice[] };
+	/**
+	 * A row of preview cards, one per theme (`data-style` in tokens.css) of `choices`, each in the
+	 * accent set at `accentPath`.
+	 */
+	| { kind: 'themes'; choices: Choice[]; accentPath: string }
+	/**
+	 * A row of colour swatches, one per accent (`data-accent` in tokens.css) of `choices`. While the
+	 * setting at `lockedWhen.path` is `lockedWhen.value`, the swatches are disabled and `note` says
+	 * why.
+	 */
+	| {
+			kind: 'swatches';
+			choices: Choice[];
+			lockedWhen?: { path: string; value: string; note: string };
+	  };
+
+/** The choices of a control that picks one of several, or none for other controls. */
+export function choicesOf(control: Control): Choice[] {
+	return 'choices' in control ? control.choices : [];
+}
 
 /** The path of the `has_<name>` flag that tells whether the secret at `path` is set. */
 export function secretFlag(path: string): string {

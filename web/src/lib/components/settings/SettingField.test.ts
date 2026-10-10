@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 import { Draft } from '#lib/settings/draft.svelte.ts';
 import type { Field } from '#lib/settings/fields.ts';
+import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 import SettingField from './SettingField.svelte';
 
 const PASSWORD: Field = {
@@ -95,5 +96,34 @@ describe('a swatches setting', () => {
 		expect(purple.getAttribute('aria-checked')).toBe('true');
 		expect(teal.getAttribute('aria-checked')).toBe('false');
 		expect(screen.getByRole('radiogroup', { name: 'Accent colour' })).toBeTruthy();
+	});
+});
+
+describe('the accent setting', () => {
+	const accent = SETTINGS_SECTIONS.flatMap((s) => s.fields).find(
+		(f) => f.path === 'appearance.accent'
+	);
+	const renderWith = (theme: string) => {
+		if (!accent) throw new Error('no accent setting');
+		const draft = new Draft<object>({ appearance: { theme, accent: 'teal' } });
+		render(SettingField, { field: accent, draft });
+		return draft;
+	};
+
+	it('is disabled in the high-contrast theme, which keeps its own accent, and says why', () => {
+		renderWith('high-contrast');
+		const radios = screen.getAllByRole('radio');
+		expect(radios.length).toBeGreaterThan(1);
+		for (const radio of radios) expect((radio as HTMLButtonElement).disabled).toBe(true);
+		expect(screen.getByText(/high contrast.*own accent/i)).toBeTruthy();
+	});
+
+	it('can be picked in the other themes', async () => {
+		const draft = renderWith('warm');
+		const blue = screen.getByRole('radio', { name: 'Blue' });
+		expect((blue as HTMLButtonElement).disabled).toBe(false);
+		expect(screen.queryByText(/high contrast.*own accent/i)).toBeNull();
+		await fireEvent.click(blue);
+		expect(draft.changes()).toEqual({ appearance: { accent: 'blue' } });
 	});
 });

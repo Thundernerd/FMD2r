@@ -80,12 +80,29 @@ impl Default for GeneralSettings {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(default)]
 pub struct AppearanceSettings {
+    /// The built-in theme: a complete look, in light and dark (T90).
+    pub theme: Theme,
     /// Light or dark; `system` follows the device's `prefers-color-scheme`.
     pub mode: ThemeMode,
     /// The text size; every font size is scaled by it.
     pub text_size: TextSize,
     /// The accent colour, one of a fixed set of swatches.
     pub accent: Accent,
+}
+
+/// The built-in themes, each a set of style tokens (`data-style` in `web/src/lib/styles/tokens.css`)
+/// with a light and a dark variant; the layout is the same in all of them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Theme {
+    #[default]
+    Default,
+    /// Text and borders at least 7:1 against their background; keeps its own accent.
+    HighContrast,
+    /// Paper-like neutrals and a serif display font.
+    Warm,
+    /// Smaller text and tighter spacing, for more rows on screen.
+    Compact,
 }
 
 /// Light or dark.

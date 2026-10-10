@@ -33,11 +33,17 @@ const number = (path: string, label: string, min: number, max: number, help?: st
 	help,
 	control: { kind: 'number', min, max }
 });
-const swatches = (path: string, label: string, choices: Choice[], help?: string): Field => ({
+const swatches = (
+	path: string,
+	label: string,
+	choices: Choice[],
+	help?: string,
+	extra: Omit<Extract<Control, { kind: 'swatches' }>, 'kind' | 'choices'> = {}
+): Field => ({ path, label, help, control: { kind: 'swatches', choices, ...extra } });
+const themes = (path: string, label: string, choices: Choice[], accentPath: string): Field => ({
 	path,
 	label,
-	help,
-	control: { kind: 'swatches', choices }
+	control: { kind: 'themes', choices, accentPath }
 });
 const select = (path: string, label: string, choices: Choice[], help?: string): Field => ({
 	path,
@@ -122,6 +128,17 @@ export const SETTINGS_SECTIONS: Section[] = [
 		id: 'appearance',
 		title: 'Appearance',
 		fields: [
+			themes(
+				'appearance.theme',
+				'Theme',
+				[
+					{ value: 'default', label: 'Default' },
+					{ value: 'high-contrast', label: 'High contrast' },
+					{ value: 'warm', label: 'Warm' },
+					{ value: 'compact', label: 'Compact' }
+				],
+				'appearance.accent'
+			),
 			select(
 				'appearance.mode',
 				'Light or dark',
@@ -138,14 +155,26 @@ export const SETTINGS_SECTIONS: Section[] = [
 				{ value: 'large', label: 'Large' },
 				{ value: 'larger', label: 'Larger' }
 			]),
-			swatches('appearance.accent', 'Accent colour', [
-				{ value: 'teal', label: 'Teal' },
-				{ value: 'blue', label: 'Blue' },
-				{ value: 'green', label: 'Green' },
-				{ value: 'purple', label: 'Purple' },
-				{ value: 'orange', label: 'Orange' },
-				{ value: 'red', label: 'Red' }
-			])
+			swatches(
+				'appearance.accent',
+				'Accent colour',
+				[
+					{ value: 'teal', label: 'Teal' },
+					{ value: 'blue', label: 'Blue' },
+					{ value: 'green', label: 'Green' },
+					{ value: 'purple', label: 'Purple' },
+					{ value: 'orange', label: 'Orange' },
+					{ value: 'red', label: 'Red' }
+				],
+				undefined,
+				{
+					lockedWhen: {
+						path: 'appearance.theme',
+						value: 'high-contrast',
+						note: 'High contrast keeps its own accent, so links and buttons stay at 7:1.'
+					}
+				}
+			)
 		]
 	},
 	{

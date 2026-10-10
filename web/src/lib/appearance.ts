@@ -1,4 +1,4 @@
-import type { Accent, AppearanceSettings } from '#lib/api/types.ts';
+import type { Accent, AppearanceSettings, Theme } from '#lib/api/types.ts';
 
 /** What every `--fs-*` token is multiplied by, per text size (`--text-scale` in tokens.css). */
 export const TEXT_SCALE: Record<AppearanceSettings['text_size'], number> = {
@@ -17,6 +17,7 @@ export const APPEARANCE_CACHE_KEY = 'fmd2r.appearance';
 
 /** The attributes an appearance sets on `<html>`; `theme` is `null` to follow the device. */
 interface Applied {
+	style: Theme;
 	theme: 'light' | 'dark' | null;
 	accent: Accent;
 	scale: string;
@@ -24,6 +25,7 @@ interface Applied {
 
 function attributes(appearance: AppearanceSettings): Applied {
 	return {
+		style: appearance.theme,
 		theme: appearance.mode === 'system' ? null : appearance.mode,
 		accent: appearance.accent,
 		scale: String(TEXT_SCALE[appearance.text_size])
@@ -31,12 +33,14 @@ function attributes(appearance: AppearanceSettings): Applied {
 }
 
 /**
- * Shows `appearance`: `data-theme` (none for the device's own light or dark), `data-accent` and
- * `--text-scale` on `<html>`, which tokens.css turns into the colours and font sizes.
+ * Shows `appearance`: `data-style` (the theme), `data-theme` (light or dark, none for the device's
+ * own), `data-accent` and `--text-scale` on `<html>`, which tokens.css turns into the colours, fonts
+ * and sizes.
  */
 export function applyAppearance(appearance: AppearanceSettings) {
 	const root = document.documentElement;
-	const { theme, accent, scale } = attributes(appearance);
+	const { style, theme, accent, scale } = attributes(appearance);
+	root.dataset['style'] = style;
 	if (theme) root.dataset['theme'] = theme;
 	else delete root.dataset['theme'];
 	root.dataset['accent'] = accent;
