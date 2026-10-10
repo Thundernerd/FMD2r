@@ -22,10 +22,15 @@
 	let saving = $state(false);
 	let saveError = $state<string | null>(null);
 	let current = $state<StepExports | undefined>();
+	/** The settings paths an FMD2 import during this setup changed. */
+	let fromFmd2 = $state<string[]>([]);
 
 	const step = $derived(steps[index]);
 	const last = $derived(index === steps.length - 1);
 	const ready = $derived(current?.ready?.() ?? true);
+	const startsFromFmd2 = $derived(
+		step?.paths?.some((p) => fromFmd2.some((c) => c === p || c.startsWith(`${p}.`))) ?? false
+	);
 
 	$effect(() => {
 		api
@@ -44,6 +49,23 @@
 	function message(e: unknown): string {
 		if (e instanceof ApiError && e.detail) return e.detail;
 		return e instanceof Error ? e.message : String(e);
+	}
+
+	/** The leaf paths (arrays count as leaves) where `a` and `b` differ. */
+	function changed(a: unknown, b: unknown, path = ''): string[] {
+		if (isObject(a) && isObject(b)) {
+			const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+			return [...keys].flatMap((k) => changed(a[k], b[k], path ? `${path}.${k}` : k));
+		}
+		return JSON.stringify(a) === JSON.stringify(b) ? [] : [path];
+	}
+
+	/** Reloads the settings an FMD2 import changed, noting what changed. */
+	async function imported() {
+		const before = settings;
+		const after = await api.getSettings();
+		fromFmd2 = [...new Set([...fromFmd2, ...changed(before, after)])];
+		settings = after;
 	}
 
 	function go(to: number) {
@@ -101,8 +123,11 @@
 
 		<section class="card step" aria-labelledby="setup-step-title">
 			<h2 id="setup-step-title">{step.title}</h2>
+			{#if startsFromFmd2}
+				<p class="small muted">These start from your FMD2 settings; change what you like.</p>
+			{/if}
 			{#key step.id}
-				<step.component bind:this={current} {api} {settings} finish={advance} />
+				<step.component bind:this={current} {api} {settings} finish={advance} {imported} />
 			{/key}
 			{#if saveError}
 				<p class="error" role="alert">{saveError}</p>
@@ -121,7 +146,7 @@
 				disabled={!ready || saving}
 				onclick={() => advance()}
 			>
-				{last ? 'Finish' : 'Next'}
+				{last ? 'Finish' : (current?.nextLabel?.() ?? 'Next')}
 			</button>
 		</div>
 	{/if}

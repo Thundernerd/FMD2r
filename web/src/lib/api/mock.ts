@@ -1,6 +1,6 @@
 import type { EventSourceLike } from '#lib/events.svelte.ts';
 import { createMockFavorites } from './mock-favorites';
-import { mockImportReport } from './mock-import';
+import { mockImportReport, mockImportedSettings } from './mock-import';
 import { createMockLists } from './mock-lists';
 import { createMockMetadata } from './mock-metadata';
 import { Invalid, createMockSettings } from './mock-settings';
@@ -595,7 +595,7 @@ export function createMockBackend({
 	};
 	/**
 	 * `POST /api/import`: anything starting like a zip is the mock's FMD2 userdata; an import adds
-	 * its favorite, One Piece, to the library.
+	 * its favorite, One Piece, to the library, and its settings.
 	 */
 	const importUserdata = async (req: Request, query: URLSearchParams): Promise<Response> => {
 		if (importJob.state === 'running') {
@@ -622,6 +622,7 @@ export function createMockBackend({
 		const exists = favorites.has('mangadex', '/title/op/one-piece');
 		if (!dryRun && onePiece && !exists)
 			favorites.add(onePiece, 'MangaDex', '/data/downloads/One Piece');
+		if (!dryRun) settings.patchSettings(mockImportedSettings(query.getAll('map_path')));
 		importJob.state = 'done';
 		broadcast('job.state', importJob);
 		return json(mockImportReport(dryRun, query.getAll('map_path'), exists));
