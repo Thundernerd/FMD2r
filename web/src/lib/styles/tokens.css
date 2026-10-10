@@ -2,7 +2,9 @@
  * in the app comes from here (a unit test checks it), so overriding these restyles all of it.
  *
  * Each colour is written once as `light-dark(<light>, <dark>)`; which one applies follows
- * `color-scheme`, set at the bottom of this file from the OS setting or `data-theme`. */
+ * `color-scheme`, set at the bottom of this file from the OS setting or `data-theme`. The build
+ * (lightningcss) lowers `light-dark()` to variables that only those two rules switch, so pick a mode
+ * with `data-theme`: setting `color-scheme` anywhere else won't flip these tokens. */
 :root {
 	color-scheme: light;
 
@@ -35,6 +37,10 @@
 	/* Text drawn over a cover image, and the stand-in for a missing cover. */
 	--on-cover: light-dark(#ffffff, #ffffff);
 	--on-cover-shadow: 0 1px 2px light-dark(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4));
+	/* A missing cover in a grid is a gradient on the series' own hue (`--h`), at these saturations
+	 * and lightnesses; the same in both modes. */
+	--cover-tone-top: 45% 52%;
+	--cover-tone-bottom: 50% 28%;
 	--cover-placeholder: linear-gradient(
 		160deg,
 		light-dark(#3f8f9c, #3f8f9c),

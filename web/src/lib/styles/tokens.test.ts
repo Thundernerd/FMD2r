@@ -12,7 +12,9 @@ const HARD_CODED: [string, RegExp][] = [
 	['a font size in px', /font-size\s*:\s*[\d.]+px/gi],
 	['a font shorthand with a size in px', /\bfont\s*:[^;]*?[\d.]+px/gi],
 	['a hex colour', /#[0-9a-f]{3,8}\b/gi],
-	['an rgb() colour', /\brgba?\s*\(/gi]
+	['an rgb() colour', /\brgba?\s*\(/gi],
+	// `hsl(var(--h) var(--tone))` is fine: the hue is per series, the tone a token.
+	['an hsl() colour with a literal tone', /\bhsla?\s*\((?:[^()]|\([^()]*\))*?\d%/gi]
 ];
 
 function styled(dir: string): string[] {

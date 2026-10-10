@@ -370,7 +370,11 @@
 		padding: 6px;
 		color: var(--on-cover);
 		font: 700 var(--fs-ui)/1.1 var(--f-display);
-		background: linear-gradient(160deg, hsl(var(--h) 45% 52%), hsl(calc(var(--h) + 40) 50% 28%));
+		background: linear-gradient(
+			160deg,
+			hsl(var(--h) var(--cover-tone-top)),
+			hsl(calc(var(--h) + 40) var(--cover-tone-bottom))
+		);
 		text-shadow: var(--on-cover-shadow);
 		overflow: hidden;
 	}
