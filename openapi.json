@@ -3554,12 +3554,17 @@
           "status",
           "auth",
           "loopback",
+          "in_container",
           "overridden"
         ],
         "properties": {
           "auth": {
             "type": "boolean",
             "description": "Whether the API requires the password (as a bearer token or a login session)."
+          },
+          "in_container": {
+            "type": "boolean",
+            "description": "Whether the server runs in a container (Docker or Podman), whose folders must be mounted."
           },
           "loopback": {
             "type": "boolean",

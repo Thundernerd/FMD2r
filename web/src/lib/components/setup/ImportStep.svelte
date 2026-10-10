@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { events } from '#lib/app.ts';
 	import ImportFlow, { type ImportBusy } from '#lib/components/library/ImportFlow.svelte';
 	import type { StepProps } from '#lib/setup/steps.ts';
 
-	let { api, reloadSettings }: StepProps = $props();
+	let { api, store, reloadSettings }: StepProps = $props();
 
 	let open = $state(false);
 	let running = $state<ImportBusy>(null);
@@ -23,7 +22,7 @@
 {#if open}
 	<ImportFlow
 		{api}
-		job={events.jobs['import']}
+		job={store.jobs['import']}
 		bind:busy={running}
 		onimported={async () => {
 			imported = true;

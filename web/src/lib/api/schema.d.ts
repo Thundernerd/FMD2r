@@ -1377,6 +1377,8 @@ export interface components {
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
 			auth: boolean;
+			/** @description Whether the server runs in a container (Docker or Podman), whose folders must be mounted. */
+			in_container: boolean;
 			/** @description Whether the server listens on a loopback address only. */
 			loopback: boolean;
 			/** @description Settings overridden by the command line or environment, as dotted paths (`server.bind`). */

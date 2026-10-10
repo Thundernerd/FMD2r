@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { Health } from '#lib/api/types.ts';
+	import { isOpenServer } from '#lib/session.svelte.ts';
 
 	let { health }: { health: Health | null } = $props();
 
-	/** Anyone who can reach the server can use it. */
-	const open = $derived(health !== null && !health.auth && !health.loopback);
+	const open = $derived(health !== null && isOpenServer(health));
 </script>
 
 {#if open}

@@ -4,13 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, createApi } from '#lib/api/client.ts';
 import { createMockBackend } from '#lib/api/mock.ts';
 import type { SetupStep } from '#lib/setup/steps.ts';
+import { EventStore } from '#lib/events.svelte.ts';
 import FakeStep from './FakeStep.fixture.svelte';
+import FormatStep from './FormatStep.svelte';
 import ImportStep from './ImportStep.svelte';
 import SetupWizard from './SetupWizard.svelte';
 
 const STEPS: SetupStep[] = [
 	{ id: 'import', title: 'Import from FMD2', component: ImportStep },
-	{ id: 'next', title: 'Next step', component: FakeStep, paths: ['output.format'] }
+	{ id: 'format', title: 'Download format', component: FormatStep, paths: ['output.format'] },
+	{ id: 'last', title: 'Last step', component: FakeStep }
 ];
 
 async function open(steps = STEPS) {
@@ -19,7 +22,8 @@ async function open(steps = STEPS) {
 		fetch: createMockBackend({ setUp: false }).fetch
 	});
 	const importFmd2 = vi.spyOn(api, 'importFmd2');
-	render(SetupWizard, { api, steps, onfinish: vi.fn() });
+	const store = new EventStore({ url: '/api/events', connect: () => ({}) as never });
+	render(SetupWizard, { api, store, steps, onfinish: vi.fn() });
 	await screen.findByRole('heading', { level: 2 });
 	return { api, importFmd2 };
 }
@@ -58,8 +62,8 @@ describe('the import from FMD2 step', () => {
 		expect(screen.getByText(/Coming from FMD2\? Import your library and settings/)).toBeTruthy();
 
 		await fireEvent.click(button('Skip'));
-		expect(await screen.findByText('Step 2 of 2')).toBeTruthy();
-		expect(heading()).toBe('Next step');
+		expect(await screen.findByText('Step 2 of 3')).toBeTruthy();
+		expect(heading()).toBe('Download format');
 		expect(importFmd2).not.toHaveBeenCalled();
 		expect(screen.queryByText(/from your FMD2 settings/)).toBeNull();
 	});
@@ -68,10 +72,10 @@ describe('the import from FMD2 step', () => {
 		await open();
 		await importUserdata();
 		await fireEvent.click(button('Next'));
-		await screen.findByText('Step 2 of 2');
+		await screen.findByText('Step 2 of 3');
 
 		// The mock userdata saves chapters as CBZ (`saveto/Compress` 2).
-		expect((screen.getByRole('textbox', { name: 'Format' }) as HTMLInputElement).value).toBe('cbz');
+		expect((screen.getByRole('radio', { name: /^CBZ/ }) as HTMLInputElement).checked).toBe(true);
 		expect(screen.getByText(/from your FMD2 settings/)).toBeTruthy();
 	});
 

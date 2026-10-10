@@ -2,15 +2,20 @@
 	import type { Api, MergePatch } from '#lib/api/client.ts';
 	import { ApiError } from '#lib/api/client.ts';
 	import type { Settings } from '#lib/api/types.ts';
+	import type { EventStore } from '#lib/events.svelte.ts';
 	import { getPath, isObject } from '#lib/settings/draft.svelte.ts';
 	import type { SetupStep, StepExports } from '#lib/setup/steps.ts';
 
 	let {
 		api,
-		steps,
+		store,
+		steps: allSteps,
 		onfinish
 	}: {
 		api: Api;
+		/** The server's live events, for the steps. */
+		store: EventStore;
+		/** Every step, including those this server may leave out (see `SetupStep.shows`). */
 		steps: SetupStep[];
 		/** Setup is saved and marked completed; open `to` (`/` from the last step's Finish). */
 		onfinish: (to: string) => void;
@@ -24,20 +29,25 @@
 	let current = $state<StepExports | undefined>();
 	/** The settings paths an FMD2 import during this setup changed. */
 	let fromFmd2 = $state<string[]>([]);
+	/** The steps this server needs; fixed once loaded, so finishing a step can't hide it. */
+	let steps = $state.raw<SetupStep[]>([]);
 
 	const step = $derived(steps[index]);
 	const last = $derived(index === steps.length - 1);
 	const ready = $derived(current?.ready?.() ?? true);
 	const busy = $derived(saving || (current?.busy?.() ?? false));
 	const startsFromFmd2 = $derived(step?.paths?.some((p) => fromFmd2.includes(p)) ?? false);
+	const nextLabel = $derived(current?.nextLabel?.() ?? 'Next');
 
 	$effect(() => {
-		api
-			.getSettings()
-			.then((loaded) => {
-				// Resumes where it was left; a finished setup starts over.
+		Promise.all([api.getSettings(), api.health()])
+			.then(([loaded, health]) => {
+				steps = allSteps.filter((s) => s.shows?.(health) ?? true);
+				// Resumes where it was left, or at the next step when that one no longer shows; a
+				// finished setup starts over.
+				const left = allSteps.findIndex((s) => s.id === loaded.general.setup_step);
 				index = Math.max(
-					steps.findIndex((s) => s.id === loaded.general.setup_step),
+					steps.findIndex((s) => allSteps.indexOf(s) >= left),
 					0
 				);
 				settings = loaded;
@@ -120,7 +130,14 @@
 				<p class="small muted">These start from your FMD2 settings; change what you like.</p>
 			{/if}
 			{#key step.id}
-				<step.component bind:this={current} {api} {settings} finish={advance} {reloadSettings} />
+				<step.component
+					bind:this={current}
+					{api}
+					{store}
+					{settings}
+					finish={advance}
+					{reloadSettings}
+				/>
 			{/key}
 			{#if saveError}
 				<p class="error" role="alert">{saveError}</p>
@@ -134,7 +151,7 @@
 				</button>
 			{/if}
 			<button class="btn primary" type="button" disabled={!ready || busy} onclick={() => advance()}>
-				{last ? 'Finish' : (current?.nextLabel?.() ?? 'Next')}
+				{last ? 'Finish' : nextLabel}
 			</button>
 		</div>
 	{/if}

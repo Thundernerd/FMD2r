@@ -1,3 +1,4 @@
+import type { OutputFormat } from '#lib/api/types.ts';
 import type { Choice, Control, Field } from './fields.ts';
 
 /** A group of settings: one entry in the table of contents. */
@@ -43,6 +44,33 @@ const select = (path: string, label: string, choices: Choice[], help?: string): 
 const U32_MAX = 4_294_967_295;
 const RENAME_TOKENS =
 	'Tokens: %MANGA% %CHAPTER% %NUMBERING% %WEBSITE% %AUTHOR% %ARTIST% %FILENAME%.';
+
+/** A way to save chapters (`output.format`), with what it suits, as the setup wizard shows it. */
+export interface OutputFormatChoice extends Choice {
+	value: OutputFormat;
+	description: string;
+}
+
+/** The choices of `output.format`, for Settings and the setup wizard alike. */
+export const OUTPUT_FORMATS: OutputFormatChoice[] = [
+	{
+		value: 'folder',
+		label: 'Folder of images',
+		description: 'Each chapter as a folder of image files, to browse in a file manager.'
+	},
+	{
+		value: 'zip',
+		label: 'ZIP',
+		description: 'Each chapter as one ZIP archive of its images, to store or share.'
+	},
+	{
+		value: 'cbz',
+		label: 'CBZ',
+		description: 'For comic readers such as Komga, Kavita or a tablet app.'
+	},
+	{ value: 'pdf', label: 'PDF', description: 'For anything that opens PDFs.' },
+	{ value: 'epub', label: 'EPUB', description: 'For e-readers.' }
+];
 
 /** Settings the Settings page edits in a section of their own rather than as a field. */
 export const OWN_SECTION_PATHS = ['general.selected_websites'];
@@ -155,13 +183,7 @@ export const SETTINGS_SECTIONS: Section[] = [
 		id: 'output',
 		title: 'Output',
 		fields: [
-			select('output.format', 'Save chapters as', [
-				{ value: 'folder', label: 'Folder of images' },
-				{ value: 'zip', label: 'ZIP' },
-				{ value: 'cbz', label: 'CBZ' },
-				{ value: 'pdf', label: 'PDF' },
-				{ value: 'epub', label: 'EPUB' }
-			]),
+			select('output.format', 'Save chapters as', OUTPUT_FORMATS),
 			number('output.pdf_quality', 'PDF image quality', 5, 100)
 		]
 	},
