@@ -1,10 +1,14 @@
-name: Release
-
 # On a version tag: the amd64/arm64 container image (smoke-tested, then pushed to GHCR) and a
-# Linux tarball per architecture, attached to a GitHub release with SHA-256 checksums. arm64
-# cross-compiles; only its smoke tests run under QEMU.
+# Linux tarball per architecture, attached to a GitHub release with SHA-256 checksums.
 #
-# PRs that change the release plumbing, and manual runs, are dry runs: nothing is pushed or released.
+# The image follows Docker's pattern for distributing a multi-platform build across runners: each
+# platform builds natively on its own runner (arm64 on ubuntu-24.04-arm, so no QEMU), is
+# smoke-tested, and only then pushed to GHCR by digest, untagged. The `manifest` job runs once both
+# platforms pass and tags the multi-platform manifest list built from those digests, so nothing gets
+# a tag unless both platforms passed.
+#
+# PRs that change the release plumbing, and manual runs, are dry runs: both platforms build and are
+# smoke-tested, but nothing is pushed or released.
 
 on:
   push:
@@ -29,7 +33,17 @@ env:
 
 jobs:
   image:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -38,13 +52,12 @@ jobs:
       # Cargo.toml's version on main is not bumped per release: the tag sets it.
       - name: Set the version from the tag
         run: scripts/set-version.sh "$VERSION"
+      # GHCR image names must be lowercase.
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       # Docker Hub images come through Google's mirror: Docker Hub rate-limits (429) and often fails
       # (500) requests from GitHub's runners. BuildKit falls back to Docker Hub for anything the
       # mirror lacks.
-      - uses: docker/setup-qemu-action@v4
-        with:
-          image: mirror.gcr.io/tonistiigi/binfmt:latest
-          platforms: arm64
       - uses: docker/setup-buildx-action@v4
         with:
           driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
@@ -57,53 +70,101 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # The labels go on the per-platform image; the tags go on the manifest list (`manifest` job).
       - id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}
-          # `latest` (flavor latest=auto) follows non-prerelease tags.
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-      # One image per platform, loaded and smoke-tested before anything is pushed.
-      - name: Build (amd64)
+          images: ${{ env.IMAGE }}
+      - name: Build (${{ matrix.arch }})
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          platforms: ${{ matrix.platform }}
           load: true
-          tags: fmd2r:smoke-amd64
+          tags: fmd2r:smoke-${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
           build-args: FMD2R_GIT_REVISION=${{ github.sha }}
-          cache-from: type=gha,scope=amd64
-          cache-to: type=gha,mode=max,scope=amd64
-      - name: Smoke test (amd64)
-        run: FMD2R_EXPECT_VERSION="$VERSION" scripts/docker-smoke.sh fmd2r:smoke-amd64
-      - name: Build (arm64)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          load: true
-          tags: fmd2r:smoke-arm64
-          build-args: FMD2R_GIT_REVISION=${{ github.sha }}
-          cache-from: type=gha,scope=arm64
-          cache-to: type=gha,mode=max,scope=arm64
-      - name: Smoke test (arm64, under QEMU)
-        run: FMD2R_EXPECT_VERSION="$VERSION" scripts/docker-smoke.sh fmd2r:smoke-arm64
-      # Same inputs as the builds above, so every layer comes from the cache.
-      - name: Push
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+      - name: Smoke test (${{ matrix.arch }})
+        run: FMD2R_EXPECT_VERSION="$VERSION" scripts/docker-smoke.sh fmd2r:smoke-${{ matrix.arch }}
+      # Same inputs as the build above, so every layer comes from the cache.
+      - name: Push by digest
+        id: push
         if: github.ref_type == 'tag'
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: FMD2R_GIT_REVISION=${{ github.sha }}
-          cache-from: |
-            type=gha,scope=amd64
-            type=gha,scope=arm64
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export the digest
+        if: github.ref_type == 'tag'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        if: github.ref_type == 'tag'
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Tags the multi-platform manifest list once both platforms passed their smoke tests.
+  manifest:
+    needs: image
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: digests-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        env:
+          # Annotations for the manifest list (the index) that `imagetools create` writes.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: ${{ env.IMAGE }}
+          # `latest` (flavor latest=auto) follows non-prerelease tags.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Create the manifest list
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          args=()
+          while IFS= read -r tag; do args+=(--tag "$tag"); done \
+            < <(jq -r '.tags[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          while IFS= read -r annotation; do args+=(--annotation "$annotation"); done \
+            < <(jq -r '.annotations[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          for digest in *; do args+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create "${args[@]}"
+      - name: Inspect
+        run: docker buildx imagetools inspect "$IMAGE:${{ steps.meta.outputs.version }}"
 
   # Built on the oldest supported Ubuntu runner, so the binaries need only glibc 2.35. The arm64
   # binary is cross-compiled and smoke-tested under QEMU.
@@ -160,7 +221,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [image, tarball]
+    needs: [manifest, tarball]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
