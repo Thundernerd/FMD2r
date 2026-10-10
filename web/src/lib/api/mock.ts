@@ -61,7 +61,7 @@ const seedInbox = (): InboxItem[] => [
 		id: 'list-missing',
 		kind: 'info',
 		title: 'Bato.to has no manga list yet',
-		body: 'Download the prebuilt list from FMD2-DB or build it from the website (slow).',
+		body: 'Get a ready-made list or build it from the website (slow).',
 		created_at: '2026-10-07T20:00:00Z',
 		read: true
 	}

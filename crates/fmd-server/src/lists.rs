@@ -285,7 +285,7 @@ pub(crate) async fn update(
     start(&state, module, ListJobKind::Update, ListJobs::update).await
 }
 
-/// Replace a module's list with its FMD2-DB dump (`update_lists.db_url`).
+/// Replace a module's list with its ready-made list (`update_lists.db_url`).
 #[utoipa::path(post, path = "/api/lists/{module}/import-db", tag = "lists",
     operation_id = "importListDb",
     params(("module" = String, Path, description = "Module ID")),

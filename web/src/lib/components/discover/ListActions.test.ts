@@ -35,24 +35,48 @@ function failed(reason: ListEvent['reason'], error: string): ListEvent {
 	};
 }
 
-function setup(event: ListEvent, module: ModuleSummary = MODULE) {
+function setup(event: ListEvent | undefined, module: ModuleSummary = MODULE) {
 	const store = new EventStore({ url: '/api/events', connect: () => ({}) as never });
-	store.lists[MODULE.id] = event;
+	if (event) store.lists[MODULE.id] = event;
 	const updateList = vi.fn(() => Promise.resolve());
 	const api = { updateList } as unknown as Api;
-	render(ListActions, { api, store, module, onfinished: () => {} });
-	return { updateList };
+	const { unmount } = render(ListActions, { api, store, module, onfinished: () => {} });
+	return { updateList, unmount };
 }
 
 describe('ListActions', () => {
-	it('says FMD2-DB has no list for the website and offers Update list', async () => {
+	it('offers a ready-made list when the website has none yet', () => {
+		setup(undefined);
+
+		expect(screen.getByRole('button', { name: 'Get ready-made list' })).toBeTruthy();
+		expect(document.body.textContent).toContain(
+			'No list yet. Get a ready-made one, or build it from the website (slow).'
+		);
+		expect(document.body.textContent).not.toContain('FMD2-DB');
+	});
+
+	it('names no upstream project in any failure message', () => {
+		const reasons: ListEvent['reason'][] = ['no_dump', 'unreachable', 'bad_archive', 'failed'];
+		for (const job of ['import_db', 'update'] as const) {
+			for (const reason of reasons) {
+				const { unmount } = setup({ ...failed(reason, 'details'), job });
+				const alert = screen.getByRole('alert');
+				const details = alert.querySelector('details');
+				const outside = [...alert.childNodes].filter((n) => n !== details);
+				expect(outside.map((n) => n.textContent).join('')).not.toContain('FMD2-DB');
+				unmount();
+			}
+		}
+	});
+
+	it('says there is no ready-made list for the website and offers Update list', async () => {
 		const { updateList } = setup(
 			failed('no_dump', `${MODULE.id}: downloading ${URL} failed with HTTP status 404`)
 		);
 
 		const alert = screen.getByRole('alert');
 		expect(alert.textContent).toContain(
-			'FMD2-DB has no ready-made list for MangaDex. Use Update list to build it from the website.'
+			'There is no ready-made list for MangaDex yet. Use Update list to build it from the website.'
 		);
 		const details = alert.querySelector('details');
 		expect(details?.textContent).toContain(URL);
@@ -71,16 +95,18 @@ describe('ListActions', () => {
 
 		const alert = screen.getByRole('alert');
 		expect(alert.textContent).toContain(
-			'FMD2-DB has no ready-made list for MangaDex, and this website cannot build one itself.'
+			'There is no ready-made list for MangaDex yet, and this website cannot build one itself.'
 		);
 		expect(within(alert).queryByRole('button', { name: 'Update list' })).toBeNull();
 	});
 
-	it('words an unreachable FMD2-DB plainly, details aside', () => {
+	it('words unreachable ready-made lists plainly, details aside', () => {
 		setup(failed('unreachable', `${MODULE.id}: downloading ${URL} failed with HTTP status 500`));
 
 		const alert = screen.getByRole('alert');
-		expect(alert.textContent).toContain('Could not reach FMD2-DB to get the list of MangaDex.');
+		expect(alert.textContent).toContain(
+			'Could not reach the ready-made lists to get the list of MangaDex.'
+		);
 		expect(alert.querySelector('details')?.textContent).toContain('HTTP status 500');
 	});
 });

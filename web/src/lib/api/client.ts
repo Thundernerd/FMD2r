@@ -140,7 +140,7 @@ export interface Api {
 	 * events. Rejects with status 409 when a list job of the module runs.
 	 */
 	updateList(module: string): Promise<ListJobStarted>;
-	/** Starts replacing a module's list with its FMD2-DB dump; otherwise like {@link updateList}. */
+	/** Starts replacing a module's list with its ready-made list; otherwise like {@link updateList}. */
 	importListDb(module: string): Promise<ListJobStarted>;
 	/** Stops a module's list job; rejects with status 409 when none runs. */
 	cancelListJob(module: string): Promise<void>;

@@ -367,7 +367,7 @@ async fn a_failed_import_event_carries_why_it_failed() {
     let last_error = job["last_error"].as_str().unwrap();
     assert!(
         last_error.starts_with(
-            "FMD2-DB has no ready-made list for Site. Use Update list to build it from the website."
+            "There is no ready-made list for Site yet. Use Update list to build it from the website."
         ),
         "{last_error}"
     );

@@ -6,12 +6,19 @@
 #![allow(clippy::unwrap_used)]
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use fmd_core::lists::{DbImporter, ImportError, ListFailureReason, db_url};
+use fmd_core::jobs::Job;
+use fmd_core::lists::{
+    DbImporter, ImportError, ListEvent, ListEventKind, ListFailureReason, ListJobs, ListUpdater,
+    db_url,
+};
+use fmd_core::settings::SettingsService;
 use fmd_http::{
     BoxFuture, HttpClient, TerminateToken, Transport, TransportError, WireRequest, WireResponse,
 };
-use fmd_store::{ListsDb, MangaListing, PageRequest, SearchFilters};
+use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
+use fmd_store::{AppDb, ListsDb, MangaListing, PageRequest, SearchFilters};
 
 const GOURMET: &str = "598672e8158d4fd781bea8d426534695";
 const LATIN1: &str = "201234a2c811487c8542fb7ec2c92b20";
@@ -267,4 +274,54 @@ fn an_empty_download_is_a_bad_archive() {
 
     assert_eq!(error.reason(), ListFailureReason::BadArchive, "{error:?}");
     assert_eq!(rows(&f.lists, GOURMET).len(), 1);
+}
+
+/// Runs `ListJobs::import_db` of a website that can build its own list against a 404 and
+/// returns the job's last error once it ended.
+fn failed_import_job_message(f: Fixture) -> String {
+    let lua = f._dir.path().join("lua/modules");
+    std::fs::create_dir_all(&lua).unwrap();
+    std::fs::write(
+        lua.join("Site.lua"),
+        "function Init()\n  local m = NewWebsiteModule()\n  m.ID = 'site'; m.Name = 'Site'; \
+         m.RootURL = 'https://site.test'; m.OnGetNameAndLink = 'GetNameAndLink'\nend\n",
+    )
+    .unwrap();
+    let report = ModuleRegistry::load_dir(&f._dir.path().join("lua"));
+    let module = report.registry.get("site").unwrap().clone();
+    let http = HttpClient::with_transport(f.server.clone()).unwrap();
+    let mut config = PoolConfig::new(http);
+    config.threads = 1;
+    let pool = Arc::new(WorkerPool::new(config).unwrap());
+    let db = AppDb::open(f._dir.path().join("app.db")).unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let jobs = ListJobs::new(
+        ListUpdater::new(pool, f.lists.clone()),
+        f.importer,
+        Arc::new(SettingsService::load(db).unwrap()),
+        move |id: &str| (id == "site").then(|| module.clone()),
+        move |event: ListEvent| {
+            let _ = tx.send(event.kind);
+        },
+    );
+    jobs.import_db("site").unwrap();
+    while rx.recv_timeout(Duration::from_secs(10)).unwrap() != ListEventKind::Failed {}
+    jobs.status().last_error.unwrap()
+}
+
+#[test]
+fn a_missing_dump_reads_as_no_ready_made_list_without_naming_fmd2_db() {
+    let f = fixture(404, b"Not Found".to_vec());
+
+    let last_error = failed_import_job_message(f);
+    // The details after it keep the URL, which names the upstream project.
+    let (message, _details) = last_error.split_once("\n\nDetails:").unwrap();
+
+    assert!(
+        message.starts_with(
+            "There is no ready-made list for Site yet. Use Update list to build it from the website."
+        ),
+        "{message}"
+    );
+    assert!(!message.contains("FMD2-DB"), "{message}");
 }

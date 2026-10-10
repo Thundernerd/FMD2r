@@ -209,7 +209,11 @@ export const SETTINGS_SECTIONS: Section[] = [
 			checkbox('update_lists.no_manga_info', 'Skip manga info when updating'),
 			checkbox('update_lists.remove_duplicate_local_data', 'Remove duplicate local data'),
 			number('update_lists.new_manga_days', 'Entries count as new for (days)', 1, 365),
-			text('update_lists.db_url', 'FMD2-DB URL', '<website> is replaced by the module name.')
+			text(
+				'update_lists.db_url',
+				'Ready-made lists URL',
+				'From the FMD2-DB project by default. <website> is replaced by the module ID.'
+			)
 		]
 	},
 	{

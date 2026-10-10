@@ -439,7 +439,7 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Replace a module's list with its FMD2-DB dump (`update_lists.db_url`). */
+		/** Replace a module's list with its ready-made list (`update_lists.db_url`). */
 		post: operations['importListDb'];
 		delete?: never;
 		options?: never;
@@ -2644,7 +2644,8 @@ export interface components {
 			 */
 			auto_update: boolean;
 			/**
-			 * @description FMD2-DB URL template ([`DEFAULT_DB_URL`]); `<website>` is replaced by the module ID.
+			 * @description Ready-made lists URL template, from the FMD2-DB project by default ([`DEFAULT_DB_URL`]);
+			 *     `<website>` is replaced by the module ID.
 			 * @default https://raw.githubusercontent.com/dazedcat19/FMD2-DB/master/7z/<website>.7z
 			 */
 			db_url: string;
