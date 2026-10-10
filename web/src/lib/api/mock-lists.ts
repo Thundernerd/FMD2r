@@ -68,7 +68,8 @@ function title(module: string, i: number): ListItem {
 		numchapter: 1 + (seed % 200),
 		added_jdn: TODAY_JDN - (i % 40),
 		format: pick(FORMATS, i),
-		publication: pick(PUBLICATIONS, i * 5 + 1)
+		publication: pick(PUBLICATIONS, i * 5 + 1),
+		cover_url: `/api/covers/series?${new URLSearchParams({ module, link: `/manga/${module}-${i}` })}`
 	};
 }
 

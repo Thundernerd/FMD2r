@@ -134,6 +134,8 @@ pub(crate) async fn get(
     ApiQuery(query): ApiQuery<SeriesQuery>,
 ) -> Result<Json<SeriesInfo>, ApiError> {
     let info = fetch_info(&state, &query.module, &query.link).await?;
+    crate::covers::series::store_learned(&state, &query.module, &query.link, &info.cover_link)
+        .await;
     // FMD2 looks up the downloaded chapters by the link the module reports
     // (mangadownloader/forms/frmMain.pas:2207).
     let mangabaka = mangabaka_metadata(&state, &query.module, [&query.link, &info.link]).await;

@@ -24,6 +24,11 @@ Settings → "MangaBaka database" downloads a local copy of
 Discover its format and publication facets and the series page a description when the website
 has none. Nothing is downloaded until you ask, and no title leaves the server.
 
+Discover's cards show the matched series' cover thumbnails from MangaBaka's CDN. A title without
+a match gets its cover from its website's info page instead, looked up once per
+`covers.revalidate_after_hours` and a few at a time per website. "Load manga covers" off shows
+placeholders only.
+
 MangaBaka's data is under its [data licence](https://mangabaka.org/about/data-license)
 (CC BY-NC-SA 4.0); fields it takes from AniList, MyAnimeList, MangaUpdates and other providers
 keep those providers' terms. FMD2r ships none of it: each install downloads its own.

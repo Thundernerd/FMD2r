@@ -117,6 +117,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(about::about))
         .routes(routes!(import::import))
         .routes(routes!(covers::get))
+        .routes(routes!(covers::series::get))
         .routes(routes!(settings::get, settings::patch))
         .routes(routes!(settings::patch_all))
         .routes(routes!(settings::preview_rename))
