@@ -80,6 +80,17 @@
 		</div>
 	{/each}
 </dl>
+<p>
+	Discover lists a website once its list is fetched: pick it in
+	<a
+		href="/discover"
+		onclick={(e) => {
+			e.preventDefault();
+			finish('/discover');
+		}}>Discover</a
+	>
+	and press “Get ready-made list”, or “Update list” to build it from the website.
+</p>
 <p class="small muted">Finish opens your library.</p>
 
 <style>

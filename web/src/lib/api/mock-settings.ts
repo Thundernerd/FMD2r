@@ -433,9 +433,9 @@ function load(setUp: boolean): Stored {
 		// No storage (tests, private mode): start from the defaults.
 	}
 	// Like an install upgraded to website selection: every module is selected, so Discover lists
-	// them all.
+	// them all. A fresh install selects none, as the server's defaults do.
 	const settings = defaultSettings();
-	settings.general.selected_websites = [...new Set(MODULES.map((m) => m.summary.id))];
+	if (setUp) settings.general.selected_websites = [...new Set(MODULES.map((m) => m.summary.id))];
 	settings.general.setup_completed = setUp;
 	return { settings, modules: {} };
 }
