@@ -119,7 +119,7 @@
 		background: var(--warn);
 		color: var(--surface);
 		border-radius: var(--r-pill);
-		font-size: 10.5px;
+		font-size: var(--fs-xs);
 		padding: 1px 6px;
 	}
 	.pop {

@@ -70,7 +70,7 @@
 	}
 	.brand {
 		margin: 0;
-		font: 800 20px var(--f-display);
+		font: 800 var(--fs-title) var(--f-display);
 		letter-spacing: -0.02em;
 	}
 	.title {

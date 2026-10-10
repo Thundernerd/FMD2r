@@ -435,7 +435,7 @@
 	}
 	.search {
 		flex: 1;
-		font-size: 15px;
+		font-size: var(--fs-search);
 		padding: 8px 12px;
 	}
 	.grid {
@@ -455,7 +455,7 @@
 	}
 	.t {
 		font-weight: 600;
-		font-size: 13.5px;
+		font-size: var(--fs-card);
 		line-height: 1.25;
 	}
 	.more {
@@ -504,7 +504,7 @@
 			inset: 0;
 			z-index: 44;
 			border: 0;
-			background: rgba(5, 15, 18, 0.45);
+			background: var(--scrim);
 		}
 		.grid {
 			grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));

@@ -296,7 +296,7 @@
 	}
 	.search {
 		flex: 1 1 240px;
-		font-size: 15px;
+		font-size: var(--fs-search);
 		padding: 8px 12px;
 	}
 	.sort {
@@ -368,10 +368,14 @@
 		display: flex;
 		align-items: flex-end;
 		padding: 6px;
-		color: #fff;
-		font: 700 13px/1.1 var(--f-display);
-		background: linear-gradient(160deg, hsl(var(--h) 45% 52%), hsl(calc(var(--h) + 40) 50% 28%));
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+		color: var(--on-cover);
+		font: 700 var(--fs-ui)/1.1 var(--f-display);
+		background: linear-gradient(
+			160deg,
+			hsl(var(--h) var(--cover-tone-top)),
+			hsl(calc(var(--h) + 40) var(--cover-tone-bottom))
+		);
+		text-shadow: var(--on-cover-shadow);
 		overflow: hidden;
 	}
 	.badge {
@@ -388,7 +392,7 @@
 	}
 	.t {
 		font-weight: 600;
-		font-size: 13.5px;
+		font-size: var(--fs-card);
 		line-height: 1.25;
 	}
 	.empty,
