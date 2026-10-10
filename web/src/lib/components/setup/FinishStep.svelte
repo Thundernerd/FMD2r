@@ -3,7 +3,7 @@
 	import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 	import type { StepProps } from '#lib/setup/steps.ts';
 
-	let { api, settings }: StepProps = $props();
+	let { api, settings, finish }: StepProps = $props();
 
 	let mangabaka = $state<MangaBakaStatus | null>(null);
 	$effect(() => {
@@ -66,8 +66,15 @@
 			<dt>{choice.label}</dt>
 			<dd>
 				<span>{choice.value}</span>
-				<a class="small" href={choice.href} aria-label="Change {choice.label} in Settings"
-					>Change in Settings</a
+				<!-- Finishes first, or the unfinished setup would lead straight back here. -->
+				<a
+					class="small"
+					href={choice.href}
+					aria-label="Change {choice.label} in Settings"
+					onclick={(e) => {
+						e.preventDefault();
+						finish(choice.href);
+					}}>Change in Settings</a
 				>
 			</dd>
 		</div>

@@ -160,32 +160,16 @@ impl SettingsService {
     /// module that has a list, so an upgraded install's Discover page keeps its websites.
     /// Blocking.
     pub fn select_listed_websites(&self, lists: &ListsDb) -> Result<(), SettingsError> {
-        let _guard = self.write.lock().unwrap_or_else(|e| e.into_inner());
-        let repo = self.db.settings();
-        let mut stored = repo.get::<Value>("general")?.unwrap_or_default();
-        if stored.get("selected_websites").is_some() {
-            return Ok(());
-        }
-        let listed: Vec<String> = lists
-            .masterlist()
-            .summaries()?
-            .into_iter()
-            .filter(|summary| summary.count > 0)
-            .map(|summary| summary.module_id)
-            .collect();
-        // Stored even when empty, so later starts know this one ran.
-        merge(
-            &mut stored,
-            serde_json::json!({ "selected_websites": listed }),
-        );
-        repo.set("general", &stored)?;
-        let current = self.get();
-        if current.general.selected_websites != listed {
-            let mut next = (*current).clone();
-            next.general.selected_websites = listed;
-            self.tx.send_replace(Arc::new(next));
-        }
-        Ok(())
+        self.decide_on_first_start("selected_websites", || {
+            let listed: Vec<String> = lists
+                .masterlist()
+                .summaries()?
+                .into_iter()
+                .filter(|summary| summary.count > 0)
+                .map(|summary| summary.module_id)
+                .collect();
+            Ok(Value::from(listed))
+        })
     }
 
     /// On the first start with `general.setup_completed` (none stored yet), marks an install
@@ -193,26 +177,30 @@ impl SettingsService {
     /// a fresh install shows the setup wizard. Run it before anything else stores settings.
     /// Blocking.
     pub fn mark_existing_install_set_up(&self, lists: &ListsDb) -> Result<(), SettingsError> {
+        self.decide_on_first_start("setup_completed", || Ok(Value::Bool(self.has_data(lists)?)))
+    }
+
+    /// Stores `general.<key>` as `decide` gives it, unless it is stored already.
+    fn decide_on_first_start(
+        &self,
+        key: &str,
+        decide: impl FnOnce() -> Result<Value, SettingsError>,
+    ) -> Result<(), SettingsError> {
         let _guard = self.write.lock().unwrap_or_else(|e| e.into_inner());
         let repo = self.db.settings();
-        let stored_general = repo.get::<Value>("general")?;
-        if stored_general
-            .as_ref()
-            .is_some_and(|general| general.get("setup_completed").is_some())
-        {
+        let mut stored = repo.get::<Value>("general")?.unwrap_or_default();
+        if stored.get(key).is_some() {
             return Ok(());
         }
-        let completed = self.has_data(lists)?;
-        let mut stored = stored_general.unwrap_or_default();
-        merge(
-            &mut stored,
-            serde_json::json!({ "setup_completed": completed }),
-        );
+        let value = decide()?;
+        // Stored even when it is the default, so later starts know this one ran.
+        merge(&mut stored, serde_json::json!({ key: value.clone() }));
         repo.set("general", &stored)?;
         let current = self.get();
-        if current.general.setup_completed != completed {
-            let mut next = (*current).clone();
-            next.general.setup_completed = completed;
+        let mut tree = serde_json::to_value(&*current)?;
+        merge(&mut tree, serde_json::json!({ "general": { key: value } }));
+        let next = Settings::deserialize(&tree)?;
+        if next != *current {
             self.tx.send_replace(Arc::new(next));
         }
         Ok(())
@@ -324,20 +312,18 @@ impl SettingsService {
                 continue;
             }
             let mut stored = repo.get::<Value>(&key)?.unwrap_or(Value::Null);
-            let unselected = key == "general" && stored.get("selected_websites").is_none();
-            let undecided = key == "general" && stored.get("setup_completed").is_none();
+            let undecided: Vec<&str> = FIRST_START_KEYS
+                .iter()
+                .filter(|(field, _)| key == "general" && stored.get(*field).is_none())
+                .map(|(field, _)| *field)
+                .collect();
             merge(&mut stored, group);
+            // A default nobody chose stays unstored, so the first start still decides it.
             if let Value::Object(fields) = &mut stored {
-                // An empty selection nobody chose stays unstored, so the upgrade still selects
-                // the listed websites ([`Self::select_listed_websites`]).
-                if unselected && fields.get("selected_websites") == Some(&Value::Array(Vec::new()))
-                {
-                    fields.remove("selected_websites");
-                }
-                // Likewise an unfinished setup nobody set, so the first start still decides it
-                // ([`Self::mark_existing_install_set_up`]).
-                if undecided && fields.get("setup_completed") == Some(&Value::Bool(false)) {
-                    fields.remove("setup_completed");
+                for (field, unchosen) in FIRST_START_KEYS {
+                    if undecided.contains(&field) && fields.get(field).is_some_and(unchosen) {
+                        fields.remove(field);
+                    }
                 }
             }
             seal_group(self.db.cipher(), &key, &mut stored)?;
@@ -346,6 +332,19 @@ impl SettingsService {
         Ok(changed)
     }
 }
+
+/// Whether a value is the default nobody chose.
+type Unchosen = fn(&Value) -> bool;
+
+/// The `general` settings the first start decides, each with a test for the default that stays
+/// unstored until then: [`SettingsService::select_listed_websites`] and
+/// [`SettingsService::mark_existing_install_set_up`].
+const FIRST_START_KEYS: [(&str, Unchosen); 2] = [
+    ("selected_websites", |v| {
+        v.as_array().is_some_and(Vec::is_empty)
+    }),
+    ("setup_completed", |v| v == &Value::Bool(false)),
+];
 
 /// Turns the download folder a build before destinations stored (`default_dir`) into the
 /// default destination, named [`DEFAULT_DESTINATION_NAME`]; `false` when `saveto` has

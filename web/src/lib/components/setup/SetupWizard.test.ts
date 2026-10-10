@@ -52,7 +52,7 @@ describe('the setup wizard', () => {
 		await screen.findByText('Step 2 of 2');
 
 		await fireEvent.click(button('Finish'));
-		await vi.waitFor(() => expect(onfinish).toHaveBeenCalledOnce());
+		await vi.waitFor(() => expect(onfinish).toHaveBeenCalledWith('/'));
 		expect((await api.getSettings()).general.setup_completed).toBe(true);
 	});
 
@@ -93,11 +93,24 @@ describe('the setup wizard', () => {
 		);
 	});
 
-	it('starts over when run again after finishing', async () => {
+	it('starts at the first step again once finished', async () => {
 		const api = freshApi();
-		await api.patchSettings({ general: { setup_completed: true, setup_step: 'second' } });
+		await api.patchSettings({ general: { setup_completed: true, setup_step: '' } });
 
 		await open(api);
 		expect(heading()).toBe('First');
+	});
+
+	it('lets a step save and finish the setup, opening another page', async () => {
+		const { api, onfinish } = await open();
+		await fireEvent.input(screen.getByRole('textbox', { name: 'Language' }), {
+			target: { value: 'nl' }
+		});
+		await fireEvent.click(button('Finish here'));
+
+		await vi.waitFor(() => expect(onfinish).toHaveBeenCalledWith('/settings#section-general'));
+		const settings = await api.getSettings();
+		expect(settings.general.setup_completed).toBe(true);
+		expect(settings.general.language).toBe('nl');
 	});
 });

@@ -243,6 +243,13 @@
 	function onBeforeUnload(event: BeforeUnloadEvent) {
 		if (dirty) event.preventDefault();
 	}
+
+	/** Opens the setup at its first step; it doesn't redirect other pages, as it was finished. */
+	async function runSetupAgain() {
+		// Where a run left off before is stale now.
+		await api.patchSettings({ general: { setup_step: '' } }).catch(() => {});
+		await goto('/setup');
+	}
 </script>
 
 <svelte:head><title>Settings · FMD2r</title></svelte:head>
@@ -328,10 +335,14 @@
 						{/if}
 						{#if section.id === 'general'}
 							<p class="setup-again">
-								<button class="btn" type="button" onclick={() => goto('/setup')}>
+								<button class="btn" type="button" disabled={dirty} onclick={runSetupAgain}>
 									Run setup again
 								</button>
-								<span class="small muted">Goes through the setup with the current values.</span>
+								<span class="small muted">
+									{dirty
+										? 'Save or discard your changes first.'
+										: 'Goes through the setup with the current values.'}
+								</span>
 							</p>
 						{/if}
 						{#if section.id === 'saveto'}

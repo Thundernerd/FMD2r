@@ -5,9 +5,9 @@
 	import { setup } from '#lib/setup/status.svelte.ts';
 	import { SETUP_STEPS } from '#lib/setup/wizard.ts';
 
-	function finish() {
+	function finish(to: string) {
 		setup.completed = true;
-		goto('/');
+		goto(to);
 	}
 </script>
 

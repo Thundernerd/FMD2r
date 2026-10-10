@@ -2,6 +2,7 @@
 	import type { Api, MergePatch } from '#lib/api/client.ts';
 	import { ApiError } from '#lib/api/client.ts';
 	import type { Settings } from '#lib/api/types.ts';
+	import { isObject } from '#lib/settings/draft.svelte.ts';
 	import type { SetupStep, StepExports } from '#lib/setup/steps.ts';
 
 	let {
@@ -11,8 +12,8 @@
 	}: {
 		api: Api;
 		steps: SetupStep[];
-		/** The last step was saved and setup is marked completed. */
-		onfinish: () => void;
+		/** Setup is saved and marked completed; open `to` (`/` from the last step's Finish). */
+		onfinish: (to: string) => void;
 	} = $props();
 
 	let settings = $state<Settings | null>(null);
@@ -30,11 +31,11 @@
 		api
 			.getSettings()
 			.then((loaded) => {
-				// A setup run again starts over; an unfinished one resumes where it was left.
-				const resume = loaded.general.setup_completed
-					? 0
-					: steps.findIndex((s) => s.id === loaded.general.setup_step);
-				index = Math.max(resume, 0);
+				// Resumes where it was left; a finished setup starts over.
+				index = Math.max(
+					steps.findIndex((s) => s.id === loaded.general.setup_step),
+					0
+				);
 				settings = loaded;
 			})
 			.catch((e: unknown) => (loadError = message(e)));
@@ -51,25 +52,26 @@
 	}
 
 	/** `patch` with `general` merged with the wizard's own fields. */
-	function withGeneral(patch: MergePatch | void, general: Record<string, unknown>): MergePatch {
-		const base = (patch ?? {}) as Record<string, unknown>;
-		const own = (base['general'] ?? {}) as Record<string, unknown>;
-		return { ...base, general: { ...own, ...general } } as MergePatch;
+	function withGeneral(patch: MergePatch | void, general: MergePatch): MergePatch {
+		const base = patch ?? {};
+		const own = isObject(base['general']) ? base['general'] : {};
+		return { ...base, general: { ...own, ...general } };
 	}
 
-	async function advance() {
+	/** Saves the step, then moves to the next one, or with `to` finishes and opens that. */
+	async function advance(to?: string) {
 		saving = true;
 		saveError = null;
 		try {
 			const patch = await current?.save?.();
-			const next = steps[index + 1];
+			const next = to === undefined ? steps[index + 1] : undefined;
 			settings = await api.patchSettings(
 				next
 					? withGeneral(patch, { setup_step: next.id })
 					: withGeneral(patch, { setup_completed: true, setup_step: '' })
 			);
 			if (next) go(index + 1);
-			else onfinish();
+			else onfinish(to ?? '/');
 		} catch (e) {
 			saveError = message(e);
 		} finally {
@@ -100,7 +102,7 @@
 		<section class="card step" aria-labelledby="setup-step-title">
 			<h2 id="setup-step-title">{step.title}</h2>
 			{#key step.id}
-				<step.component bind:this={current} {api} {settings} />
+				<step.component bind:this={current} {api} {settings} finish={advance} />
 			{/key}
 			{#if saveError}
 				<p class="error" role="alert">{saveError}</p>
@@ -113,7 +115,12 @@
 					Back
 				</button>
 			{/if}
-			<button class="btn primary" type="button" disabled={!ready || saving} onclick={advance}>
+			<button
+				class="btn primary"
+				type="button"
+				disabled={!ready || saving}
+				onclick={() => advance()}
+			>
 				{last ? 'Finish' : 'Next'}
 			</button>
 		</div>

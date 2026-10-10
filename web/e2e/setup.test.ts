@@ -59,3 +59,15 @@ test('setup can be run again from Settings without redirecting other pages', asy
 	await expect(page).toHaveURL(/\/discover$/);
 	await expect(wizard(page)).toHaveCount(0);
 });
+
+test("the finish step's links to Settings finish the setup first", async ({ page }) => {
+	await freshInstall(page);
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('link', { name: 'Change Download format in Settings' }).click();
+
+	await expect(page).toHaveURL(/\/settings#section-output$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Output' })).toBeVisible();
+	await page.goto('/');
+	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+});

@@ -7,6 +7,8 @@ export interface StepProps {
 	api: Api;
 	/** The settings as saved so far, including the earlier steps' choices. */
 	settings: Settings;
+	/** Saves the step and finishes the setup, then opens `to`, e.g. a Settings section. */
+	finish: (to: string) => Promise<void>;
 }
 
 /** What a step's component may export. */
