@@ -333,6 +333,8 @@ export interface MockOptions {
 	 * Defaults to true unless `sessionStorage['fmd2r.mock.fresh-install']` is set.
 	 */
 	setUp?: boolean;
+	/** Whether the server says it runs in a container, like the Docker image. */
+	inContainer?: boolean;
 }
 
 const PASSWORD_KEY = 'fmd2r.mock.password';
@@ -365,7 +367,8 @@ export function createMockBackend({
 	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0),
 	moduleSettingsDelayMs = Number(stored(MODULE_SETTINGS_DELAY_KEY) ?? 0),
 	mangabaka = false,
-	setUp = stored(FRESH_INSTALL_KEY) === null
+	setUp = stored(FRESH_INSTALL_KEY) === null,
+	inContainer = false
 }: MockOptions = {}): MockBackend {
 	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
 	let loggedIn = stored(SESSION_KEY) !== null;
@@ -632,7 +635,13 @@ export function createMockBackend({
 		const route = `${req.method} ${pathname}`;
 
 		if (route === 'GET /api/health')
-			return json({ status: 'ok', auth: password !== null, loopback: true, overridden: [] });
+			return json({
+				status: 'ok',
+				auth: password !== null,
+				loopback: true,
+				in_container: inContainer,
+				overridden: []
+			});
 		if (route === 'POST /api/login') {
 			const body = (await req.json()) as { password?: unknown } | null;
 			if (password !== null && body?.password !== password) {

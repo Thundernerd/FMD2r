@@ -434,8 +434,10 @@ export function createApi({
 			return unwrap('mangabakaStatus', await client.GET('/api/metadata/mangabaka'));
 		},
 		async downloadMangabaka() {
-			const { response } = await client.POST('/api/metadata/mangabaka/download');
-			if (!response.ok) throw new ApiError(response.status, 'downloadMangabaka');
+			const { response, error } = await client.POST('/api/metadata/mangabaka/download');
+			if (!response.ok) {
+				throw new ApiError(response.status, 'downloadMangabaka', error?.detail ?? null);
+			}
 		},
 		async cancelMangabaka() {
 			const { response } = await client.POST('/api/metadata/mangabaka/cancel');

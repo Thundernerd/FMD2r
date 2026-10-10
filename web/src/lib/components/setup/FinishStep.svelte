@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { MangaBakaStatus } from '#lib/api/types.ts';
-	import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
+	import { OUTPUT_FORMATS } from '#lib/settings/sections.ts';
 	import type { StepProps } from '#lib/setup/steps.ts';
 
 	let { api, settings, finish }: StepProps = $props();
@@ -14,16 +14,9 @@
 	});
 
 	/** The label Settings shows for the output format. */
-	const formatLabel = $derived.by(() => {
-		const control = SETTINGS_SECTIONS.flatMap((s) => s.fields).find(
-			(f) => f.path === 'output.format'
-		)?.control;
-		const choice =
-			control?.kind === 'select'
-				? control.choices.find((c) => c.value === settings.output.format)
-				: undefined;
-		return choice?.label ?? settings.output.format;
-	});
+	const formatLabel = $derived(
+		OUTPUT_FORMATS.find((c) => c.value === settings.output.format)?.label ?? settings.output.format
+	);
 
 	const folders = $derived(
 		settings.saveto.destinations.map((d) => `${d.name} (${d.path})${d.default ? ', default' : ''}`)
@@ -52,7 +45,7 @@
 			value: mangabaka?.downloaded
 				? 'Downloaded'
 				: mangabaka?.running
-					? 'Downloading'
+					? 'Still downloading; Settings shows its progress'
 					: 'Not downloaded',
 			href: '/settings#section-metadata'
 		}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { api } from '#lib/app.ts';
+	import { api, events } from '#lib/app.ts';
 	import SetupWizard from '#lib/components/setup/SetupWizard.svelte';
 	import { setup } from '#lib/setup/status.svelte.ts';
 	import { SETUP_STEPS } from '#lib/setup/wizard.ts';
@@ -15,7 +15,7 @@
 
 <div class="page setup">
 	<h1>Set up FMD2r</h1>
-	<SetupWizard {api} steps={SETUP_STEPS} onfinish={finish} />
+	<SetupWizard {api} store={events} steps={SETUP_STEPS} onfinish={finish} />
 </div>
 
 <style>

@@ -15,6 +15,8 @@ pub(crate) struct Health {
     auth: bool,
     /// Whether the server listens on a loopback address only.
     loopback: bool,
+    /// Whether the server runs in a container (Docker or Podman), whose folders must be mounted.
+    in_container: bool,
     /// Settings overridden by the command line or environment, as dotted paths (`server.bind`).
     overridden: Vec<&'static str>,
 }
@@ -26,6 +28,7 @@ pub(crate) async fn health(State(state): State<AppState>) -> Json<Health> {
         status: "ok",
         auth: state.secret().is_some(),
         loopback: state.listen_addr.is_none_or(|a| a.ip().is_loopback()),
+        in_container: in_container(),
         overridden: state
             .overridden
             .iter()
@@ -33,4 +36,11 @@ pub(crate) async fn health(State(state): State<AppState>) -> Json<Health> {
             .chain(state.auth.is_fixed().then_some("server.auth_token"))
             .collect(),
     })
+}
+
+/// Docker creates `/.dockerenv` in every container, Podman `/run/.containerenv`.
+fn in_container() -> bool {
+    ["/.dockerenv", "/run/.containerenv"]
+        .iter()
+        .any(|p| std::path::Path::new(p).exists())
 }
