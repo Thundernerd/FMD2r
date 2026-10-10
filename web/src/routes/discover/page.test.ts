@@ -1,28 +1,20 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/app.ts';
 import Discover from './+page.svelte';
 
 /** Set to answer that this server has no MangaBaka database at all. */
-const mangabaka = vi.hoisted(() => ({ unavailable: false, answered: false }));
+const mangabaka = vi.hoisted(() => ({ unavailable: false }));
 
 // The page talks to the mock backend; no list job runs, so it needs no event store.
 vi.mock('#lib/app.ts', async () => {
 	const { createApi } = await import('#lib/api/client.ts');
 	const { createMockBackend } = await import('#lib/api/mock.ts');
 	const backend = createMockBackend().fetch;
-	const fetch: typeof backend = async (input) => {
-		const response = await backend(input);
-		if (!mangabaka.unavailable || !input.url.endsWith('/api/metadata/mangabaka')) {
-			return response;
-		}
-		mangabaka.answered = true;
-		const status = { ...(await response.json()), available: false };
-		return new Response(JSON.stringify(status), {
-			headers: { 'content-type': 'application/json' }
-		});
-	};
+	const unavailable = createMockBackend({ mangabakaAvailable: false }).fetch;
+	const fetch = (input: Request) => (mangabaka.unavailable ? unavailable : backend)(input);
 	return { api: createApi({ baseUrl: 'http://fmd2r.test', fetch }), events: {} };
 });
 
@@ -42,9 +34,8 @@ class OnScreen {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
-	localStorage.clear();
+	vi.restoreAllMocks();
 	mangabaka.unavailable = false;
-	mangabaka.answered = false;
 });
 
 describe('Discover', () => {
@@ -99,17 +90,18 @@ describe('Discover', () => {
 
 		const website = await screen.findByRole('group', { name: 'Website filters' });
 		expect(within(website).getByText('From each website’s list.')).toBeTruthy();
-		within(website).getByRole('combobox', { name: 'Status' });
-		await waitFor(() => within(website).getByRole('group', { name: 'Genres' }));
+		expect(within(website).getByRole('combobox', { name: 'Status' })).toBeTruthy();
+		expect(await within(website).findByRole('group', { name: 'Genres' })).toBeTruthy();
 	});
 
 	it('says how to get the metadata filters while MangaBaka is not downloaded', async () => {
-		localStorage.setItem('fmd2r.discover.mangabaka-hint-dismissed', '1');
 		await api.patchSettings({ general: { selected_websites: ['webtoons'] } });
 		render(Discover);
 
-		const metadata = await screen.findByRole('group', { name: 'Metadata filters' });
+		const hint = await screen.findByRole('note');
+		await fireEvent.click(within(hint).getByRole('button', { name: 'Dismiss' }));
 		expect(screen.queryByRole('note')).toBeNull();
+		const metadata = screen.getByRole('group', { name: 'Metadata filters' });
 		expect(metadata.textContent?.replace(/\s+/g, ' ')).toContain(
 			'Download the MangaBaka database to filter by format and publication.'
 		);
@@ -121,11 +113,13 @@ describe('Discover', () => {
 	it('leaves out the metadata filters when MangaBaka is unavailable', async () => {
 		mangabaka.unavailable = true;
 		await api.patchSettings({ general: { selected_websites: ['webtoons'] } });
+		const asked = vi.spyOn(api, 'mangabakaStatus');
 		render(Discover);
 
 		await screen.findByRole('group', { name: 'Website filters' });
-		await waitFor(() => expect(mangabaka.answered).toBe(true));
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await waitFor(() => expect(asked).toHaveBeenCalled());
+		expect((await asked.mock.results[0]?.value)?.available).toBe(false);
+		await tick();
 		expect(screen.queryByRole('group', { name: 'Metadata filters' })).toBeNull();
 	});
 });

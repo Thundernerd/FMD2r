@@ -24,8 +24,11 @@ export interface MockMetadata {
 	tick(emit: (event: MetadataEvent) => void): void;
 }
 
-/** @param downloaded Whether a database is downloaded at first. */
-export function createMockMetadata(downloaded = false): MockMetadata {
+/**
+ * @param downloaded Whether a database is downloaded at first.
+ * @param available Whether the server can use MangaBaka at all.
+ */
+export function createMockMetadata(downloaded = false, available = true): MockMetadata {
 	let builtAt: string | null = downloaded ? '2026-10-08T22:42:02Z' : null;
 	let job: { step: number; cancelled: boolean } | null = null;
 	let last: MetadataEvent | null = null;
@@ -41,7 +44,7 @@ export function createMockMetadata(downloaded = false): MockMetadata {
 
 	return {
 		status: () => ({
-			available: true,
+			available,
 			downloaded: builtAt !== null,
 			built_at: builtAt,
 			bytes: builtAt ? DB_BYTES : null,

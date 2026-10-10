@@ -34,8 +34,8 @@ describe('Discover with the MangaBaka database', () => {
 
 		const metadata = await screen.findByRole('group', { name: 'Metadata filters' });
 		expect(within(metadata).getByText('From MangaBaka.')).toBeTruthy();
-		await within(metadata).findByRole('combobox', { name: 'Format' });
-		within(metadata).getByRole('combobox', { name: 'Publication' });
+		expect(await within(metadata).findByRole('combobox', { name: 'Format' })).toBeTruthy();
+		expect(within(metadata).getByRole('combobox', { name: 'Publication' })).toBeTruthy();
 		expect(within(metadata).queryByRole('link')).toBeNull();
 		const website = screen.getByRole('group', { name: 'Website filters' });
 		expect(within(website).queryByRole('combobox', { name: 'Format' })).toBeNull();

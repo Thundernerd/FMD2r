@@ -218,7 +218,7 @@
 				<fieldset class="group">
 					<legend class="group-head">Website filters</legend>
 					<p class="small muted">From each website’s list.</p>
-					<div class="status">
+					<div class="field">
 						<label class="label" for="status">Status</label>
 						<select id="status" class="input" bind:value={status}>
 							<option value="">Any</option>
@@ -235,7 +235,7 @@
 						<legend class="group-head">Metadata filters</legend>
 						<p class="small muted">From MangaBaka.</p>
 						{#if mangabaka.downloaded}
-							<div class="status">
+							<div class="field">
 								<label class="label" for="format">Format</label>
 								<select id="format" class="input" bind:value={format}>
 									<option value="">Any</option>
@@ -244,7 +244,7 @@
 									{/each}
 								</select>
 							</div>
-							<div class="status">
+							<div class="field">
 								<label class="label" for="publication">Publication</label>
 								<select id="publication" class="input" bind:value={publication}>
 									<option value="">Any</option>
@@ -364,7 +364,7 @@
 		padding: 0;
 		font-weight: 600;
 	}
-	.status {
+	.field {
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-2);
