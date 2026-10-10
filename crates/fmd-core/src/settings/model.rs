@@ -14,6 +14,7 @@ use utoipa::ToSchema;
 #[serde(default)]
 pub struct Settings {
     pub general: GeneralSettings,
+    pub appearance: AppearanceSettings,
     pub connections: ConnectionSettings,
     pub saveto: SaveToSettings,
     pub output: OutputSettings,
@@ -72,6 +73,55 @@ impl Default for GeneralSettings {
             setup_step: String::new(),
         }
     }
+}
+
+/// How the web UI looks, the same on every device (T89). No FMD2 counterpart: FMD2 follows the
+/// Windows theme.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct AppearanceSettings {
+    /// Light or dark; `system` follows the device's `prefers-color-scheme`.
+    pub mode: ThemeMode,
+    /// The text size; every font size is scaled by it.
+    pub text_size: TextSize,
+    /// The accent colour, one of a fixed set of swatches.
+    pub accent: Accent,
+}
+
+/// Light or dark.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    /// Follow the device's light or dark preference.
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+/// The text size: 0.9, 1, 1.15 or 1.3 times the normal font sizes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum TextSize {
+    Small,
+    #[default]
+    Normal,
+    Large,
+    Larger,
+}
+
+/// The accent swatches. Each has a light and a dark value chosen for at least 4.5:1 contrast of
+/// links and of text on the accent (`web/src/lib/styles/tokens.css`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Accent {
+    #[default]
+    Teal,
+    Blue,
+    Green,
+    Purple,
+    Orange,
+    Red,
 }
 
 /// User agent FMD2 sends when none is configured (`UserAgentDefault`,

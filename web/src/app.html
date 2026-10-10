@@ -5,6 +5,24 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<title>FMD2r</title>
+		<script>
+			// The appearance last applied (`adoptAppearance` in src/lib/appearance.ts, which writes this
+			// cache; keep the two in step), before the first paint: the settings
+			// only answer after the page renders, which would flash the default look first.
+			try {
+				const cached = JSON.parse(localStorage.getItem('fmd2r.appearance') || 'null');
+				if (cached) {
+					const root = document.documentElement;
+					if (cached.theme === 'light' || cached.theme === 'dark')
+						root.dataset.theme = cached.theme;
+					if (typeof cached.accent === 'string') root.dataset.accent = cached.accent;
+					if (typeof cached.scale === 'string')
+						root.style.setProperty('--text-scale', cached.scale);
+				}
+			} catch {
+				// Blocked storage or a damaged entry: the default look until the settings answer.
+			}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

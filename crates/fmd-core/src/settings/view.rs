@@ -6,9 +6,10 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 use super::model::{
-    ConnectionSettings, CoverSettings, FavoriteSettings, GeneralSettings, ImageSettings,
-    LogSettings, MetadataSettings, ModuleUpdaterSettings, OutputSettings, ProxySettings, ProxyType,
-    SaveToSettings, ServerSettings, Settings, UpdateListSettings, XPathSettings,
+    AppearanceSettings, ConnectionSettings, CoverSettings, FavoriteSettings, GeneralSettings,
+    ImageSettings, LogSettings, MetadataSettings, ModuleUpdaterSettings, OutputSettings,
+    ProxySettings, ProxyType, SaveToSettings, ServerSettings, Settings, UpdateListSettings,
+    XPathSettings,
 };
 use super::module_overrides::{HttpOverrides, ProxyOverride, ProxyOverrideType};
 
@@ -18,6 +19,7 @@ use super::module_overrides::{HttpOverrides, ProxyOverride, ProxyOverrideType};
 #[serde(default)]
 pub struct SettingsView {
     pub general: GeneralSettings,
+    pub appearance: AppearanceSettings,
     pub connections: ConnectionSettingsView,
     pub saveto: SaveToSettings,
     pub output: OutputSettings,
@@ -42,6 +44,7 @@ impl From<&Settings> for SettingsView {
     fn from(s: &Settings) -> Self {
         let Settings {
             general,
+            appearance,
             connections,
             saveto,
             output,
@@ -57,6 +60,7 @@ impl From<&Settings> for SettingsView {
         } = s.clone();
         Self {
             general,
+            appearance,
             connections: connections.into(),
             saveto,
             output,

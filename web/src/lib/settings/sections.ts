@@ -33,6 +33,12 @@ const number = (path: string, label: string, min: number, max: number, help?: st
 	help,
 	control: { kind: 'number', min, max }
 });
+const swatches = (path: string, label: string, choices: Choice[], help?: string): Field => ({
+	path,
+	label,
+	help,
+	control: { kind: 'swatches', choices }
+});
 const select = (path: string, label: string, choices: Choice[], help?: string): Field => ({
 	path,
 	label,
@@ -110,6 +116,36 @@ export const SETTINGS_SECTIONS: Section[] = [
 				'For the list databases, relative to the app data directory.'
 			),
 			text('general.lua_dir', 'Lua folder', 'Holds the website modules.')
+		]
+	},
+	{
+		id: 'appearance',
+		title: 'Appearance',
+		fields: [
+			select(
+				'appearance.mode',
+				'Light or dark',
+				[
+					{ value: 'system', label: 'Same as the device' },
+					{ value: 'light', label: 'Light' },
+					{ value: 'dark', label: 'Dark' }
+				],
+				'Applies on every device.'
+			),
+			select('appearance.text_size', 'Text size', [
+				{ value: 'small', label: 'Small' },
+				{ value: 'normal', label: 'Normal' },
+				{ value: 'large', label: 'Large' },
+				{ value: 'larger', label: 'Larger' }
+			]),
+			swatches('appearance.accent', 'Accent colour', [
+				{ value: 'teal', label: 'Teal' },
+				{ value: 'blue', label: 'Blue' },
+				{ value: 'green', label: 'Green' },
+				{ value: 'purple', label: 'Purple' },
+				{ value: 'orange', label: 'Orange' },
+				{ value: 'red', label: 'Red' }
+			])
 		]
 	},
 	{
