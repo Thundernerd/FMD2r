@@ -80,6 +80,8 @@ pub struct ListItem {
     pub format: String,
     /// As in the `publication` filter.
     pub publication: String,
+    /// The title's cover through `/api/covers/series`; add `w` for a thumbnail.
+    pub cover_url: String,
 }
 
 impl From<MasterListEntry> for ListItem {
@@ -87,6 +89,7 @@ impl From<MasterListEntry> for ListItem {
         let l = entry.listing;
         let or_unknown = |v: Option<String>| v.unwrap_or_else(|| UNKNOWN.to_owned());
         ListItem {
+            cover_url: crate::covers::series::cover_url(&entry.module_id, &l.link),
             module_id: entry.module_id,
             link: l.link,
             title: l.title,
