@@ -14,7 +14,8 @@
 	const errors = $derived(
 		destinationErrors((draft.get('saveto.destinations') ?? []) as unknown as Destination[])
 	);
-	// Shown next to the fields as they are typed; the editor drops them as a row is edited.
+	// Shown next to the fields as they are typed. Editing a row drops the draft's errors and this
+	// adds back the ones that still hold, so only current problems show.
 	$effect(() => {
 		Object.assign(draft.errors, errors);
 	});
@@ -23,8 +24,8 @@
 	let inContainer = $state(false);
 	$effect(() => {
 		api
-			.about()
-			.then((about) => (inContainer = about.in_container))
+			.health()
+			.then((health) => (inContainer = health.in_container))
 			// Only the hint depends on it.
 			.catch(() => {});
 	});

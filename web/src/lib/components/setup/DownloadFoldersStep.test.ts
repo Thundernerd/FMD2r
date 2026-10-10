@@ -13,10 +13,10 @@ const STEPS: SetupStep[] = [
 	{ id: 'next', title: 'Next step', component: FakeStep }
 ];
 
-async function open() {
+async function open({ inContainer = false } = {}) {
 	const api = createApi({
 		baseUrl: 'http://fmd2r.test',
-		fetch: createMockBackend({ setUp: false }).fetch
+		fetch: createMockBackend({ setUp: false, inContainer }).fetch
 	});
 	render(SetupWizard, { api, steps: STEPS, onfinish: () => {} });
 	await screen.findByRole('heading', { level: 2, name: 'Download folders' });
@@ -77,5 +77,16 @@ describe('the download folders setup step', () => {
 			target: { value: 'Manhwa' }
 		});
 		expect(next().disabled).toBe(false);
+	});
+
+	it('says that folders must be mounted when the server runs in a container', async () => {
+		await open({ inContainer: true });
+		expect(await screen.findByText(/each folder must be mounted into it/)).toBeTruthy();
+	});
+
+	it('says nothing about mounting folders outside a container', async () => {
+		await open();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(screen.queryByText(/must be mounted/)).toBeNull();
 	});
 });

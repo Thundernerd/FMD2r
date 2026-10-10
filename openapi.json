@@ -2840,8 +2840,7 @@
           "load_failures",
           "databases",
           "uptime_secs",
-          "tools",
-          "in_container"
+          "tools"
         ],
         "properties": {
           "data_dir": {
@@ -2862,10 +2861,6 @@
               "null"
             ],
             "description": "The git commit the binary was built from, when known."
-          },
-          "in_container": {
-            "type": "boolean",
-            "description": "Whether the server runs in a container (Docker or Podman), whose folders must be mounted."
           },
           "load_failures": {
             "type": "array",
@@ -3559,12 +3554,17 @@
           "status",
           "auth",
           "loopback",
+          "in_container",
           "overridden"
         ],
         "properties": {
           "auth": {
             "type": "boolean",
             "description": "Whether the API requires the password (as a bearer token or a login session)."
+          },
+          "in_container": {
+            "type": "boolean",
+            "description": "Whether the server runs in a container (Docker or Podman), whose folders must be mounted."
           },
           "loopback": {
             "type": "boolean",
