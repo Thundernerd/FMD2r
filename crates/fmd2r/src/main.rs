@@ -57,6 +57,12 @@ struct ServeArgs {
     /// API is open.
     #[arg(long, env = "FMD2R_PASSWORD", hide_env_values = true)]
     password: Option<String>,
+    /// Authentication is handled in front of FMD2r (e.g. a reverse proxy that asks for a login);
+    /// turns `server.external_auth` on. Hides the warnings about an open server; the API itself
+    /// stays open. Empty or false leaves the setting in charge.
+    // Falsey, because the default parser rejects the empty variable compose passes by default.
+    #[arg(long, env = "FMD2R_EXTERNAL_AUTH", value_parser = clap::builder::FalseyValueParser::new())]
+    external_auth: bool,
     /// FlareSolverr URL (e.g. http://flaresolverr:8191) for Cloudflare-protected sites; overrides
     /// `connections.flaresolverr_url`. Empty turns FlareSolverr off.
     #[arg(long, env = "FMD2R_FLARESOLVERR_URL")]
@@ -120,6 +126,7 @@ fn serve(args: ServeArgs) -> anyhow::Result<()> {
         bind: args.bind,
         data_dir: args.data_dir,
         auth: args.password.filter(|p| !p.is_empty()),
+        external_auth: args.external_auth,
         flaresolverr_url: args.flaresolverr_url,
         logs,
         module_updates: !args.no_module_updates,

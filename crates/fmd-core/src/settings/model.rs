@@ -601,6 +601,10 @@ pub struct ServerSettings {
     /// Days a login session lasts at most, however often it is used.
     #[schema(minimum = 1, maximum = 3650)]
     pub session_lifetime_days: u32,
+    /// Authentication is handled in front of FMD2r (a reverse proxy that asks for a login, a VPN),
+    /// so an open server is not warned about. Changes nothing about access.
+    /// `--external-auth` / `FMD2R_EXTERNAL_AUTH` overrides it.
+    pub external_auth: bool,
 }
 
 impl Default for ServerSettings {
@@ -610,6 +614,7 @@ impl Default for ServerSettings {
             auth_token: None,
             session_idle_days: 7,
             session_lifetime_days: 30,
+            external_auth: false,
         }
     }
 }

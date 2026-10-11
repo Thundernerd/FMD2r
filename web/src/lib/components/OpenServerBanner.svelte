@@ -28,8 +28,9 @@
 
 	const open = $derived(health !== null && isOpenServer(health));
 
-	// A dismissal covers one stretch of being open: once the server is secured (or bound to
-	// loopback), forget it, so opening the server again brings the warning back.
+	// A dismissal covers one stretch of being open: once the server is secured (a password,
+	// loopback only, or authentication in front of it), forget it, so opening the server again
+	// brings the warning back.
 	$effect(() => {
 		if (health === null || open) return;
 		dismissed = false;

@@ -14,9 +14,10 @@ async function sessionWith(health: Health) {
 	return session;
 }
 
-const health = (auth: boolean, loopback: boolean): Health => ({
+const health = (auth: boolean, loopback: boolean, external_auth = false): Health => ({
 	status: 'ok',
 	auth,
+	external_auth,
 	loopback,
 	in_container: false,
 	overridden: []
@@ -82,6 +83,12 @@ describe('the open server banner', () => {
 		render(OpenServerBanner, { health: open.health });
 		expect(screen.getByRole('alert').textContent).toContain('no password');
 		await fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+		expect(screen.queryByRole('alert')).toBeNull();
+	});
+
+	it('stays away when authentication is handled in front of the server', async () => {
+		const session = await sessionWith(health(false, false, true));
+		render(OpenServerBanner, { health: session.health });
 		expect(screen.queryByRole('alert')).toBeNull();
 	});
 });

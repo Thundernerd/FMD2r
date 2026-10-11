@@ -13,6 +13,9 @@ pub(crate) struct Health {
     status: &'static str,
     /// Whether the API requires the password (as a bearer token or a login session).
     auth: bool,
+    /// Whether authentication is handled in front of FMD2r (`server.external_auth`, or its
+    /// command line override), so an open server needs no warning. The API itself stays open.
+    external_auth: bool,
     /// Whether the server listens on a loopback address only.
     loopback: bool,
     /// Whether the server runs in a container (Docker or Podman), whose folders must be mounted.
@@ -27,6 +30,7 @@ pub(crate) async fn health(State(state): State<AppState>) -> Json<Health> {
     Json(Health {
         status: "ok",
         auth: state.secret().is_some(),
+        external_auth: state.external_auth(),
         loopback: state.listen_addr.is_none_or(|a| a.ip().is_loopback()),
         in_container: in_container(),
         overridden: state
@@ -34,6 +38,7 @@ pub(crate) async fn health(State(state): State<AppState>) -> Json<Health> {
             .iter()
             .copied()
             .chain(state.auth.is_fixed().then_some("server.auth_token"))
+            .chain(state.external_auth.then_some("server.external_auth"))
             .collect(),
     })
 }
