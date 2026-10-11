@@ -251,6 +251,21 @@ test('skipping the password step leaves the open server warning', async ({ page 
 	await expect(banner(page)).toBeVisible();
 });
 
+test('saying authentication is handled in front removes the open server warning at once', async ({
+	page
+}) => {
+	await openServer(page);
+	await page.goto('/settings#section-server');
+	await expect(banner(page)).toBeVisible();
+
+	await page.getByRole('checkbox', { name: 'Authentication is handled in front of FMD2r' }).check();
+	const bar = page.getByRole('region', { name: 'Save changes' });
+	await bar.getByRole('button', { name: 'Save' }).click();
+	await expect(bar).toContainText('Saved');
+
+	await expect(banner(page)).toHaveCount(0);
+});
+
 test('an FMD2 import during setup brings its settings to the later steps', async ({ page }) => {
 	await freshInstall(page);
 	await page.goto('/');

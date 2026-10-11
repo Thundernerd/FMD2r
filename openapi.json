@@ -3605,6 +3605,7 @@
         "required": [
           "status",
           "auth",
+          "external_auth",
           "loopback",
           "in_container",
           "overridden"
@@ -3613,6 +3614,10 @@
           "auth": {
             "type": "boolean",
             "description": "Whether the API requires the password (as a bearer token or a login session)."
+          },
+          "external_auth": {
+            "type": "boolean",
+            "description": "Whether authentication is handled in front of FMD2r (`server.external_auth`, or its\ncommand line override), so an open server needs no warning. The API itself stays open."
           },
           "in_container": {
             "type": "boolean",
@@ -5430,12 +5435,17 @@
           "bind",
           "has_auth_token",
           "session_idle_days",
-          "session_lifetime_days"
+          "session_lifetime_days",
+          "external_auth"
         ],
         "properties": {
           "bind": {
             "type": "string",
             "description": "Socket address to listen on."
+          },
+          "external_auth": {
+            "type": "boolean",
+            "description": "Authentication is handled in front of FMD2r, so an open server is not warned about."
           },
           "has_auth_token": {
             "type": "boolean",
@@ -5686,6 +5696,7 @@
             ],
             "default": {
               "bind": "127.0.0.1:8080",
+              "external_auth": false,
               "has_auth_token": false,
               "session_idle_days": 7,
               "session_lifetime_days": 30

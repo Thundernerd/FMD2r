@@ -73,6 +73,18 @@ describe('the setup password step', () => {
 		expect(stepTitles()).not.toContain('Password');
 	});
 
+	it('is left out when authentication is handled in front of the server', async () => {
+		const api = serverApi();
+		await api.patchSettings({ server: { external_auth: true } });
+		await renderWizard(api);
+		expect(stepTitles()).not.toContain('Password');
+	});
+
+	it('is left out when the command line or environment says authentication is handled in front', async () => {
+		await renderWizard(serverApi({ externalAuth: true }));
+		expect(stepTitles()).not.toContain('Password');
+	});
+
 	it('explains why it is there', async () => {
 		await atPasswordStep();
 		expect(screen.getByText(/reachable from other machines/)).toBeTruthy();

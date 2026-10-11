@@ -346,7 +346,15 @@ export interface MockOptions {
 	 * `loopback` is false). Defaults to whether `sessionStorage['fmd2r.mock.open']` is set.
 	 */
 	open?: boolean;
-	/** The settings overridden besides `server.auth_token`, which `password` overrides. */
+	/**
+	 * `fmd2r serve --external-auth`: authentication is handled in front of the server, overriding
+	 * `server.external_auth`. Unset, the setting decides.
+	 */
+	externalAuth?: boolean;
+	/**
+	 * The settings overridden besides `server.auth_token` and `server.external_auth`, which
+	 * `password` and `externalAuth` override.
+	 */
 	overridden?: string[];
 	/** Whether the server says it runs in a container, like the Docker image. */
 	inContainer?: boolean;
@@ -389,6 +397,7 @@ export function createMockBackend({
 	mangabakaAvailable = true,
 	setUp = stored(FRESH_INSTALL_KEY) === null,
 	open = stored(OPEN_KEY) !== null,
+	externalAuth,
 	overridden = [],
 	inContainer = false
 }: MockOptions = {}): MockBackend {
@@ -688,9 +697,14 @@ export function createMockBackend({
 			return json({
 				status: 'ok',
 				auth: requiredPassword() !== null,
+				external_auth: externalAuth ?? settings.getSettings().server.external_auth,
 				loopback: !open,
 				in_container: inContainer,
-				overridden: fixedPassword === null ? overridden : [...overridden, 'server.auth_token']
+				overridden: [
+					...overridden,
+					...(fixedPassword === null ? [] : ['server.auth_token']),
+					...(externalAuth === undefined ? [] : ['server.external_auth'])
+				]
 			});
 		if (route === 'POST /api/login') {
 			const body = (await req.json()) as { password?: unknown } | null;

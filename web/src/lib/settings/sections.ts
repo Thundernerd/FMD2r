@@ -373,6 +373,11 @@ export const SETTINGS_SECTIONS: Section[] = [
 		fields: [
 			text('server.bind', 'Listen address', 'Takes effect after a restart.'),
 			secret('server.auth_token', 'Password', 'Clear it to disable authentication.'),
+			checkbox(
+				'server.external_auth',
+				'Authentication is handled in front of FMD2r',
+				'e.g. a reverse proxy that asks for a login. Hides the warning about having no password.'
+			),
 			number(
 				'server.session_idle_days',
 				'Log out after (days unused)',
