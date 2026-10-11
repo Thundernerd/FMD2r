@@ -48,6 +48,9 @@ pub enum ApiError {
     /// A service the request needs is not running in this server (e.g. no Lua modules loaded).
     #[error("{0}")]
     Unavailable(String),
+    /// A website is limiting requests from this server (`InfoError::RateLimited`).
+    #[error("{0}")]
+    RateLimited(String),
     #[error(transparent)]
     Store(#[from] fmd_store::StoreError),
     #[error("internal error: {0}")]
@@ -93,7 +96,7 @@ impl ApiError {
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Rejected(status, _) => *status,
             Self::BadGateway(_) => StatusCode::BAD_GATEWAY,
-            Self::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Unavailable(_) | Self::RateLimited(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Store(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -102,9 +105,12 @@ impl ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
-        // Server errors are logged in full but hidden from clients, except failing sites and
-        // unconfigured services, which are routine.
-        let detail = if let Self::BadGateway(msg) | Self::Unavailable(msg) = &self {
+        // Server errors are logged in full but hidden from clients, except failing or
+        // rate-limiting sites and unconfigured services, which are routine.
+        let detail = if let Self::BadGateway(msg)
+        | Self::Unavailable(msg)
+        | Self::RateLimited(msg) = &self
+        {
             tracing::debug!(target: "fmd_server", "{msg}");
             msg.clone()
         } else if status.is_server_error() {

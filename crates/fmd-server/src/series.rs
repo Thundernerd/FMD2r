@@ -128,6 +128,7 @@ impl SeriesStatus {
         (status = 200, body = SeriesInfo, description = "The series' info and chapters"),
         (status = 404, body = Problem, description = "No such module, or the module found no series there"),
         (status = 502, body = Problem, description = "The website could not be reached"),
+        (status = 503, body = Problem, description = "The website is limiting requests from this server"),
     ))]
 pub(crate) async fn get(
     State(state): State<AppState>,
@@ -204,7 +205,8 @@ async fn mangabaka_metadata(
     }
 }
 
-/// Served from the cache when recent.
+/// Served from the cache when recent. A rate-limited answer is not cached, and pauses the
+/// website's cover lookups and favorite checks.
 pub(crate) async fn fetch_info(
     state: &AppState,
     module: &str,
@@ -221,7 +223,10 @@ pub(crate) async fn fetch_info(
         .modules
         .get_info(module, link, options)
         .await
-        .map_err(info_error)?;
+        .map_err(|e| {
+            state.rate_limits.pause_if_limited(module, &e);
+            info_error(e)
+        })?;
     state.series_cache.put(key, info.clone());
     Ok(info)
 }
@@ -261,12 +266,13 @@ impl InfoCache {
     }
 }
 
-fn info_error(err: InfoError) -> ApiError {
+pub(crate) fn info_error(err: InfoError) -> ApiError {
     match err {
         InfoError::UnknownModule => ApiError::Missing("no such module".into()),
         InfoError::NotFound(msg) => ApiError::Missing(msg),
         InfoError::NetProblem => ApiError::BadGateway(err.to_string()),
         InfoError::Failed(msg) => ApiError::Internal(msg),
+        InfoError::RateLimited { .. } => ApiError::RateLimited(err.to_string()),
     }
 }
 

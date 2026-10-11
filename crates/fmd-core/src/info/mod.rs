@@ -1,11 +1,15 @@
 //! A series' info as a module's `OnGetInfo` reports it, cleaned up as FMD2's
 //! `TMangaInformation.GetInfoFromURL` does (baseunits/uData.pas:85-208).
 
+mod rate_limits;
 mod text;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use fmd_lua::{CallbackError, JobError, Module, WorkerPool};
+
+pub use self::rate_limits::RateLimits;
 
 use self::text::{
     clean_multilined_string, clean_string, clean_url, common_string_filter, fix_white_space,
@@ -53,6 +57,18 @@ pub enum InfoError {
     /// `net_problem`.
     #[error("the website could not be reached")]
     NetProblem,
+    /// The website answered with a rate-limit or block page ([`fmd_http::RateLimit`]) while the
+    /// module ran, whatever the module made of it. Beyond FMD2, which shows that page as the
+    /// series (baseunits/httpsendthread.pas:718).
+    #[error("{website} is limiting requests from this server. Try again in a few minutes.")]
+    RateLimited {
+        /// The module's name.
+        website: String,
+        /// The status code of the response.
+        status: i32,
+        /// The response's `Retry-After`.
+        retry_after: Option<Duration>,
+    },
     /// The worker pool failed.
     #[error("{0}")]
     Failed(String),
@@ -75,7 +91,16 @@ pub async fn get_info(
         return Err(InfoError::NotFound("no series link".into()));
     }
     let reply = match pool.on(module).get_info(link).await {
-        Ok(reply) => reply.value,
+        Ok(reply) => {
+            if let Some(limit) = reply.http.as_ref().and_then(|h| h.rate_limit()) {
+                return Err(InfoError::RateLimited {
+                    website: module.def().name,
+                    status: limit.status,
+                    retry_after: limit.retry_after,
+                });
+            }
+            reply.value
+        }
         Err(JobError::NoCallback { .. }) => {
             return Err(InfoError::NotFound(
                 "the module cannot show series info".into(),

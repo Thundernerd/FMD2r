@@ -7,6 +7,7 @@ use std::time::{Instant, SystemTime};
 
 use fmd_core::accounts::AccountService;
 use fmd_core::favorites::CheckerEvent;
+use fmd_core::info::RateLimits;
 use fmd_core::jobs::JobRegistry;
 use fmd_core::lists::ListJobs;
 use fmd_core::metadata::{MetadataEvent, MetadataJobs};
@@ -46,6 +47,8 @@ pub struct AppState {
     pub(crate) jobs: JobRegistry,
     pub(crate) modules: Arc<dyn ModuleCatalog>,
     pub(crate) series_cache: Arc<InfoCache>,
+    /// Websites paused after a rate-limited answer; shared with the favorites check.
+    pub(crate) rate_limits: Arc<RateLimits>,
     pub(crate) accounts: Option<Arc<AccountService>>,
     pub(crate) tools: Arc<dyn ToolProbe>,
     pub(crate) covers: Option<Arc<Covers>>,
@@ -75,6 +78,7 @@ impl AppState {
             jobs: JobRegistry::new(),
             modules: Arc::new(Idle),
             series_cache: Arc::default(),
+            rate_limits: Arc::default(),
             accounts: None,
             tools: Arc::new(NoTools),
             covers: None,

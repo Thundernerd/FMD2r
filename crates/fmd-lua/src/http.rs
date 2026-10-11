@@ -63,6 +63,18 @@ impl HttpObject {
     }
 }
 
+/// `result`, after recording the response it got when that is a rate limit
+/// ([`HttpSession::note_rate_limit`]). Runs after the anti-bot hook, so a challenge the bypass
+/// solved doesn't count.
+fn noting_rate_limit(
+    http: &Rc<RefCell<HttpObject>>,
+    result: mlua::Result<bool>,
+) -> mlua::Result<bool> {
+    let result = result?;
+    borrow(http)?.session.note_rate_limit();
+    Ok(result)
+}
+
 /// Replaces `target`'s lines with `source`'s items. Header and cookie lines are text; bytes
 /// that are not UTF-8 are replaced.
 fn copy_into(source: &StringList, target: &mut NameValueList) {
@@ -167,14 +179,19 @@ impl LuaHttp {
                 "Request",
                 |lua, http: &mut HttpObject, (method, url): (Value, Value)| {
                     let (method, url) = (text(lua, method)?, text(lua, url)?);
-                    http.request(|s| s.request(&method, &url))
+                    let result = http.request(|s| s.request(&method, &url))?;
+                    http.session.note_rate_limit();
+                    Ok(result)
                 },
             )
             // `http_get` (baseunits/lua/LuaHTTPSend.pas:27-31): true when the response body
             // is non-empty, whatever the status (baseunits/httpsendthread.pas:718, :725-728).
             .method_with_object("GET", |lua, http, object, url: Value| {
                 let url = text(lua, url)?;
-                bypass::request(lua, http, object, "GET", &url, |s| s.get(&url))
+                noting_rate_limit(
+                    http,
+                    bypass::request(lua, http, object, "GET", &url, |s| s.get(&url)),
+                )
             })
             // `http_post` (baseunits/lua/LuaHTTPSend.pas:33-38): non-empty `data` replaces the
             // document; a `Content-Type` header moves into `MimeType`, and `text/html` is sent
@@ -182,19 +199,28 @@ impl LuaHttp {
             .method_with_object("POST", |lua, http, object, (url, data): (Value, Value)| {
                 let url = text(lua, url)?;
                 let data = to_bytes(lua, data)?;
-                bypass::request(lua, http, object, "POST", &url, |s| s.post(&url, &data))
+                noting_rate_limit(
+                    http,
+                    bypass::request(lua, http, object, "POST", &url, |s| s.post(&url, &data)),
+                )
             })
             // `http_head` (baseunits/lua/LuaHTTPSend.pas:40-44, baseunits/httpsendthread.pas:720-723).
             .method_with_object("HEAD", |lua, http, object, url: Value| {
                 let url = text(lua, url)?;
-                bypass::request(lua, http, object, "HEAD", &url, |s| s.head(&url))
+                noting_rate_limit(
+                    http,
+                    bypass::request(lua, http, object, "HEAD", &url, |s| s.head(&url)),
+                )
             })
             // `http_xhr` (baseunits/lua/LuaHTTPSend.pas:46-50): resets stale response headers,
             // adds `X-Requested-With: XMLHttpRequest`, then GETs
             // (baseunits/httpsendthread.pas:749-755), so the hook sees a `GET`.
             .method_with_object("XHR", |lua, http, object, url: Value| {
                 let url = text(lua, url)?;
-                bypass::request(lua, http, object, "GET", &url, |s| s.xhr(&url))
+                noting_rate_limit(
+                    http,
+                    bypass::request(lua, http, object, "GET", &url, |s| s.xhr(&url)),
+                )
             })
             // `http_reset` (baseunits/lua/LuaHTTPSend.pas:52-56): `ResetBasic` plus browser-like
             // default headers (baseunits/httpsendthread.pas:924-932).

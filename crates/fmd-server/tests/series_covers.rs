@@ -110,6 +110,8 @@ struct Site {
     calls: AtomicUsize,
     /// Whether the website is down: `GetInfo` fails with a network problem.
     down: std::sync::atomic::AtomicBool,
+    /// Whether the website is rate-limiting this server: `GetInfo` reports it.
+    limited: std::sync::atomic::AtomicBool,
     in_flight: AtomicUsize,
     most_in_flight: AtomicUsize,
 }
@@ -160,6 +162,13 @@ impl ModuleCatalog for Shared {
             site.calls.fetch_add(1, Ordering::SeqCst);
             if site.down.load(Ordering::SeqCst) {
                 return Err(InfoError::NetProblem);
+            }
+            if site.limited.load(Ordering::SeqCst) {
+                return Err(InfoError::RateLimited {
+                    website: "Site".into(),
+                    status: 429,
+                    retry_after: None,
+                });
             }
             let now = site.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
             site.most_in_flight.fetch_max(now, Ordering::SeqCst);
@@ -243,6 +252,7 @@ fn harness(covers: &[(&str, &str)], max_connection_limit: u32, delay: Duration) 
         delay,
         calls: AtomicUsize::new(0),
         down: Default::default(),
+        limited: Default::default(),
         in_flight: AtomicUsize::new(0),
         most_in_flight: AtomicUsize::new(0),
     });
@@ -738,4 +748,70 @@ async fn a_stale_link_is_served_when_the_website_cannot_recheck_it() {
     let state = h.state_with(|c| c.revalidate_after = Duration::ZERO);
     assert_eq!(image(&state, &series_cover("/shadow", None)).await, png());
     assert_eq!(h.site.calls(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rate_limited_title_stores_no_cover_link() {
+    let h = harness(
+        &[("/shadow", "http://site.test/covers/shadow.png")],
+        0,
+        quick(),
+    );
+    h.site.limited.store(true, Ordering::SeqCst);
+    let state = h.state();
+
+    let res = send(&state, &series_cover("/shadow", None)).await;
+
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(h.lists.cover_links().get("site", "/shadow").unwrap(), None);
+    assert!(h.network.urls().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rate_limited_title_keeps_and_serves_its_stored_link() {
+    let h = harness(
+        &[("/shadow", "http://site.test/covers/shadow.png")],
+        0,
+        quick(),
+    );
+    // Every stored link is stale at once.
+    let state = h.state_with(|c| c.revalidate_after = Duration::ZERO);
+    assert_eq!(image(&state, &series_cover("/shadow", None)).await, png());
+    let stored = h.lists.cover_links().get("site", "/shadow").unwrap();
+
+    h.site.limited.store(true, Ordering::SeqCst);
+    let state = h.state_with(|c| c.revalidate_after = Duration::ZERO);
+    assert_eq!(image(&state, &series_cover("/shadow", None)).await, png());
+
+    assert_eq!(h.site.calls(), 2);
+    assert_eq!(
+        h.lists.cover_links().get("site", "/shadow").unwrap(),
+        stored
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn during_a_pause_cover_lookups_do_not_ask_the_website() {
+    let h = harness(
+        &[
+            ("/shadow", "http://site.test/covers/shadow.png"),
+            ("/baskerville", "http://site.test/covers/baskerville.png"),
+        ],
+        0,
+        quick(),
+    );
+    h.site.limited.store(true, Ordering::SeqCst);
+    let state = h.state();
+    let res = send(&state, &series_cover("/shadow", None)).await;
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(h.site.calls(), 1);
+
+    let res = send(&state, &series_cover("/baskerville", None)).await;
+
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(h.site.calls(), 1);
+    assert_eq!(
+        h.lists.cover_links().get("site", "/baskerville").unwrap(),
+        None
+    );
 }
