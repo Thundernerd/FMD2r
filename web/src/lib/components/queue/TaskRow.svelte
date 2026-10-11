@@ -234,8 +234,4 @@
 		color: var(--bad);
 		border-color: var(--bad);
 	}
-	.btn:disabled {
-		opacity: 0.55;
-		cursor: default;
-	}
 </style>

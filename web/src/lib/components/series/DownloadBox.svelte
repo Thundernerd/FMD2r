@@ -190,10 +190,6 @@
 		display: flex;
 		gap: var(--sp-2);
 	}
-	.btn:disabled {
-		opacity: 0.55;
-		cursor: default;
-	}
 	.error {
 		margin: 0;
 		padding: 6px 10px;

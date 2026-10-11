@@ -238,11 +238,6 @@
 		display: flex;
 		gap: var(--sp-2);
 	}
-	.btn:disabled {
-		opacity: 0.5;
-		cursor: default;
-		border-color: var(--line);
-	}
 	.error {
 		margin: 0;
 		color: var(--bad);
