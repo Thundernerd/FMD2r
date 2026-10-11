@@ -128,7 +128,8 @@ export interface paths {
 		 * A list title's cover. Its link comes from, in order: the link stored for the title while it
 		 *     is recent (`covers.revalidate_after_hours`); the title's accepted match in the MangaBaka
 		 *     database, when it is downloaded; the website module's `GetInfo`, a few at a time per module.
-		 *     The link found is stored, "no cover" included. The image then goes through the cover cache
+		 *     The link found is stored, "no cover" included; nothing is stored while the website is
+		 *     rate-limiting this server. The image then goes through the cover cache
 		 *     like `GET /api/covers`. With `general.load_covers` off nothing is looked up or fetched.
 		 */
 		get: operations['getSeriesCover'];
@@ -3082,7 +3083,7 @@ export interface operations {
 					'application/json': components['schemas']['Problem'];
 				};
 			};
-			/** @description lists.db is not open */
+			/** @description lists.db is not open, or the website is limiting requests from this server */
 			503: {
 				headers: {
 					[name: string]: unknown;
@@ -4361,6 +4362,15 @@ export interface operations {
 			};
 			/** @description The website could not be reached */
 			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The website is limiting requests from this server */
+			503: {
 				headers: {
 					[name: string]: unknown;
 				};

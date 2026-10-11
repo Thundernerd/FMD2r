@@ -55,9 +55,16 @@ end
 struct Site {
     pages: Mutex<HashMap<String, String>>,
     hits: Mutex<Vec<String>>,
+    /// URLs answered with Cloudflare's rate-limit page.
+    limited: Mutex<Vec<String>>,
 }
 
 impl Site {
+    /// Answers `url` with Cloudflare's "Error 1015" page, as a 429.
+    fn limit(&self, url: &str) {
+        self.limited.lock().unwrap().push(url.into());
+    }
+
     fn page(&self, url: &str, body: &str) {
         self.pages.lock().unwrap().insert(url.into(), body.into());
     }
@@ -79,7 +86,18 @@ impl Transport for Site {
     ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
         self.hits.lock().unwrap().push(request.url.clone());
         let page = self.pages.lock().unwrap().get(&request.url).cloned();
+        let limited = self.limited.lock().unwrap().contains(&request.url);
         Box::pin(async move {
+            if limited {
+                return Ok(WireResponse {
+                    status: 429,
+                    reason: "Too Many Requests".into(),
+                    headers: vec![("Content-Type".into(), "text/html".into())],
+                    body: b"title=Error 1015\n<span class=\"cf-error-code\">1015</span>\n\
+                            <h2>You are being rate limited</h2>"
+                        .to_vec(),
+                });
+            }
             let body = page.ok_or_else(|| TransportError("connection refused".into()))?;
             Ok(WireResponse {
                 status: 200,
@@ -429,6 +447,24 @@ async fn series_maps_module_failures_to_http_errors() {
     // No link.
     let res = series(&h.state, "t", "").await;
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_rate_limited_series_is_a_503_that_says_so_and_is_not_cached() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.limit("https://example.com/manga/1");
+
+    let res = series(&h.state, "t", "/manga/1").await;
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let problem = body_json(res).await;
+    assert_eq!(
+        problem["detail"],
+        "T is limiting requests from this server. Try again in a few minutes."
+    );
+    // Within the cache's 5 minutes, the page asks the website again.
+    let res = series(&h.state, "t", "/manga/1").await;
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(h.site.hits("https://example.com/manga/1"), 2);
 }
 
 #[tokio::test]

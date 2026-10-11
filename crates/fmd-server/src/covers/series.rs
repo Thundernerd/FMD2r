@@ -82,7 +82,8 @@ pub(crate) struct SeriesCoverQuery {
 /// A list title's cover. Its link comes from, in order: the link stored for the title while it
 /// is recent (`covers.revalidate_after_hours`); the title's accepted match in the MangaBaka
 /// database, when it is downloaded; the website module's `GetInfo`, a few at a time per module.
-/// The link found is stored, "no cover" included. The image then goes through the cover cache
+/// The link found is stored, "no cover" included; nothing is stored while the website is
+/// rate-limiting this server. The image then goes through the cover cache
 /// like `GET /api/covers`. With `general.load_covers` off nothing is looked up or fetched.
 #[utoipa::path(get, path = "/api/covers/series", tag = "covers", operation_id = "getSeriesCover",
     params(SeriesCoverQuery),
@@ -92,7 +93,7 @@ pub(crate) struct SeriesCoverQuery {
         (status = 400, description = "A bad width, or a cover link that may not be fetched", body = Problem),
         (status = 404, description = "Unknown module, the title has no cover, or covers are off", body = Problem),
         (status = 502, description = "The website or the cover's host failed", body = Problem),
-        (status = 503, description = "lists.db is not open", body = Problem),
+        (status = 503, description = "lists.db is not open, or the website is limiting requests from this server", body = Problem),
     ))]
 pub(crate) async fn get(
     State(state): State<AppState>,
@@ -159,14 +160,34 @@ async fn find(
     let found = match mangabaka(state, lists, module, link, now).await? {
         Some(found) => found,
         None => {
-            let _turn = covers
-                .lookups
-                .turn(module, permits(state, &info.limits, module).await)
-                .await?;
-            match website(state, &info.root_url, module, link, now).await {
+            // A website paused after a rate-limited answer isn't asked, nor are the lookups
+            // queued behind the one that got that answer.
+            let paused = || {
+                state.rate_limits.is_paused(module).then(|| {
+                    ApiError::RateLimited(format!(
+                        "{} is limiting requests from this server. Try again in a few minutes.",
+                        info.name
+                    ))
+                })
+            };
+            let looked_up = match paused() {
+                Some(e) => Err(e),
+                None => {
+                    let _turn = covers
+                        .lookups
+                        .turn(module, permits(state, &info.limits, module).await)
+                        .await?;
+                    match paused() {
+                        Some(e) => Err(e),
+                        None => website(state, &info.root_url, module, link, now).await,
+                    }
+                }
+            };
+            match looked_up {
                 Ok(found) => found,
-                // A website that is down keeps the covers it gave: serve the stale link.
-                Err(ApiError::BadGateway(msg)) if stored.is_some() => {
+                // A website that is down or rate-limiting keeps the covers it gave: serve the
+                // stale link.
+                Err(ApiError::BadGateway(msg) | ApiError::RateLimited(msg)) if stored.is_some() => {
                     tracing::debug!(target: "fmd_server", "serving a stale cover link: {msg}");
                     return Ok(stored);
                 }

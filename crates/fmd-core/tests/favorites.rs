@@ -27,6 +27,8 @@ use serde_json::{Value, json};
 struct Site {
     pages: Mutex<HashMap<String, String>>,
     requests: Mutex<Vec<String>>,
+    /// URLs answered with Cloudflare's rate-limit page.
+    limited: Mutex<Vec<String>>,
     /// While set, requests wait for it to be released.
     gate: Mutex<Option<Arc<tokio::sync::Semaphore>>>,
 }
@@ -48,9 +50,23 @@ impl Site {
     }
 
     fn requested(&self, path: &str) -> usize {
-        let url = format!("https://site.test{path}");
+        self.requested_url(&format!("https://site.test{path}"))
+    }
+
+    fn requested_url(&self, url: &str) -> usize {
         let requests = self.requests.lock().unwrap();
-        requests.iter().filter(|u| **u == url).count()
+        requests.iter().filter(|u| *u == url).count()
+    }
+
+    /// Answers `url` with a series page.
+    fn set_url(&self, url: &str, body: &str) {
+        self.pages.lock().unwrap().insert(url.into(), body.into());
+    }
+
+    /// Answers `path` with Cloudflare's "Error 1015" page, as a 429.
+    fn limit(&self, path: &str) {
+        let url = format!("https://site.test{path}");
+        self.limited.lock().unwrap().push(url);
     }
 }
 
@@ -60,9 +76,18 @@ impl Transport for Site {
         request: WireRequest,
     ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
         self.requests.lock().unwrap().push(request.url.clone());
-        let body = self.pages.lock().unwrap().get(&request.url).cloned();
+        let mut body = self.pages.lock().unwrap().get(&request.url).cloned();
+        let mut status = if body.is_some() { 200 } else { 404 };
+        if self.limited.lock().unwrap().contains(&request.url) {
+            status = 429;
+            body = Some(
+                "<h1><span class=\"cf-error-code\">1015</span></h1>\
+                 <h2>You are being rate limited</h2>"
+                    .into(),
+            );
+        }
         let response = WireResponse {
-            status: if body.is_some() { 200 } else { 404 },
+            status,
             reason: String::new(),
             headers: Vec::new(),
             body: body.unwrap_or_default().into_bytes(),
@@ -77,7 +102,7 @@ impl Transport for Site {
     }
 }
 
-/// A module whose series page holds a status line, then one `link name` chapter per line; a
+/// A module (and, at `other.test`, its copy `other`) whose series page holds a status line, then one `link name` chapter per line; a
 /// `cover <link>` line sets the cover link.
 const SITE: &str = r#"
 function Init()
@@ -123,6 +148,11 @@ impl Fixture {
         let lua = dir.path().join("lua");
         fs::create_dir_all(lua.join("modules")).unwrap();
         fs::write(lua.join("modules/Site.lua"), SITE).unwrap();
+        let other = SITE
+            .replace("'site'", "'other'")
+            .replace("'Site'", "'Other'")
+            .replace("https://site.test", "https://other.test");
+        fs::write(lua.join("modules/Other.lua"), other).unwrap();
         let report = ModuleRegistry::load_dir(&lua);
         assert!(report.failures.is_empty(), "{:?}", report.failures);
         let site = Arc::new(Site::default());
@@ -200,6 +230,7 @@ impl Fixture {
                 settings: self.settings.clone(),
                 queue,
                 jobs: JobRegistry::new(),
+                rate_limits: Arc::default(),
             },
             on_event,
         )
@@ -812,4 +843,58 @@ async fn edits_made_while_a_check_runs_are_kept() {
     assert_eq!(after.current_chapter, 3);
     let events = fx.db.events().list(&EventQuery::default()).unwrap();
     assert!(events[0].body.as_str().unwrap().contains("Renamed <Site>"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rate_limited_website_keeps_its_favorites_and_pauses_while_others_are_checked() {
+    let fx = Fixture::new(json!({ "connections": { "max_favorite_threads": 1 } }));
+    let create = |module: &str, link: &str| {
+        let created = fx
+            .db
+            .favorites()
+            .create(&NewFavorite {
+                module_id: module.into(),
+                link: link.into(),
+                title: link.into(),
+                save_to: String::new(),
+                cover_url: None,
+            })
+            .unwrap();
+        let mut favorite = fx.db.favorites().get(created.id).unwrap().unwrap();
+        favorite.current_chapter = 2;
+        favorite.status = "1".into();
+        favorite.cover_url = Some("https://site.test/old.jpg".into());
+        fx.db.favorites().update(&favorite).unwrap();
+        favorite
+    };
+    let limited = create("site", "/a");
+    create("site", "/b");
+    let other = create("other", "/c");
+    fx.site.limit("/a");
+    fx.site.set("/b", "1\n/c1 Chapter 1");
+    fx.site.set_url(
+        "https://other.test/c",
+        "0\n/c1 Chapter 1\n/c2 Chapter 2\n/c3 Chapter 3",
+    );
+
+    let report = fx
+        .checker()
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+
+    let after = fx.db.favorites().get(limited.id).unwrap().unwrap();
+    assert_eq!(after.current_chapter, 2);
+    assert_eq!(after.status, "1");
+    assert_eq!(
+        after.cover_url.as_deref(),
+        Some("https://site.test/old.jpg")
+    );
+    // The website is paused: its other favorite is not requested.
+    assert_eq!(fx.site.requested("/b"), 0);
+    assert_eq!(fx.site.requested_url("https://other.test/c"), 1);
+    assert_eq!(report.checked, 1);
+    let checked = fx.db.favorites().get(other.id).unwrap().unwrap();
+    assert_eq!(checked.current_chapter, 3);
+    assert_eq!(checked.status, "0");
 }

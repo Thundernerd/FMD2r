@@ -342,7 +342,7 @@
         "tags": [
           "covers"
         ],
-        "summary": "A list title's cover. Its link comes from, in order: the link stored for the title while it\nis recent (`covers.revalidate_after_hours`); the title's accepted match in the MangaBaka\ndatabase, when it is downloaded; the website module's `GetInfo`, a few at a time per module.\nThe link found is stored, \"no cover\" included. The image then goes through the cover cache\nlike `GET /api/covers`. With `general.load_covers` off nothing is looked up or fetched.",
+        "summary": "A list title's cover. Its link comes from, in order: the link stored for the title while it\nis recent (`covers.revalidate_after_hours`); the title's accepted match in the MangaBaka\ndatabase, when it is downloaded; the website module's `GetInfo`, a few at a time per module.\nThe link found is stored, \"no cover\" included; nothing is stored while the website is\nrate-limiting this server. The image then goes through the cover cache\nlike `GET /api/covers`. With `general.load_covers` off nothing is looked up or fetched.",
         "operationId": "getSeriesCover",
         "parameters": [
           {
@@ -416,7 +416,7 @@
             }
           },
           "503": {
-            "description": "lists.db is not open",
+            "description": "lists.db is not open, or the website is limiting requests from this server",
             "content": {
               "application/json": {
                 "schema": {
@@ -2080,6 +2080,16 @@
           },
           "502": {
             "description": "The website could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The website is limiting requests from this server",
             "content": {
               "application/json": {
                 "schema": {

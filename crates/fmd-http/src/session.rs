@@ -8,7 +8,7 @@ use crate::module::ModuleHttp;
 use crate::strings::NameValueList;
 use crate::terminate::TerminateToken;
 use crate::transport::{ConnectTo, Proxy, ProxyKind, WireRequest, WireResponse};
-use crate::{HttpError, decode, url};
+use crate::{HttpError, decode, httpdate, url};
 
 /// Headers, document and MIME type of a request, restored before each re-send.
 struct RequestState {
@@ -52,6 +52,18 @@ pub struct HttpSession {
     enabled_cookies: bool,
     clear_cookies: bool,
     after_set_cookies: Option<SessionHook>,
+    rate_limit: Option<RateLimit>,
+}
+
+/// A response by which a website refused to serve this client for a while: a 429, or a 403 or
+/// 503 whose body is a Cloudflare error page (e.g. "Error 1015: You are being rate limited").
+/// Beyond FMD2, which hands such a page to the module like any other (`HTTPRequest` is true
+/// when the body is non-empty, baseunits/httpsendthread.pas:718).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RateLimit {
+    pub status: i32,
+    /// From the response's `Retry-After`, in seconds or as a date.
+    pub retry_after: Option<Duration>,
 }
 
 impl HttpSession {
@@ -87,6 +99,7 @@ impl HttpSession {
             enabled_cookies: true,
             clear_cookies: false,
             after_set_cookies: None,
+            rate_limit: None,
         };
         session.reset();
         session
@@ -431,6 +444,49 @@ impl HttpSession {
     /// baseunits/synapse/httpsend.pas:215, 436).
     pub fn result_code(&self) -> i32 {
         self.result_code
+    }
+
+    /// The first rate limit [`HttpSession::note_rate_limit`] recorded.
+    pub fn rate_limit(&self) -> Option<&RateLimit> {
+        self.rate_limit.as_ref()
+    }
+
+    /// Records the last response when it is a [`RateLimit`], unless one is recorded already.
+    /// Not part of any FMD2 request: the caller decides which responses count (e.g. not the
+    /// challenge an anti-bot bypass then solves).
+    pub fn note_rate_limit(&mut self) {
+        if self.rate_limit.is_none() {
+            self.rate_limit = self.response_rate_limit();
+        }
+    }
+
+    fn response_rate_limit(&self) -> Option<RateLimit> {
+        let limited = match self.result_code {
+            429 => true,
+            403 | 503 => {
+                let body = String::from_utf8_lossy(&self.document);
+                body.contains("cf-error-code") || body.contains("You are being rate limited")
+            }
+            _ => false,
+        };
+        if !limited || !self.holds_response_headers() {
+            return None;
+        }
+        let retry_after = self.headers.value("Retry-After").trim().to_owned();
+        let retry_after = match retry_after.parse::<u64>() {
+            Ok(secs) => Some(Duration::from_secs(secs)),
+            Err(_) => httpdate::parse(&retry_after).map(|at| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                let at = u64::try_from(at).unwrap_or(0);
+                Duration::from_secs(at.saturating_sub(now))
+            }),
+        };
+        Some(RateLimit {
+            status: self.result_code,
+            retry_after,
+        })
     }
 
     /// Reason phrase of the last response (`ResultString`,

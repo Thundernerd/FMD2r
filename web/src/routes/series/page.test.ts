@@ -117,6 +117,16 @@ describe('series page', () => {
 			'This series was not found'
 		);
 	});
+
+	it('shows why the series is unavailable as the server says it', async () => {
+		const detail =
+			'Weeb Central is limiting requests from this server. Try again in a few minutes.';
+		pending.reject(new ApiError(503, 'GET /api/series', detail));
+		await settle();
+
+		expect(document.querySelector('[role="alert"]')?.textContent).toBe(detail);
+		expect(document.querySelector('h1')?.textContent).toBe('Series');
+	});
 });
 
 /** Settings with two destinations, Manga the default, as the server sends them. */

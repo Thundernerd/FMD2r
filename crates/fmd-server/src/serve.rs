@@ -258,6 +258,7 @@ fn start_favorites(
             settings: state.settings.clone(),
             queue,
             jobs: state.jobs.clone(),
+            rate_limits: state.rate_limits.clone(),
         },
         state.favorites_events(),
     );

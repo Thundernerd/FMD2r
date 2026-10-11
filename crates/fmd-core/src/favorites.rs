@@ -24,7 +24,7 @@ use crate::download::{
     ChapterSpec, DownloadManager, EngineError, ModuleLookup, NewDownload, TaskId, rename_options,
     save_to,
 };
-use crate::info::{InfoError, InfoOptions, MangaInfo, get_info};
+use crate::info::{InfoError, InfoOptions, MangaInfo, RateLimits, get_info};
 use crate::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
 use crate::settings::{OutputFormat, SaveToSettings, SettingsService};
 
@@ -40,6 +40,8 @@ pub struct CheckerConfig {
     /// Used when `favorites.auto_download` is on; without one, finds go to the inbox.
     pub queue: Option<Arc<dyn TaskQueue>>,
     pub jobs: JobRegistry,
+    /// Websites paused after a rate-limited answer, shared with the other callers of `GetInfo`.
+    pub rate_limits: Arc<RateLimits>,
 }
 
 pub type QueueFuture<'a> = Pin<Box<dyn Future<Output = Result<TaskId, EngineError>> + Send + 'a>>;
@@ -408,16 +410,18 @@ impl FavoritesChecker {
             .max_favorite_threads
             .max(1);
         let permits = Arc::new(Semaphore::new(threads as usize));
+        let skipped: Arc<Mutex<HashSet<String>>> = Arc::default();
         let mut running = JoinSet::new();
         for (index, favorite) in favorites.into_iter().enumerate() {
             let permit = permits.clone().acquire_owned().await;
             let this = self.clone();
+            let skipped = skipped.clone();
             running.spawn(async move {
                 let _permit = permit;
                 if this.inner.cancelled.load(Ordering::SeqCst) {
                     return (index, Ok(None));
                 }
-                let checked = this.check_one(&favorite, mode).await;
+                let checked = this.check_one(&favorite, mode, &skipped).await;
                 let done = {
                     let mut status = lock(&this.inner.status);
                     status.done += 1;
@@ -471,15 +475,30 @@ impl FavoritesChecker {
         Ok(report)
     }
 
-    /// `DoCheck`/`DoCheckMissing` (baseunits/uFavoritesManager.pas:329-531).
+    /// `DoCheck`/`DoCheckMissing` (baseunits/uFavoritesManager.pas:329-531). Beyond FMD2, a
+    /// favorite of a website paused after a rate-limited answer is skipped; the first skip of
+    /// each website in a run (`skipped`) logs.
     async fn check_one(
         &self,
         favorite: &Favorite,
         mode: CheckMode,
+        skipped: &Mutex<HashSet<String>>,
     ) -> Result<Option<Checked>, CheckError> {
+        let rate_limits = &self.inner.config.rate_limits;
+        if rate_limits.is_paused(&favorite.module_id) {
+            if lock(skipped).insert(favorite.module_id.clone()) {
+                tracing::warn!(
+                    target: "fmd_core",
+                    "skipping the favorites of {}: it is limiting requests",
+                    self.website(&favorite.module_id)
+                );
+            }
+            return Ok(None);
+        }
         let info = match self.info(favorite).await {
             Ok(info) => info,
             Err(e) => {
+                rate_limits.record(&favorite.module_id, &e);
                 tracing::warn!(target: "fmd_core", "checking favorite {}: {e}", favorite.title);
                 return Ok(None);
             }

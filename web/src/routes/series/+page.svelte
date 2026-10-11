@@ -76,6 +76,8 @@
 		if (e.status === 404) return `This series was not found${e.detail ? ` (${e.detail})` : ''}.`;
 		if (e.status === 502)
 			return `The website could not be reached${e.detail ? `: ${e.detail}` : ''}.`;
+		// The server says which website is limiting requests, and what to do.
+		if (e.status === 503 && e.detail) return e.detail;
 		return `Could not load the series (HTTP ${e.status}).`;
 	}
 </script>

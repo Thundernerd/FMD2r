@@ -25,7 +25,7 @@ pub use fixtures::{
 };
 pub use module::ModuleHttp;
 pub use reqwest_transport::ReqwestTransport;
-pub use session::{HttpSession, SessionHook, USER_AGENT_DEFAULT, USER_AGENT_SYNAPSE};
+pub use session::{HttpSession, RateLimit, SessionHook, USER_AGENT_DEFAULT, USER_AGENT_SYNAPSE};
 pub use strings::NameValueList;
 pub use terminate::TerminateToken;
 pub use transport::{
