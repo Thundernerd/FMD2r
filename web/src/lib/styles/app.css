@@ -10,6 +10,8 @@
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import './tokens.css';
+/* PROTOTYPE (issue 225): candidate themes and accents, on branch prototype/themes only. */
+@import './prototype-themes.css';
 
 /* Base */
 *,

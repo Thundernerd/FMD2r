@@ -35,7 +35,10 @@ function css(file: string): string {
 }
 
 describe('style tokens', () => {
-	const files = styled(SRC).filter((file) => file !== TOKENS);
+	// PROTOTYPE (issue 225): the candidate themes are token blocks too.
+	const files = styled(SRC).filter(
+		(file) => file !== TOKENS && file !== 'lib/styles/prototype-themes.css'
+	);
 
 	it('finds the stylesheets and components to check', () => {
 		expect(files).toContain('lib/styles/app.css');

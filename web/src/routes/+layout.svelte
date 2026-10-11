@@ -8,6 +8,7 @@
 	import AddByUrl from '#lib/components/AddByUrl.svelte';
 	import InboxPopover from '#lib/components/InboxPopover.svelte';
 	import LoginScreen from '#lib/components/LoginScreen.svelte';
+	import PrototypeThemeSwitcher from '#lib/components/PrototypeThemeSwitcher.svelte';
 	import OpenServerBanner from '#lib/components/OpenServerBanner.svelte';
 	import QueueDock from '#lib/components/QueueDock.svelte';
 	import TopNav from '#lib/components/TopNav.svelte';
@@ -91,6 +92,9 @@
 		{/if}
 	</div>
 {/if}
+
+<!-- PROTOTYPE (#225): theme and accent candidates; branch prototype/themes only. -->
+<PrototypeThemeSwitcher />
 
 <style>
 	/* Leave room for the bottom tab bar (phones) and the queue dock. */

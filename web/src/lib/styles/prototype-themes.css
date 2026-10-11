@@ -1,0 +1,145 @@
+/* PROTOTYPE (#225), branch `prototype/themes` only; never merge into main.
+ *
+ * Candidate themes and accents, written exactly like the blocks in tokens.css so a chosen one can be
+ * copied there as it is. Imported after tokens.css (app.css), and picked with the floating switcher
+ * (PrototypeThemeSwitcher.svelte). */
+
+@import '@fontsource/literata/400.css';
+@import '@fontsource/literata/500.css';
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/700.css';
+
+/* Candidate accents. In tokens.css they go with the other swatches, before the themes. */
+
+[data-accent='pink'] {
+	--accent: light-dark(#b02a6b, #f48fbf);
+	--accent-fg: light-dark(#ffffff, #3d0a22);
+	--accent-soft: light-dark(#f9dceb, #3d1a2c);
+}
+
+[data-accent='amber'] {
+	--accent: light-dark(#835600, #f2bf4a);
+	--accent-fg: light-dark(#ffffff, #2e1f00);
+	--accent-soft: light-dark(#f7ebcf, #3a2c10);
+}
+
+[data-accent='indigo'] {
+	--accent: light-dark(#4338ca, #a5b4fc);
+	--accent-fg: light-dark(#ffffff, #14123d);
+	--accent-soft: light-dark(#e2e1fa, #232450);
+}
+
+[data-accent='cyan'] {
+	--accent: light-dark(#06657f, #5fd4f0);
+	--accent-fg: light-dark(#ffffff, #032530);
+	--accent-soft: light-dark(#d6edf5, #12343f);
+}
+
+[data-accent='lime'] {
+	--accent: light-dark(#476a06, #a3e048);
+	--accent-fg: light-dark(#ffffff, #1a2a03);
+	--accent-soft: light-dark(#e5f1cf, #25340f);
+}
+
+[data-accent='slate'] {
+	--accent: light-dark(#475569, #b4c0d0);
+	--accent-fg: light-dark(#ffffff, #141b26);
+	--accent-soft: light-dark(#e3e8ef, #252e3a);
+}
+
+/* High contrast keeps its own accent whichever swatch is picked. Only needed here because these
+ * swatches come after the themes in tokens.css; drop it when the swatches move there. */
+[data-style='high-contrast'] {
+	--accent: light-dark(#00398f, #9ccaff);
+	--accent-fg: light-dark(#ffffff, #000000);
+	--accent-soft: light-dark(#dce6f7, #0d2747);
+}
+
+/* Candidate themes. */
+
+/* True black in dark, for OLED screens: no glow around surfaces, so they part by their borders.
+ * Light is a plain neutral grey without the default's blue tint. */
+[data-style='oled'] {
+	--bg: light-dark(#f5f5f5, #000000);
+	--surface: light-dark(#ffffff, #000000);
+	--surface-2: light-dark(#ebebeb, #121212);
+	--line: light-dark(#d9d9d9, #2a2a2a);
+	--fg: light-dark(#111111, #e8e8e8);
+	--muted: light-dark(#555555, #9a9a9a);
+	--ok-soft: light-dark(#dcefe2, #0d1f13);
+	--warn-soft: light-dark(#f6e9d2, #241a08);
+	--bad-soft: light-dark(#f6dcd8, #2a100d);
+	--idle-soft: light-dark(#ececec, #141414);
+	--shadow: 0 1px 2px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0));
+}
+
+/* Solarized's low-glare base tones: cream paper in light, deep blue-green in dark. */
+[data-style='solarized'] {
+	--bg: light-dark(#fdf6e3, #002b36);
+	--surface: light-dark(#fffbee, #073642);
+	--surface-2: light-dark(#eee8d5, #0d4250);
+	--line: light-dark(#ddd6c1, #1d5563);
+	--fg: light-dark(#073642, #eee8d5);
+	--muted: light-dark(#4e6168, #9fadad);
+	--ok-soft: light-dark(#eef0cf, #12402a);
+	--warn-soft: light-dark(#f6ead0, #3a3a1a);
+	--bad-soft: light-dark(#f8e0d8, #3f2a2e);
+	--idle-soft: light-dark(#eee8d5, #0d4250);
+}
+
+/* Nord's cool arctic greys: snow-white in light, polar night in dark, with rounder corners. */
+[data-style='nord'] {
+	--bg: light-dark(#eceff4, #272c36);
+	--surface: light-dark(#f8f9fb, #2e3440);
+	--surface-2: light-dark(#e5e9f0, #3b4252);
+	--line: light-dark(#d1d8e3, #4c566a);
+	--fg: light-dark(#2e3440, #eceff4);
+	--muted: light-dark(#4c566a, #c0c8d6);
+	--ok-soft: light-dark(#dfeadb, #3a4a45);
+	--warn-soft: light-dark(#f3ead7, #4a4638);
+	--bad-soft: light-dark(#f2dfe0, #4e3c44);
+	--idle-soft: light-dark(#e5e9f0, #3b4252);
+	--r: 8px;
+	--r-lg: 12px;
+	--r-xl: 16px;
+}
+
+/* Saturated violet-tinted surfaces, strong status colours, round shapes and a geometric display
+ * font: loud where the others are quiet. */
+[data-style='vivid'] {
+	--bg: light-dark(#f2eeff, #110822);
+	--surface: light-dark(#ffffff, #1c1036);
+	--surface-2: light-dark(#e8e0ff, #2a1a4d);
+	--line: light-dark(#d2c4ff, #3f2a70);
+	--fg: light-dark(#1a1033, #f3eeff);
+	--muted: light-dark(#5a4a82, #b4a5dc);
+	--ok: light-dark(#007a3d, #2ee88a);
+	--warn: light-dark(#a35a00, #ffb627);
+	--bad: light-dark(#c4122f, #ff5c7a);
+	--ok-soft: light-dark(#d4f7e3, #0d3a26);
+	--warn-soft: light-dark(#ffecc8, #3d2a05);
+	--bad-soft: light-dark(#ffd9e0, #45101e);
+	--idle-soft: light-dark(#ece6ff, #2a1a4d);
+	--r: 10px;
+	--r-lg: 16px;
+	--r-xl: 20px;
+	--f-display: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* A book page: yellowed paper (darker and yellower than Warm) or lamplit brown in dark, serif body
+ * text and looser lines, for long reading sessions. */
+[data-style='sepia'] {
+	--bg: light-dark(#efe2c6, #1f1710);
+	--surface: light-dark(#f7ecd4, #2a2017);
+	--surface-2: light-dark(#e6d5b3, #362a1e);
+	--line: light-dark(#d2bd96, #4a3a29);
+	--fg: light-dark(#3a2914, #ead9ba);
+	--muted: light-dark(#634b2c, #b8a07c);
+	--ok-soft: light-dark(#e2e6c4, #2a3018);
+	--warn-soft: light-dark(#f0dcb0, #3a2a12);
+	--bad-soft: light-dark(#efd0bd, #3d2018);
+	--idle-soft: light-dark(#e6d9bd, #30261b);
+	--f-display: 'Literata', Georgia, 'Times New Roman', serif;
+	--f-body: 'Literata', Georgia, 'Times New Roman', serif;
+	--lh: 1.6;
+}
