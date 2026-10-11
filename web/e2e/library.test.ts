@@ -55,6 +55,8 @@ test('library covers load as thumbnails, and a missing one shows the title', asy
 
 	await expect(cards.filter({ hasText: 'Frieren' }).locator('img.loaded')).toBeVisible();
 	const sakamoto = cards.filter({ hasText: 'Sakamoto Days' });
+	// Covers are asked for only on screen, and on a phone this card can start below the fold.
+	await sakamoto.scrollIntoViewIfNeeded();
 	// Once asked for, its image is dropped when the request fails.
 	await expect
 		.poll(() => requested.some((url) => url.searchParams.get('link') === '/title/sd/sakamoto-days'))
