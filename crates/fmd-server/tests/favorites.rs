@@ -384,3 +384,54 @@ async fn a_favorite_not_checked_since_the_upgrade_keeps_the_count_difference() {
     // The site's 5 chapters less the 2 marked ones.
     assert_eq!(fx.new_chapters().await, 3);
 }
+
+impl Fixture {
+    /// Imports `/manga` of module `t` as FMD2 would, with `cover_url` stored (T227, issue #227).
+    fn import(&self, cover_url: Option<&str>) {
+        self.db
+            .favorites()
+            .import(&ImportedFavorite {
+                favorite: NewFavorite {
+                    module_id: "t".into(),
+                    link: "/manga".into(),
+                    title: "Manga".into(),
+                    save_to: "/data/Manga".into(),
+                    cover_url: cover_url.map(Into::into),
+                },
+                status: "1".into(),
+                current_chapter: 0,
+                enabled: true,
+                date_added: 0,
+                date_last_checked: None,
+                date_last_updated: None,
+            })
+            .unwrap();
+    }
+
+    async fn cover_url(&self) -> Value {
+        let list = json_body(self.send("GET", "/api/favorites", None).await).await;
+        list[0]["cover_url"].clone()
+    }
+}
+
+#[tokio::test]
+async fn a_favorite_without_a_stored_cover_gets_the_series_cover_url() {
+    let fx = Fixture::new();
+    fx.import(None);
+
+    assert_eq!(
+        fx.cover_url().await,
+        "/api/covers/series?module=t&link=%2Fmanga"
+    );
+}
+
+#[tokio::test]
+async fn a_favorite_with_a_stored_cover_gets_the_cover_proxy_url() {
+    let fx = Fixture::new();
+    fx.import(Some("https://example.com/c.jpg"));
+
+    assert_eq!(
+        fx.cover_url().await,
+        "/api/covers?module=t&url=https%3A%2F%2Fexample.com%2Fc.jpg"
+    );
+}

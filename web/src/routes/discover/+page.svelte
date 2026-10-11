@@ -4,7 +4,7 @@
 	import { page as route } from '$app/state';
 	import type { ListFacets, ListItem, MangaBakaStatus, ModuleSummary } from '#lib/api/types.ts';
 	import { api, events } from '#lib/app.ts';
-	import CoverThumb from '#lib/components/discover/CoverThumb.svelte';
+	import CoverThumb from '#lib/components/CoverThumb.svelte';
 	import GenreChips from '#lib/components/discover/GenreChips.svelte';
 	import ListActions from '#lib/components/discover/ListActions.svelte';
 	import MangaBakaHint from '#lib/components/discover/MangaBakaHint.svelte';

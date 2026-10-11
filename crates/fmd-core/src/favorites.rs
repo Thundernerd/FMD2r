@@ -631,7 +631,8 @@ impl FavoritesChecker {
 
     /// Stores chapter count and status (`DoCheck`, baseunits/uFavoritesManager.pas:351-353),
     /// check time, and update time when chapters were found (:373-378); beyond FMD2, also the
-    /// chapter links for the new-chapter badge. `None` when the favorite was removed meanwhile.
+    /// chapter links for the new-chapter badge and a non-empty cover link for the library.
+    /// `None` when the favorite was removed meanwhile.
     async fn store_checked(
         &self,
         id: FavoriteId,
@@ -642,6 +643,7 @@ impl FavoritesChecker {
         let chapters = u32::try_from(info.chapters.len()).unwrap_or(u32::MAX);
         let status = info.status.clone();
         let links: Vec<String> = info.chapters.iter().map(|c| c.link.clone()).collect();
+        let cover = Some(info.cover_link.clone()).filter(|c| !c.is_empty());
         let db = self.inner.config.db.clone();
         // Not atomic: it only races with another write to this favorite, which a PATCH redoes.
         blocking(move || {
@@ -651,6 +653,9 @@ impl FavoritesChecker {
             favorite.current_chapter = chapters;
             favorite.status = status;
             favorite.date_last_checked = Some(now);
+            if cover.is_some() {
+                favorite.cover_url = cover;
+            }
             if found {
                 favorite.date_last_updated = Some(now);
             }

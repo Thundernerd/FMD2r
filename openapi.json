@@ -3366,17 +3366,15 @@
           "status",
           "enabled",
           "save_to",
+          "cover_url",
           "current_chapter",
           "new_chapters",
           "date_added"
         ],
         "properties": {
           "cover_url": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "The cover through `/api/covers`."
+            "type": "string",
+            "description": "The cover through `/api/covers`, or through `/api/covers/series` when none is stored\n(FMD2's favorites have no cover)."
           },
           "current_chapter": {
             "type": "integer",

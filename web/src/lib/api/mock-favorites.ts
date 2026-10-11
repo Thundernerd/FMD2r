@@ -10,6 +10,10 @@ import type {
 // The library of the in-memory backend (see mock.ts), with a favorites check that works
 // through one favorite per tick.
 
+/** The `/api/covers/series` URL the server gives a favorite with no stored cover. */
+const seriesCover = (module: string, link: string): string =>
+	`/api/covers/series?${new URLSearchParams({ module, link })}`;
+
 const seedFavorites = (): FavoriteView[] => {
 	const favorite = (
 		id: number,
@@ -27,7 +31,8 @@ const seedFavorites = (): FavoriteView[] => {
 		status: 'ongoing',
 		enabled: true,
 		save_to: `/data/downloads/${title}`,
-		cover_url: null,
+		// FMD2's favorites have no cover, so the server points at the series cover.
+		cover_url: seriesCover(module_id, link),
 		current_chapter: 40,
 		new_chapters: 0,
 		date_added: `2026-0${(id % 9) + 1}-01T00:00:00Z`,
@@ -132,7 +137,7 @@ export function createMockFavorites(job: JobState): MockFavorites {
 				status: series.status,
 				enabled: true,
 				save_to: saveTo,
-				cover_url: series.cover_url ?? null,
+				cover_url: series.cover_url ?? seriesCover(series.module_id, series.link),
 				current_chapter: series.chapters.length,
 				new_chapters: 0,
 				date_added: new Date().toISOString(),
