@@ -102,8 +102,8 @@ impl Transport for Site {
     }
 }
 
-/// A module (and, at `other.test`, its copy `other`) whose series page holds a status line, then one `link name` chapter per line; a
-/// `cover <link>` line sets the cover link.
+/// A module (and, at `other.test`, its copy `other`) whose series page holds a status line, then
+/// one `link name` chapter per line; a `cover <link>` line sets the cover link.
 const SITE: &str = r#"
 function Init()
   local m = NewWebsiteModule()

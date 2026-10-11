@@ -1,13 +1,15 @@
 //! A series' info as a module's `OnGetInfo` reports it, cleaned up as FMD2's
 //! `TMangaInformation.GetInfoFromURL` does (baseunits/uData.pas:85-208).
 
+mod rate_limits;
 mod text;
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 use fmd_lua::{CallbackError, JobError, Module, WorkerPool};
+
+pub use self::rate_limits::RateLimits;
 
 use self::text::{
     clean_multilined_string, clean_string, clean_url, common_string_filter, fix_white_space,
@@ -115,53 +117,6 @@ pub async fn get_info(
         _ => return Err(InfoError::NotFound("series not found".into())),
     }
     Ok(clean_up(reply.info, options))
-}
-
-/// How long a website stays paused after a rate-limited answer without a `Retry-After`.
-pub const DEFAULT_PAUSE: Duration = Duration::from_secs(10 * 60);
-
-/// The websites that rate-limited this server, by module ID, and until when background requests
-/// to them (cover lookups, favorite checks) pause. Beyond FMD2, which keeps asking.
-#[derive(Debug, Default)]
-pub struct RateLimits {
-    paused: Mutex<HashMap<String, Instant>>,
-}
-
-impl RateLimits {
-    /// After `err`, when it is [`InfoError::RateLimited`], pauses `module_id` until its
-    /// `Retry-After`, else for [`DEFAULT_PAUSE`]. Logs a warning when the pause starts.
-    pub fn record(&self, module_id: &str, err: &InfoError) {
-        let InfoError::RateLimited {
-            website,
-            status,
-            retry_after,
-        } = err
-        else {
-            return;
-        };
-        let pause = retry_after.unwrap_or(DEFAULT_PAUSE);
-        let until = Instant::now() + pause;
-        let mut paused = self.paused.lock().unwrap_or_else(|e| e.into_inner());
-        match paused.get_mut(module_id) {
-            Some(current) if *current > Instant::now() => *current = (*current).max(until),
-            _ => {
-                tracing::warn!(
-                    target: "fmd_core",
-                    "{website} answered {status}: pausing its cover lookups and favorite checks for {}s",
-                    pause.as_secs()
-                );
-                paused.insert(module_id.to_owned(), until);
-            }
-        }
-    }
-
-    /// Whether background requests to `module_id` are paused.
-    pub fn is_paused(&self, module_id: &str) -> bool {
-        let paused = self.paused.lock().unwrap_or_else(|e| e.into_inner());
-        paused
-            .get(module_id)
-            .is_some_and(|until| *until > Instant::now())
-    }
 }
 
 /// baseunits/uData.pas:111-205.

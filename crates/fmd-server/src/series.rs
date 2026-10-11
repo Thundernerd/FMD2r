@@ -224,7 +224,7 @@ pub(crate) async fn fetch_info(
         .get_info(module, link, options)
         .await
         .map_err(|e| {
-            state.rate_limits.record(module, &e);
+            state.rate_limits.pause_if_limited(module, &e);
             info_error(e)
         })?;
     state.series_cache.put(key, info.clone());
@@ -266,7 +266,7 @@ impl InfoCache {
     }
 }
 
-fn info_error(err: InfoError) -> ApiError {
+pub(crate) fn info_error(err: InfoError) -> ApiError {
     match err {
         InfoError::UnknownModule => ApiError::Missing("no such module".into()),
         InfoError::NotFound(msg) => ApiError::Missing(msg),

@@ -485,7 +485,7 @@ impl FavoritesChecker {
         skipped: &Mutex<HashSet<String>>,
     ) -> Result<Option<Checked>, CheckError> {
         let rate_limits = &self.inner.config.rate_limits;
-        if rate_limits.is_paused(&favorite.module_id) {
+        if rate_limits.paused(&favorite.module_id).is_some() {
             if lock(skipped).insert(favorite.module_id.clone()) {
                 tracing::warn!(
                     target: "fmd_core",
@@ -498,7 +498,7 @@ impl FavoritesChecker {
         let info = match self.info(favorite).await {
             Ok(info) => info,
             Err(e) => {
-                rate_limits.record(&favorite.module_id, &e);
+                rate_limits.pause_if_limited(&favorite.module_id, &e);
                 tracing::warn!(target: "fmd_core", "checking favorite {}: {e}", favorite.title);
                 return Ok(None);
             }

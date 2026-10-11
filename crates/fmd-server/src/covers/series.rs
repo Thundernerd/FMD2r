@@ -18,7 +18,7 @@ use utoipa::IntoParams;
 
 use super::{Covers, Origin, check_width, respond};
 use crate::error::ApiQuery;
-use crate::series::fetch_info;
+use crate::series::{fetch_info, info_error};
 use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
@@ -162,14 +162,7 @@ async fn find(
         None => {
             // A website paused after a rate-limited answer isn't asked, nor are the lookups
             // queued behind the one that got that answer.
-            let paused = || {
-                state.rate_limits.is_paused(module).then(|| {
-                    ApiError::RateLimited(format!(
-                        "{} is limiting requests from this server. Try again in a few minutes.",
-                        info.name
-                    ))
-                })
-            };
+            let paused = || state.rate_limits.paused(module).map(info_error);
             let looked_up = match paused() {
                 Some(e) => Err(e),
                 None => {
