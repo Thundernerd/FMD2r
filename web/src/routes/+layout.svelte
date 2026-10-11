@@ -11,6 +11,19 @@
 	import OpenServerBanner from '#lib/components/OpenServerBanner.svelte';
 	import QueueDock from '#lib/components/QueueDock.svelte';
 	import TopNav from '#lib/components/TopNav.svelte';
+	// PROTOTYPE (#224): alternative app shells behind `?variant=`; see PrototypeSwitcher.svelte.
+	import PrototypeSwitcher from '#lib/components/prototype-layouts/PrototypeSwitcher.svelte';
+	import ShellCommand from '#lib/components/prototype-layouts/ShellCommand.svelte';
+	import ShellRail from '#lib/components/prototype-layouts/ShellRail.svelte';
+	import ShellSidebar from '#lib/components/prototype-layouts/ShellSidebar.svelte';
+	import ShellWorkbench from '#lib/components/prototype-layouts/ShellWorkbench.svelte';
+	import {
+		currentVariant,
+		picked,
+		prototypesOn,
+		urlHasVariant,
+		type VariantKey
+	} from '#lib/components/prototype-layouts/variant.svelte.ts';
 	import { setup } from '#lib/setup/status.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
@@ -59,6 +72,28 @@
 	// puts its save bar where the dock sits.
 	const showDock = $derived(!['/queue', '/settings'].includes(page.url.pathname));
 
+	// PROTOTYPE (#224): remember the variant, and put it back on links that drop it.
+	const variant = $derived(prototypesOn ? currentVariant() : 'B');
+	$effect(() => {
+		if (!prototypesOn) return;
+		const url = page.url;
+		if (urlHasVariant(url)) {
+			picked.key = currentVariant();
+		} else if (picked.key !== 'B') {
+			const next = new URL(url.href);
+			next.searchParams.set('variant', picked.key);
+			goto(next, { replace: true, reset: false });
+		}
+	});
+	// Where the switcher sits so it clears each shell's bottom chrome (phone, desktop).
+	const LIFT: Record<VariantKey, [string, string]> = {
+		B: ['calc(var(--bottom-nav-h) + 76px)', '96px'],
+		S: ['16px', '16px'],
+		W: ['calc(var(--bottom-nav-h) + 48px)', '44px'],
+		C: ['72px', '16px'],
+		R: ['calc(var(--bottom-nav-h) + 70px)', '16px']
+	};
+
 	async function logout() {
 		await api.logout().catch(() => {});
 		session.unauthorized();
@@ -73,7 +108,7 @@
 	<main>
 		{@render children()}
 	</main>
-{:else}
+{:else if variant === 'B'}
 	<div class="app" class:with-dock={showDock}>
 		<OpenServerBanner health={session.health} />
 		<TopNav>
@@ -90,6 +125,22 @@
 			<QueueDock queue={events.queue} />
 		{/if}
 	</div>
+{:else}
+	{@const shellProps = { api, events, logout: session.required ? logout : null }}
+	{#snippet banner()}<OpenServerBanner health={session.health} />{/snippet}
+	{#if variant === 'S'}
+		<ShellSidebar {...shellProps} {banner}>{@render children()}</ShellSidebar>
+	{:else if variant === 'W'}
+		<ShellWorkbench {...shellProps} {banner}>{@render children()}</ShellWorkbench>
+	{:else if variant === 'C'}
+		<ShellCommand {...shellProps} {banner}>{@render children()}</ShellCommand>
+	{:else}
+		<ShellRail {...shellProps} {banner}>{@render children()}</ShellRail>
+	{/if}
+{/if}
+
+{#if prototypesOn && !session.locked && !onSetup}
+	<PrototypeSwitcher liftPhone={LIFT[variant][0]} liftDesktop={LIFT[variant][1]} />
 {/if}
 
 <style>
