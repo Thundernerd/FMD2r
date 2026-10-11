@@ -236,10 +236,6 @@
 		gap: var(--sp-1);
 		margin-right: auto;
 	}
-	.btn:disabled {
-		opacity: 0.55;
-		cursor: default;
-	}
 	.field-error,
 	.warning {
 		margin: 0;
