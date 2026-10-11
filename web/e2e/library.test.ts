@@ -38,23 +38,32 @@ const PIXEL = Buffer.from(
 
 test('library covers load as thumbnails, and a missing one shows the title', async ({ page }) => {
 	const requested: URL[] = [];
-	await page.route('**/api/covers/**', (route) => {
-		const url = new URL(route.request().url());
-		requested.push(url);
-		// Sakamoto Days has no cover anywhere.
-		return url.searchParams.get('link') === '/title/sd/sakamoto-days'
-			? route.fulfill({ status: 404 })
-			: route.fulfill({ contentType: 'image/png', body: PIXEL });
-	});
+	await page.route(
+		(url) => url.pathname.startsWith('/api/covers'),
+		(route) => {
+			const url = new URL(route.request().url());
+			requested.push(url);
+			// Sakamoto Days has no cover anywhere.
+			return url.searchParams.get('link') === '/title/sd/sakamoto-days'
+				? route.fulfill({ status: 404 })
+				: route.fulfill({ contentType: 'image/png', body: PIXEL });
+		}
+	);
 	await page.goto('/');
 	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
 	await expect(cards).toHaveCount(8);
 
 	await expect(cards.filter({ hasText: 'Frieren' }).locator('img.loaded')).toBeVisible();
 	const sakamoto = cards.filter({ hasText: 'Sakamoto Days' });
+	// Once asked for, its image is dropped when the request fails.
+	await expect
+		.poll(() => requested.some((url) => url.searchParams.get('link') === '/title/sd/sakamoto-days'))
+		.toBe(true);
 	await expect(sakamoto.locator('img')).toHaveCount(0);
 	await expect(sakamoto.locator('.blank')).toHaveText('Sakamoto Days');
-	expect(requested.length).toBeGreaterThan(0);
+	// Both endpoints: Frieren's stored cover through the proxy, the others' series covers.
+	const paths = new Set(requested.map((url) => url.pathname));
+	expect(paths).toEqual(new Set(['/api/covers', '/api/covers/series']));
 	for (const url of requested) expect(url.searchParams.get('w')).toBe('300');
 });
 

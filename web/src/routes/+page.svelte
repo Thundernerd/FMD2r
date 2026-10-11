@@ -215,7 +215,10 @@
 				<li>
 					<a class="card" class:disabled={!favorite.enabled} href={seriesHref(favorite)}>
 						<span class="art">
-							<CoverThumb src={favorite.cover_url} title={favorite.title} />
+							<!-- A check can replace the series cover with the website's: start that one afresh. -->
+							{#key favorite.cover_url}
+								<CoverThumb src={favorite.cover_url} title={favorite.title} />
+							{/key}
 							{#if favorite.new_chapters > 0}
 								<span class="badge num" aria-label="{favorite.new_chapters} new chapters"
 									>+{favorite.new_chapters}</span

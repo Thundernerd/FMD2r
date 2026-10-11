@@ -358,24 +358,7 @@ async fn stale_marks_from_an_old_url_scheme_do_not_hide_new_chapters() {
 async fn a_favorite_not_checked_since_the_upgrade_keeps_the_count_difference() {
     let fx = Fixture::new();
     // Imported from FMD2, which stores only the chapter count.
-    fx.db
-        .favorites()
-        .import(&ImportedFavorite {
-            favorite: NewFavorite {
-                module_id: "t".into(),
-                link: "/manga".into(),
-                title: "Manga".into(),
-                save_to: "/data/Manga".into(),
-                cover_url: None,
-            },
-            status: "1".into(),
-            current_chapter: 5,
-            enabled: true,
-            date_added: 0,
-            date_last_checked: None,
-            date_last_updated: None,
-        })
-        .unwrap();
+    fx.import(5, None);
     fx.db
         .downloaded_chapters()
         .mark("t", "/manga", &["/c1", "/c2"])
@@ -386,8 +369,9 @@ async fn a_favorite_not_checked_since_the_upgrade_keeps_the_count_difference() {
 }
 
 impl Fixture {
-    /// Imports `/manga` of module `t` as FMD2 would, with `cover_url` stored (T227, issue #227).
-    fn import(&self, cover_url: Option<&str>) {
+    /// Imports `/manga` of module `t` as FMD2 would, with `current_chapter` and `cover_url`
+    /// stored.
+    fn import(&self, current_chapter: u32, cover_url: Option<&str>) {
         self.db
             .favorites()
             .import(&ImportedFavorite {
@@ -399,7 +383,7 @@ impl Fixture {
                     cover_url: cover_url.map(Into::into),
                 },
                 status: "1".into(),
-                current_chapter: 0,
+                current_chapter,
                 enabled: true,
                 date_added: 0,
                 date_last_checked: None,
@@ -417,7 +401,7 @@ impl Fixture {
 #[tokio::test]
 async fn a_favorite_without_a_stored_cover_gets_the_series_cover_url() {
     let fx = Fixture::new();
-    fx.import(None);
+    fx.import(0, None);
 
     assert_eq!(
         fx.cover_url().await,
@@ -428,7 +412,7 @@ async fn a_favorite_without_a_stored_cover_gets_the_series_cover_url() {
 #[tokio::test]
 async fn a_favorite_with_a_stored_cover_gets_the_cover_proxy_url() {
     let fx = Fixture::new();
-    fx.import(Some("https://example.com/c.jpg"));
+    fx.import(0, Some("https://example.com/c.jpg"));
 
     assert_eq!(
         fx.cover_url().await,

@@ -6,13 +6,10 @@ import type {
 	JobState,
 	SeriesInfo
 } from './types';
+import { seriesCover } from './mock-lists';
 
 // The library of the in-memory backend (see mock.ts), with a favorites check that works
 // through one favorite per tick.
-
-/** The `/api/covers/series` URL the server gives a favorite with no stored cover. */
-const seriesCover = (module: string, link: string): string =>
-	`/api/covers/series?${new URLSearchParams({ module, link })}`;
 
 const seedFavorites = (): FavoriteView[] => {
 	const favorite = (
@@ -42,6 +39,8 @@ const seedFavorites = (): FavoriteView[] => {
 	});
 	return [
 		favorite(1, 'Frieren', 'mangadex', 'MangaDex', '/title/abc123/frieren', {
+			// Added from its series page, so its cover is stored and goes through the proxy.
+			cover_url: `/api/covers?${new URLSearchParams({ module: 'mangadex', url: 'https://mangadex.test/frieren.jpg' })}`,
 			current_chapter: 142,
 			new_chapters: 4,
 			last_updated: '2026-10-08T09:12:00Z'
