@@ -21,6 +21,8 @@ services:
       # (use_webdriver, flaresolverr_ip, flaresolverr_port), which upstream's cloudflare.lua reads.
       FMD2R_FLARESOLVERR_URL: http://flaresolverr:8191
       FMD2R_PASSWORD: ${FMD2R_PASSWORD:-}
+      # true when a reverse proxy or VPN in front of FMD2r asks for a login: no open-server warnings.
+      FMD2R_EXTERNAL_AUTH: ${FMD2R_EXTERNAL_AUTH:-}
       RUST_LOG: ${RUST_LOG:-info}
       TZ: ${TZ:-UTC}
     ports:

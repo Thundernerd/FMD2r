@@ -173,6 +173,7 @@ impl Server {
             bind: Some(bind),
             data_dir,
             auth: None,
+            external_auth: None,
             flaresolverr_url: None,
             logs: LogBuffer::new(100, EventBus::new()),
             module_updates,

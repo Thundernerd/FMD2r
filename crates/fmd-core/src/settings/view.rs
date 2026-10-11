@@ -256,6 +256,8 @@ pub struct ServerSettingsView {
     /// Days a login session lasts at most, however often it is used.
     #[schema(minimum = 1, maximum = 3650)]
     pub session_lifetime_days: u32,
+    /// Authentication is handled in front of FMD2r, so an open server is not warned about.
+    pub external_auth: bool,
 }
 
 impl From<ServerSettings> for ServerSettingsView {
@@ -265,12 +267,14 @@ impl From<ServerSettings> for ServerSettingsView {
             auth_token,
             session_idle_days,
             session_lifetime_days,
+            external_auth,
         } = s;
         Self {
             bind,
             has_auth_token: is_set(auth_token.as_deref()),
             session_idle_days,
             session_lifetime_days,
+            external_auth,
         }
     }
 }

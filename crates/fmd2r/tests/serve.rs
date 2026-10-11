@@ -30,6 +30,11 @@ fn start_with(args: &[&str]) -> Server {
 /// Starts `fmd2r serve` with `args` and the data dir `<dir>/data`, and no `FMD2R_*` variables
 /// from the test's environment, and waits for its "listening on" line.
 fn start_in(dir: tempfile::TempDir, args: &[&str]) -> Server {
+    start_in_env(dir, args, &[])
+}
+
+/// [`start_in`] with the environment variables `env` set.
+fn start_in_env(dir: tempfile::TempDir, args: &[&str], env: &[(&str, &str)]) -> Server {
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("fmd2r"))
         .args(["serve", "--data-dir"])
         .arg(dir.path().join("data"))
@@ -39,6 +44,8 @@ fn start_in(dir: tempfile::TempDir, args: &[&str]) -> Server {
         .env("RUST_LOG", "info")
         .env_remove("FMD2R_BIND")
         .env_remove("FMD2R_PASSWORD")
+        .env_remove("FMD2R_EXTERNAL_AUTH")
+        .envs(env.iter().copied())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -236,5 +243,22 @@ fn startup_does_not_warn_on_loopback_or_with_a_password() {
     let args = ["--bind", "0.0.0.0:0", "--password", "hunter2"];
     let server = start_in(tempfile::tempdir().unwrap(), &args);
     assert!(!warned_open(&server), "{:?}", server.startup);
+    signal_and_wait(server, "TERM");
+}
+
+#[test]
+fn startup_does_not_warn_when_authentication_is_handled_in_front() {
+    let env = [("FMD2R_EXTERNAL_AUTH", "true")];
+    let server = start_in_env(tempfile::tempdir().unwrap(), &["--bind", "0.0.0.0:0"], &env);
+    assert!(!warned_open(&server), "{:?}", server.startup);
+    // The log still records that the API itself is open.
+    assert!(
+        server
+            .startup
+            .iter()
+            .any(|line| line.contains("INFO") && line.contains("authentication in front")),
+        "{:?}",
+        server.startup
+    );
     signal_and_wait(server, "TERM");
 }
