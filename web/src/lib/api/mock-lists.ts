@@ -69,7 +69,7 @@ function title(module: string, i: number): ListItem {
 		added_jdn: TODAY_JDN - (i % 40),
 		format: pick(FORMATS, i),
 		publication: pick(PUBLICATIONS, i * 5 + 1),
-		cover_url: `/api/covers/series?${new URLSearchParams({ module, link: `/manga/${module}-${i}` })}`
+		cover_url: seriesCover(module, `/manga/${module}-${i}`)
 	};
 }
 
@@ -82,6 +82,10 @@ interface Job {
 	total: number;
 	cancelled: boolean;
 }
+
+/** The `GET /api/covers/series` URL of `module`'s title at `link`. */
+export const seriesCover = (module: string, link: string): string =>
+	`/api/covers/series?${new URLSearchParams({ module, link })}`;
 
 export interface MockLists {
 	/** The list fields of `module`'s `GET /api/modules` entry. */

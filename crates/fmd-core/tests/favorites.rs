@@ -77,7 +77,8 @@ impl Transport for Site {
     }
 }
 
-/// A module whose series page holds a status line, then one `link name` chapter per line.
+/// A module whose series page holds a status line, then one `link name` chapter per line; a
+/// `cover <link>` line sets the cover link.
 const SITE: &str = r#"
 function Init()
   local m = NewWebsiteModule()
@@ -93,6 +94,8 @@ function GetInfo()
       MANGAINFO.Title = 'Manga'
       MANGAINFO.Status = line
       first = false
+    elseif line:match('^cover ') then
+      MANGAINFO.CoverLink = line:sub(7)
     else
       local link, name = line:match('^(%S+) (.+)$')
       MANGAINFO.ChapterLinks.Add(link)
@@ -246,6 +249,47 @@ async fn a_check_stores_the_status_chapter_count_and_dates() {
     assert!(after.date_last_checked.is_some());
     // New chapters were found, so it counts as updated (:376-377).
     assert!(after.date_last_updated.is_some());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_check_stores_the_sites_cover_link() {
+    let fx = Fixture::new(json!({}));
+    let id = fx.favorite();
+    fx.site.set(
+        "/manga",
+        "1\ncover https://site.test/cover.jpg\n/c1 Chapter 1",
+    );
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+
+    let after = fx.db.favorites().get(id).unwrap().unwrap();
+    assert_eq!(
+        after.cover_url.as_deref(),
+        Some("https://site.test/cover.jpg")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_check_without_a_cover_link_keeps_the_stored_cover() {
+    let fx = Fixture::new(json!({}));
+    let id = fx.favorite();
+    let mut favorite = fx.db.favorites().get(id).unwrap().unwrap();
+    favorite.cover_url = Some("https://site.test/old.jpg".into());
+    fx.db.favorites().update(&favorite).unwrap();
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+
+    let after = fx.db.favorites().get(id).unwrap().unwrap();
+    assert_eq!(
+        after.cover_url.as_deref(),
+        Some("https://site.test/old.jpg")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

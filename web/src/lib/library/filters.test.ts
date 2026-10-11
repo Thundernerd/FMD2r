@@ -17,7 +17,7 @@ const favorite = (id: number, patch: Partial<FavoriteView> = {}): FavoriteView =
 	status: 'ongoing',
 	enabled: true,
 	save_to: '/data',
-	cover_url: null,
+	cover_url: `/api/covers/series?module=mangadex&link=%2Ftitle%2F${id}`,
 	current_chapter: 10,
 	new_chapters: 0,
 	date_added: '2026-01-01T00:00:00Z',

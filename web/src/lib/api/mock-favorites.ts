@@ -6,6 +6,7 @@ import type {
 	JobState,
 	SeriesInfo
 } from './types';
+import { seriesCover } from './mock-lists';
 
 // The library of the in-memory backend (see mock.ts), with a favorites check that works
 // through one favorite per tick.
@@ -27,7 +28,8 @@ const seedFavorites = (): FavoriteView[] => {
 		status: 'ongoing',
 		enabled: true,
 		save_to: `/data/downloads/${title}`,
-		cover_url: null,
+		// FMD2's favorites have no cover, so the server points at the series cover.
+		cover_url: seriesCover(module_id, link),
 		current_chapter: 40,
 		new_chapters: 0,
 		date_added: `2026-0${(id % 9) + 1}-01T00:00:00Z`,
@@ -37,6 +39,8 @@ const seedFavorites = (): FavoriteView[] => {
 	});
 	return [
 		favorite(1, 'Frieren', 'mangadex', 'MangaDex', '/title/abc123/frieren', {
+			// Added from its series page, so its cover is stored and goes through the proxy.
+			cover_url: `/api/covers?${new URLSearchParams({ module: 'mangadex', url: 'https://mangadex.test/frieren.jpg' })}`,
 			current_chapter: 142,
 			new_chapters: 4,
 			last_updated: '2026-10-08T09:12:00Z'
@@ -132,7 +136,7 @@ export function createMockFavorites(job: JobState): MockFavorites {
 				status: series.status,
 				enabled: true,
 				save_to: saveTo,
-				cover_url: series.cover_url ?? null,
+				cover_url: series.cover_url ?? seriesCover(series.module_id, series.link),
 				current_chapter: series.chapters.length,
 				new_chapters: 0,
 				date_added: new Date().toISOString(),

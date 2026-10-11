@@ -1259,8 +1259,11 @@ export interface components {
 		};
 		/** @description A favorite as the Library shows it. */
 		FavoriteView: {
-			/** @description The cover through `/api/covers`. */
-			cover_url?: string | null;
+			/**
+			 * @description The cover through `/api/covers`, or through `/api/covers/series` when none is stored
+			 *     (FMD2's favorites have no cover).
+			 */
+			cover_url: string;
 			/**
 			 * Format: int32
 			 * @description Chapters on the site at the last check (FMD2's `currentchapter`).

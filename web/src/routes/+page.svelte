@@ -12,6 +12,7 @@
 		type LibraryFilters
 	} from '#lib/library/filters.ts';
 	import { seriesHref } from '#lib/series/href.ts';
+	import CoverThumb from '#lib/components/CoverThumb.svelte';
 	import FolderDialog from '#lib/components/library/FolderDialog.svelte';
 	import ImportDialog from '#lib/components/library/ImportDialog.svelte';
 
@@ -30,8 +31,6 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let filters = $state<LibraryFilters>(emptyFilters());
-	/** Covers that failed to load, by favorite id. */
-	let brokenCovers = $state<Record<number, boolean>>({});
 	let starting = $state(false);
 	let checkError = $state<string | null>(null);
 	let importing = $state(false);
@@ -98,13 +97,6 @@
 		} catch {
 			checkError = 'Could not cancel the check.';
 		}
-	}
-
-	/** A stable hue per title for its placeholder cover. */
-	function hue(title: string): number {
-		let h = 0;
-		for (const c of title) h = (h * 31 + c.charCodeAt(0)) % 360;
-		return h;
 	}
 </script>
 
@@ -223,19 +215,10 @@
 				<li>
 					<a class="card" class:disabled={!favorite.enabled} href={seriesHref(favorite)}>
 						<span class="art">
-							{#if favorite.cover_url && !brokenCovers[favorite.id]}
-								<img
-									class="cover"
-									src={favorite.cover_url}
-									alt=""
-									loading="lazy"
-									onerror={() => (brokenCovers[favorite.id] = true)}
-								/>
-							{:else}
-								<span class="cover blank" style:--h={hue(favorite.title)} aria-hidden="true"
-									>{favorite.title}</span
-								>
-							{/if}
+							<!-- A check can replace the series cover with the website's: start that one afresh. -->
+							{#key favorite.cover_url}
+								<CoverThumb src={favorite.cover_url} title={favorite.title} />
+							{/key}
 							{#if favorite.new_chapters > 0}
 								<span class="badge num" aria-label="{favorite.new_chapters} new chapters"
 									>+{favorite.new_chapters}</span
@@ -348,35 +331,9 @@
 	.card.disabled .art {
 		opacity: 0.5;
 	}
-	.card:hover .cover {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
 	.art {
 		position: relative;
 		display: block;
-	}
-	.cover {
-		display: block;
-		width: 100%;
-		aspect-ratio: 5 / 7;
-		border-radius: 4px;
-		object-fit: cover;
-		background: var(--surface-2);
-	}
-	.cover.blank {
-		display: flex;
-		align-items: flex-end;
-		padding: 6px;
-		color: var(--on-cover);
-		font: 700 var(--fs-ui)/1.1 var(--f-display);
-		background: linear-gradient(
-			160deg,
-			hsl(var(--h) var(--cover-tone-top)),
-			hsl(calc(var(--h) + 40) var(--cover-tone-bottom))
-		);
-		text-shadow: var(--on-cover-shadow);
-		overflow: hidden;
 	}
 	.badge {
 		position: absolute;

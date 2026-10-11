@@ -9,6 +9,7 @@ use fmd_store::{Favorite, FavoriteId, NewFavorite};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
+use crate::covers::series::cover_url as series_cover_url;
 use crate::error::{ApiJson, ApiQuery};
 use crate::series::{SeriesStatus, fetch_info};
 use crate::services::FavoritesJobs;
@@ -29,8 +30,9 @@ pub struct FavoriteView {
     /// Checked by the new-chapter check.
     pub enabled: bool,
     pub save_to: String,
-    /// The cover through `/api/covers`.
-    pub cover_url: Option<String>,
+    /// The cover through `/api/covers`, or through `/api/covers/series` when none is stored
+    /// (FMD2's favorites have no cover).
+    pub cover_url: String,
     /// Chapters on the site at the last check (FMD2's `currentchapter`).
     pub current_chapter: u32,
     /// Chapters on the site at the last check that are not downloaded, compared by link. Until
@@ -348,11 +350,10 @@ async fn view(state: &AppState, favorite: Favorite) -> Result<FavoriteView, ApiE
 fn to_view(favorite: Favorite, website: String, new_chapters: u32) -> FavoriteView {
     FavoriteView {
         id: favorite.id.0,
-        cover_url: favorite
-            .cover_url
-            .as_deref()
-            .filter(|c| !c.is_empty())
-            .map(|c| cover_url(&favorite.module_id, c)),
+        cover_url: match favorite.cover_url.as_deref().filter(|c| !c.is_empty()) {
+            Some(cover) => cover_url(&favorite.module_id, cover),
+            None => series_cover_url(&favorite.module_id, &favorite.link),
+        },
         status: SeriesStatus::from_fmd(&favorite.status),
         new_chapters,
         current_chapter: favorite.current_chapter,

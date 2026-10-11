@@ -6,7 +6,7 @@
 		src,
 		title
 	}: {
-		/** The title's cover (`ListItem.cover_url`); `null` asks for nothing. */
+		/** The title's cover (`ListItem.cover_url` or `FavoriteView.cover_url`); `null` asks for nothing. */
 		src: string | null;
 		title: string;
 	} = $props();
@@ -64,7 +64,7 @@
 		border-radius: 4px;
 		overflow: hidden;
 	}
-	:global(a:hover) > .frame {
+	:global(a:hover) .frame {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
