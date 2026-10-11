@@ -1400,6 +1400,11 @@ export interface components {
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
 			auth: boolean;
+			/**
+			 * @description Whether authentication is handled in front of FMD2r (`server.external_auth`, or its
+			 *     command line override), so an open server needs no warning. The API itself stays open.
+			 */
+			external_auth: boolean;
 			/** @description Whether the server runs in a container (Docker or Podman), whose folders must be mounted. */
 			in_container: boolean;
 			/** @description Whether the server listens on a loopback address only. */
@@ -2261,6 +2266,8 @@ export interface components {
 		ServerSettingsView: {
 			/** @description Socket address to listen on. */
 			bind: string;
+			/** @description Authentication is handled in front of FMD2r, so an open server is not warned about. */
+			external_auth: boolean;
 			/** @description Whether a password is set. Patch `auth_token` to set it; an empty one clears it. */
 			has_auth_token: boolean;
 			/**
@@ -2433,6 +2440,7 @@ export interface components {
 			/**
 			 * @default {
 			 *       "bind": "127.0.0.1:8080",
+			 *       "external_auth": false,
 			 *       "has_auth_token": false,
 			 *       "session_idle_days": 7,
 			 *       "session_lifetime_days": 30

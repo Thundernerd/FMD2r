@@ -1,8 +1,12 @@
 import type { Api } from '#lib/api/client.ts';
 import type { Health } from '#lib/api/types.ts';
 
-/** Whether anyone who can reach the server can use it: no password, and not on loopback only. */
-export const isOpenServer = (health: Health): boolean => !health.auth && !health.loopback;
+/**
+ * Whether anyone who can reach the server can use it: no password, not on loopback only, and no
+ * authentication in front of it (`server.external_auth`).
+ */
+export const isOpenServer = (health: Health): boolean =>
+	!health.auth && !health.loopback && !health.external_auth;
 
 /**
  * Whether the server wants the password, and whether this browser lacks a live session: set
