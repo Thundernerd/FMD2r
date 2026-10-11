@@ -30,8 +30,9 @@ pub struct ServeConfig {
     pub data_dir: PathBuf,
     /// Password/token required for the API; `None` leaves it open.
     pub auth: Option<String>,
-    /// Overrides `server.external_auth` for this run without changing the setting.
-    pub external_auth: Option<bool>,
+    /// Turns `server.external_auth` on for this run without changing the setting; `false` leaves
+    /// the setting in charge.
+    pub external_auth: bool,
     /// Overrides `connections.flaresolverr_url` for this run without changing the setting.
     pub flaresolverr_url: Option<String>,
     /// The buffer the `tracing` subscriber feeds; persisted to `<data dir>/logs/`.
@@ -140,8 +141,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     if let Some(secret) = config.auth {
         state = state.with_auth(secret);
     }
-    if let Some(on) = config.external_auth {
-        state = state.with_external_auth(on);
+    if config.external_auth {
+        state = state.with_external_auth();
     }
     // Loading the modules blocks.
     let db = state.db.clone();
@@ -226,8 +227,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     if !bind.ip().is_loopback() && state.secret().is_none() {
         if state.external_auth() {
             tracing::info!(target: "fmd_server",
-                "{bind} is reachable from other machines and no password is set: FMD2r relies on \
-                 authentication in front of it");
+                "{bind} is reachable from other machines and no password is set, so the API \
+                 itself is open: FMD2r relies on authentication in front of it");
         } else {
             tracing::warn!(target: "fmd_server",
                 "{bind} is reachable from other machines and no password is set: anyone who can \

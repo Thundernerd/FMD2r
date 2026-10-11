@@ -126,7 +126,7 @@ FMD2R_GIT_REVISION=$(git rev-parse --short=12 HEAD) docker compose up -d --build
   warning and the UI shows a banner when it listens beyond loopback. Behind a reverse proxy or VPN
   that asks for a login, set `FMD2R_EXTERNAL_AUTH=true` (or tick the setting) to drop the warning,
   the banner and the setup wizard's Password step; the API itself stays open to whatever reaches
-  it.
+  it. Empty or `false` leaves it to the setting.
 - **Health:** the image's `HEALTHCHECK` polls `GET /api/health`.
 - **Platforms:** linux/amd64 and linux/arm64. `fmd2r` uses the native XPath backend only, so the
   image has no `libfmdxpath.so` (the `fpc` backend's shim, whose float-environment code is x86

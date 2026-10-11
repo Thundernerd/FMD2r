@@ -63,17 +63,14 @@ async fn health_reports_the_external_auth_setting() {
 #[tokio::test]
 async fn the_command_line_override_wins_over_the_setting_and_is_reported() {
     let (_dir, state) = state();
-    set_external_auth(&state, false).await;
+    assert_eq!(health(&state).await["overridden"], json!([]));
 
-    let on = state.clone().with_external_auth(true);
+    let on = state.clone().with_external_auth();
     let body = health(&on).await;
     assert_eq!(body["external_auth"], true);
     assert_eq!(body["overridden"], json!(["server.external_auth"]));
 
-    // Off from the command line beats the setting too.
-    set_external_auth(&state, true).await;
-    let off = state.clone().with_external_auth(false);
-    let body = health(&off).await;
-    assert_eq!(body["external_auth"], false);
-    assert_eq!(body["overridden"], json!(["server.external_auth"]));
+    // Turning the setting off changes nothing while the command line turns it on.
+    assert_eq!(set_external_auth(&on, false).await, StatusCode::OK);
+    assert_eq!(health(&on).await["external_auth"], true);
 }

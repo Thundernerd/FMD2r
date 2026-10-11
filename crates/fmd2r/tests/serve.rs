@@ -101,6 +101,22 @@ fn request(addr: &str, path: &str) -> TcpStream {
     stream
 }
 
+/// `GET /api/health`'s body.
+fn health_body(addr: &str) -> String {
+    let mut stream = TcpStream::connect(addr).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        stream,
+        "GET /api/health HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    response.split_once("\r\n\r\n").unwrap().1.to_string()
+}
+
 fn read_head(stream: &mut TcpStream) -> String {
     let mut head = Vec::new();
     let mut byte = [0u8; 1];
@@ -260,5 +276,21 @@ fn startup_does_not_warn_when_authentication_is_handled_in_front() {
         "{:?}",
         server.startup
     );
+    let health = health_body(&server.addr);
+    assert!(health.contains(r#""external_auth":true"#), "{health}");
+    assert!(health.contains("server.external_auth"), "{health}");
     signal_and_wait(server, "TERM");
+}
+
+#[test]
+fn an_empty_or_false_external_auth_variable_leaves_the_setting_in_charge() {
+    for value in ["", "false"] {
+        let env = [("FMD2R_EXTERNAL_AUTH", value)];
+        let server = start_in_env(tempfile::tempdir().unwrap(), &["--bind", "0.0.0.0:0"], &env);
+        assert!(warned_open(&server), "{value:?}: {:?}", server.startup);
+        let health = health_body(&server.addr);
+        assert!(health.contains(r#""external_auth":false"#), "{health}");
+        assert!(!health.contains("server.external_auth"), "{health}");
+        signal_and_wait(server, "TERM");
+    }
 }

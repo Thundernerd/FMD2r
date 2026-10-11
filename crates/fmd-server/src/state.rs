@@ -37,8 +37,8 @@ pub struct AppState {
     pub(crate) auth: Arc<Auth>,
     pub(crate) listen_addr: Option<SocketAddr>,
     pub(crate) overridden: Vec<&'static str>,
-    /// `--external-auth` / `FMD2R_EXTERNAL_AUTH`, overriding `server.external_auth`.
-    pub(crate) external_auth: Option<bool>,
+    /// `--external-auth` / `FMD2R_EXTERNAL_AUTH` turned `server.external_auth` on.
+    pub(crate) external_auth: bool,
     pub(crate) events: EventBus,
     pub(crate) logs: LogBuffer,
     pub(crate) settings: Arc<SettingsService>,
@@ -94,7 +94,7 @@ impl AppState {
             auth: Auth::from_settings(),
             listen_addr: None,
             overridden: Vec::new(),
-            external_auth: None,
+            external_auth: false,
             events,
         })
     }
@@ -125,17 +125,16 @@ impl AppState {
         self
     }
 
-    /// `--external-auth` / `FMD2R_EXTERNAL_AUTH`, overriding `server.external_auth`;
-    /// `GET /api/health` reports the setting as overridden.
-    pub fn with_external_auth(mut self, on: bool) -> Self {
-        self.external_auth = Some(on);
+    /// `--external-auth` / `FMD2R_EXTERNAL_AUTH`: turns `server.external_auth` on whatever the
+    /// setting says; `GET /api/health` reports the setting as overridden.
+    pub fn with_external_auth(mut self) -> Self {
+        self.external_auth = true;
         self
     }
 
     /// Whether authentication is handled in front of FMD2r: the override, else the setting.
-    pub fn external_auth(&self) -> bool {
-        self.external_auth
-            .unwrap_or_else(|| self.settings.get().server.external_auth)
+    pub(crate) fn external_auth(&self) -> bool {
+        self.external_auth || self.settings.get().server.external_auth
     }
 
     /// The password requests need now, or `None` when the API is open.

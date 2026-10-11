@@ -38,7 +38,7 @@ pub(crate) async fn health(State(state): State<AppState>) -> Json<Health> {
             .iter()
             .copied()
             .chain(state.auth.is_fixed().then_some("server.auth_token"))
-            .chain(state.external_auth.map(|_| "server.external_auth"))
+            .chain(state.external_auth.then_some("server.external_auth"))
             .collect(),
     })
 }
