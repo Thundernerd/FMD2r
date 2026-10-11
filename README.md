@@ -118,11 +118,15 @@ FMD2R_GIT_REVISION=$(git rev-parse --short=12 HEAD) docker compose up -d --build
 - **Lua modules:** on first start, when `/data/lua` has no modules, it is seeded from the upstream
   snapshot baked into the image (`fixtures/lua`); existing files are never overwritten.
 - **Configuration:** `serve` reads `FMD2R_BIND` (default `0.0.0.0:8080` in the image),
-  `FMD2R_DATA_DIR` (`/data`), `FMD2R_PASSWORD` and `FMD2R_FLARESOLVERR_URL` (compose sets
-  `http://flaresolverr:8191`). Each overrides its setting (Settings → Server: Listen address and
-  Password; Connections: FlareSolverr URL), and the Settings page says so. Without
-  `FMD2R_PASSWORD` the password comes from the settings, and with neither the API is open: the
-  server then logs a warning and the UI shows a banner when it listens beyond loopback.
+  `FMD2R_DATA_DIR` (`/data`), `FMD2R_PASSWORD`, `FMD2R_EXTERNAL_AUTH` and
+  `FMD2R_FLARESOLVERR_URL` (compose sets `http://flaresolverr:8191`). Each overrides its setting
+  (Settings → Server: Listen address, Password and "Authentication is handled in front of FMD2r";
+  Connections: FlareSolverr URL), and the Settings page says so. Without `FMD2R_PASSWORD` the
+  password comes from the settings, and with neither the API is open: the server then logs a
+  warning and the UI shows a banner when it listens beyond loopback. Behind a reverse proxy or VPN
+  that asks for a login, set `FMD2R_EXTERNAL_AUTH=true` (or tick the setting) to drop the warning,
+  the banner and the setup wizard's Password step; the API itself stays open to whatever reaches
+  it. Empty or `false` leaves it to the setting.
 - **Health:** the image's `HEALTHCHECK` polls `GET /api/health`.
 - **Platforms:** linux/amd64 and linux/arm64. `fmd2r` uses the native XPath backend only, so the
   image has no `libfmdxpath.so` (the `fpc` backend's shim, whose float-environment code is x86

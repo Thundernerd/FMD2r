@@ -30,6 +30,11 @@ fn start_with(args: &[&str]) -> Server {
 /// Starts `fmd2r serve` with `args` and the data dir `<dir>/data`, and no `FMD2R_*` variables
 /// from the test's environment, and waits for its "listening on" line.
 fn start_in(dir: tempfile::TempDir, args: &[&str]) -> Server {
+    start_in_env(dir, args, &[])
+}
+
+/// [`start_in`] with the environment variables `env` set.
+fn start_in_env(dir: tempfile::TempDir, args: &[&str], env: &[(&str, &str)]) -> Server {
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("fmd2r"))
         .args(["serve", "--data-dir"])
         .arg(dir.path().join("data"))
@@ -39,6 +44,8 @@ fn start_in(dir: tempfile::TempDir, args: &[&str]) -> Server {
         .env("RUST_LOG", "info")
         .env_remove("FMD2R_BIND")
         .env_remove("FMD2R_PASSWORD")
+        .env_remove("FMD2R_EXTERNAL_AUTH")
+        .envs(env.iter().copied())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -92,6 +99,22 @@ fn request(addr: &str, path: &str) -> TcpStream {
         .unwrap();
     write!(stream, "GET {path} HTTP/1.1\r\nHost: {addr}\r\n\r\n").unwrap();
     stream
+}
+
+/// `GET /api/health`'s body.
+fn health_body(addr: &str) -> String {
+    let mut stream = TcpStream::connect(addr).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        stream,
+        "GET /api/health HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    response.split_once("\r\n\r\n").unwrap().1.to_string()
 }
 
 fn read_head(stream: &mut TcpStream) -> String {
@@ -237,4 +260,37 @@ fn startup_does_not_warn_on_loopback_or_with_a_password() {
     let server = start_in(tempfile::tempdir().unwrap(), &args);
     assert!(!warned_open(&server), "{:?}", server.startup);
     signal_and_wait(server, "TERM");
+}
+
+#[test]
+fn startup_does_not_warn_when_authentication_is_handled_in_front() {
+    let env = [("FMD2R_EXTERNAL_AUTH", "true")];
+    let server = start_in_env(tempfile::tempdir().unwrap(), &["--bind", "0.0.0.0:0"], &env);
+    assert!(!warned_open(&server), "{:?}", server.startup);
+    // The log still records that the API itself is open.
+    assert!(
+        server
+            .startup
+            .iter()
+            .any(|line| line.contains("INFO") && line.contains("authentication in front")),
+        "{:?}",
+        server.startup
+    );
+    let health = health_body(&server.addr);
+    assert!(health.contains(r#""external_auth":true"#), "{health}");
+    assert!(health.contains("server.external_auth"), "{health}");
+    signal_and_wait(server, "TERM");
+}
+
+#[test]
+fn an_empty_or_false_external_auth_variable_leaves_the_setting_in_charge() {
+    for value in ["", "false"] {
+        let env = [("FMD2R_EXTERNAL_AUTH", value)];
+        let server = start_in_env(tempfile::tempdir().unwrap(), &["--bind", "0.0.0.0:0"], &env);
+        assert!(warned_open(&server), "{value:?}: {:?}", server.startup);
+        let health = health_body(&server.addr);
+        assert!(health.contains(r#""external_auth":false"#), "{health}");
+        assert!(!health.contains("server.external_auth"), "{health}");
+        signal_and_wait(server, "TERM");
+    }
 }

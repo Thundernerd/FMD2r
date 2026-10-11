@@ -100,7 +100,8 @@ export const defaultSettings = (): Settings => ({
 		bind: '127.0.0.1:8080',
 		has_auth_token: false,
 		session_idle_days: 7,
-		session_lifetime_days: 30
+		session_lifetime_days: 30,
+		external_auth: false
 	},
 	xpath: { backend: 'native' }
 });
