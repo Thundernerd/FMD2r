@@ -251,6 +251,18 @@ test('skipping the password step leaves the open server warning', async ({ page 
 	await expect(banner(page)).toBeVisible();
 });
 
+test('a dismissed open server warning stays gone after a reload', async ({ page }) => {
+	await openServer(page);
+	await page.goto('/');
+	await expect(banner(page)).toBeVisible();
+	await banner(page).getByRole('button', { name: 'Dismiss' }).click();
+	await expect(banner(page)).toHaveCount(0);
+
+	await page.reload();
+	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+	await expect(banner(page)).toHaveCount(0);
+});
+
 test('saying authentication is handled in front removes the open server warning at once', async ({
 	page
 }) => {
