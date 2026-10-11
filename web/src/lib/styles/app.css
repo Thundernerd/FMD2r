@@ -86,7 +86,7 @@ a {
 	color: var(--fg);
 }
 /* A disabled button doesn't respond, so it doesn't highlight on hover either. */
-.btn:hover:not(:disabled) {
+.btn:hover:where(:not(:disabled)) {
 	border-color: var(--accent);
 }
 .btn.primary {

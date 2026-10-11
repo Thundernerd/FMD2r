@@ -38,7 +38,11 @@ describe('disabled buttons', () => {
 
 	it('only highlight on hover when enabled', () => {
 		expect(declarations('.btn:hover').has('border-color')).toBe(false);
-		expect(declarations('.btn:hover:not(:disabled)').get('border-color')).toBe('var(--accent)');
+		// `:where()` keeps the specificity of `.btn:hover`, so `.btn.ghost` and a component's own
+		// border colour still win over the highlight.
+		expect(declarations('.btn:hover:where(:not(:disabled))').get('border-color')).toBe(
+			'var(--accent)'
+		);
 	});
 
 	it('look the same in every component', () => {

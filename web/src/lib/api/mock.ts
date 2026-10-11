@@ -328,10 +328,10 @@ export interface MockOptions {
 	 */
 	moduleSettingsDelayMs?: number;
 	/**
-	 * How long, in ms, each of `POST /api/import`'s five steps takes, so a test can see the page while
-	 * it imports. Defaults to `sessionStorage['fmd2r.mock.import-step-ms']`, or 150.
+	 * How long, in ms, each step of `POST /api/import` takes, so a test can see the page while
+	 * it imports. Defaults to `sessionStorage['fmd2r.mock.import-step-delay-ms']`, or 150.
 	 */
-	importStepMs?: number;
+	importStepDelayMs?: number;
 	/** Start with a MangaBaka database downloaded, so list titles carry formats and statuses. */
 	mangabaka?: boolean;
 	/** Whether the server can use MangaBaka at all (`GET /api/metadata/mangabaka`'s `available`). */
@@ -356,7 +356,7 @@ const PASSWORD_KEY = 'fmd2r.mock.password';
 const SESSION_KEY = 'fmd2r.mock.session';
 const SERIES_DELAY_KEY = 'fmd2r.mock.series-delay-ms';
 const MODULE_SETTINGS_DELAY_KEY = 'fmd2r.mock.module-settings-delay-ms';
-const IMPORT_STEP_KEY = 'fmd2r.mock.import-step-ms';
+const IMPORT_STEP_KEY = 'fmd2r.mock.import-step-delay-ms';
 const FRESH_INSTALL_KEY = 'fmd2r.mock.fresh-install';
 const OPEN_KEY = 'fmd2r.mock.open';
 const SAVED_PASSWORD_KEY = 'fmd2r.mock.saved-password';
@@ -384,7 +384,7 @@ export function createMockBackend({
 	password: fixedPassword = stored(PASSWORD_KEY),
 	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0),
 	moduleSettingsDelayMs = Number(stored(MODULE_SETTINGS_DELAY_KEY) ?? 0),
-	importStepMs = Number(stored(IMPORT_STEP_KEY) ?? 150),
+	importStepDelayMs = Number(stored(IMPORT_STEP_KEY) ?? 150),
 	mangabaka = false,
 	mangabakaAvailable = true,
 	setUp = stored(FRESH_INSTALL_KEY) === null,
@@ -665,7 +665,7 @@ export function createMockBackend({
 		Object.assign(importJob, { state: 'running', done: 0, last_run: new Date().toISOString() });
 		broadcast('job.state', importJob);
 		for (let step = 1; step <= importJob.total; step++) {
-			await new Promise((resolve) => setTimeout(resolve, importStepMs));
+			await new Promise((resolve) => setTimeout(resolve, importStepDelayMs));
 			importJob.done = step;
 			broadcast('job.state', importJob);
 		}
