@@ -5,6 +5,7 @@ import type {
 	About,
 	AccountInfo,
 	AccountRequest,
+	BulkChange,
 	FavoritePatch,
 	FavoriteView,
 	GroupPatch,
@@ -186,6 +187,12 @@ export interface Api {
 	addFavorite(module: string, link: string, saveTo?: string): Promise<FavoriteView>;
 	updateFavorite(id: number, patch: FavoritePatch): Promise<FavoriteView>;
 	deleteFavorite(id: number): Promise<void>;
+	/**
+	 * Changes or removes several favorites at once, all of them or none; resolves to the changed
+	 * ones (none after a removal). Rejects with an {@link ApiError}: 400 when one of them or the
+	 * group is not there.
+	 */
+	bulkUpdateFavorites(change: BulkChange): Promise<FavoriteView[]>;
 	/**
 	 * Starts checking the given favorites (every enabled one when omitted) for new chapters;
 	 * progress follows as `job.favorites.*` events. Rejects with status 409 while a check runs.
@@ -560,6 +567,12 @@ export function createApi({
 				params: { path: { id } }
 			});
 			if (!response.ok) throw new ApiError(response.status, 'deleteFavorite');
+		},
+		async bulkUpdateFavorites(change) {
+			return explained(
+				'bulkUpdateFavorites',
+				await client.POST('/api/favorites/bulk', { body: change })
+			);
 		},
 		async checkFavorites(ids) {
 			const { response } = await client.POST('/api/favorites/check', {

@@ -69,3 +69,39 @@ describe('Library titles', () => {
 		await waitFor(async () => expect(await cardTitles()).toEqual(['葬送のフリーレン']));
 	});
 });
+
+describe('Library selection', () => {
+	it('selects cards instead of opening them, and pauses the selection in one request', async () => {
+		const bulk = vi.spyOn(api, 'bulkUpdateFavorites');
+		render(Library);
+		const grid = await screen.findByRole('list', { name: 'Favorites' });
+		expect(within(grid).getAllByRole('link').length).toBeGreaterThan(0);
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+
+		expect(within(grid).queryAllByRole('link')).toEqual([]);
+		const frieren = within(grid).getByRole('checkbox', { name: 'Frieren' });
+		const sakamoto = within(grid).getByRole('checkbox', { name: 'Sakamoto Days' });
+		await fireEvent.click(frieren);
+		await fireEvent.click(sakamoto);
+		expect(frieren.getAttribute('aria-checked')).toBe('true');
+		expect(screen.getByRole('status', { name: 'Selection' }).textContent).toContain('2 selected');
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+
+		await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1));
+		expect(bulk).toHaveBeenCalledWith({ ids: [1, 4], enabled: false });
+		await waitFor(() =>
+			expect(within(grid).getByRole('checkbox', { name: 'Frieren' }).textContent).toContain(
+				'Paused'
+			)
+		);
+		// The selection stays for the next action.
+		expect(
+			within(grid).getByRole('checkbox', { name: 'Frieren' }).getAttribute('aria-checked')
+		).toBe('true');
+
+		await api.bulkUpdateFavorites({ ids: [1, 4], enabled: true });
+		bulk.mockRestore();
+	});
+});

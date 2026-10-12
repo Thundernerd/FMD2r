@@ -61,6 +61,7 @@ export type ChapterState = Schemas['ChapterState'];
 export type TaskOrder = Schemas['TaskOrder'];
 export type FavoriteView = Schemas['FavoriteView'];
 export type FavoritePatch = Schemas['FavoritePatch'];
+export type BulkChange = Schemas['BulkChange'];
 export type GroupView = Schemas['GroupView'];
 export type GroupPatch = Schemas['GroupPatch'];
 export type FavoritesEvent = Schemas['FavoritesEvent'];

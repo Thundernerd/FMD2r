@@ -95,8 +95,8 @@
 	{:else}
 		{#if groups.length === 0}
 			<p class="muted">
-				No groups yet. Add one, then put series in it from their series pages; the Library shows
-				each group as a section you can fold away.
+				No groups yet. Add one, then put series in it from their series pages or by selecting them
+				in the Library; the Library shows each group as a section you can fold away.
 			</p>
 		{/if}
 		<ul aria-label="Groups">
