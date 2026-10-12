@@ -8,6 +8,7 @@ mod custom_css;
 mod error;
 mod events;
 mod favorites;
+mod groups;
 mod health;
 mod import;
 mod inbox;
@@ -148,6 +149,9 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(favorites::patch, favorites::delete))
         .routes(routes!(favorites::check))
         .routes(routes!(favorites::check_missing))
+        .routes(routes!(groups::list, groups::create))
+        .routes(routes!(groups::patch, groups::delete))
+        .routes(routes!(groups::reorder))
         .routes(routes!(accounts::list))
         .routes(routes!(accounts::put, accounts::delete))
         .routes(routes!(accounts::login))

@@ -42,6 +42,22 @@ pub struct Favorite {
     /// Unix milliseconds.
     pub date_last_updated: Option<i64>,
     pub cover_url: Option<String>,
+    /// The library group it is in; `None` is "Ungrouped".
+    pub group_id: Option<LibraryGroupId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct LibraryGroupId(pub i64);
+
+/// A named section of the library. A favorite is in at most one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryGroup {
+    pub id: LibraryGroupId,
+    /// Unique, ignoring case.
+    pub name: String,
+    pub sort_order: i64,
+    /// Whether the library shows the section folded.
+    pub collapsed: bool,
 }
 
 /// What the website says about a favorite, as MangaBaka matching reads it. Apart from
@@ -69,7 +85,7 @@ pub struct ImportedFavorite {
 }
 
 const COLUMNS: &str = "id, module_id, link, title, status, current_chapter, save_to, enabled, \
-     sort_order, date_added, date_last_checked, date_last_updated, cover_url";
+     sort_order, date_added, date_last_checked, date_last_updated, cover_url, group_id";
 
 fn favorite_from_row(row: &Row<'_>) -> rusqlite::Result<Favorite> {
     Ok(Favorite {
@@ -86,6 +102,7 @@ fn favorite_from_row(row: &Row<'_>) -> rusqlite::Result<Favorite> {
         date_last_checked: row.get(10)?,
         date_last_updated: row.get(11)?,
         cover_url: row.get(12)?,
+        group_id: row.get::<_, Option<i64>>(13)?.map(LibraryGroupId),
     })
 }
 
@@ -277,7 +294,7 @@ impl<'a> FavoriteRepo<'a> {
         conn.execute(
             "UPDATE favorites SET module_id = ?2, link = ?3, title = ?4, status = ?5,
                 current_chapter = ?6, save_to = ?7, enabled = ?8, date_last_checked = ?9,
-                date_last_updated = ?10, cover_url = ?11
+                date_last_updated = ?10, cover_url = ?11, group_id = ?12
              WHERE id = ?1",
             params![
                 favorite.id.0,
@@ -290,7 +307,8 @@ impl<'a> FavoriteRepo<'a> {
                 favorite.enabled,
                 favorite.date_last_checked,
                 favorite.date_last_updated,
-                favorite.cover_url
+                favorite.cover_url,
+                favorite.group_id.map(|g| g.0)
             ],
         )?;
         Ok(())
@@ -360,6 +378,101 @@ impl<'a> FavoriteRepo<'a> {
     pub fn delete(&self, id: FavoriteId) -> Result<()> {
         let conn = self.db.lock();
         conn.execute("DELETE FROM favorites WHERE id = ?1", [id.0])?;
+        Ok(())
+    }
+}
+
+const GROUP_COLUMNS: &str = "id, name, sort_order, collapsed";
+
+fn group_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryGroup> {
+    Ok(LibraryGroup {
+        id: LibraryGroupId(row.get(0)?),
+        name: row.get(1)?,
+        sort_order: row.get(2)?,
+        collapsed: row.get(3)?,
+    })
+}
+
+pub struct LibraryGroupRepo<'a> {
+    db: &'a Db,
+}
+
+impl<'a> LibraryGroupRepo<'a> {
+    pub(crate) fn new(db: &'a Db) -> Self {
+        Self { db }
+    }
+
+    /// Appends an unfolded group; fails when the name is taken, ignoring case.
+    pub fn create(&self, name: &str) -> Result<LibraryGroup> {
+        let conn = self.db.lock();
+        Ok(conn.query_row(
+            &format!(
+                "INSERT INTO library_groups (name, sort_order) VALUES (?1, {})
+                 RETURNING {GROUP_COLUMNS}",
+                next_sort_order("library_groups")
+            ),
+            [name],
+            group_from_row,
+        )?)
+    }
+
+    pub fn get(&self, id: LibraryGroupId) -> Result<Option<LibraryGroup>> {
+        let conn = self.db.lock();
+        Ok(conn
+            .query_row(
+                &format!("SELECT {GROUP_COLUMNS} FROM library_groups WHERE id = ?1"),
+                [id.0],
+                group_from_row,
+            )
+            .optional()?)
+    }
+
+    /// The group named `name`, ignoring case.
+    pub fn find(&self, name: &str) -> Result<Option<LibraryGroup>> {
+        let conn = self.db.lock();
+        Ok(conn
+            .query_row(
+                &format!("SELECT {GROUP_COLUMNS} FROM library_groups WHERE name = ?1"),
+                [name],
+                group_from_row,
+            )
+            .optional()?)
+    }
+
+    /// In display order.
+    pub fn list(&self) -> Result<Vec<LibraryGroup>> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare_cached(&format!(
+            "SELECT {GROUP_COLUMNS} FROM library_groups ORDER BY sort_order"
+        ))?;
+        let rows = stmt.query_map([], group_from_row)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Stores the name and fold state; fails when the name is taken, ignoring case. Leaves
+    /// `sort_order` as stored; see [`Self::reorder`].
+    pub fn update(&self, group: &LibraryGroup) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute(
+            "UPDATE library_groups SET name = ?2, collapsed = ?3 WHERE id = ?1",
+            params![group.id.0, group.name, group.collapsed],
+        )?;
+        Ok(())
+    }
+
+    /// Puts `ids` first; the rest keep their relative order.
+    pub fn reorder(&self, ids: &[LibraryGroupId]) -> Result<()> {
+        reorder(
+            &mut self.db.lock(),
+            "library_groups",
+            ids.iter().map(|id| id.0),
+        )
+    }
+
+    /// Its favorites become ungrouped.
+    pub fn delete(&self, id: LibraryGroupId) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute("DELETE FROM library_groups WHERE id = ?1", [id.0])?;
         Ok(())
     }
 }

@@ -20,7 +20,7 @@ use crate::error::Result;
 use accounts::AccountRepo;
 use downloaded_chapters::DownloadedChaptersRepo;
 use events::EventRepo;
-use favorites::FavoriteRepo;
+use favorites::{FavoriteRepo, LibraryGroupRepo};
 use metadata_overrides::MetadataOverrideRepo;
 use module_files::ModuleFileRepo;
 use module_settings::{ModuleSettings, ModuleSettingsRepo};
@@ -35,6 +35,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/app_v4.sql"),
     include_str!("../migrations/app_v5.sql"),
     include_str!("../migrations/app_v6.sql"),
+    include_str!("../migrations/app_v7.sql"),
 ];
 
 const IN_MEMORY: &str = ":memory:";
@@ -133,6 +134,11 @@ impl AppDb {
     /// The library.
     pub fn favorites(&self) -> FavoriteRepo<'_> {
         FavoriteRepo::new(&self.db)
+    }
+
+    /// The library's groups, which fold into sections.
+    pub fn library_groups(&self) -> LibraryGroupRepo<'_> {
+        LibraryGroupRepo::new(&self.db)
     }
 
     /// The MangaBaka series picked by hand, by module and link.

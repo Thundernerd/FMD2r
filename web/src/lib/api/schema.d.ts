@@ -380,6 +380,59 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/library/groups': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** The library's groups in display order. */
+		get: operations['listGroups'];
+		put?: never;
+		/** Add a group after the others. */
+		post: operations['createGroup'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/library/groups/reorder': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Reorder the groups. */
+		post: operations['reorderGroups'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/library/groups/{id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		post?: never;
+		/** Remove a group; its series stay in the library, ungrouped. */
+		delete: operations['deleteGroup'];
+		options?: never;
+		head?: never;
+		/** Rename a group, or fold or unfold its section. */
+		patch: operations['updateGroup'];
+		trace?: never;
+	};
 	'/api/lists/facets': {
 		parameters: {
 			query?: never;
@@ -1273,6 +1326,11 @@ export interface components {
 		/** @description Fields of a favorite to change; missing ones stay. */
 		FavoritePatch: {
 			enabled?: boolean | null;
+			/**
+			 * Format: int64
+			 * @description The library group to put it in; `null` ungroups it.
+			 */
+			group_id?: number | null;
 			save_to?: string | null;
 			title?: string | null;
 		};
@@ -1327,6 +1385,11 @@ export interface components {
 			display_title: string;
 			/** @description Checked by the new-chapter check. */
 			enabled: boolean;
+			/**
+			 * Format: int64
+			 * @description The library group it is in; `null` is "Ungrouped".
+			 */
+			group_id?: number | null;
 			/** Format: int64 */
 			id: number;
 			/** @description RFC 3339. */
@@ -1451,6 +1514,24 @@ export interface components {
 			 * @default
 			 */
 			setup_step: string;
+		};
+		/** @description The groups' new order. */
+		GroupOrder: {
+			/** @description These first, in this order; the rest keep their relative order. */
+			ids: number[];
+		};
+		/** @description Fields of a group to change; missing ones stay. */
+		GroupPatch: {
+			collapsed?: boolean | null;
+			name?: string | null;
+		};
+		/** @description A library group, as the Library's sections show it. */
+		GroupView: {
+			/** @description Whether the Library shows the section folded. */
+			collapsed: boolean;
+			/** Format: int64 */
+			id: number;
+			name: string;
 		};
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
@@ -2013,6 +2094,11 @@ export interface components {
 			repo_owner: string;
 			repo_path: string;
 			repo_ref: string;
+		};
+		/** @description A group to add. */
+		NewGroup: {
+			/** @description Unique, ignoring case. */
+			name: string;
 		};
 		/** @description A download to queue: chapters of one series. */
 		NewTask: {
@@ -3411,6 +3497,15 @@ export interface operations {
 					'application/json': components['schemas']['FavoriteView'];
 				};
 			};
+			/** @description No such group */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
 			/** @description No such favorite */
 			404: {
 				headers: {
@@ -3736,6 +3831,171 @@ export interface operations {
 				};
 			};
 			/** @description Already running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	listGroups: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['GroupView'][];
+				};
+			};
+		};
+	};
+	createGroup: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['NewGroup'];
+			};
+		};
+		responses: {
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['GroupView'];
+				};
+			};
+			/** @description The name is empty */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Another group has the name, ignoring case */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	reorderGroups: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['GroupOrder'];
+			};
+		};
+		responses: {
+			/** @description Reordered */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+		};
+	};
+	deleteGroup: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Group id */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Removed */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description No such group */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	updateGroup: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Group id */
+				id: number;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['GroupPatch'];
+			};
+		};
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['GroupView'];
+				};
+			};
+			/** @description The name is empty */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description No such group */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description Another group has the name, ignoring case */
 			409: {
 				headers: {
 					[name: string]: unknown;

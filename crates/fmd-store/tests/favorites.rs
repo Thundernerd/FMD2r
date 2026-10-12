@@ -87,3 +87,48 @@ fn saving_a_favorites_website_info_survives_a_rename() {
         "My Name For It"
     );
 }
+
+#[test]
+fn groups_create_rename_reorder_and_reject_a_name_in_another_case() {
+    let db = AppDb::open(":memory:").unwrap();
+    let groups = db.library_groups();
+
+    let shounen = groups.create("Shounen").unwrap();
+    let seinen = groups.create("Seinen").unwrap();
+    assert_eq!(shounen.name, "Shounen");
+    assert!(!shounen.collapsed);
+    assert!(groups.create("shounen").is_err(), "names ignore case");
+
+    let mut renamed = seinen.clone();
+    renamed.name = "Seinen (done)".into();
+    renamed.collapsed = true;
+    groups.update(&renamed).unwrap();
+    assert_eq!(groups.get(seinen.id).unwrap(), Some(renamed.clone()));
+    let mut clash = renamed.clone();
+    clash.name = "SHOUNEN".into();
+    assert!(groups.update(&clash).is_err(), "rename into a taken name");
+
+    groups.reorder(&[seinen.id, shounen.id]).unwrap();
+    let names: Vec<_> = groups.list().unwrap().into_iter().map(|g| g.name).collect();
+    assert_eq!(names, ["Seinen (done)", "Shounen"]);
+}
+
+#[test]
+fn deleting_a_group_ungroups_its_favorites() {
+    let db = AppDb::open(":memory:").unwrap();
+    let group = db.library_groups().create("Shounen").unwrap();
+    let mut favorite = db.favorites().create(&new_favorite("/a")).unwrap();
+    assert_eq!(favorite.group_id, None, "new favorites are ungrouped");
+
+    favorite.group_id = Some(group.id);
+    db.favorites().update(&favorite).unwrap();
+    assert_eq!(
+        db.favorites().get(favorite.id).unwrap(),
+        Some(favorite.clone())
+    );
+
+    db.library_groups().delete(group.id).unwrap();
+    assert!(db.library_groups().list().unwrap().is_empty());
+    let kept = db.favorites().get(favorite.id).unwrap().unwrap();
+    assert_eq!(kept.group_id, None);
+}

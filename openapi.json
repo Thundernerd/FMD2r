@@ -703,6 +703,16 @@
               }
             }
           },
+          "400": {
+            "description": "No such group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "description": "No such favorite",
             "content": {
@@ -1125,6 +1135,210 @@
           },
           "409": {
             "description": "Already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/groups": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "The library's groups in display order.",
+        "operationId": "listGroups",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroupView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Add a group after the others.",
+        "operationId": "createGroup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewGroup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The name is empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another group has the name, ignoring case",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/groups/reorder": {
+      "post": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Reorder the groups.",
+        "operationId": "reorderGroups",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupOrder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Reordered"
+          }
+        }
+      }
+    },
+    "/api/library/groups/{id}": {
+      "delete": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Remove a group; its series stay in the library, ungrouped.",
+        "operationId": "deleteGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Group id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "404": {
+            "description": "No such group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Rename a group, or fold or unfold its section.",
+        "operationId": "updateGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Group id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The name is empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another group has the name, ignoring case",
             "content": {
               "application/json": {
                 "schema": {
@@ -3466,6 +3680,14 @@
               "null"
             ]
           },
+          "group_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The library group to put it in; `null` ungroups it."
+          },
           "save_to": {
             "type": [
               "string",
@@ -3554,6 +3776,14 @@
           "enabled": {
             "type": "boolean",
             "description": "Checked by the new-chapter check."
+          },
+          "group_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The library group it is in; `null` is \"Ungrouped\"."
           },
           "id": {
             "type": "integer",
@@ -3763,6 +3993,63 @@
             "type": "string",
             "description": "The id of the setup step to resume at, saved with each step's settings; empty for the\nfirst. No FMD2 setting.",
             "default": ""
+          }
+        }
+      },
+      "GroupOrder": {
+        "type": "object",
+        "description": "The groups' new order.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "These first, in this order; the rest keep their relative order."
+          }
+        }
+      },
+      "GroupPatch": {
+        "type": "object",
+        "description": "Fields of a group to change; missing ones stay.",
+        "properties": {
+          "collapsed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "GroupView": {
+        "type": "object",
+        "description": "A library group, as the Library's sections show it.",
+        "required": [
+          "id",
+          "name",
+          "collapsed"
+        ],
+        "properties": {
+          "collapsed": {
+            "type": "boolean",
+            "description": "Whether the Library shows the section folded."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -5035,6 +5322,19 @@
           },
           "repo_ref": {
             "type": "string"
+          }
+        }
+      },
+      "NewGroup": {
+        "type": "object",
+        "description": "A group to add.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique, ignoring case."
           }
         }
       },
