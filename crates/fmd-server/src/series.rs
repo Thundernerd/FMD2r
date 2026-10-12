@@ -9,6 +9,7 @@ use axum::Json;
 use axum::extract::State;
 use fmd_core::info::{InfoError, InfoOptions, MangaInfo};
 use fmd_core::modules::locate_by_url;
+use fmd_store::{ListsDb, StoredMatch};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -189,10 +190,7 @@ async fn mangabaka_metadata(
     let links = links.map(String::clone);
     let found = crate::state::off_thread(move || -> Result<_, fmd_store::StoreError> {
         for link in &links {
-            let Some(m) = lists.matches().get(&module, link)? else {
-                continue;
-            };
-            let Some(id) = m.series_id.filter(|_| m.confidence.is_accepted()) else {
+            let Some((id, m)) = accepted_match(&lists, &module, link)? else {
                 continue;
             };
             let description = meta.series(id)?.map(|s| s.description).unwrap_or_default();
@@ -213,6 +211,21 @@ async fn mangabaka_metadata(
         }
         Err(_) => None,
     }
+}
+
+/// The MangaBaka series the list title at `link` was matched to, with the match; `None` when
+/// it has no match or a rejected one. Blocking.
+pub(crate) fn accepted_match(
+    lists: &ListsDb,
+    module: &str,
+    link: &str,
+) -> Result<Option<(i64, StoredMatch)>, fmd_store::StoreError> {
+    let Some(m) = lists.matches().get(module, link)? else {
+        return Ok(None);
+    };
+    Ok(m.series_id
+        .filter(|_| m.confidence.is_accepted())
+        .map(|id| (id, m)))
 }
 
 /// Served from the cache when recent. A rate-limited answer is not cached, and pauses the

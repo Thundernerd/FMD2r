@@ -68,6 +68,7 @@ describe('settings sections', () => {
 		expect(values('appearance.mode')).toEqual(schemas['ThemeMode']?.enum);
 		expect(values('appearance.text_size')).toEqual(schemas['TextSize']?.enum);
 		expect(values('appearance.accent')).toEqual(schemas['Accent']?.enum);
+		expect(values('appearance.library_title')).toEqual(schemas['LibraryTitle']?.enum);
 	});
 
 	it('bound every number by the range the server validates', () => {
