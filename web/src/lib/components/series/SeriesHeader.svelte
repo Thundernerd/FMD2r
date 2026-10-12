@@ -78,6 +78,12 @@
 	// Short summaries show in full; longer ones start clamped.
 	const long = $derived(series.summary.length > 280 || series.summary.split('\n').length > 4);
 	const seen = $derived(series.chapters.filter((c) => c.downloaded).length);
+
+	/** Links shown before "Show all". */
+	const FEW_LINKS = 8;
+	let allLinks = $state(false);
+	// The website first, then what MangaBaka knows of the series.
+	const links = $derived([{ label: website, url: series.url }, ...(series.mangabaka?.links ?? [])]);
 </script>
 
 <header class="hero">
@@ -123,6 +129,19 @@
 			<div>
 				<dt class="label">Chapters</dt>
 				<dd class="num">{series.chapters.length} · {seen} seen</dd>
+			</div>
+			<div class="links-row">
+				<dt class="label">Links</dt>
+				<dd class="links">
+					{#each allLinks ? links : links.slice(0, FEW_LINKS) as link (link.url)}
+						<a href={link.url} target="_blank" rel="noreferrer">{link.label}</a>
+					{/each}
+					{#if !allLinks && links.length > FEW_LINKS}
+						<button class="btn sm ghost" type="button" onclick={() => (allLinks = true)}
+							>Show all</button
+						>
+					{/if}
+				</dd>
 			</div>
 		</dl>
 		{#if series.genres.length}
@@ -249,6 +268,16 @@
 	}
 	.facts dd {
 		margin: 0;
+	}
+	.facts .links-row {
+		flex-basis: 100%;
+	}
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--sp-1) var(--sp-3);
+		overflow-wrap: anywhere;
 	}
 	.genres {
 		display: flex;
