@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FavoriteView } from '#lib/api/types.ts';
 import {
+	CHIPS,
 	chipCounts,
 	emptyFilters,
 	filterFavorites,
@@ -57,7 +58,8 @@ describe('library chips', () => {
 		expect(titles({ chip: 'completed' })).toEqual(['One Piece']);
 	});
 
-	it('Disabled shows the favorites the check skips', () => {
+	it('Paused shows the favorites the check skips', () => {
+		expect(CHIPS.find((c) => c.id === 'disabled')?.label).toBe('Paused');
 		expect(titles({ chip: 'disabled' })).toEqual(['Blue Lock']);
 	});
 

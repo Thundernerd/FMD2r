@@ -35,7 +35,7 @@ pub struct FavoriteView {
     /// series' accepted MangaBaka match, else MangaBaka's main title, else `title`.
     pub display_title: String,
     pub status: SeriesStatus,
-    /// Checked by the new-chapter check.
+    /// Checked by the new-chapter check; `false` for a paused favorite, which no check looks at.
     pub enabled: bool,
     pub save_to: String,
     /// The cover through `/api/covers`, or through `/api/covers/series` when none is stored

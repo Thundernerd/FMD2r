@@ -1325,7 +1325,7 @@ export interface components {
 			 *     series' accepted MangaBaka match, else MangaBaka's main title, else `title`.
 			 */
 			display_title: string;
-			/** @description Checked by the new-chapter check. */
+			/** @description Checked by the new-chapter check; `false` for a paused favorite, which no check looks at. */
 			enabled: boolean;
 			/** Format: int64 */
 			id: number;

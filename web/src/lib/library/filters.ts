@@ -7,7 +7,7 @@ export const CHIPS: { id: Chip; label: string }[] = [
 	{ id: 'new', label: 'New' },
 	{ id: 'ongoing', label: 'Ongoing' },
 	{ id: 'completed', label: 'Completed' },
-	{ id: 'disabled', label: 'Disabled' }
+	{ id: 'disabled', label: 'Paused' }
 ];
 
 /** How the grid is ordered; `library` keeps the server's order. */
