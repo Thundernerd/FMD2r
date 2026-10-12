@@ -7,7 +7,7 @@ use common::{App, Fmd2};
 use fmd_core::settings::{
     Destination, OutputFormat, PngCompression, ProxyType, SettingsService, WebpSaveAs,
 };
-use fmd_import::SkipReason;
+use fmd_import::{ImportOptions, SkipReason};
 use serde_json::json;
 
 /// `settings.json` is a `TJSONIniFile` (baseunits/FMDOptions.pas:242): sections as objects,
@@ -210,4 +210,94 @@ fn an_invalid_setting_is_skipped_and_the_rest_imported() {
     let s = SettingsService::load(app.db.clone()).unwrap().get();
     assert_eq!(s.connections.max_parallel_tasks, 3);
     assert_eq!(s.connections.timeout_secs, 30);
+}
+
+#[test]
+fn an_unclosed_token_in_a_rename_template_is_repaired_with_a_warning() {
+    let fmd2 = Fmd2::new();
+    fmd2.file(
+        "settings.json",
+        &json!({ "saveto": { "FilenameCustomRename": "%MANGA% - %CHAPTER - %FILENAME%" } })
+            .to_string(),
+    );
+    let app = App::new();
+
+    let report = app.import(&fmd2);
+
+    assert_eq!(report.settings.imported, 1);
+    assert!(report.settings.skipped.is_empty());
+    assert_eq!(report.warnings.len(), 1);
+    let warning = &report.warnings[0];
+    assert!(warning.contains("saveto/FilenameCustomRename"), "{warning}");
+    assert!(
+        warning.contains("%MANGA% - %CHAPTER - %FILENAME%"),
+        "{warning}"
+    );
+    assert!(
+        warning.contains("%MANGA% - %CHAPTER% - %FILENAME%"),
+        "{warning}"
+    );
+    let s = SettingsService::load(app.db.clone()).unwrap().get();
+    assert_eq!(s.saveto.filename_rename, "%MANGA% - %CHAPTER% - %FILENAME%");
+}
+
+#[test]
+fn a_rename_template_with_an_unknown_token_is_skipped() {
+    let fmd2 = Fmd2::new();
+    fmd2.file(
+        "settings.json",
+        &json!({ "saveto": { "FilenameCustomRename": "%MANGA% - %CHAPTR% - %FILENAME%" } })
+            .to_string(),
+    );
+    let app = App::new();
+
+    let report = app.import(&fmd2);
+
+    assert_eq!(report.settings.imported, 0);
+    assert_eq!(report.settings.skipped.len(), 1);
+    assert_eq!(
+        report.settings.skipped[0].item,
+        "saveto/FilenameCustomRename"
+    );
+    assert!(
+        matches!(&report.settings.skipped[0].reason, SkipReason::Invalid(why) if why.contains("%CHAPTR%")),
+        "{:?}",
+        report.settings.skipped[0].reason
+    );
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    let s = SettingsService::load(app.db.clone()).unwrap().get();
+    assert_eq!(s.saveto.filename_rename, "%FILENAME%");
+}
+
+#[test]
+fn a_dry_run_reports_the_template_repair_and_skip_and_writes_nothing() {
+    let fmd2 = Fmd2::new();
+    fmd2.file(
+        "settings.json",
+        &json!({ "saveto": {
+            "FilenameCustomRename": "%MANGA% - %CHAPTER - %FILENAME%",
+            "MangaCustomRename": "%WEBSITE% %CHAPTR%",
+        } })
+        .to_string(),
+    );
+    let app = App::new();
+    let dry = ImportOptions {
+        dry_run: true,
+        ..ImportOptions::default()
+    };
+
+    let report = app.import_with(&fmd2, &dry);
+
+    assert_eq!(report.settings.imported, 1);
+    assert_eq!(report.warnings.len(), 1);
+    assert!(report.warnings[0].contains("saveto/FilenameCustomRename"));
+    assert_eq!(report.settings.skipped.len(), 1);
+    assert_eq!(report.settings.skipped[0].item, "saveto/MangaCustomRename");
+    assert!(matches!(
+        report.settings.skipped[0].reason,
+        SkipReason::Invalid(_)
+    ));
+    let s = SettingsService::load(app.db.clone()).unwrap().get();
+    assert_eq!(s.saveto.filename_rename, "%FILENAME%");
+    assert_eq!(s.saveto.manga_rename, "%MANGA%");
 }

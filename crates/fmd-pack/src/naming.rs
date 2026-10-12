@@ -8,6 +8,16 @@ pub const CR_MANGA: &str = "%MANGA%";
 pub const CR_AUTHOR: &str = "%AUTHOR%";
 pub const CR_ARTIST: &str = "%ARTIST%";
 pub const CR_FILENAME: &str = "%FILENAME%";
+/// Every template token.
+pub const RENAME_TOKENS: [&str; 7] = [
+    CR_MANGA,
+    CR_CHAPTER,
+    CR_NUMBERING,
+    CR_WEBSITE,
+    CR_AUTHOR,
+    CR_ARTIST,
+    CR_FILENAME,
+];
 
 /// The values substituted into a rename template.
 #[derive(Debug, Default, Clone)]

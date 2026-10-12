@@ -390,8 +390,40 @@ function checkDestinations(current: Settings, next: Settings, problems: FieldPro
 	next.saveto.default_dir = fallback?.path ?? next.saveto.default_dir;
 }
 
+const TEMPLATE_TOKENS = [
+	'MANGA',
+	'CHAPTER',
+	'NUMBERING',
+	'WEBSITE',
+	'AUTHOR',
+	'ARTIST',
+	'FILENAME'
+];
+
+/** The server's token check of a rename template (fmd_core's `template_problems`). */
+function templateProblems(template: string): string[] {
+	const problems: string[] = [];
+	for (const [, word = '', closing] of template.matchAll(/%([A-Za-z]+)(%?)/g)) {
+		const right = TEMPLATE_TOKENS.find((t) => t === word.toUpperCase());
+		if (!closing) {
+			if (right === word) problems.push(`%${word} is missing its closing %`);
+		} else if (right !== word) {
+			problems.push(
+				right
+					? `%${word}% is not a token; did you mean %${right}%?`
+					: `%${word}% is not a token. Tokens: ${TEMPLATE_TOKENS.map((t) => `%${t}%`).join(' ')}`
+			);
+		}
+	}
+	return problems;
+}
+
 /** The server's range checks, as the settings page's own field definitions state them. */
 function validateSettings(settings: Settings, problems: FieldProblem[]) {
+	for (const key of ['manga_rename', 'chapter_rename', 'filename_rename'] as const) {
+		for (const detail of templateProblems(settings.saveto[key]))
+			problems.push({ field: `saveto.${key}`, detail });
+	}
 	for (const field of SETTINGS_SECTIONS.flatMap((s) => s.fields)) {
 		const value = getPath(settings, field.path);
 		const control = field.control;

@@ -191,6 +191,15 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         bad_flaresolverr
             .then(|| "must be empty or an http(s) URL such as http://flaresolverr:8191".into()),
     );
+    for (field, template) in [
+        ("saveto.manga_rename", &s.saveto.manga_rename),
+        ("saveto.chapter_rename", &s.saveto.chapter_rename),
+        ("saveto.filename_rename", &s.saveto.filename_rename),
+    ] {
+        for reason in template_problems(template) {
+            check(field, Some(reason));
+        }
+    }
     check(
         "server.bind",
         s.server
@@ -200,6 +209,92 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
             .then(|| "must be a socket address such as 0.0.0.0:8080".into()),
     );
     errors
+}
+
+/// A `%` followed by letters in a rename template.
+struct Word<'a> {
+    /// The letters after the `%`.
+    word: &'a str,
+    /// Where the letters end in the template.
+    end: usize,
+    /// A `%` follows the letters.
+    closed: bool,
+}
+
+impl Word<'_> {
+    /// The token whose name equals the word under `same`.
+    fn token(&self, same: fn(&str, &str) -> bool) -> Option<&'static str> {
+        fmd_pack::RENAME_TOKENS
+            .into_iter()
+            .find(|t| same(&t[1..t.len() - 1], self.word))
+    }
+
+    /// A token name without its closing `%`, e.g. `%CHAPTER - `.
+    fn is_unclosed_token(&self) -> bool {
+        !self.closed && self.token(str::eq).is_some()
+    }
+}
+
+/// Every `%` in `template` that is followed by a letter. A closing `%` is not read as the start
+/// of the next word.
+fn words(template: &str) -> Vec<Word<'_>> {
+    let mut words = Vec::new();
+    let mut from = 0;
+    while let Some(at) = template[from..].find('%') {
+        let start = from + at + 1;
+        let after = &template[start..];
+        let len = after
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(after.len());
+        let end = start + len;
+        let closed = template[end..].starts_with('%');
+        if len > 0 {
+            words.push(Word {
+                word: &template[start..end],
+                end,
+                closed,
+            });
+        }
+        from = if closed { end + 1 } else { end };
+    }
+    words
+}
+
+/// What is wrong with the tokens of a rename template. `custom_rename` replaces only exact
+/// tokens (baseunits/uBaseUnit.pas:251-257), so anything else would land in every file name as
+/// plain text. A `%` not followed by a letter, or followed by a word that is neither a token nor
+/// closed, is a literal `%` and fine.
+fn template_problems(template: &str) -> Vec<String> {
+    let mut problems = Vec::new();
+    for word in words(template) {
+        let w = word.word;
+        if word.is_unclosed_token() {
+            problems.push(format!("%{w} is missing its closing %"));
+        } else if word.closed && word.token(str::eq).is_none() {
+            problems.push(match word.token(str::eq_ignore_ascii_case) {
+                Some(right) => format!("%{w}% is not a token; did you mean {right}?"),
+                None => format!(
+                    "%{w}% is not a token. Tokens: {}",
+                    fmd_pack::RENAME_TOKENS.join(" ")
+                ),
+            });
+        }
+    }
+    problems
+}
+
+/// `template` with the missing closing `%` added to every token name that lacks it
+/// (`%CHAPTER - ` → `%CHAPTER% - `). Other problems are left for validation to report.
+pub fn close_rename_tokens(template: &str) -> String {
+    let mut closed = String::with_capacity(template.len());
+    let mut from = 0;
+    for word in words(template).iter().filter(|w| w.is_unclosed_token()) {
+        closed.push_str(&template[from..word.end]);
+        closed.push('%');
+        from = word.end;
+    }
+    closed.push_str(&template[from..]);
+    closed
 }
 
 /// Why `value` is not in `range`, if it is not.
