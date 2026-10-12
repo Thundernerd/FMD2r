@@ -279,6 +279,22 @@ const SERIES: Record<
 		count: 142,
 		downloaded: 138
 	},
+	'/title/sd/sakamoto-days': {
+		title: 'Sakamoto Days',
+		alt_titles: '',
+		authors: 'Yuto Suzuki',
+		artists: 'Yuto Suzuki',
+		genres: ['Action', 'Comedy', 'Shounen'],
+		status: 'ongoing',
+		summary: 'A retired hitman runs a corner shop, and his past keeps walking in.',
+		summary_from_mangabaka: false,
+		format: 'manga',
+		year: 2020,
+		cover_url: `/api/covers?${new URLSearchParams({ module: 'mangadex', url: 'https://mangadex.test/sakamoto-days.jpg' })}`,
+		in_library: true,
+		count: 190,
+		downloaded: 0
+	},
 	'/title/op/one-piece': {
 		title: 'One Piece',
 		alt_titles: 'ワンピース',
@@ -783,6 +799,8 @@ export function createMockBackend({
 		if (route === 'GET /api/series') {
 			if (seriesDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, seriesDelayMs));
 			const info = series(searchParams.get('module') ?? '', searchParams.get('link') ?? '');
+			// Like fmd-server: a favorite keeps the cover its series page found.
+			if (info?.cover_url) favorites.storeCover(info.module_id, info.link, info.cover_url);
 			return info
 				? json(info)
 				: json({ status: 404, title: 'Not Found', detail: 'series not found' }, 404);

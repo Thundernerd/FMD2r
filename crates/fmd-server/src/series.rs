@@ -135,8 +135,11 @@ pub(crate) async fn get(
     ApiQuery(query): ApiQuery<SeriesQuery>,
 ) -> Result<Json<SeriesInfo>, ApiError> {
     let info = fetch_info(&state, &query.module, &query.link).await?;
-    crate::covers::series::store_learned(&state, &query.module, &query.link, &info.cover_link)
-        .await;
+    // The library shows a favorite's stored cover before the title's (`to_view`,
+    // favorites.rs), so `None` for a MangaBaka cover keeps it.
+    let cover =
+        crate::covers::series::store_learned(&state, &query.module, &query.link, &info.cover_link)
+            .await;
     // FMD2 looks up the downloaded chapters by the link the module reports
     // (mangadownloader/forms/frmMain.pas:2207).
     let mangabaka = mangabaka_metadata(&state, &query.module, [&query.link, &info.link]).await;
@@ -145,7 +148,14 @@ pub(crate) async fn get(
         .blocking(move |db| -> Result<_, ApiError> {
             let downloaded = db.downloaded_chapters().list_for(&module, &link)?;
             let favorite = db.favorites().find(&module, &link)?;
-            Ok((downloaded, favorite.is_some()))
+            let in_library = favorite.is_some();
+            if let (Some(mut favorite), Some(cover)) = (favorite, cover)
+                && favorite.cover_url.as_ref() != Some(&cover)
+            {
+                favorite.cover_url = Some(cover);
+                db.favorites().update(&favorite)?;
+            }
+            Ok((downloaded, in_library))
         })
         .await?;
     let mut series = view(&query.module, info, &downloaded, favorite);
