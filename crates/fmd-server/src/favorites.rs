@@ -4,8 +4,12 @@ use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use std::sync::Arc;
+
 use fmd_core::favorites::{CheckMode, CheckScope, favorite_save_to};
-use fmd_store::{Favorite, FavoriteId, NewFavorite};
+use fmd_core::metadata::Metadata;
+use fmd_core::settings::LibraryTitle;
+use fmd_store::{Favorite, FavoriteId, ListsDb, NewFavorite, StoreError};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -25,7 +29,11 @@ pub struct FavoriteView {
     pub website: String,
     /// The series link relative to the module's `RootURL`.
     pub link: String,
+    /// As the website names it; download folders and files are named after it.
     pub title: String,
+    /// The title the Library shows (`appearance.library_title`): the chosen title of the
+    /// series' accepted MangaBaka match, else MangaBaka's main title, else `title`.
+    pub display_title: String,
     pub status: SeriesStatus,
     /// Checked by the new-chapter check.
     pub enabled: bool,
@@ -67,7 +75,7 @@ pub(crate) struct ListQuery {
     filter: FavoriteFilter,
     /// Only this module's favorites.
     module: Option<String>,
-    /// Case-insensitive part of the title.
+    /// Case-insensitive part of the shown or the website's title.
     q: Option<String>,
 }
 
@@ -96,7 +104,11 @@ pub(crate) async fn list(
                 FavoriteFilter::Disabled => !f.enabled,
             })
             .filter(|f| query.module.as_ref().is_none_or(|m| *m == f.module_id))
-            .filter(|f| q.is_empty() || f.title.to_lowercase().contains(&q))
+            .filter(|f| {
+                q.is_empty()
+                    || f.display_title.to_lowercase().contains(&q)
+                    || f.title.to_lowercase().contains(&q)
+            })
             .collect(),
     ))
 }
@@ -308,14 +320,77 @@ fn website(state: &AppState, module_id: &str) -> String {
         .map_or_else(|| module_id.to_owned(), |m| m.name)
 }
 
+/// The titles the Library shows, with MangaBaka's database and the lists opened once.
+struct DisplayTitles {
+    choice: LibraryTitle,
+    /// `None` when the website's titles are shown, or MangaBaka's database is not there.
+    sources: Option<(Arc<Metadata>, ListsDb)>,
+}
+
+impl DisplayTitles {
+    fn new(state: &AppState) -> Self {
+        let choice = state.settings.get().appearance.library_title;
+        let sources = if choice == LibraryTitle::Website {
+            None
+        } else {
+            state
+                .metadata
+                .as_ref()
+                .and_then(|m| m.current())
+                .zip(state.lists.clone())
+        };
+        Self { choice, sources }
+    }
+
+    /// The website's title when the series has no accepted match or the lookup fails. Blocking.
+    fn of(&self, favorite: &Favorite) -> String {
+        match self.lookup(&favorite.module_id, &favorite.link) {
+            Ok(Some(title)) => title,
+            Ok(None) => favorite.title.clone(),
+            Err(e) => {
+                tracing::warn!(target: "fmd_server", "MangaBaka title of a favorite: {e}");
+                favorite.title.clone()
+            }
+        }
+    }
+
+    /// The chosen title of the accepted match, else its main title.
+    fn lookup(&self, module: &str, link: &str) -> Result<Option<String>, StoreError> {
+        let Some((meta, lists)) = &self.sources else {
+            return Ok(None);
+        };
+        let Some(m) = lists.matches().get(module, link)? else {
+            return Ok(None);
+        };
+        let Some(id) = m.series_id.filter(|_| m.confidence.is_accepted()) else {
+            return Ok(None);
+        };
+        let Some(series) = meta.series(id)? else {
+            return Ok(None);
+        };
+        let chosen = match self.choice {
+            LibraryTitle::English => series.english_title,
+            LibraryTitle::Romanized => series.romanized_title,
+            LibraryTitle::Native => series.native_title,
+            LibraryTitle::MangaBaka | LibraryTitle::Website => None,
+        };
+        let usable = |t: &String| !t.trim().is_empty();
+        Ok(chosen
+            .filter(usable)
+            .or_else(|| Some(series.title).filter(usable)))
+    }
+}
+
 async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
+    let titles = DisplayTitles::new(state);
     let rows = state
-        .blocking(|db| -> Result<_, ApiError> {
+        .blocking(move |db| -> Result<_, ApiError> {
             let favorites = db.favorites().list()?;
             let mut rows = Vec::with_capacity(favorites.len());
             for favorite in favorites {
                 let new_chapters = db.favorites().new_chapter_count(&favorite)?;
-                rows.push((favorite, new_chapters));
+                let display_title = titles.of(&favorite);
+                rows.push((favorite, display_title, new_chapters));
             }
             Ok(rows)
         })
@@ -328,26 +403,37 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
         .collect();
     Ok(rows
         .into_iter()
-        .map(|(favorite, new_chapters)| {
+        .map(|(favorite, display_title, new_chapters)| {
             let website = names
                 .get(&favorite.module_id)
                 .cloned()
                 .unwrap_or_else(|| favorite.module_id.clone());
-            to_view(favorite, website, new_chapters)
+            to_view(favorite, website, display_title, new_chapters)
         })
         .collect())
 }
 
 async fn view(state: &AppState, favorite: Favorite) -> Result<FavoriteView, ApiError> {
+    let titles = DisplayTitles::new(state);
     let counted = favorite.clone();
-    let new_chapters = state
-        .blocking(move |db| db.favorites().new_chapter_count(&counted))
+    let (display_title, new_chapters) = state
+        .blocking(move |db| -> Result<_, ApiError> {
+            Ok((
+                titles.of(&counted),
+                db.favorites().new_chapter_count(&counted)?,
+            ))
+        })
         .await?;
     let website = website(state, &favorite.module_id);
-    Ok(to_view(favorite, website, new_chapters))
+    Ok(to_view(favorite, website, display_title, new_chapters))
 }
 
-fn to_view(favorite: Favorite, website: String, new_chapters: u32) -> FavoriteView {
+fn to_view(
+    favorite: Favorite,
+    website: String,
+    display_title: String,
+    new_chapters: u32,
+) -> FavoriteView {
     FavoriteView {
         id: favorite.id.0,
         cover_url: match favorite.cover_url.as_deref().filter(|c| !c.is_empty()) {
@@ -364,6 +450,7 @@ fn to_view(favorite: Favorite, website: String, new_chapters: u32) -> FavoriteVi
         website,
         link: favorite.link,
         title: favorite.title,
+        display_title,
         enabled: favorite.enabled,
         save_to: favorite.save_to,
     }
