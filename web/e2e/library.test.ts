@@ -286,3 +286,106 @@ test('a series paused from its page shows as paused in the library, until resume
 	await expect(cards.filter({ hasText: 'Frieren' })).toContainText('MangaDex · Ongoing');
 	await expect(show.getByRole('button', { name: /^Paused/ })).toContainText('1');
 });
+
+test.describe('selecting several series', () => {
+	const THREE = ['Frieren', 'Kagurabachi', 'Sakamoto Days'];
+
+	/** Turns on selection mode and selects `titles`; the cards, as checkboxes. */
+	async function select(page: import('@playwright/test').Page, titles: string[]) {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Select', exact: true }).click();
+		for (const title of titles) {
+			await page.getByRole('checkbox', { name: title }).click();
+			await expect(page.getByRole('checkbox', { name: title })).toHaveAttribute(
+				'aria-checked',
+				'true'
+			);
+		}
+		return page.getByRole('region', { name: 'Selected series' });
+	}
+
+	test('pauses them, then moves them to a new group', async ({ page }) => {
+		const bar = await select(page, THREE);
+		await expect(bar.getByRole('status')).toContainText('3 selected');
+
+		await bar.getByRole('button', { name: 'Pause' }).click();
+		for (const title of THREE) {
+			await expect(page.getByRole('checkbox', { name: title })).toContainText('Paused');
+		}
+		await expect(page.getByRole('checkbox', { name: 'Vinland Saga' })).not.toContainText('Paused');
+		// Paused ones are skipped by a check, and the bar says so.
+		await expect(bar.getByRole('status')).toContainText('skips the paused');
+
+		await bar.getByRole('button', { name: 'Group…' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Group' });
+		await dialog.getByRole('combobox', { name: 'Group' }).selectOption({ label: 'New group…' });
+		await dialog.getByRole('textbox', { name: 'New group name' }).fill('Weekly');
+		await dialog.getByRole('button', { name: 'Save' }).click();
+		await expect(dialog).toHaveCount(0);
+
+		const weekly = page.getByRole('list', { name: 'Weekly' }).getByRole('checkbox');
+		await expect(weekly).toHaveCount(3);
+		await expect(weekly.filter({ hasText: 'Paused' })).toHaveCount(3);
+		// The selection stays for the next action.
+		await expect(bar.getByRole('status')).toContainText('3 selected');
+
+		// A folded section's series are hidden: select all leaves them out of view and counts them.
+		await page.getByRole('button', { name: 'Weekly · 3' }).click();
+		await expect(bar.getByRole('status')).toContainText('3 selected (3 hidden)');
+		await page.getByRole('button', { name: 'Select all', exact: true }).click();
+		await expect(bar.getByRole('status')).toContainText('8 selected (3 hidden)');
+		await page.getByRole('button', { name: 'Weekly · 3' }).click();
+
+		await page.getByRole('button', { name: 'Done' }).click();
+		await expect(bar).toHaveCount(0);
+		await expect(page.getByRole('list', { name: 'Weekly' }).getByRole('link')).toHaveCount(3);
+	});
+
+	test('gives them a folder in a destination', async ({ page }) => {
+		const bar = await select(page, THREE);
+
+		await bar.getByRole('button', { name: 'Download folder…' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Download folder' });
+		await expect(dialog).toContainText('not moved');
+		await dialog.getByRole('combobox', { name: 'Destination' }).selectOption({
+			label: 'Downloads (default)'
+		});
+		await dialog.getByRole('button', { name: 'Save' }).click();
+		await expect(dialog).toHaveCount(0);
+
+		await page.keyboard.press('Escape');
+		await expect(bar).toHaveCount(0);
+		await page.getByRole('link', { name: /Sakamoto Days/ }).click();
+		await expect(page.getByRole('button', { name: 'Download folder…' })).toHaveAttribute(
+			'title',
+			'downloads/Sakamoto Days'
+		);
+	});
+
+	test('removes one after confirming', async ({ page }) => {
+		const bar = await select(page, ['Chainsaw Man']);
+
+		await bar.getByRole('button', { name: 'Remove…' }).click();
+		await expect(bar).toContainText(
+			'Remove 1 series from the library? Downloaded chapters stay recorded.'
+		);
+		await bar.getByRole('button', { name: 'Remove', exact: true }).click();
+
+		await expect(page.getByRole('checkbox', { name: 'Chainsaw Man' })).toHaveCount(0);
+		await expect(page.getByRole('list', { name: 'Favorites' }).getByRole('checkbox')).toHaveCount(
+			7
+		);
+		await expect(bar).toHaveCount(0);
+	});
+
+	test('select all takes the shown series, and keeps hidden ones selected', async ({ page }) => {
+		const bar = await select(page, ['Frieren']);
+		await page
+			.getByRole('group', { name: 'Show' })
+			.getByRole('button', { name: /^Completed/ })
+			.click();
+		await page.getByRole('button', { name: 'Select all' }).click();
+
+		await expect(bar.getByRole('status')).toContainText('2 selected (1 hidden)');
+	});
+});

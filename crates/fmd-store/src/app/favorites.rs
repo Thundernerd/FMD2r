@@ -290,28 +290,37 @@ impl<'a> FavoriteRepo<'a> {
 
     /// Leaves `sort_order` and `date_added` as stored; see [`Self::reorder`].
     pub fn update(&self, favorite: &Favorite) -> Result<()> {
-        let conn = self.db.lock();
-        conn.execute(
-            "UPDATE favorites SET module_id = ?2, link = ?3, title = ?4, status = ?5,
-                current_chapter = ?6, save_to = ?7, enabled = ?8, date_last_checked = ?9,
-                date_last_updated = ?10, cover_url = ?11, group_id = ?12
-             WHERE id = ?1",
-            params![
-                favorite.id.0,
-                favorite.module_id,
-                favorite.link,
-                favorite.title,
-                favorite.status,
-                favorite.current_chapter,
-                favorite.save_to,
-                favorite.enabled,
-                favorite.date_last_checked,
-                favorite.date_last_updated,
-                favorite.cover_url,
-                favorite.group_id.map(|g| g.0)
-            ],
-        )?;
+        update_row(&self.db.lock(), favorite)?;
         Ok(())
+    }
+
+    /// Reads, changes and stores each favorite in one transaction, as [`Self::update`] stores
+    /// it: all of them, or none and `None` when one of them is not in the library.
+    pub fn update_each(
+        &self,
+        ids: &[FavoriteId],
+        mut change: impl FnMut(&mut Favorite),
+    ) -> Result<Option<Vec<Favorite>>> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        let mut favorites = Vec::with_capacity(ids.len());
+        for id in ids {
+            let Some(mut favorite) = tx
+                .query_row(
+                    &format!("SELECT {COLUMNS} FROM favorites WHERE id = ?1"),
+                    [id.0],
+                    favorite_from_row,
+                )
+                .optional()?
+            else {
+                return Ok(None);
+            };
+            change(&mut favorite);
+            update_row(&tx, &favorite)?;
+            favorites.push(favorite);
+        }
+        tx.commit()?;
+        Ok(Some(favorites))
     }
 
     /// Puts `ids` first; the rest keep their relative order.
@@ -375,11 +384,53 @@ impl<'a> FavoriteRepo<'a> {
         Ok(favorite.current_chapter.saturating_sub(marked))
     }
 
+    /// Deletes every favorite in one transaction: all of them, or none and `false` when one of
+    /// them is not in the library.
+    pub fn delete_all(&self, ids: &[FavoriteId]) -> Result<bool> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        for id in ids {
+            if delete_row(&tx, *id)? == 0 {
+                return Ok(false);
+            }
+        }
+        tx.commit()?;
+        Ok(true)
+    }
+
     pub fn delete(&self, id: FavoriteId) -> Result<()> {
-        let conn = self.db.lock();
-        conn.execute("DELETE FROM favorites WHERE id = ?1", [id.0])?;
+        delete_row(&self.db.lock(), id)?;
         Ok(())
     }
+}
+
+/// The number of rows changed: 0 when the favorite is not stored.
+fn update_row(conn: &rusqlite::Connection, favorite: &Favorite) -> Result<usize> {
+    Ok(conn.execute(
+        "UPDATE favorites SET module_id = ?2, link = ?3, title = ?4, status = ?5,
+            current_chapter = ?6, save_to = ?7, enabled = ?8, date_last_checked = ?9,
+            date_last_updated = ?10, cover_url = ?11, group_id = ?12
+         WHERE id = ?1",
+        params![
+            favorite.id.0,
+            favorite.module_id,
+            favorite.link,
+            favorite.title,
+            favorite.status,
+            favorite.current_chapter,
+            favorite.save_to,
+            favorite.enabled,
+            favorite.date_last_checked,
+            favorite.date_last_updated,
+            favorite.cover_url,
+            favorite.group_id.map(|g| g.0)
+        ],
+    )?)
+}
+
+/// The number of rows deleted: 0 when the favorite is not stored.
+fn delete_row(conn: &rusqlite::Connection, id: FavoriteId) -> Result<usize> {
+    Ok(conn.execute("DELETE FROM favorites WHERE id = ?1", [id.0])?)
 }
 
 const GROUP_COLUMNS: &str = "id, name, sort_order, collapsed";

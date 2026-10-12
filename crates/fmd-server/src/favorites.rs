@@ -6,6 +6,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use std::sync::Arc;
 
+use fmd_core::download::NewDownload;
 use fmd_core::favorites::{CheckMode, CheckScope, favorite_save_to, website_info};
 use fmd_core::metadata::Metadata;
 use fmd_core::settings::LibraryTitle;
@@ -15,7 +16,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::covers::series::cover_url as series_cover_url;
 use crate::error::{ApiJson, ApiQuery};
-use crate::series::{SeriesStatus, accepted_match, fetch_info};
+use crate::series::{SeriesStatus, accepted_match, fetch_info, manga_folder};
 use crate::services::FavoritesJobs;
 use crate::time::rfc3339_from_unix_ms;
 use crate::{ApiError, AppState, Problem, cover_url};
@@ -255,6 +256,143 @@ pub(crate) async fn patch(
         })
         .await?;
     Ok(Json(view(&state, favorite).await?))
+}
+
+/// One change to several favorites.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct BulkChange {
+    pub ids: Vec<i64>,
+    /// Resume (`true`) or pause (`false`) them.
+    pub enabled: Option<bool>,
+    /// The library group to put them in; `null` ungroups them.
+    #[serde(default, deserialize_with = "null_or_value")]
+    #[schema(value_type = Option<i64>, nullable)]
+    pub group_id: Option<Option<i64>>,
+    /// A parent folder: each favorite downloads to its own manga folder in it, as
+    /// `POST /api/save-folder` makes it. Chapters already downloaded are not moved.
+    pub destination: Option<String>,
+    /// Remove them from the library instead; their downloaded chapters stay recorded. Cannot be
+    /// combined with a change.
+    #[serde(default)]
+    pub remove: bool,
+}
+
+/// Change or remove several favorites at once, all of them or none.
+#[utoipa::path(post, path = "/api/favorites/bulk", tag = "library", operation_id = "bulkUpdateFavorites",
+    request_body = BulkChange,
+    responses(
+        (status = 200, body = Vec<FavoriteView>, description = "The changed favorites, in the order of `ids`; none after a removal"),
+        (status = 400, body = Problem, description = "No such favorite or group, and nothing changed"),
+        (status = 422, body = Problem, description = "An empty destination"),
+    ))]
+pub(crate) async fn bulk(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<BulkChange>,
+) -> Result<Json<Vec<FavoriteView>>, ApiError> {
+    if req
+        .destination
+        .as_deref()
+        .is_some_and(|d| d.trim().is_empty())
+    {
+        return Err(ApiError::Invalid {
+            field: Some("destination".into()),
+            detail: "the destination cannot be empty".into(),
+        });
+    }
+    let ids: Vec<FavoriteId> = req.ids.iter().copied().map(FavoriteId).collect();
+    let favorites = if req.remove {
+        if req.enabled.is_some() || req.group_id.is_some() || req.destination.is_some() {
+            return Err(ApiError::BadRequest(
+                "remove cannot be combined with a change".into(),
+            ));
+        }
+        bulk_remove(&state, ids).await?;
+        Vec::new()
+    } else {
+        bulk_change(&state, ids, req).await?
+    };
+    let mut views = Vec::with_capacity(favorites.len());
+    for favorite in favorites {
+        views.push(view(&state, favorite).await?);
+    }
+    Ok(Json(views))
+}
+
+async fn bulk_remove(state: &AppState, ids: Vec<FavoriteId>) -> Result<(), ApiError> {
+    state
+        .blocking(move |db| -> Result<(), ApiError> {
+            if !db.favorites().delete_all(&ids)? {
+                return Err(ApiError::BadRequest(
+                    "a favorite is not in the library".into(),
+                ));
+            }
+            Ok(())
+        })
+        .await
+}
+
+/// Each favorite is read again in the transaction that stores it, so a check finishing
+/// meanwhile keeps what it found.
+async fn bulk_change(
+    state: &AppState,
+    ids: Vec<FavoriteId>,
+    req: BulkChange,
+) -> Result<Vec<Favorite>, ApiError> {
+    let group_id = req.group_id.map(|g| g.map(LibraryGroupId));
+    let read = ids.clone();
+    let favorites = state
+        .blocking(move |db| -> Result<Vec<Favorite>, ApiError> {
+            if let Some(Some(id)) = group_id
+                && db.library_groups().get(id)?.is_none()
+            {
+                return Err(ApiError::BadRequest(format!("no group with id {}", id.0)));
+            }
+            read.into_iter()
+                .map(|id| {
+                    db.favorites().get(id)?.ok_or_else(|| {
+                        ApiError::BadRequest(format!("no favorite with id {}", id.0))
+                    })
+                })
+                .collect()
+        })
+        .await?;
+    let mut folders = std::collections::HashMap::new();
+    if let Some(destination) = &req.destination {
+        for favorite in favorites {
+            // As the series page's folder dialog asks for it (FolderDialog.svelte).
+            let folder = manga_folder(
+                state,
+                NewDownload {
+                    module_id: favorite.module_id,
+                    title: favorite.title,
+                    save_to: destination.trim().to_owned(),
+                    ..NewDownload::default()
+                },
+            )
+            .await?;
+            folders.insert(favorite.id, folder);
+        }
+    }
+    let enabled = req.enabled;
+    state
+        .blocking(move |db| -> Result<Vec<Favorite>, ApiError> {
+            db.favorites()
+                .update_each(&ids, |favorite| {
+                    if let Some(enabled) = enabled {
+                        favorite.enabled = enabled;
+                    }
+                    if let Some(group_id) = group_id {
+                        favorite.group_id = group_id;
+                    }
+                    if let Some(folder) = folders.remove(&favorite.id) {
+                        favorite.save_to = folder;
+                    }
+                })?
+                .ok_or_else(|| {
+                    ApiError::BadRequest("a favorite was removed while changing it".into())
+                })
+        })
+        .await
 }
 
 /// Remove a favorite from the library; its downloaded chapters stay recorded.

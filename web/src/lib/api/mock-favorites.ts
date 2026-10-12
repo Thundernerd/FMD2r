@@ -1,4 +1,5 @@
 import type {
+	BulkChange,
 	FavoritePatch,
 	FavoriteView,
 	FavoritesEvent,
@@ -146,6 +147,11 @@ export interface MockFavorites {
 	storeCover(module: string, link: string, cover: string): void;
 	patch(id: number, patch: FavoritePatch): Result;
 	remove(id: number): Result;
+	/**
+	 * Changes or removes every favorite in `change.ids`, all or none, as fmd-server does;
+	 * `folder` makes a series' manga folder in a destination, as `POST /api/save-folder` does.
+	 */
+	bulk(change: BulkChange, folder: (f: FavoriteView, destination: string) => string): Result;
 	/** Starts a check of `ids` (every enabled favorite when `null`); false when one runs. */
 	start(ids: number[] | null, mode: FavoritesEvent['mode']): boolean;
 	cancel(): boolean;
@@ -269,6 +275,34 @@ export function createMockFavorites(
 			favorites.splice(index, 1);
 			saveGroups();
 			return { status: 204 };
+		},
+		bulk(change, folder) {
+			const picked = change.ids.map((id) => favorites.find((f) => f.id === id));
+			const missing = change.ids.find((_, i) => !picked[i]);
+			if (missing !== undefined) return problem(400, `no favorite with id ${missing}`);
+			const list = picked.filter((f) => f !== undefined);
+			const { enabled, group_id, destination, remove } = change;
+			if (remove) {
+				if (enabled != null || group_id !== undefined || destination != null) {
+					return problem(400, 'remove cannot be combined with a change');
+				}
+				for (const f of list) favorites.splice(favorites.indexOf(f), 1);
+				saveGroups();
+				return { status: 200, body: [] };
+			}
+			if (destination != null && !destination.trim()) {
+				return { status: 422, body: { status: 422, detail: 'the destination cannot be empty' } };
+			}
+			if (group_id != null && !grouping.groups.some((g) => g.id === group_id)) {
+				return problem(400, `no group with id ${group_id}`);
+			}
+			for (const f of list) {
+				f.enabled = enabled ?? f.enabled;
+				if (group_id !== undefined) f.group_id = group_id;
+				if (destination != null) f.save_to = folder(f, destination.trim());
+			}
+			saveGroups();
+			return { status: 200, body: list.map(view) };
 		},
 		listGroups: () => grouping.groups.map((g) => ({ ...g })),
 		createGroup(raw) {

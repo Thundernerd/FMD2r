@@ -12,10 +12,19 @@
 		type LibraryFilters
 	} from '#lib/library/filters.ts';
 	import { sections, type Section } from '#lib/library/sections.ts';
+	import {
+		inLibrary,
+		selectShown,
+		selectionLabel,
+		toggle as toggleSelected
+	} from '#lib/library/selection.ts';
 	import { seriesHref } from '#lib/series/href.ts';
 	import CoverThumb from '#lib/components/CoverThumb.svelte';
 	import ImportDialog from '#lib/components/library/ImportDialog.svelte';
 	import GroupsDialog from '#lib/components/library/GroupsDialog.svelte';
+	import BulkGroupDialog from '#lib/components/library/BulkGroupDialog.svelte';
+	import BulkFolderDialog from '#lib/components/library/BulkFolderDialog.svelte';
+	import type { BulkChange } from '#lib/api/types.ts';
 
 	/** Where this browser keeps whether "Ungrouped" is folded; groups keep theirs on the server. */
 	const UNGROUPED_KEY = 'fmd2r.library.ungrouped-collapsed';
@@ -42,6 +51,15 @@
 	let editingGroups = $state(false);
 	let foldError = $state<string | null>(null);
 	let ungroupedCollapsed = $state(readUngroupedCollapsed());
+	/** Whether cards select series instead of opening them. */
+	let selecting = $state(false);
+	/** Favorite ids; kept while filters hide them. */
+	let selected = $state<Set<number>>(new Set());
+	let bulkBusy = $state(false);
+	let bulkError = $state<string | null>(null);
+	let bulkNote = $state<string | null>(null);
+	/** The bulk action waiting in a dialog or for confirmation. */
+	let bulkAction = $state<'group' | 'folder' | 'remove' | null>(null);
 
 	const shown = $derived(filterFavorites(favorites, filters));
 	const counts = $derived(chipCounts(favorites));
@@ -60,6 +78,13 @@
 			return counts;
 		}, {})
 	);
+	/** The cards on screen: those in folded sections are hidden too. */
+	const visible = $derived(
+		shownSections ? shownSections.filter((s) => !s.collapsed).flatMap((s) => s.favorites) : shown
+	);
+	const selectedLabel = $derived(selectionLabel(selected, visible));
+	/** Paused series in the selection, which "Check now" skips. */
+	const selectedPaused = $derived(favorites.filter((f) => selected.has(f.id) && !f.enabled).length);
 	const job = $derived(events.jobs[JOB]);
 	const checking = $derived(starting || job?.state === 'running');
 
@@ -71,18 +96,24 @@
 		}
 	}
 
-	function load() {
+	function load(): Promise<void> {
 		// Without its groups, the library still shows, as one grid.
-		Promise.all([api.listFavorites(), api.listGroups().catch(() => [])])
+		return Promise.all([api.listFavorites(), api.listGroups().catch(() => [])])
 			.then(([list, groupList]) => {
 				favorites = list;
 				groups = groupList;
 				error = null;
+				// Removed series leave the selection.
+				selected = inLibrary(selected, list);
 			})
-			.catch(() => (error = 'Could not load the library.'))
+			.catch(() => {
+				error = 'Could not load the library.';
+			})
 			.finally(() => (loading = false));
 	}
-	$effect(load);
+	$effect(() => {
+		load();
+	});
 
 	// The job's state on arrival, so a check already going shows its progress.
 	$effect(() => {
@@ -103,18 +134,22 @@
 		load();
 	});
 
+	/** Why a check did not start. */
+	function checkFailure(e: unknown): string {
+		return e instanceof ApiError && e.status === 409
+			? 'A check is already running.'
+			: e instanceof ApiError && e.status === 503
+				? 'The new-chapter check is not running on this server.'
+				: 'Could not start the check.';
+	}
+
 	async function checkNow() {
 		starting = true;
 		checkError = null;
 		try {
 			await api.checkFavorites();
 		} catch (e) {
-			checkError =
-				e instanceof ApiError && e.status === 409
-					? 'A check is already running.'
-					: e instanceof ApiError && e.status === 503
-						? 'The new-chapter check is not running on this server.'
-						: 'Could not start the check.';
+			checkError = checkFailure(e);
 		} finally {
 			starting = false;
 		}
@@ -143,6 +178,70 @@
 		}
 	}
 
+	function startSelecting() {
+		selecting = true;
+		bulkError = null;
+		bulkNote = null;
+	}
+
+	/** Leaves selection mode, clearing the selection. */
+	function stopSelecting() {
+		selecting = false;
+		selected = new Set();
+		bulkAction = null;
+		bulkError = null;
+		bulkNote = null;
+	}
+
+	function onkeydown(event: KeyboardEvent) {
+		// An open dialog closes on its own Esc; the bar's confirmation cancels first.
+		if (event.key !== 'Escape' || !selecting || event.defaultPrevented) return;
+		if (document.querySelector('dialog[open]')) return;
+		if (bulkAction === 'remove') bulkAction = null;
+		else stopSelecting();
+	}
+
+	/** Applies `change` to the selection, then reloads the library; rejects when it fails. */
+	async function applyBulk(change: Omit<BulkChange, 'ids'>) {
+		bulkBusy = true;
+		bulkError = null;
+		bulkNote = null;
+		try {
+			await api.bulkUpdateFavorites({ ids: [...selected], ...change });
+		} finally {
+			bulkBusy = false;
+		}
+		await load();
+	}
+
+	/** Runs an action from the bar, saying so when it fails. */
+	async function bulk(change: Omit<BulkChange, 'ids'>, failed: string) {
+		try {
+			await applyBulk(change);
+		} catch {
+			bulkError = failed;
+		} finally {
+			// The bar shows the outcome in place of the confirmation.
+			if (change.remove) bulkAction = null;
+		}
+	}
+
+	async function checkSelected() {
+		bulkBusy = true;
+		bulkError = null;
+		bulkNote = null;
+		try {
+			await api.checkFavorites([...selected]);
+			if (selectedPaused > 0) {
+				bulkNote = `Checking; the ${selectedPaused} paused series ${selectedPaused === 1 ? 'is' : 'are'} skipped.`;
+			}
+		} catch (e) {
+			bulkError = checkFailure(e);
+		} finally {
+			bulkBusy = false;
+		}
+	}
+
 	async function cancel() {
 		try {
 			await api.cancelJob(JOB);
@@ -158,31 +257,49 @@
 	<ul class="grid" aria-label={label}>
 		{#each list as favorite (favorite.id)}
 			<li>
-				<a class="card" class:disabled={!favorite.enabled} href={seriesHref(favorite)}>
-					<span class="art">
-						<!-- A check can replace the series cover with the website's: start that one afresh. -->
-						{#key favorite.cover_url}
-							<CoverThumb src={favorite.cover_url} title={favorite.display_title} />
-						{/key}
-						{#if favorite.new_chapters > 0}
-							<span class="badge num" aria-label="{favorite.new_chapters} new chapters"
-								>+{favorite.new_chapters}</span
-							>
-						{/if}
-					</span>
-					<!-- The website's own title, when MangaBaka's shows instead. -->
-					<span
-						class="t"
-						title={favorite.display_title === favorite.title ? undefined : favorite.title}
-						>{favorite.display_title}</span
+				{#if selecting}
+					<button
+						class="card selectable"
+						class:disabled={!favorite.enabled}
+						class:selected={selected.has(favorite.id)}
+						type="button"
+						role="checkbox"
+						aria-checked={selected.has(favorite.id)}
+						aria-label={favorite.display_title}
+						onclick={() => (selected = toggleSelected(selected, favorite.id))}
 					>
-					<span class="small muted"
-						>{favorite.website} · {favorite.enabled ? STATUS[favorite.status] : 'Paused'}</span
-					>
-				</a>
+						{@render card(favorite)}
+						<span class="tick" aria-hidden="true">{selected.has(favorite.id) ? '✓' : ''}</span>
+					</button>
+				{:else}
+					<a class="card" class:disabled={!favorite.enabled} href={seriesHref(favorite)}>
+						{@render card(favorite)}
+					</a>
+				{/if}
 			</li>
 		{/each}
 	</ul>
+{/snippet}
+
+{#snippet card(favorite: FavoriteView)}
+	<span class="art">
+		<!-- A check can replace the series cover with the website's: start that one afresh. -->
+		{#key favorite.cover_url}
+			<CoverThumb src={favorite.cover_url} title={favorite.display_title} />
+		{/key}
+		{#if favorite.new_chapters > 0}
+			<span class="badge num" aria-label="{favorite.new_chapters} new chapters"
+				>+{favorite.new_chapters}</span
+			>
+		{/if}
+	</span>
+	<!-- The website's own title, when MangaBaka's shows instead. -->
+	<span class="t" title={favorite.display_title === favorite.title ? undefined : favorite.title}
+		>{favorite.display_title}</span
+	>
+	<span class="small muted"
+		>{favorite.website} · {favorite.enabled ? STATUS[favorite.status] : 'Paused'}</span
+	>
 {/snippet}
 
 <div class="page">
@@ -206,6 +323,16 @@
 				<button class="btn sm ghost" type="button" onclick={cancel}>Cancel</button>
 			{:else}
 				<button class="btn primary" type="button" onclick={checkNow}>Check now</button>
+			{/if}
+			{#if selecting}
+				<button
+					class="btn"
+					type="button"
+					onclick={() => (selected = selectShown(selected, visible))}>Select all</button
+				>
+				<button class="btn" type="button" onclick={stopSelecting}>Done</button>
+			{:else}
+				<button class="btn" type="button" onclick={startSelecting}>Select</button>
 			{/if}
 			<button class="btn" type="button" onclick={() => (editingGroups = true)}>Groups…</button>
 			<button class="btn" type="button" onclick={() => (importing = true)}>Import from FMD2</button>
@@ -313,6 +440,15 @@
 						<span class="chevron" aria-hidden="true">{section.collapsed ? '▸' : '▾'}</span>
 						{section.name} · <span class="num">{section.favorites.length}</span>
 					</button>
+					{#if selecting && !section.collapsed}
+						<button
+							class="btn sm ghost"
+							type="button"
+							aria-label="Select all in {section.name}"
+							onclick={() => (selected = selectShown(selected, section.favorites))}
+							>Select all</button
+						>
+					{/if}
 				</h2>
 				<div {id} hidden={section.collapsed}>
 					{@render grid(section.favorites, section.name)}
@@ -322,7 +458,89 @@
 	{:else}
 		{@render grid(shown, 'Favorites')}
 	{/if}
+
+	{#if selecting && selected.size > 0}
+		<div class="bulk-bar" role="region" aria-label="Selected series">
+			{#if bulkAction === 'remove'}
+				<span class="grow small" role="alert"
+					>Remove {selected.size} series from the library? Downloaded chapters stay recorded.</span
+				>
+				<button
+					class="btn sm primary"
+					type="button"
+					disabled={bulkBusy}
+					onclick={() => bulk({ remove: true }, 'Could not remove the series.')}>Remove</button
+				>
+				<button class="btn sm ghost" type="button" onclick={() => (bulkAction = null)}
+					>Cancel</button
+				>
+			{:else}
+				<span class="grow small num" role="status" aria-label="Selection">
+					{selectedLabel}
+					{#if bulkError}
+						· <span class="bad">{bulkError}</span>
+					{:else if bulkNote}
+						· {bulkNote}
+					{:else if selectedPaused > 0}
+						· <span class="muted">Check now skips the paused ones.</span>
+					{/if}
+				</span>
+				<div class="bulk-actions">
+					<button
+						class="btn sm"
+						type="button"
+						disabled={bulkBusy}
+						onclick={() => bulk({ enabled: false }, 'Could not pause the series.')}>Pause</button
+					>
+					<button
+						class="btn sm"
+						type="button"
+						disabled={bulkBusy}
+						onclick={() => bulk({ enabled: true }, 'Could not resume the series.')}>Resume</button
+					>
+					<button
+						class="btn sm"
+						type="button"
+						disabled={bulkBusy}
+						onclick={() => (bulkAction = 'group')}>Group…</button
+					>
+					<button
+						class="btn sm"
+						type="button"
+						disabled={bulkBusy}
+						onclick={() => (bulkAction = 'folder')}>Download folder…</button
+					>
+					<button class="btn sm" type="button" disabled={bulkBusy} onclick={checkSelected}
+						>Check now</button
+					>
+					<button
+						class="btn sm"
+						type="button"
+						disabled={bulkBusy}
+						onclick={() => (bulkAction = 'remove')}>Remove…</button
+					>
+				</div>
+			{/if}
+		</div>
+	{/if}
+	{#if bulkAction === 'group'}
+		<BulkGroupDialog
+			{api}
+			count={selected.size}
+			onpick={(group_id) => applyBulk({ group_id })}
+			onclose={() => (bulkAction = null)}
+		/>
+	{:else if bulkAction === 'folder'}
+		<BulkFolderDialog
+			{api}
+			count={selected.size}
+			onpick={(destination) => applyBulk({ destination })}
+			onclose={() => (bulkAction = null)}
+		/>
+	{/if}
 </div>
+
+<svelte:window {onkeydown} />
 
 <style>
 	.head {
@@ -429,6 +647,80 @@
 		gap: 6px;
 		color: inherit;
 		text-decoration: none;
+	}
+	.card.selectable {
+		position: relative;
+		width: 100%;
+		border: 2px solid transparent;
+		border-radius: var(--r-lg);
+		background: none;
+		padding: 4px;
+		font: inherit;
+		text-align: start;
+		cursor: pointer;
+	}
+	.card.selected {
+		border-color: var(--accent);
+		background: var(--surface-2);
+	}
+	.tick {
+		position: absolute;
+		top: 10px;
+		left: 10px;
+		width: 22px;
+		height: 22px;
+		display: grid;
+		place-items: center;
+		border: 2px solid var(--accent);
+		border-radius: var(--r-pill);
+		background: var(--surface);
+		color: var(--accent-fg);
+		font-weight: 700;
+		box-shadow: var(--shadow);
+	}
+	.card.selected .tick {
+		background: var(--accent);
+	}
+	.section h2 {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+	}
+	/* Where the queue dock sits, as the Settings page's save bar. */
+	.bulk-bar {
+		position: fixed;
+		left: var(--sp-2);
+		right: var(--sp-2);
+		bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + var(--sp-2));
+		z-index: 30;
+		max-width: 900px;
+		margin: 0 auto;
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: var(--sp-2);
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: var(--r-xl);
+		box-shadow: var(--shadow);
+		padding: var(--sp-2) var(--sp-3);
+	}
+	.bulk-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sp-2);
+	}
+	.grow {
+		flex: 1 1 200px;
+		min-width: 0;
+	}
+	@media (min-width: 861px) {
+		.bulk-bar {
+			left: var(--sp-4);
+			right: var(--sp-4);
+			bottom: calc(var(--sp-4) + var(--safe-bottom));
+			padding: 10px 14px;
+		}
 	}
 	.card.disabled .art {
 		opacity: 0.5;

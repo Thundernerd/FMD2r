@@ -446,24 +446,35 @@ pub(crate) async fn save_folder(
     State(state): State<AppState>,
     ApiJson(req): ApiJson<SaveFolderRequest>,
 ) -> Result<Json<SaveFolder>, ApiError> {
+    let folder = manga_folder(
+        &state,
+        fmd_core::download::NewDownload {
+            module_id: req.module_id,
+            title: req.title,
+            authors: req.authors,
+            artists: req.artists,
+            save_to: req.save_to,
+            ..Default::default()
+        },
+    )
+    .await?;
+    Ok(Json(SaveFolder { folder }))
+}
+
+/// The folder `download` would be saved in with the saved settings, the manga folder included.
+pub(crate) async fn manga_folder(
+    state: &AppState,
+    download: fmd_core::download::NewDownload,
+) -> Result<String, ApiError> {
     let website = state
         .modules
-        .module(&req.module_id)
-        .map_or_else(|| req.module_id.clone(), |m| m.name);
-    let website_dir = state.website_dir(&req.module_id).await?;
-    let download = fmd_core::download::NewDownload {
-        module_id: req.module_id,
-        title: req.title,
-        authors: req.authors,
-        artists: req.artists,
-        save_to: req.save_to,
-        ..Default::default()
-    };
-    let folder = fmd_core::download::save_to(
+        .module(&download.module_id)
+        .map_or_else(|| download.module_id.clone(), |m| m.name);
+    let website_dir = state.website_dir(&download.module_id).await?;
+    Ok(fmd_core::download::save_to(
         &state.settings.get().saveto,
         &website,
         &website_dir,
         &download,
-    );
-    Ok(Json(SaveFolder { folder }))
+    ))
 }

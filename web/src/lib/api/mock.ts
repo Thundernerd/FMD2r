@@ -9,6 +9,7 @@ import type {
 	About,
 	AccountInfo,
 	AccountRequest,
+	BulkChange,
 	FavoritePatch,
 	GroupPatch,
 	InboxItem,
@@ -869,6 +870,12 @@ export function createMockBackend({
 			const saveTo = settings.saveFolder(info.module_id, info.title, dir);
 			const { status, body: added } = favorites.add(info, website, saveTo);
 			return json(added, status);
+		}
+		if (route === 'POST /api/favorites/bulk') {
+			const { status, body } = favorites.bulk((await req.json()) as BulkChange, (f, dir) =>
+				settings.saveFolder(f.module_id, f.title, dir)
+			);
+			return json(body, status);
 		}
 		if (route === 'POST /api/favorites/check') {
 			const body = (await req.json().catch(() => ({}))) as { ids?: number[] } | null;

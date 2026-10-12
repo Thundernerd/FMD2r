@@ -183,6 +183,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/favorites/bulk': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Change or remove several favorites at once, all of them or none. */
+		post: operations['bulkUpdateFavorites'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/favorites/check': {
 		parameters: {
 			query?: never;
@@ -1180,6 +1197,27 @@ export interface components {
 			text_size: components['schemas']['TextSize'];
 			/** @default default */
 			theme: components['schemas']['Theme'];
+		};
+		/** @description One change to several favorites. */
+		BulkChange: {
+			/**
+			 * @description A parent folder: each favorite downloads to its own manga folder in it, as
+			 *     `POST /api/save-folder` makes it. Chapters already downloaded are not moved.
+			 */
+			destination?: string | null;
+			/** @description Resume (`true`) or pause (`false`) them. */
+			enabled?: boolean | null;
+			/**
+			 * Format: int64
+			 * @description The library group to put them in; `null` ungroups them.
+			 */
+			group_id?: number | null;
+			ids: number[];
+			/**
+			 * @description Remove them from the library instead; their downloaded chapters stay recorded. Cannot be
+			 *     combined with a change.
+			 */
+			remove?: boolean;
 		};
 		/** @description One chapter of a series. */
 		ChapterInfo: {
@@ -3394,6 +3432,48 @@ export interface operations {
 			};
 			/** @description The website could not be reached */
 			502: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	bulkUpdateFavorites: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['BulkChange'];
+			};
+		};
+		responses: {
+			/** @description The changed favorites, in the order of `ids`; none after a removal */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['FavoriteView'][];
+				};
+			};
+			/** @description No such favorite or group, and nothing changed */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description An empty destination */
+			422: {
 				headers: {
 					[name: string]: unknown;
 				};
