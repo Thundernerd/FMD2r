@@ -14,7 +14,7 @@ use fmd_core::metadata::{ListModule, MangaBakaDb, MangaDexLinks, MatchScope, Mat
 use fmd_http::{
     BoxFuture, HttpClient, TerminateToken, Transport, TransportError, WireRequest, WireResponse,
 };
-use fmd_store::{ListsDb, MangaListing, MatchConfidence, StoredMatch};
+use fmd_store::{AppDb, ListsDb, MangaListing, MatchConfidence, StoredMatch};
 use serde_json::{Value, json};
 
 const MANGADEX: &str = "d07c9c2425764da8ba056505f57cf40c";
@@ -86,7 +86,11 @@ fn fixture(records: &[Value]) -> Fixture {
         down: std::sync::atomic::AtomicBool::new(false),
     });
     let http = HttpClient::with_transport(mangadex.clone()).unwrap();
-    let matcher = Matcher::new(lists.clone(), MangaDexLinks::new(http));
+    let matcher = Matcher::new(
+        lists.clone(),
+        AppDb::open(dir.path().join("app.db")).unwrap(),
+        MangaDexLinks::new(http),
+    );
     Fixture {
         _dir: dir,
         lists,

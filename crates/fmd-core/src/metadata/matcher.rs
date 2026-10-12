@@ -1,4 +1,4 @@
-//! Matches list titles against MangaBaka's database by T71's rules
+//! Matches list titles and favorites against MangaBaka's database by T71's rules
 //! (docs/research/metadata-sources.md, "Matching"; docs/research/metadata-probe/probe.py).
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use fmd_http::{HttpClient, TerminateToken};
-use fmd_store::{ListsDb, MatchConfidence, MatchInput, MetadataSeries, StoredMatch};
+use fmd_store::{AppDb, ListsDb, MatchConfidence, MatchInput, MetadataSeries, StoredMatch};
 use regex::Regex;
 use serde_json::Value;
 
@@ -160,6 +160,8 @@ impl MangaDexLinks {
 
 pub struct Matcher {
     lists: ListsDb,
+    /// Favorites match too, whether or not their website's list is downloaded.
+    favorites: AppDb,
     mangadex: MangaDexLinks,
 }
 
@@ -171,8 +173,78 @@ struct CrossIds {
 }
 
 impl Matcher {
-    pub fn new(lists: ListsDb, mangadex: MangaDexLinks) -> Self {
-        Self { lists, mangadex }
+    pub fn new(lists: ListsDb, favorites: AppDb, mangadex: MangaDexLinks) -> Self {
+        Self {
+            lists,
+            favorites,
+            mangadex,
+        }
+    }
+
+    /// The modules with a list, favorites, or matches to prune.
+    pub fn module_ids(&self) -> Result<BTreeSet<String>, MetadataError> {
+        let mut ids: BTreeSet<String> = self
+            .lists
+            .masterlist()
+            .summaries()
+            .map_err(MetadataError::Lists)?
+            .into_iter()
+            .filter(|s| s.count > 0)
+            .map(|s| s.module_id)
+            .collect();
+        ids.extend(
+            self.favorites
+                .favorites()
+                .module_ids()
+                .map_err(MetadataError::Favorites)?,
+        );
+        ids.extend(
+            self.lists
+                .matches()
+                .module_ids()
+                .map_err(MetadataError::Lists)?,
+        );
+        Ok(ids)
+    }
+
+    /// The list's titles, then the favorites not in it.
+    fn inputs(
+        &self,
+        module_id: &str,
+        build_id: &str,
+        scope: MatchScope,
+    ) -> Result<Vec<MatchInput>, MetadataError> {
+        let matches = self.lists.matches();
+        let mut inputs = match scope {
+            MatchScope::Changed => matches.pending(module_id, build_id),
+            MatchScope::All => matches.all(module_id, build_id),
+        }
+        .map_err(MetadataError::Lists)?;
+        let favorites = self
+            .favorites
+            .favorites()
+            .match_inputs(module_id, build_id)
+            .map_err(MetadataError::Favorites)?;
+        if favorites.is_empty() {
+            return Ok(inputs);
+        }
+        let listed = self
+            .lists
+            .masterlist()
+            .links(module_id)
+            .map_err(MetadataError::Lists)?;
+        let stored = match scope {
+            MatchScope::Changed => matches
+                .fingerprints(module_id)
+                .map_err(MetadataError::Lists)?,
+            MatchScope::All => HashMap::new(),
+        };
+        inputs.extend(
+            favorites.into_iter().filter(|f| {
+                !listed.contains(&f.link) && stored.get(&f.link) != Some(&f.fingerprint)
+            }),
+        );
+        Ok(inputs)
     }
 
     /// Blocking (MangaDex requests).
@@ -184,13 +256,16 @@ impl Matcher {
         terminate: &TerminateToken,
     ) -> Result<MatchReport, MetadataError> {
         let matches = self.lists.matches();
-        matches.prune(&module.id).map_err(MetadataError::Lists)?;
+        let favorites = self
+            .favorites
+            .favorites()
+            .links(&module.id)
+            .map_err(MetadataError::Favorites)?;
+        matches
+            .prune(&module.id, &favorites)
+            .map_err(MetadataError::Lists)?;
         let build_id = meta.build_id()?;
-        let mut inputs = match scope {
-            MatchScope::Changed => matches.pending(&module.id, &build_id),
-            MatchScope::All => matches.all(&module.id, &build_id),
-        }
-        .map_err(MetadataError::Lists)?;
+        let mut inputs = self.inputs(&module.id, &build_id, scope)?;
         let cross_ids = if is_mangadex(&module.root_url) {
             let uuids: Vec<String> = inputs
                 .iter()

@@ -11,6 +11,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
+use fmd_core::info::{InfoError, InfoOptions, MangaInfo};
 use fmd_core::metadata::{
     Download, DumpSource, MangaBakaDb, MangaDexLinks, Matcher, MetadataError, MetadataJobs,
 };
@@ -58,17 +59,48 @@ impl ModuleCatalog for Modules {
     }
 
     fn modules(&self) -> Vec<ModuleInfo> {
-        vec![ModuleInfo {
-            id: "fire".into(),
-            name: "MangaFire".into(),
-            root_url: "https://mangafire.to".into(),
+        [
+            ("fire", "MangaFire", "https://mangafire.to"),
+            (PLAIN, "Plain", PLAIN_ROOT),
+        ]
+        .into_iter()
+        .map(|(id, name, root_url)| ModuleInfo {
+            id: id.into(),
+            name: name.into(),
+            root_url: root_url.into(),
             category: "English".into(),
             limits: Default::default(),
             options: Vec::new(),
             capabilities: Default::default(),
-        }]
+        })
+        .collect()
+    }
+
+    /// Every series of [`PLAIN`] is Reborn Rich.
+    fn get_info(
+        &self,
+        id: &str,
+        link: &str,
+        _options: InfoOptions,
+    ) -> futures_util::future::BoxFuture<'static, Result<MangaInfo, InfoError>> {
+        let result = if id == PLAIN {
+            Ok(MangaInfo {
+                title: "Reborn Rich".into(),
+                link: link.into(),
+                authors: "San-Gyeong, JP".into(),
+                status: "1".into(),
+                ..MangaInfo::default()
+            })
+        } else {
+            Err(InfoError::UnknownModule)
+        };
+        Box::pin(std::future::ready(result))
     }
 }
+
+/// A module whose list was never downloaded.
+const PLAIN: &str = "plain";
+const PLAIN_ROOT: &str = "https://plain.test";
 
 fn listing(link: &str, title: &str, authors: &str) -> MangaListing {
     MangaListing {
@@ -108,12 +140,36 @@ fn state() -> (TempDir, AppState, ListsDb) {
 
 fn metadata_jobs(dir: &TempDir, state: &AppState, lists: &ListsDb) -> MetadataJobs {
     let db = Arc::new(MangaBakaDb::open(dir.path(), Arc::new(FixtureDump)));
+    metadata_jobs_over(db, dir, state, lists)
+}
+
+/// Over a database built from the fixture.
+fn built_metadata_jobs(dir: &TempDir, state: &AppState, lists: &ListsDb) -> MetadataJobs {
+    let db = Arc::new(MangaBakaDb::open(dir.path(), Arc::new(FixtureDump)));
+    db.refresh(&TerminateToken::new(), &mut |_| {}).unwrap();
+    metadata_jobs_over(db, dir, state, lists)
+}
+
+fn metadata_jobs_over(
+    db: Arc<MangaBakaDb>,
+    dir: &TempDir,
+    state: &AppState,
+    lists: &ListsDb,
+) -> MetadataJobs {
     let http = HttpClient::with_transport(Arc::new(NoNetwork)).unwrap();
     MetadataJobs::new(
         db,
-        Matcher::new(lists.clone(), MangaDexLinks::new(http)),
+        Matcher::new(
+            lists.clone(),
+            AppDb::open(dir.path().join("app.db")).unwrap(),
+            MangaDexLinks::new(http),
+        ),
         lists.clone(),
-        |id: &str| (id == "fire").then(|| "https://mangafire.to".to_owned()),
+        |id: &str| match id {
+            "fire" => Some("https://mangafire.to".to_owned()),
+            PLAIN => Some(PLAIN_ROOT.to_owned()),
+            _ => None,
+        },
         state.settings().clone(),
         state.metadata_events(),
     )
@@ -307,4 +363,40 @@ async fn the_database_job_reports_its_start_progress_and_finish() {
     assert_eq!(removed["downloaded"], false);
     let body = get(&state, "/api/lists/search?module=fire&format=unknown").await;
     assert_eq!(body["total"], 4);
+}
+
+#[tokio::test]
+async fn a_favorite_added_without_its_websites_list_gets_mangabaka_metadata() {
+    let (dir, state, lists) = state();
+    let jobs = built_metadata_jobs(&dir, &state, &lists);
+    let state = state.with_metadata(jobs);
+
+    let res = send(
+        &state,
+        Request::post("/api/favorites")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({ "module_id": PLAIN, "link": "/reborn-rich" }).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Matched in the background.
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let series = loop {
+        let series = get(&state, "/api/series?module=plain&link=%2Freborn-rich").await;
+        if !series["format"].is_null() {
+            break series;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "never matched: {series}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    // Series 189 in the fixture.
+    assert_eq!(series["format"], "manhwa");
+    assert_eq!(series["year"], 2022);
 }

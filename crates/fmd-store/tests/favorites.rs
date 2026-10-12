@@ -1,7 +1,7 @@
 // unwrap is fine in tests/, but clippy.toml's exemption misses helpers outside #[test] fns.
 #![allow(clippy::unwrap_used)]
 
-use fmd_store::{AppDb, NewFavorite};
+use fmd_store::{AppDb, FavoriteInfo, NewFavorite};
 
 fn new_favorite(link: &str) -> NewFavorite {
     NewFavorite {
@@ -58,4 +58,32 @@ fn favorites_create_update_reorder_delete() {
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].id, b.id);
     assert_eq!(remaining[0].current_chapter, 42);
+}
+
+#[test]
+fn saving_a_favorites_website_info_survives_a_rename() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let favorites = db.favorites();
+    let mut favorite = favorites.create(&new_favorite("/a")).unwrap();
+    let info = FavoriteInfo {
+        title: "Reborn Rich".into(),
+        alt_titles: "재벌집 막내아들".into(),
+        authors: "SAN.G".into(),
+        artists: "JP".into(),
+    };
+
+    assert!(favorites.set_info(favorite.id, &info).unwrap(), "changed");
+    assert!(
+        !favorites.set_info(favorite.id, &info).unwrap(),
+        "unchanged"
+    );
+    favorite.title = "My Name For It".into();
+    favorites.update(&favorite).unwrap();
+
+    assert_eq!(favorites.info(favorite.id).unwrap(), Some(info));
+    assert_eq!(
+        favorites.get(favorite.id).unwrap().unwrap().title,
+        "My Name For It"
+    );
 }

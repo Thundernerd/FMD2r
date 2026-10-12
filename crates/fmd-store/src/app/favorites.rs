@@ -1,10 +1,13 @@
 //! Favorites (the library), replacing FMD2's `favorites` table (baseunits/FavoritesDB.pas:55-71);
 //! its `downloadedchapterlist` lives in `downloaded_chapters`.
 
+use std::collections::HashSet;
+
 use rusqlite::{OptionalExtension, Row, params};
 
 use crate::db::Db;
 use crate::error::Result;
+use crate::lists::MatchInput;
 use crate::sql::{next_sort_order, now_ms, reorder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -41,6 +44,16 @@ pub struct Favorite {
     pub cover_url: Option<String>,
 }
 
+/// What the website says about a favorite, as MangaBaka matching reads it. Apart from
+/// [`Favorite::title`], which the user can rename; empty until the website's info is fetched.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FavoriteInfo {
+    pub title: String,
+    pub alt_titles: String,
+    pub authors: String,
+    pub artists: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportedFavorite {
     pub favorite: NewFavorite,
@@ -75,6 +88,11 @@ fn favorite_from_row(row: &Row<'_>) -> rusqlite::Result<Favorite> {
         cover_url: row.get(12)?,
     })
 }
+
+/// What matching reads of a favorite, plus the database build ID in `?2`, joined like the list
+/// titles' fingerprint. A favorite whose info was never fetched (imported) matches on its title.
+const FINGERPRINT: &str = "IIF(info_title = '', title, info_title) || char(31) || alt_titles \
+    || char(31) || authors || char(31) || artists || char(31) || ?2";
 
 pub struct FavoriteRepo<'a> {
     db: &'a Db,
@@ -146,6 +164,80 @@ impl<'a> FavoriteRepo<'a> {
                 favorite_from_row,
             )
             .optional()?)
+    }
+
+    pub fn info(&self, id: FavoriteId) -> Result<Option<FavoriteInfo>> {
+        let conn = self.db.lock();
+        Ok(conn
+            .query_row(
+                "SELECT info_title, alt_titles, authors, artists FROM favorites WHERE id = ?1",
+                [id.0],
+                |r| {
+                    Ok(FavoriteInfo {
+                        title: r.get(0)?,
+                        alt_titles: r.get(1)?,
+                        authors: r.get(2)?,
+                        artists: r.get(3)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Returns whether it changed what was stored.
+    pub fn set_info(&self, id: FavoriteId, info: &FavoriteInfo) -> Result<bool> {
+        let conn = self.db.lock();
+        let changed = conn.execute(
+            "UPDATE favorites SET info_title = ?2, alt_titles = ?3, authors = ?4, artists = ?5
+             WHERE id = ?1
+             AND (info_title, alt_titles, authors, artists) IS NOT (?2, ?3, ?4, ?5)",
+            params![
+                id.0,
+                info.title,
+                info.alt_titles,
+                info.authors,
+                info.artists
+            ],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// `module_id`'s favorites as MangaBaka matching reads them, fingerprinted against database
+    /// build `build_id`.
+    pub fn match_inputs(&self, module_id: &str, build_id: &str) -> Result<Vec<MatchInput>> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare_cached(&format!(
+            "SELECT link, IIF(info_title = '', title, info_title), alt_titles, authors, artists,
+                    {FINGERPRINT}
+             FROM favorites WHERE module_id = ?1 ORDER BY id"
+        ))?;
+        let rows = stmt.query_map([module_id, build_id], |r| {
+            Ok(MatchInput {
+                link: r.get(0)?,
+                title: r.get(1)?,
+                alttitles: r.get(2)?,
+                authors: r.get(3)?,
+                artists: r.get(4)?,
+                fingerprint: r.get(5)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn links(&self, module_id: &str) -> Result<HashSet<String>> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare_cached("SELECT link FROM favorites WHERE module_id = ?1")?;
+        let rows = stmt.query_map([module_id], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The modules with favorites.
+    pub fn module_ids(&self) -> Result<Vec<String>> {
+        let conn = self.db.lock();
+        let mut stmt =
+            conn.prepare_cached("SELECT DISTINCT module_id FROM favorites ORDER BY module_id")?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn find(&self, module_id: &str, link: &str) -> Result<Option<Favorite>> {

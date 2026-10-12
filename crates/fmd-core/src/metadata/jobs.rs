@@ -1,4 +1,5 @@
-//! The MangaBaka database as a background job: download, refresh, and matching lists.
+//! The MangaBaka database as a background job: download, refresh, and matching lists and
+//! favorites.
 
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Duration;
@@ -36,7 +37,8 @@ pub enum MetadataEventKind {
 pub enum MetadataPhase {
     /// Downloading the dump and building `metadata.db` from it; `done` and `total` count bytes.
     Downloading,
-    /// Matching the lists against the new database; `done` and `total` count lists.
+    /// Matching the lists and favorites against the new database; `done` and `total` count
+    /// modules.
     Matching,
 }
 
@@ -202,7 +204,7 @@ impl MetadataJobs {
         }
     }
 
-    /// Also deletes every list title's match.
+    /// Also deletes every match.
     pub fn remove(&self) -> Result<(), MetadataJobError> {
         if self.is_running() {
             return Err(MetadataJobError::AlreadyRunning);
@@ -219,7 +221,7 @@ impl MetadataJobs {
         Ok(())
     }
 
-    /// Matches new or changed titles of the list. Blocking.
+    /// Matches new or changed titles of the module's list and favorites. Blocking.
     pub fn list_changed(&self, module_id: &str, terminate: &TerminateToken) {
         let Some(meta) = self.inner.db.current() else {
             return;
@@ -245,22 +247,28 @@ impl MetadataJobs {
         }
     }
 
-    /// Matches titles still owing a match: new, changed, matched against an older database, or
+    /// [`MetadataJobs::list_changed`] after a favorite of the module was added or its website
+    /// info changed. Blocking.
+    pub fn favorites_changed(&self, module_id: &str) {
+        self.list_changed(module_id, &TerminateToken::new());
+    }
+
+    /// Matches list titles and favorites still owing a match: new, changed, matched against an older database, or
     /// matched while MangaDex could not be asked. Blocking.
     pub fn catch_up(&self) {
-        let summaries = match self.inner.lists.masterlist().summaries() {
-            Ok(summaries) => summaries,
+        let module_ids = match self.inner.matcher.module_ids() {
+            Ok(ids) => ids,
             Err(e) => {
                 tracing::warn!(target: "fmd_core", "catching up MangaBaka matches: {e}");
                 return;
             }
         };
         let terminate = TerminateToken::new();
-        for summary in summaries.into_iter().filter(|s| s.count > 0) {
+        for module_id in module_ids {
             if self.is_running() {
                 return;
             }
-            self.list_changed(&summary.module_id, &terminate);
+            self.list_changed(&module_id, &terminate);
         }
     }
 
@@ -415,18 +423,12 @@ impl Inner {
             return Ok(false);
         };
         let modules: Vec<ListModule> = self
-            .lists
-            .masterlist()
-            .summaries()
-            .map_err(MetadataError::Lists)?
+            .matcher
+            .module_ids()?
             .into_iter()
-            .filter(|s| s.count > 0)
-            .filter_map(|s| {
-                let root_url = self.modules.root_url(&s.module_id)?;
-                Some(ListModule {
-                    id: s.module_id,
-                    root_url,
-                })
+            .filter_map(|id| {
+                let root_url = self.modules.root_url(&id)?;
+                Some(ListModule { id, root_url })
             })
             .collect();
         let total = modules.len() as u64;

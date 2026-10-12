@@ -1,5 +1,5 @@
 //! List metadata from MangaBaka's database (T73): an opt-in local copy of its nightly dump
-//! ([`MangaBakaDb`]), and list titles matched against it offline.
+//! ([`MangaBakaDb`]), and list titles and favorites matched against it offline.
 
 mod build;
 mod db;
@@ -55,6 +55,8 @@ pub enum MetadataError {
     Store(#[from] fmd_store::StoreError),
     #[error("lists.db: {0}")]
     Lists(fmd_store::StoreError),
+    #[error("favorites: {0}")]
+    Favorites(fmd_store::StoreError),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 }

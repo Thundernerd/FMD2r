@@ -266,7 +266,11 @@ async fn a_v1_database_is_rebuilt_at_startup() {
     let http = HttpClient::with_transport(Arc::new(NoNetwork)).unwrap();
     let jobs = MetadataJobs::new(
         db.clone(),
-        Matcher::new(lists.clone(), MangaDexLinks::new(http)),
+        Matcher::new(
+            lists.clone(),
+            AppDb::open(dir.path().join("app.db")).unwrap(),
+            MangaDexLinks::new(http),
+        ),
         lists,
         |_: &str| None,
         Arc::new(settings),

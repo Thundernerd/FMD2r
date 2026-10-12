@@ -4,7 +4,7 @@ use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use fmd_core::favorites::{CheckMode, CheckScope, favorite_save_to};
+use fmd_core::favorites::{CheckMode, CheckScope, favorite_save_to, website_info};
 use fmd_store::{Favorite, FavoriteId, NewFavorite};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -155,12 +155,17 @@ pub(crate) async fn add(
             favorite.status = info.status.clone();
             favorite.current_chapter = u32::try_from(info.chapters.len()).unwrap_or(u32::MAX);
             db.favorites().update(&favorite)?;
+            db.favorites().set_info(favorite.id, &website_info(&info))?;
             let links: Vec<&str> = info.chapters.iter().map(|c| c.link.as_str()).collect();
             db.downloaded_chapters()
                 .mark(&module_id, &info.link, &links)?;
             Ok(favorite)
         })
         .await?;
+    if let Some(jobs) = state.metadata.clone() {
+        let module_id = favorite.module_id.clone();
+        tokio::task::spawn_blocking(move || jobs.favorites_changed(&module_id));
+    }
     let view = view(&state, favorite).await?;
     Ok((StatusCode::CREATED, Json(view)))
 }

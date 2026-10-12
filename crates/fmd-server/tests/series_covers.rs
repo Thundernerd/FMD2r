@@ -303,7 +303,11 @@ impl Harness {
         let http = HttpClient::with_transport(Arc::new(NoNetwork)).unwrap();
         let jobs = MetadataJobs::new(
             db,
-            Matcher::new(self.lists.clone(), MangaDexLinks::new(http)),
+            Matcher::new(
+                self.lists.clone(),
+                AppDb::open(self.dir.path().join("app.db")).unwrap(),
+                MangaDexLinks::new(http),
+            ),
             self.lists.clone(),
             |id: &str| (id == "site").then(|| "http://site.test".to_owned()),
             state.settings().clone(),
