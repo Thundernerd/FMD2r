@@ -57,6 +57,21 @@ fn active_series_are_kept_with_their_metadata() {
 }
 
 #[test]
+fn the_urls_mangabaka_lists_are_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MangaBakaDb::open(dir.path(), FixtureSource::new(&fixture_records()));
+    db.refresh(&TerminateToken::new(), &mut |_| {}).unwrap();
+
+    let series = db.current().unwrap().series(189).unwrap().unwrap();
+    for url in [
+        "https://www.webtoons.com/en/drama/reborn-rich/list?title_no=4956",
+        "https://mangabaka.org/189",
+    ] {
+        assert!(series.urls.iter().any(|u| u == url), "{:?}", series.urls);
+    }
+}
+
+#[test]
 fn a_merged_series_points_at_the_series_it_was_merged_into() {
     let dir = tempfile::tempdir().unwrap();
     let db = MangaBakaDb::open(dir.path(), FixtureSource::new(&fixture_records()));
@@ -246,15 +261,15 @@ impl Transport for NoNetwork {
 }
 
 #[tokio::test]
-async fn a_v1_database_is_rebuilt_at_startup() {
+async fn a_v2_database_is_rebuilt_at_startup() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("metadata.db");
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(include_str!(
-        "../../fmd-store/src/migrations/metadata_v1.sql"
+        "../../fmd-store/src/migrations/metadata_v2.sql"
     ))
     .unwrap();
-    conn.pragma_update(None, "user_version", 1).unwrap();
+    conn.pragma_update(None, "user_version", 2).unwrap();
     drop(conn);
 
     let source = FixtureSource::new(&fixture_records());
@@ -288,10 +303,11 @@ async fn a_v1_database_is_rebuilt_at_startup() {
     assert_eq!(source.opened.load(Ordering::SeqCst), 1);
     assert!(
         fmd_store::MetadataDb::open(&path).is_ok(),
-        "the new file is v2"
+        "the new file is v3"
     );
     let series = db.current().unwrap().series(189).unwrap().unwrap();
     assert_eq!(series.english_title.as_deref(), Some("Reborn Rich"));
+    assert!(series.urls.iter().any(|u| u == "https://mangabaka.org/189"));
 }
 
 #[test]

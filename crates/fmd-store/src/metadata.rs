@@ -8,10 +8,10 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::error::Result;
 
-const SCHEMA: &str = include_str!("migrations/metadata_v2.sql");
+const SCHEMA: &str = include_str!("migrations/metadata_v3.sql");
 
 /// A file with another `user_version` is not read; an older one is rebuilt.
-const SCHEMA_VERSION: u32 = 2;
+const SCHEMA_VERSION: u32 = 3;
 
 /// A MangaBaka series. Titles kept only for matching live in the title index. Empty optional
 /// strings are stored as NULL and read back as `None`.
@@ -43,6 +43,8 @@ pub struct MetadataSeries {
     pub cover_x150: Option<String>,
     pub cover_x250: Option<String>,
     pub cover_x350: Option<String>,
+    /// MangaBaka's `links`: the series on other sites, e.g. `https://mangabaka.org/189`.
+    pub urls: Vec<String>,
 }
 
 fn non_empty(s: Option<&str>) -> Option<&str> {
@@ -70,8 +72,9 @@ impl MetadataBuilder {
         let mut stmt = self.conn.prepare_cached(
             "INSERT OR REPLACE INTO series (id, title, native_title, romanized_title,
                  english_title, type, status, year, content_rating, description, genres, people,
-                 authors, artists, cover_x150, cover_x250, cover_x350)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                 authors, artists, cover_x150, cover_x250, cover_x350, urls)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                     ?18)",
         )?;
         stmt.execute(params![
             s.id,
@@ -91,6 +94,7 @@ impl MetadataBuilder {
             s.cover_x150,
             s.cover_x250,
             s.cover_x350,
+            non_empty(Some(&s.urls.join("\n"))),
         ])?;
         Ok(())
     }
@@ -216,7 +220,7 @@ impl MetadataDb {
         let mut stmt = conn.prepare_cached(
             "SELECT id, title, native_title, romanized_title, english_title, type, status, year,
                     content_rating, description, genres, people, authors, artists,
-                    cover_x150, cover_x250, cover_x350
+                    cover_x150, cover_x250, cover_x350, urls
              FROM series WHERE id = ?1",
         )?;
         let split = |s: Option<String>| -> Vec<String> {
@@ -246,6 +250,7 @@ impl MetadataDb {
                     cover_x150: r.get(14)?,
                     cover_x250: r.get(15)?,
                     cover_x350: r.get(16)?,
+                    urls: split(r.get(17)?),
                 })
             })
             .optional()?)

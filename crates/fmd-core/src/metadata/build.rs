@@ -222,6 +222,10 @@ fn add_record(
         cover_x150: cover("x150"),
         cover_x250: cover("x250"),
         cover_x350: cover("x350"),
+        urls: strings(record.get("links"))
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .collect(),
     })?;
     summary.series += 1;
     Ok(())
