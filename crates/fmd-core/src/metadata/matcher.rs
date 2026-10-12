@@ -160,8 +160,9 @@ impl MangaDexLinks {
 
 pub struct Matcher {
     lists: ListsDb,
-    /// Favorites match too, whether or not their website's list is downloaded.
-    favorites: AppDb,
+    /// Favorites match too, whether or not their website's list is downloaded; the series
+    /// picked by hand replace matching.
+    app: AppDb,
     mangadex: MangaDexLinks,
 }
 
@@ -173,15 +174,15 @@ struct CrossIds {
 }
 
 impl Matcher {
-    pub fn new(lists: ListsDb, favorites: AppDb, mangadex: MangaDexLinks) -> Self {
+    pub fn new(lists: ListsDb, app: AppDb, mangadex: MangaDexLinks) -> Self {
         Self {
             lists,
-            favorites,
+            app,
             mangadex,
         }
     }
 
-    /// The modules with a list, favorites, or matches to prune.
+    /// The modules with a list, favorites, series picked by hand, or matches to prune.
     pub fn module_ids(&self) -> Result<BTreeSet<String>, MetadataError> {
         let mut ids: BTreeSet<String> = self
             .lists
@@ -193,10 +194,16 @@ impl Matcher {
             .map(|s| s.module_id)
             .collect();
         ids.extend(
-            self.favorites
+            self.app
                 .favorites()
                 .module_ids()
                 .map_err(MetadataError::Favorites)?,
+        );
+        ids.extend(
+            self.app
+                .metadata_overrides()
+                .module_ids()
+                .map_err(MetadataError::Overrides)?,
         );
         ids.extend(
             self.lists
@@ -221,7 +228,7 @@ impl Matcher {
         }
         .map_err(MetadataError::Lists)?;
         let favorites = self
-            .favorites
+            .app
             .favorites()
             .match_inputs(module_id, build_id)
             .map_err(MetadataError::Favorites)?;
@@ -256,16 +263,22 @@ impl Matcher {
         terminate: &TerminateToken,
     ) -> Result<MatchReport, MetadataError> {
         let matches = self.lists.matches();
-        let favorites = self
-            .favorites
+        let overrides = self.overrides(&module.id)?;
+        let mut keep = self
+            .app
             .favorites()
             .links(&module.id)
             .map_err(MetadataError::Favorites)?;
+        keep.extend(overrides.keys().cloned());
         matches
-            .prune(&module.id, &favorites)
+            .prune(&module.id, &keep)
             .map_err(MetadataError::Lists)?;
+        for (link, series_id) in &overrides {
+            self.apply_override(meta, &module.id, link, *series_id)?;
+        }
         let build_id = meta.build_id()?;
         let mut inputs = self.inputs(&module.id, &build_id, scope)?;
+        inputs.retain(|i| !overrides.contains_key(&i.link));
         let cross_ids = if is_mangadex(&module.root_url) {
             let uuids: Vec<String> = inputs
                 .iter()
@@ -309,6 +322,92 @@ impl Matcher {
                 .map_err(MetadataError::Lists)?;
         }
         Ok(report)
+    }
+}
+
+impl Matcher {
+    fn overrides(&self, module_id: &str) -> Result<HashMap<String, i64>, MetadataError> {
+        self.app
+            .metadata_overrides()
+            .for_module(module_id)
+            .map_err(MetadataError::Overrides)
+    }
+
+    /// Stores MangaBaka series `series_id` as `link`'s match, picked by hand, in place of
+    /// matching's. Returns `false`, changing nothing, when `meta` has no such series.
+    pub fn set_override(
+        &self,
+        meta: &Metadata,
+        module_id: &str,
+        link: &str,
+        series_id: i64,
+    ) -> Result<bool, MetadataError> {
+        if meta.series(series_id)?.is_none() {
+            return Ok(false);
+        }
+        self.app
+            .metadata_overrides()
+            .set(module_id, link, series_id)
+            .map_err(MetadataError::Overrides)?;
+        self.apply_override(meta, module_id, link, series_id)?;
+        Ok(true)
+    }
+
+    /// Forgets the series picked by hand for `link`, and its match; the next
+    /// [`Matcher::match_module`] matches it again. Returns whether there was one.
+    pub fn remove_override(&self, module_id: &str, link: &str) -> Result<bool, MetadataError> {
+        let removed = self
+            .app
+            .metadata_overrides()
+            .remove(module_id, link)
+            .map_err(MetadataError::Overrides)?;
+        if removed {
+            self.lists
+                .matches()
+                .remove(module_id, link)
+                .map_err(MetadataError::Lists)?;
+        }
+        Ok(removed)
+    }
+
+    /// The MangaBaka series picked by hand for `link`, if any.
+    pub fn override_of(&self, module_id: &str, link: &str) -> Result<Option<i64>, MetadataError> {
+        self.app
+            .metadata_overrides()
+            .get(module_id, link)
+            .map_err(MetadataError::Overrides)
+    }
+
+    /// Writes `link`'s match picked by hand. A series no longer in `meta` leaves `link`
+    /// unmatched; the override stays for a later build that has it.
+    fn apply_override(
+        &self,
+        meta: &Metadata,
+        module_id: &str,
+        link: &str,
+        series_id: i64,
+    ) -> Result<(), MetadataError> {
+        let matches = self.lists.matches();
+        let stored = matches.get(module_id, link).map_err(MetadataError::Lists)?;
+        let Some(series) = meta.series(series_id)? else {
+            if stored.is_some() {
+                matches
+                    .remove(module_id, link)
+                    .map_err(MetadataError::Lists)?;
+            }
+            return Ok(());
+        };
+        let manual = accepted(MatchConfidence::Manual, &series);
+        if stored.as_ref() != Some(&manual) {
+            let input = MatchInput {
+                link: link.to_owned(),
+                ..MatchInput::default()
+            };
+            matches
+                .store(module_id, [(&input, &manual)])
+                .map_err(MetadataError::Lists)?;
+        }
+        Ok(())
     }
 }
 
@@ -437,7 +536,7 @@ fn rejected(confidence: MatchConfidence) -> StoredMatch {
 }
 
 /// Discover's format facet value for MangaBaka's `type`.
-fn format_of(kind: &str) -> &'static str {
+pub fn format_of(kind: &str) -> &'static str {
     match kind {
         "manga" => "manga",
         "manhwa" => "manhwa",

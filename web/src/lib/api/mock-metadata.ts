@@ -1,4 +1,4 @@
-import type { MangaBakaStatus, MetadataEvent } from './types';
+import type { MangaBakaSearchResult, MangaBakaStatus, MetadataEvent, SeriesLink } from './types';
 
 // The MangaBaka database of the mock backend: absent until downloaded, then a download that
 // advances on the mock's event ticks, as fmd-server's `job.metadata.*` events report it.
@@ -9,6 +9,49 @@ const DUMP_BYTES = 388_000_000;
 const DOWNLOAD_STEPS = 4;
 /** The built database's size. */
 const DB_BYTES = 214_000_000;
+
+/** The MangaBaka series the mock database holds. */
+const CATALOG: MangaBakaSearchResult[] = [
+	{
+		id: 377,
+		title: 'One Piece',
+		english_title: 'One Piece',
+		year: 1997,
+		format: 'manga',
+		cover: null
+	},
+	{
+		id: 9314,
+		title: 'Sakamoto Days',
+		english_title: 'Sakamoto Days',
+		year: 2020,
+		format: 'manga',
+		cover: null
+	},
+	{
+		id: 1288,
+		title: 'Sakamoto desu ga?',
+		english_title: "Haven't You Heard? I'm Sakamoto",
+		year: 2011,
+		format: 'manga',
+		cover: null
+	},
+	{
+		id: 8153,
+		title: 'Sousou no Frieren',
+		english_title: "Frieren: Beyond Journey's End",
+		year: 2020,
+		format: 'manga',
+		cover: null
+	}
+];
+
+/** The search key of a title: lower-cased words. */
+const key = (s: string) =>
+	s
+		.toLowerCase()
+		.replace(/[^\p{L}\p{N}]+/gu, ' ')
+		.trim();
 
 export interface MockMetadata {
 	status(): MangaBakaStatus;
@@ -22,6 +65,17 @@ export interface MockMetadata {
 	downloaded(): boolean;
 	/** Advances the running download one step, reporting each event. */
 	tick(emit: (event: MetadataEvent) => void): void;
+	/** `GET /api/metadata/search`: by the beginning of a title, an ID or a MangaBaka URL. */
+	search(query: string): MangaBakaSearchResult[];
+	/** A series of the database. */
+	series(id: number): MangaBakaSearchResult | undefined;
+	/** A series' MangaBaka links, as `SeriesInfo.mangabaka.links`. */
+	links(id: number): SeriesLink[];
+	/** The series picked by hand for a series, by module and link. */
+	picked(module: string, link: string): number | undefined;
+	/** Picks a series by hand; `false` when the database has no such series. */
+	pick(module: string, link: string, id: number): boolean;
+	unpick(module: string, link: string): void;
 }
 
 /**
@@ -32,6 +86,8 @@ export function createMockMetadata(downloaded = false, available = true): MockMe
 	let builtAt: string | null = downloaded ? '2026-10-08T22:42:02Z' : null;
 	let job: { step: number; cancelled: boolean } | null = null;
 	let last: MetadataEvent | null = null;
+	const picks = new Map<string, number>();
+	const pickKey = (module: string, link: string) => `${module}\n${link}`;
 
 	const event = (kind: MetadataEvent['kind'], step: number): MetadataEvent => ({
 		kind,
@@ -91,6 +147,34 @@ export function createMockMetadata(downloaded = false, available = true): MockMe
 			job = null;
 			builtAt = new Date().toISOString();
 			emit(event('finished', DOWNLOAD_STEPS));
+		},
+
+		search(query) {
+			const q = query.trim();
+			const id =
+				/^(?:https?:\/\/)?(?:www\.)?mangabaka\.org\/(\d+)/i.exec(q)?.[1] ?? /^\d+$/.exec(q)?.[0];
+			if (id) return CATALOG.filter((s) => s.id === Number(id));
+			const k = key(q);
+			if (!k) return [];
+			return CATALOG.filter((s) =>
+				[s.title, s.english_title ?? ''].some((t) => key(t).startsWith(k))
+			);
+		},
+
+		series: (id) => CATALOG.find((s) => s.id === id),
+
+		links: (id) => [{ label: 'MangaBaka', url: `https://mangabaka.org/${id}` }],
+
+		picked: (module, link) => picks.get(pickKey(module, link)),
+
+		pick(module, link, id) {
+			if (!CATALOG.some((s) => s.id === id)) return false;
+			picks.set(pickKey(module, link), id);
+			return true;
+		},
+
+		unpick(module, link) {
+			picks.delete(pickKey(module, link));
 		}
 	};
 }

@@ -1727,6 +1727,51 @@
         }
       }
     },
+    "/api/metadata/search": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Find MangaBaka series to match a series to by hand: up to 20, by title (normalised as\nmatching does), ID or MangaBaka URL.",
+        "operationId": "searchMangabaka",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "The beginning of a title, a MangaBaka series ID, or a `mangabaka.org/<id>` URL.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MangaBakaSearchResult"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No MangaBaka database is downloaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/modules": {
       "get": {
         "tags": [
@@ -2090,6 +2135,92 @@
           },
           "503": {
             "description": "The website is limiting requests from this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/series/match": {
+      "put": {
+        "tags": [
+          "series"
+        ],
+        "summary": "Match a series to a MangaBaka series by hand. The match outlives list updates, matching,\ndatabase refreshes and removing the database.",
+        "operationId": "setSeriesMatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Matched"
+          },
+          "404": {
+            "description": "The database has no such MangaBaka series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No MangaBaka database is downloaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "series"
+        ],
+        "summary": "Undo a match by hand: the series is matched automatically again.",
+        "operationId": "removeSeriesMatch",
+        "parameters": [
+          {
+            "name": "module",
+            "in": "query",
+            "description": "Module ID.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "link",
+            "in": "query",
+            "description": "The series link relative to the module's `RootURL`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Matched automatically again, if it can be"
+          },
+          "503": {
+            "description": "This server has no MangaBaka database job",
             "content": {
               "application/json": {
                 "schema": {
@@ -4304,6 +4435,60 @@
           }
         }
       },
+      "MangaBakaMatch": {
+        "type": "string",
+        "description": "How a series is matched to MangaBaka.",
+        "enum": [
+          "unavailable",
+          "unmatched",
+          "automatic",
+          "manual",
+          "missing"
+        ]
+      },
+      "MangaBakaSearchResult": {
+        "type": "object",
+        "description": "A MangaBaka series found by `GET /api/metadata/search`.",
+        "required": [
+          "id",
+          "title",
+          "format"
+        ],
+        "properties": {
+          "cover": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The cover thumbnail on MangaBaka's CDN, 150 px tall."
+          },
+          "english_title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The official English title, else the primary one."
+          },
+          "format": {
+            "type": "string",
+            "description": "`manga`, `manhwa`, `manhua`, `oel` or `other`, as `SeriesInfo.format`."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
       "MangaBakaSeries": {
         "type": "object",
         "description": "The MangaBaka series a series was matched to.",
@@ -4393,6 +4578,30 @@
           "running": {
             "type": "boolean",
             "description": "Whether a download or refresh is running."
+          }
+        }
+      },
+      "MatchRequest": {
+        "type": "object",
+        "description": "The MangaBaka series a series is.",
+        "required": [
+          "module",
+          "link",
+          "series_id"
+        ],
+        "properties": {
+          "link": {
+            "type": "string",
+            "description": "The series link relative to the module's `RootURL`, as `GET /api/series` reports it."
+          },
+          "module": {
+            "type": "string",
+            "description": "Module ID."
+          },
+          "series_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The MangaBaka series ID."
           }
         }
       },
@@ -5404,7 +5613,8 @@
           "summary",
           "summary_from_mangabaka",
           "chapters",
-          "in_library"
+          "in_library",
+          "mangabaka_match"
         ],
         "properties": {
           "alt_titles": {
@@ -5462,6 +5672,10 @@
                 "description": "The series' MangaBaka match; `None` without an accepted one."
               }
             ]
+          },
+          "mangabaka_match": {
+            "$ref": "#/components/schemas/MangaBakaMatch",
+            "description": "How the series is matched to MangaBaka, for the header's match control."
           },
           "module_id": {
             "type": "string"

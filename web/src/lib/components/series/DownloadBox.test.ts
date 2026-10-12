@@ -17,6 +17,7 @@ const series: SeriesInfo = {
 	summary: '',
 	summary_from_mangabaka: false,
 	status: 'ongoing',
+	mangabaka_match: 'unavailable',
 	in_library: true,
 	chapters: [
 		{ name: 'Chapter 1', link: '/c/1', downloaded: true },

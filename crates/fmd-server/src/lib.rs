@@ -56,10 +56,11 @@ pub use inbox::{InboxItem, InboxKind};
 pub use lists::{FacetValue, ListFacets, ListItem, ListJobStarted, SearchPage};
 pub use log_files::{LogRotation, LogWriter};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
-pub use metadata::MangaBakaStatus;
+pub use metadata::{MangaBakaSearchResult, MangaBakaStatus};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
 pub use series::{
-    ChapterInfo, MangaBakaSeries, ResolveRequest, SeriesInfo, SeriesLink, SeriesRef, SeriesStatus,
+    ChapterInfo, MangaBakaMatch, MangaBakaSeries, MatchRequest, ResolveRequest, SeriesInfo,
+    SeriesLink, SeriesRef, SeriesStatus,
 };
 pub use serve::{ServeConfig, ServeError, serve};
 pub use services::{
@@ -130,6 +131,10 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(series::resolve))
         .routes(routes!(series::get))
         .routes(routes!(series::save_folder))
+        .routes(routes!(
+            series::matching::set_match,
+            series::matching::remove_match
+        ))
         .routes(routes!(lists::search))
         .routes(routes!(lists::facets))
         .routes(routes!(lists::update))
@@ -138,6 +143,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(metadata::status, metadata::remove))
         .routes(routes!(metadata::download))
         .routes(routes!(metadata::cancel))
+        .routes(routes!(metadata::search))
         .routes(routes!(favorites::list, favorites::add))
         .routes(routes!(favorites::patch, favorites::delete))
         .routes(routes!(favorites::check))

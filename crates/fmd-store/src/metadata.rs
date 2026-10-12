@@ -263,6 +263,23 @@ impl MetadataDb {
         )
     }
 
+    /// The series with a title key starting with `prefix`, those with the shortest such key
+    /// first, at most `limit`.
+    pub fn by_title_prefix(&self, prefix: &str, limit: u32) -> Result<Vec<i64>> {
+        // Keys compare as UTF-8 bytes, so every key starting with `prefix` sorts below it
+        // followed by the last code point.
+        let end = format!("{prefix}{}", char::MAX);
+        let conn = self.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT series FROM titles WHERE key >= ?1 AND key < ?2
+             GROUP BY series ORDER BY MIN(length(key)), series LIMIT ?3",
+        )?;
+        let ids = stmt
+            .query_map(params![prefix, end, limit], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(ids)
+    }
+
     pub fn by_link_key(&self, key: &str) -> Result<Vec<i64>> {
         self.ids(
             "SELECT DISTINCT series FROM links WHERE key = ?1 ORDER BY series",

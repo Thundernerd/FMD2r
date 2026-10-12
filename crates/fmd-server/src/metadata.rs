@@ -5,9 +5,10 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use fmd_core::metadata::{MetadataEvent, MetadataJobError, MetadataJobs};
-use serde::Serialize;
-use utoipa::ToSchema;
+use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
+use crate::error::ApiQuery;
 use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
@@ -36,6 +37,8 @@ impl From<MetadataJobError> for ApiError {
             MetadataJobError::AlreadyRunning | MetadataJobError::NotRunning => {
                 Self::Conflict(err.to_string())
             }
+            MetadataJobError::NoDatabase => Self::Unavailable(err.to_string()),
+            MetadataJobError::UnknownSeries(_) => Self::Missing(err.to_string()),
             MetadataJobError::Spawn(_) | MetadataJobError::Metadata(_) => {
                 Self::Internal(err.to_string())
             }
@@ -43,7 +46,7 @@ impl From<MetadataJobError> for ApiError {
     }
 }
 
-fn jobs(state: &AppState) -> Result<MetadataJobs, ApiError> {
+pub(crate) fn jobs(state: &AppState) -> Result<MetadataJobs, ApiError> {
     state
         .metadata
         .clone()
@@ -127,4 +130,58 @@ pub(crate) async fn remove(State(state): State<AppState>) -> Result<StatusCode, 
     let jobs = jobs(&state)?;
     off_thread(move || jobs.remove()).await??;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// What to look for in the MangaBaka database.
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct SearchQuery {
+    /// The beginning of a title, a MangaBaka series ID, or a `mangabaka.org/<id>` URL.
+    q: String,
+}
+
+/// A MangaBaka series found by `GET /api/metadata/search`.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MangaBakaSearchResult {
+    pub id: i64,
+    pub title: String,
+    /// The official English title, else the primary one.
+    pub english_title: Option<String>,
+    pub year: Option<i64>,
+    /// `manga`, `manhwa`, `manhua`, `oel` or `other`, as `SeriesInfo.format`.
+    pub format: String,
+    /// The cover thumbnail on MangaBaka's CDN, 150 px tall.
+    pub cover: Option<String>,
+}
+
+/// Find MangaBaka series to match a series to by hand: up to 20, by title (normalised as
+/// matching does), ID or MangaBaka URL.
+#[utoipa::path(get, path = "/api/metadata/search", tag = "metadata",
+    operation_id = "searchMangabaka",
+    params(SearchQuery),
+    responses(
+        (status = 200, body = [MangaBakaSearchResult]),
+        (status = 503, description = "No MangaBaka database is downloaded", body = Problem),
+    ))]
+pub(crate) async fn search(
+    State(state): State<AppState>,
+    ApiQuery(query): ApiQuery<SearchQuery>,
+) -> Result<Json<Vec<MangaBakaSearchResult>>, ApiError> {
+    let meta = jobs(&state)?
+        .current()
+        .ok_or_else(|| ApiError::Unavailable("the MangaBaka database is not downloaded".into()))?;
+    let found = off_thread(move || meta.search(&query.q)).await??;
+    Ok(Json(
+        found
+            .into_iter()
+            .map(|s| MangaBakaSearchResult {
+                id: s.id,
+                format: fmd_core::metadata::format_of(&s.kind).to_owned(),
+                title: s.title,
+                english_title: s.english_title,
+                year: s.year,
+                cover: s.cover_x150,
+            })
+            .collect(),
+    ))
 }

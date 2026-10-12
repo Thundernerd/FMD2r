@@ -320,3 +320,25 @@ fn a_file_without_a_schema_version_is_not_taken_for_an_old_database() {
     assert!(db.current().is_none());
     assert!(!db.is_outdated());
 }
+
+#[test]
+fn a_series_can_be_searched_for_by_title_id_or_mangabaka_url() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MangaBakaDb::open(dir.path(), FixtureSource::new(&fixture_records()));
+    db.refresh(&TerminateToken::new(), &mut |_| {}).unwrap();
+    let meta = db.current().unwrap();
+    let ids = |q: &str| -> Vec<i64> { meta.search(q).unwrap().into_iter().map(|s| s.id).collect() };
+
+    assert!(
+        ids("reborn rich").contains(&189),
+        "{:?}",
+        ids("reborn rich")
+    );
+    // A title's beginning is enough.
+    assert!(ids("Reborn R").contains(&189), "{:?}", ids("Reborn R"));
+    assert_eq!(ids("189"), [189]);
+    assert_eq!(ids("https://mangabaka.org/189"), [189]);
+    assert_eq!(ids(" mangabaka.org/189 "), [189]);
+    assert!(ids("").is_empty());
+    assert!(ids("no such series anywhere").is_empty());
+}

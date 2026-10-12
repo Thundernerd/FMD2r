@@ -80,6 +80,10 @@ pub enum MetadataJobError {
     AlreadyRunning,
     #[error("the MangaBaka database is not being downloaded")]
     NotRunning,
+    #[error("the MangaBaka database is not downloaded")]
+    NoDatabase,
+    #[error("MangaBaka series {0} is not in the database")]
+    UnknownSeries(i64),
     #[error("starting the job thread: {0}")]
     Spawn(#[from] std::io::Error),
     #[error(transparent)]
@@ -200,6 +204,53 @@ impl MetadataJobs {
             tracing::warn!(target: "fmd_core", "MangaBaka match of {module_id} {link}: {e}");
             None
         })
+    }
+
+    /// Matches `module_id`'s series `link` to MangaBaka series `series_id` by hand. The match
+    /// outlives matching, list updates, refreshes and removing the database. Blocking.
+    pub fn set_override(
+        &self,
+        module_id: &str,
+        link: &str,
+        series_id: i64,
+    ) -> Result<(), MetadataJobError> {
+        let _matching = lock(&self.inner.matching);
+        let meta = self
+            .inner
+            .db
+            .current()
+            .ok_or(MetadataJobError::NoDatabase)?;
+        if !self
+            .inner
+            .matcher
+            .set_override(&meta, module_id, link, series_id)?
+        {
+            return Err(MetadataJobError::UnknownSeries(series_id));
+        }
+        Ok(())
+    }
+
+    /// Forgets the MangaBaka series picked by hand for `module_id`'s series `link`, and matches
+    /// the module's titles again. Blocking.
+    pub fn remove_override(&self, module_id: &str, link: &str) -> Result<(), MetadataJobError> {
+        let removed = {
+            let _matching = lock(&self.inner.matching);
+            self.inner.matcher.remove_override(module_id, link)?
+        };
+        if removed {
+            self.list_changed(module_id, &TerminateToken::new());
+        }
+        Ok(())
+    }
+
+    /// The MangaBaka series picked by hand for `module_id`'s series `link`, whether or not the
+    /// database has it.
+    pub fn override_of(
+        &self,
+        module_id: &str,
+        link: &str,
+    ) -> Result<Option<i64>, MetadataJobError> {
+        Ok(self.inner.matcher.override_of(module_id, link)?)
     }
 
     pub fn is_running(&self) -> bool {

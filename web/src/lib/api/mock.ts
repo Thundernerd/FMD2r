@@ -257,7 +257,7 @@ const MODULES: Record<string, string> = {
 /** Series the mock knows, by link; `chapters` of them, the first `downloaded` seen. */
 const SERIES: Record<
 	string,
-	Omit<SeriesInfo, 'module_id' | 'link' | 'url' | 'chapters'> & {
+	Omit<SeriesInfo, 'module_id' | 'link' | 'url' | 'chapters' | 'mangabaka_match'> & {
 		count: number;
 		downloaded: number;
 	}
@@ -288,8 +288,9 @@ const SERIES: Record<
 		status: 'ongoing',
 		summary: 'A retired hitman runs a corner shop, and his past keeps walking in.',
 		summary_from_mangabaka: false,
-		format: 'manga',
-		year: 2020,
+		// Not matched on MangaBaka, so it has no format or year.
+		format: null,
+		year: null,
 		cover_url: `/api/covers?${new URLSearchParams({ module: 'mangadex', url: 'https://mangadex.test/sakamoto-days.jpg' })}`,
 		in_library: true,
 		count: 190,
@@ -358,7 +359,10 @@ export interface MockOptions {
 	 * it imports. Defaults to `sessionStorage['fmd2r.mock.import-step-delay-ms']`, or 150.
 	 */
 	importStepDelayMs?: number;
-	/** Start with a MangaBaka database downloaded, so list titles carry formats and statuses. */
+	/**
+	 * Start with a MangaBaka database downloaded, so list titles carry formats and statuses.
+	 * Defaults to whether `sessionStorage['fmd2r.mock.mangabaka']` is set.
+	 */
 	mangabaka?: boolean;
 	/** Whether the server can use MangaBaka at all (`GET /api/metadata/mangabaka`'s `available`). */
 	mangabakaAvailable?: boolean;
@@ -393,6 +397,7 @@ const MODULE_SETTINGS_DELAY_KEY = 'fmd2r.mock.module-settings-delay-ms';
 const IMPORT_STEP_KEY = 'fmd2r.mock.import-step-delay-ms';
 const FRESH_INSTALL_KEY = 'fmd2r.mock.fresh-install';
 const OPEN_KEY = 'fmd2r.mock.open';
+const MANGABAKA_KEY = 'fmd2r.mock.mangabaka';
 const SAVED_PASSWORD_KEY = 'fmd2r.mock.saved-password';
 
 /** A sessionStorage item, or `null` without storage (tests, private mode). */
@@ -419,7 +424,7 @@ export function createMockBackend({
 	seriesDelayMs = Number(stored(SERIES_DELAY_KEY) ?? 0),
 	moduleSettingsDelayMs = Number(stored(MODULE_SETTINGS_DELAY_KEY) ?? 0),
 	importStepDelayMs = Number(stored(IMPORT_STEP_KEY) ?? 150),
-	mangabaka = false,
+	mangabaka = stored(MANGABAKA_KEY) !== null,
 	mangabakaAvailable = true,
 	setUp = stored(FRESH_INSTALL_KEY) === null,
 	open = stored(OPEN_KEY) !== null,
@@ -517,14 +522,30 @@ export function createMockBackend({
 			downloaded: i < downloaded
 		}));
 		const host = Object.keys(MODULES).find((h) => MODULES[h] === module_id);
-		return {
+		const found: SeriesInfo = {
 			...info,
 			module_id,
 			link,
 			url: `https://${host}${link}`,
 			chapters,
-			in_library: favorites.has(module_id, link)
+			in_library: favorites.has(module_id, link),
+			mangabaka_match: 'unavailable'
 		};
+		if (!metadata.downloaded()) return found;
+		// Like fmd-server: a match by hand wins over the automatic one.
+		const picked = metadata.picked(module_id, link);
+		const pick = picked === undefined ? undefined : metadata.series(picked);
+		if (pick) {
+			return {
+				...found,
+				format: pick.format,
+				year: pick.year,
+				mangabaka: { id: pick.id, links: metadata.links(pick.id) },
+				mangabaka_match: 'manual'
+			};
+		}
+		if (picked !== undefined) return { ...found, mangabaka: null, mangabaka_match: 'missing' };
+		return { ...found, mangabaka_match: info.mangabaka ? 'automatic' : 'unmatched' };
 	};
 
 	let nextTaskId = 100;
@@ -902,6 +923,40 @@ export function createMockBackend({
 			return metadata.cancel()
 				? new Response(null, { status: 202 })
 				: json({ status: 409, detail: 'not downloading' }, 409);
+		}
+		if (route === 'GET /api/metadata/search') {
+			if (!metadata.downloaded()) {
+				return json({ status: 503, detail: 'the MangaBaka database is not downloaded' }, 503);
+			}
+			return json(metadata.search(searchParams.get('q') ?? ''));
+		}
+		if (route === 'PUT /api/series/match') {
+			if (!metadata.downloaded()) {
+				return json({ status: 503, detail: 'the MangaBaka database is not downloaded' }, 503);
+			}
+			// Untrusted input: check the shape instead of trusting the generated type.
+			const body = (await req.json()) as {
+				module?: unknown;
+				link?: unknown;
+				series_id?: unknown;
+			} | null;
+			if (
+				typeof body?.module !== 'string' ||
+				typeof body.link !== 'string' ||
+				typeof body.series_id !== 'number'
+			) {
+				return json({ status: 400, detail: 'expected a match' }, 400);
+			}
+			return metadata.pick(body.module, body.link, body.series_id)
+				? new Response(null, { status: 204 })
+				: json(
+						{ status: 404, detail: `MangaBaka series ${body.series_id} is not in the database` },
+						404
+					);
+		}
+		if (route === 'DELETE /api/series/match') {
+			metadata.unpick(searchParams.get('module') ?? '', searchParams.get('link') ?? '');
+			return new Response(null, { status: 204 });
 		}
 		if (route === 'DELETE /api/metadata/mangabaka') {
 			return metadata.remove()

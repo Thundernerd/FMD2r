@@ -15,6 +15,7 @@ import type {
 	JobState,
 	ListFacets,
 	ListJobStarted,
+	MangaBakaSearchResult,
 	MangaBakaStatus,
 	LogLine,
 	ModuleSettingsView,
@@ -161,6 +162,18 @@ export interface Api {
 	cancelMangabaka(): Promise<void>;
 	/** Deletes the MangaBaka database; rejects with status 409 while a download runs. */
 	removeMangabaka(): Promise<void>;
+	/**
+	 * Up to 20 MangaBaka series by the beginning of a title, an ID or a MangaBaka URL; rejects
+	 * with status 503 without a downloaded database.
+	 */
+	searchMangabaka(query: string): Promise<MangaBakaSearchResult[]>;
+	/**
+	 * Matches a series to a MangaBaka series by hand; rejects with status 404 when the database
+	 * has no such series, 503 without a database.
+	 */
+	setSeriesMatch(module: string, link: string, seriesId: number): Promise<void>;
+	/** Undoes a match by hand: the series is matched automatically again. */
+	removeSeriesMatch(module: string, link: string): Promise<void>;
 	/** The library, in library order. */
 	listFavorites(): Promise<FavoriteView[]>;
 	/**
@@ -479,6 +492,26 @@ export function createApi({
 		async removeMangabaka() {
 			const { response } = await client.DELETE('/api/metadata/mangabaka');
 			if (!response.ok) throw new ApiError(response.status, 'removeMangabaka');
+		},
+		async searchMangabaka(q) {
+			return unwrap(
+				'searchMangabaka',
+				await client.GET('/api/metadata/search', { params: { query: { q } } })
+			);
+		},
+		async setSeriesMatch(module, link, seriesId) {
+			const { response, error } = await client.PUT('/api/series/match', {
+				body: { module, link, series_id: seriesId }
+			});
+			if (!response.ok) {
+				throw new ApiError(response.status, 'setSeriesMatch', error?.detail ?? null);
+			}
+		},
+		async removeSeriesMatch(module, link) {
+			const { response } = await client.DELETE('/api/series/match', {
+				params: { query: { module, link } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'removeSeriesMatch');
 		},
 		async listFavorites() {
 			return unwrap('listFavorites', await client.GET('/api/favorites'));

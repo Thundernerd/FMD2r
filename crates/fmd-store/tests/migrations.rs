@@ -20,11 +20,11 @@ fn fresh_app_db_runs_all_migrations_and_reopen_is_a_noop() {
     let path = dir.path().join("app.db");
 
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 5);
+    assert_eq!(db.schema_version().unwrap(), 6);
     drop(db);
 
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 5);
+    assert_eq!(db.schema_version().unwrap(), 6);
     drop(db);
 
     let names = tables(&path);
@@ -41,6 +41,7 @@ fn fresh_app_db_runs_all_migrations_and_reopen_is_a_noop() {
         "module_files",
         "sessions",
         "favorite_chapters",
+        "metadata_overrides",
     ] {
         assert!(names.iter().any(|n| n == t), "missing table {t}: {names:?}");
     }
@@ -156,4 +157,15 @@ fn upgrading_app_db_gives_favorites_empty_website_info() {
         db.favorites().info(favorite.id).unwrap(),
         Some(fmd_store::FavoriteInfo::default())
     );
+}
+
+#[test]
+fn a_match_picked_by_hand_is_stored_as_manual_and_accepted() {
+    use fmd_store::MatchConfidence;
+    assert_eq!(MatchConfidence::Manual.as_str(), "manual");
+    assert_eq!(
+        MatchConfidence::parse("manual"),
+        Some(MatchConfidence::Manual)
+    );
+    assert!(MatchConfidence::Manual.is_accepted());
 }

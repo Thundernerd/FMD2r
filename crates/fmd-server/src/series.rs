@@ -2,8 +2,10 @@
 //! info and chapters, as FMD2's info panel shows them).
 
 mod links;
+pub(crate) mod matching;
 
 pub use links::SeriesLink;
+pub use matching::MatchRequest;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
@@ -13,7 +15,7 @@ use axum::Json;
 use axum::extract::State;
 use fmd_core::info::{InfoError, InfoOptions, MangaInfo};
 use fmd_core::modules::locate_by_url;
-use fmd_store::{ListsDb, StoredMatch};
+use fmd_store::{ListsDb, MatchConfidence, StoredMatch};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -95,6 +97,24 @@ pub struct SeriesInfo {
     pub in_library: bool,
     /// The series' MangaBaka match; `None` without an accepted one.
     pub mangabaka: Option<MangaBakaSeries>,
+    /// How the series is matched to MangaBaka, for the header's match control.
+    pub mangabaka_match: MangaBakaMatch,
+}
+
+/// How a series is matched to MangaBaka.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MangaBakaMatch {
+    /// No MangaBaka database is downloaded.
+    Unavailable,
+    /// No accepted match.
+    Unmatched,
+    /// Matched automatically.
+    Automatic,
+    /// Matched by hand (`PUT /api/series/match`).
+    Manual,
+    /// The series picked by hand is no longer in the database, so it is not matched.
+    Missing,
 }
 
 /// The MangaBaka series a series was matched to.
@@ -166,7 +186,7 @@ pub(crate) async fn get(
         .map(|m| m.root_url)
         .unwrap_or_default();
     let url = fmd_core::metadata::absolute(&root_url, &info.link);
-    let mangabaka =
+    let (mangabaka_match, mangabaka) =
         mangabaka_metadata(&state, &query.module, [&query.link, &info.link], &url).await;
     let (module, link) = (query.module.clone(), info.link.clone());
     let (downloaded, favorite) = state
@@ -184,6 +204,7 @@ pub(crate) async fn get(
         })
         .await?;
     let mut series = view(&query.module, url, info, &downloaded, favorite);
+    series.mangabaka_match = mangabaka_match;
     if let Some(m) = mangabaka {
         if series.summary.trim().is_empty() && !m.description.trim().is_empty() {
             series.summary = m.description;
@@ -210,36 +231,53 @@ async fn mangabaka_metadata(
     module: &str,
     links: [&String; 2],
     website_url: &str,
-) -> Option<MangaBakaMetadata> {
-    let meta = state.metadata.as_ref()?.current()?;
-    let lists = state.lists.clone()?;
+) -> (MangaBakaMatch, Option<MangaBakaMetadata>) {
+    let (Some(jobs), Some(lists)) = (state.metadata.clone(), state.lists.clone()) else {
+        return (MangaBakaMatch::Unavailable, None);
+    };
+    let Some(meta) = jobs.current() else {
+        return (MangaBakaMatch::Unavailable, None);
+    };
     let module = module.to_owned();
     let links = links.map(String::clone);
     let website_url = website_url.to_owned();
-    let found = crate::state::off_thread(move || -> Result<_, fmd_store::StoreError> {
+    let found = crate::state::off_thread(move || -> Result<_, ApiError> {
         for link in &links {
             let Some((id, m)) = accepted_match(&lists, &module, link)? else {
                 continue;
             };
             let series = meta.series(id)?.unwrap_or_default();
             let links = links::mangabaka_links(id, &meta.xids_of(id)?, &series.urls, &website_url);
-            return Ok(Some(MangaBakaMetadata {
-                series: MangaBakaSeries { id, links },
-                description: series.description,
-                format: m.format,
-                year: m.year,
-            }));
+            let how = if m.confidence == MatchConfidence::Manual {
+                MangaBakaMatch::Manual
+            } else {
+                MangaBakaMatch::Automatic
+            };
+            return Ok((
+                how,
+                Some(MangaBakaMetadata {
+                    series: MangaBakaSeries { id, links },
+                    description: series.description,
+                    format: m.format,
+                    year: m.year,
+                }),
+            ));
         }
-        Ok(None)
+        for link in &links {
+            if jobs.override_of(&module, link)?.is_some() {
+                return Ok((MangaBakaMatch::Missing, None));
+            }
+        }
+        Ok((MangaBakaMatch::Unmatched, None))
     })
     .await;
     match found {
         Ok(Ok(found)) => found,
         Ok(Err(e)) => {
             tracing::warn!(target: "fmd_server", "MangaBaka metadata of a series: {e}");
-            None
+            (MangaBakaMatch::Unmatched, None)
         }
-        Err(_) => None,
+        Err(_) => (MangaBakaMatch::Unmatched, None),
     }
 }
 
@@ -371,6 +409,7 @@ fn view(
             .collect(),
         in_library,
         mangabaka: None,
+        mangabaka_match: MangaBakaMatch::Unavailable,
     }
 }
 
