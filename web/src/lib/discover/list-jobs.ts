@@ -23,3 +23,10 @@ export function listFailedText(
 				: `Getting the ready-made list of ${site} failed.`;
 	}
 }
+
+/** When the list of `module` was last updated, e.g. "updated 10/7/2026". */
+export function listUpdatedText(module: Pick<ModuleSummary, 'list_updated'>): string {
+	return module.list_updated
+		? `updated ${new Date(module.list_updated).toLocaleDateString()}`
+		: 'never updated';
+}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
 	import type { ListEvent, ListJobKind, ModuleSummary } from '#lib/api/types.ts';
-	import { listFailedText } from '#lib/discover/list-jobs.ts';
+	import { listFailedText, listUpdatedText } from '#lib/discover/list-jobs.ts';
 	import type { EventStore } from '#lib/events.svelte.ts';
 
 	let {
@@ -38,11 +38,7 @@
 		}
 	});
 
-	const updatedText = $derived(
-		module.list_updated
-			? `updated ${new Date(module.list_updated).toLocaleDateString()}`
-			: 'never updated'
-	);
+	const updatedText = $derived(listUpdatedText(module));
 
 	async function start(kind: ListJobKind) {
 		busy = true;

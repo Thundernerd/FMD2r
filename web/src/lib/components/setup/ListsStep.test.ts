@@ -33,7 +33,7 @@ const event = (module: string, patch: Partial<ListEvent>): ListEvent => ({
  * The wizard on the lists step of a fresh install that selected MangaDex, which has a list, and
  * Bato.to, which has none; its API calls spied on.
  */
-async function open(override: Partial<Api> = {}) {
+async function open(override: Partial<Api> = {}, events: ListEvent[] = []) {
 	const real = createApi({
 		baseUrl: 'http://fmd2r.test',
 		fetch: createMockBackend({ setUp: false }).fetch
@@ -42,6 +42,7 @@ async function open(override: Partial<Api> = {}) {
 	const api: Api = { ...real, ...override };
 	const importListDb = vi.spyOn(api, 'importListDb');
 	const store = new EventStore({ url: '/api/events', connect: () => ({}) as never });
+	for (const e of events) store.lists[e.module_id] = e;
 	render(SetupWizard, { api, store, steps: STEPS, onfinish: vi.fn() });
 	await screen.findByRole('checkbox', { name: 'Bato.to' });
 	return { api, store, importListDb };
@@ -109,7 +110,7 @@ describe('the ready-made lists setup step', () => {
 		store.lists['batoto'] = event('batoto', { kind: 'failed', reason: 'no_dump' });
 		const alert = await within(batoto).findByRole('alert');
 		expect(alert.textContent).toContain('There is no ready-made list for Bato.to yet.');
-		expect(alert.textContent).toContain('It stays without a list when you go on.');
+		expect(alert.textContent).toContain('Update list in Discover builds one');
 		expect(within(batoto).queryByRole('progressbar')).toBeNull();
 	});
 
@@ -123,5 +124,25 @@ describe('the ready-made lists setup step', () => {
 		expect((await screen.findByRole('alert')).textContent).toMatch(/Discover can get them later/);
 		expect(screen.queryByRole('button', { name: 'Download selected' })).toBeNull();
 		expect(button('Skip').disabled).toBe(false);
+	});
+
+	it('reads Next when a download runs already, as when coming back to the step', async () => {
+		await open({}, [event('batoto', { done: 1, total: 4 })]);
+		expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
+		expect(button('Next').disabled).toBe(false);
+	});
+
+	it("shows a new download as running, not the last one's failure", async () => {
+		await open({}, [event('batoto', { kind: 'failed', reason: 'unreachable' })]);
+		const batoto = screen.getByRole('group', { name: 'Bato.to' });
+		expect(within(batoto).getByRole('alert').textContent).toMatch(/Could not reach/);
+
+		await fireEvent.click(button('Download selected'));
+		await vi.waitFor(() =>
+			expect(within(batoto).getByRole('status').textContent).toContain(
+				'Getting the ready-made list'
+			)
+		);
+		expect(within(batoto).queryByRole('alert')).toBeNull();
 	});
 });

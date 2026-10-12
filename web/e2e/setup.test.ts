@@ -219,7 +219,7 @@ test('the websites chosen during setup are the ones Discover lists', async ({ pa
 
 test('the ready-made lists of the websites chosen during setup download in one go', async ({
 	page
-}) => {
+}, info) => {
 	await freshInstall(page);
 	await page.goto('/');
 	await toWebsites(page);
@@ -241,9 +241,15 @@ test('the ready-made lists of the websites chosen during setup download in one g
 	await expect(page.getByRole('heading', { level: 2, name: 'Finish' })).toBeVisible();
 	await page.getByRole('link', { name: 'Discover' }).click();
 	await expect(page).toHaveURL(/\/discover$/);
-	await expect(page.getByRole('region', { name: 'Results' }).getByRole('status')).toHaveText(
-		'120 titles'
-	);
+	const count = page.getByRole('region', { name: 'Results' }).getByRole('status');
+	await expect(count).toHaveText('120 titles');
+	// On a phone the picker is in the filters drawer.
+	if (info.project.name === 'phone') await page.getByRole('button', { name: 'Filters' }).click();
+	const picker = page.getByRole('combobox', { name: 'Website' });
+	for (const website of ['Bato.to', 'MangaAe']) {
+		await picker.selectOption({ label: website });
+		await expect(count).toHaveText('60 titles');
+	}
 });
 
 /** Makes the mock backend listen where other machines can reach it, with no password. */
