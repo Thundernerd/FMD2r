@@ -9,14 +9,17 @@ use std::time::{Duration, Instant};
 use fmd_http::{HttpSession, TerminateToken};
 use fmd_lua::{Affinity, Caller, HttpModule, JobError, Module, ModuleDef, Reply, create_http};
 use fmd_pack::{
-    MAX_IMAGE_FILE_PATH, MagickOptions, PackFormat, PackOptions, RenameContext, custom_rename,
+    ArchiveEntry, MAX_IMAGE_FILE_PATH, MagickOptions, PackFormat, PackOptions, RenameContext,
+    custom_rename,
 };
 use fmd_store::{ChapterStatus, NewPage, PageStatus, TaskId, TaskPage, TaskStatus};
 
+use super::comic_metadata;
 use super::files::{find_image_file, remove_partial_images};
 use super::manager::{Inner, log_task, pack_format, rename_options};
 use super::{EngineError, EngineEvent, Progress};
-use crate::settings::{SaveToSettings, Settings, StoredModuleHttpSettings};
+use crate::metadata::absolute;
+use crate::settings::{ComicMetadataFiles, SaveToSettings, Settings, StoredModuleHttpSettings};
 
 /// The page-list markers FMD2 keeps in `PageLinks`: no link yet, downloaded, and a link to get
 /// at download time (baseunits/uDownloadsManager.pas:349-361, :1048-1061).
@@ -731,6 +734,24 @@ impl<'a> TaskRun<'a> {
         }
     }
 
+    /// The metadata files the settings ask for, for the current chapter.
+    fn comic_metadata_entries(&self) -> Vec<ArchiveEntry> {
+        let files = self.settings.output.comic_metadata;
+        if files == ComicMetadataFiles::None {
+            return Vec::new();
+        }
+        let module_id = &self.def.id;
+        let matched = (self.inner.config.series.as_ref())
+            .and_then(|lookup| lookup(module_id, &self.manga_link));
+        comic_metadata::entries(
+            files,
+            &self.title,
+            &self.chapter_names[self.chapter],
+            &absolute(&self.def.root_url, &self.manga_link),
+            matched.as_ref(),
+        )
+    }
+
     /// `TTaskThread.Compress` (baseunits/uDownloadsManager.pas:553-611, :579-590). The pages
     /// are moved into a folder named after the chapter first (the PDF/EPUB title,
     /// baseunits/uPacker.pas:186, :225), so other files stay out of the archive.
@@ -747,6 +768,11 @@ impl<'a> TaskRun<'a> {
         let options = PackOptions {
             pdf_quality: u8::try_from(self.settings.output.pdf_quality.min(100)).unwrap_or(100),
             remove_sources: true,
+            extra_entries: if format == PackFormat::Cbz {
+                self.comic_metadata_entries()
+            } else {
+                Vec::new()
+            },
         };
         let staging = self.staging_dir();
         let packed = std::fs::create_dir_all(&staging).and_then(|()| {

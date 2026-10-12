@@ -2,8 +2,8 @@
 #![allow(clippy::unwrap_used)]
 
 use fmd_core::settings::{
-    Accent, OutputFormat, SettingsError, SettingsService, SymbolMode, TextSize, Theme, ThemeMode,
-    WebpSaveAs, XPathBackend,
+    Accent, ComicMetadataFiles, LibraryTitle, OutputFormat, SettingsError, SettingsService,
+    SymbolMode, TextSize, Theme, ThemeMode, WebpSaveAs, XPathBackend,
 };
 use fmd_store::{AppDb, ListsDb, MangaListing, NewFavorite, NewTask, TaskStatus};
 use serde_json::json;
@@ -503,4 +503,75 @@ fn the_theme_defaults_to_default_and_takes_only_the_built_in_ones() {
             .unwrap();
         assert_eq!(service.get().appearance.theme, theme);
     }
+}
+
+#[test]
+fn comic_metadata_defaults_to_none_validates_and_round_trips() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db.clone()).unwrap();
+    assert_eq!(
+        service.get().output.comic_metadata,
+        ComicMetadataFiles::None
+    );
+
+    let err = service
+        .update(json!({ "output": { "comic_metadata": "xmp" } }))
+        .unwrap_err();
+    assert!(matches!(err, SettingsError::Invalid(_)), "{err:?}");
+
+    for (value, files) in [
+        ("comicinfo", ComicMetadataFiles::ComicInfo),
+        ("metroninfo", ComicMetadataFiles::MetronInfo),
+        ("both", ComicMetadataFiles::Both),
+        ("none", ComicMetadataFiles::None),
+    ] {
+        service
+            .update(json!({ "output": { "comic_metadata": value } }))
+            .unwrap();
+        assert_eq!(service.get().output.comic_metadata, files);
+        let reloaded = SettingsService::load(db.clone()).unwrap();
+        assert_eq!(reloaded.get().output.comic_metadata, files);
+        let stored: serde_json::Value = db.settings().get("output").unwrap().unwrap();
+        assert_eq!(stored["comic_metadata"], json!(value));
+    }
+}
+
+#[test]
+fn the_library_title_defaults_to_the_websites_and_takes_only_the_known_choices() {
+    let (dir, db) = open_db();
+    let service = SettingsService::load(db).unwrap();
+    assert_eq!(
+        service.get().appearance.library_title,
+        LibraryTitle::Website
+    );
+
+    for value in ["japanese", "English", "romaji", ""] {
+        let patch = json!({ "appearance": { "library_title": value } });
+        let err = service.update(patch.clone()).unwrap_err();
+        assert!(matches!(err, SettingsError::Invalid(_)), "{patch}: {err:?}");
+    }
+    assert_eq!(
+        service.get().appearance.library_title,
+        LibraryTitle::Website
+    );
+
+    for (value, title) in [
+        ("english", LibraryTitle::English),
+        ("romanized", LibraryTitle::Romanized),
+        ("native", LibraryTitle::Native),
+        ("mangabaka", LibraryTitle::MangaBaka),
+        ("website", LibraryTitle::Website),
+    ] {
+        service
+            .update(json!({ "appearance": { "library_title": value } }))
+            .unwrap();
+        assert_eq!(service.get().appearance.library_title, title);
+    }
+
+    service
+        .update(json!({ "appearance": { "library_title": "native" } }))
+        .unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let reloaded = SettingsService::load(db).unwrap().get();
+    assert_eq!(reloaded.appearance.library_title, LibraryTitle::Native);
 }

@@ -29,7 +29,13 @@ export const defaultSettings = (): Settings => ({
 		setup_completed: false,
 		setup_step: ''
 	},
-	appearance: { theme: 'default', mode: 'system', text_size: 'normal', accent: 'teal' },
+	appearance: {
+		theme: 'default',
+		mode: 'system',
+		text_size: 'normal',
+		accent: 'teal',
+		library_title: 'website'
+	},
 	connections: {
 		max_parallel_tasks: 1,
 		threads_per_task: 1,
@@ -60,7 +66,7 @@ export const defaultSettings = (): Settings => ({
 		digit_chapter_length: 3,
 		illegal_chars: 'posix'
 	},
-	output: { format: 'folder', pdf_quality: 100 },
+	output: { format: 'folder', pdf_quality: 100, comic_metadata: 'none' },
 	images: {
 		png_to_jpeg: false,
 		webp_save_as: 'png',

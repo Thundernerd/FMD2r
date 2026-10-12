@@ -88,6 +88,8 @@ pub struct AppearanceSettings {
     pub text_size: TextSize,
     /// The accent colour, one of a fixed set of swatches.
     pub accent: Accent,
+    /// Which title the Library shows for a series MangaBaka's database matched.
+    pub library_title: LibraryTitle,
 }
 
 /// The built-in themes, each a set of style tokens (`data-style` in `web/src/lib/styles/tokens.css`)
@@ -139,6 +141,25 @@ pub enum Accent {
     Purple,
     Orange,
     Red,
+}
+
+/// Which of a series' titles the Library shows. Series without an accepted MangaBaka match
+/// keep the website's title.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum LibraryTitle {
+    /// As the website names it.
+    #[default]
+    Website,
+    /// MangaBaka's English title.
+    English,
+    /// MangaBaka's romanized title.
+    Romanized,
+    /// MangaBaka's native title.
+    Native,
+    /// MangaBaka's main title.
+    #[serde(rename = "mangabaka")]
+    MangaBaka,
 }
 
 /// User agent FMD2 sends when none is configured (`UserAgentDefault`,
@@ -373,6 +394,8 @@ pub struct OutputSettings {
     /// (mangadownloader/forms/frmMain.lfm:4245-4246).
     #[schema(minimum = 5, maximum = 100)]
     pub pdf_quality: u32,
+    /// Metadata files written into CBZ archives (not in FMD2). Other formats get none.
+    pub comic_metadata: ComicMetadataFiles,
 }
 
 impl Default for OutputSettings {
@@ -380,7 +403,31 @@ impl Default for OutputSettings {
         Self {
             format: OutputFormat::Folder,
             pdf_quality: 100,
+            comic_metadata: ComicMetadataFiles::None,
         }
+    }
+}
+
+/// Which metadata files comic readers look for go into a CBZ.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ComicMetadataFiles {
+    #[default]
+    None,
+    /// `ComicInfo.xml` (Anansi Project schema v2.0).
+    ComicInfo,
+    /// `MetronInfo.xml` (Metron Project schema v1.0).
+    MetronInfo,
+    Both,
+}
+
+impl ComicMetadataFiles {
+    pub fn comic_info(self) -> bool {
+        matches!(self, Self::ComicInfo | Self::Both)
+    }
+
+    pub fn metron_info(self) -> bool {
+        matches!(self, Self::MetronInfo | Self::Both)
     }
 }
 

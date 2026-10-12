@@ -496,7 +496,7 @@
           {
             "name": "q",
             "in": "query",
-            "description": "Case-insensitive part of the title.",
+            "description": "Case-insensitive part of the shown or the website's title.",
             "required": false,
             "schema": {
               "type": "string"
@@ -3058,6 +3058,15 @@
             ],
             "default": "teal"
           },
+          "library_title": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LibraryTitle",
+                "description": "Which title the Library shows for a series MangaBaka's database matched."
+              }
+            ],
+            "default": "website"
+          },
           "mode": {
             "oneOf": [
               {
@@ -3142,6 +3151,16 @@
             "description": "These favorites; every enabled favorite when missing."
           }
         }
+      },
+      "ComicMetadataFiles": {
+        "type": "string",
+        "description": "Which metadata files comic readers look for go into a CBZ.",
+        "enum": [
+          "none",
+          "comicinfo",
+          "metroninfo",
+          "both"
+        ]
       },
       "ConnectionSettingsView": {
         "type": "object",
@@ -3373,6 +3392,7 @@
           "website",
           "link",
           "title",
+          "display_title",
           "status",
           "enabled",
           "save_to",
@@ -3395,6 +3415,10 @@
           "date_added": {
             "type": "string",
             "description": "RFC 3339."
+          },
+          "display_title": {
+            "type": "string",
+            "description": "The title the Library shows (`appearance.library_title`): the chosen title of the\nseries' accepted MangaBaka match, else MangaBaka's main title, else `title`."
           },
           "enabled": {
             "type": "boolean",
@@ -3438,7 +3462,8 @@
             "$ref": "#/components/schemas/SeriesStatus"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "As the website names it; download folders and files are named after it."
           },
           "website": {
             "type": "string",
@@ -3915,6 +3940,17 @@
             "minimum": 0
           }
         }
+      },
+      "LibraryTitle": {
+        "type": "string",
+        "description": "Which of a series' titles the Library shows. Series without an accepted MangaBaka match\nkeep the website's title.",
+        "enum": [
+          "website",
+          "english",
+          "romanized",
+          "native",
+          "mangabaka"
+        ]
       },
       "LimitOverrides": {
         "type": "object",
@@ -4853,6 +4889,15 @@
       "OutputSettings": {
         "type": "object",
         "properties": {
+          "comic_metadata": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComicMetadataFiles",
+                "description": "Metadata files written into CBZ archives (not in FMD2). Other formats get none."
+              }
+            ],
+            "default": "none"
+          },
           "format": {
             "oneOf": [
               {
@@ -5077,6 +5122,7 @@
               }
             ],
             "default": {
+              "comic_metadata": "none",
               "format": "folder",
               "pdf_quality": 100
             }
@@ -5524,6 +5570,7 @@
             ],
             "default": {
               "accent": "teal",
+              "library_title": "website",
               "mode": "system",
               "text_size": "normal",
               "theme": "default"
@@ -5664,6 +5711,7 @@
               }
             ],
             "default": {
+              "comic_metadata": "none",
               "format": "folder",
               "pdf_quality": 100
             }

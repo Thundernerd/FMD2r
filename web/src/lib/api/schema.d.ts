@@ -1078,6 +1078,8 @@ export interface components {
 		AppearanceSettings: {
 			/** @default teal */
 			accent: components['schemas']['Accent'];
+			/** @default website */
+			library_title: components['schemas']['LibraryTitle'];
 			/** @default system */
 			mode: components['schemas']['ThemeMode'];
 			/** @default normal */
@@ -1111,6 +1113,11 @@ export interface components {
 			/** @description These favorites; every enabled favorite when missing. */
 			ids?: number[] | null;
 		};
+		/**
+		 * @description Which metadata files comic readers look for go into a CBZ.
+		 * @enum {string}
+		 */
+		ComicMetadataFiles: 'none' | 'comicinfo' | 'metroninfo' | 'both';
 		/** @description [`ConnectionSettings`] with the proxy password left out. */
 		ConnectionSettingsView: {
 			/**
@@ -1272,6 +1279,11 @@ export interface components {
 			current_chapter: number;
 			/** @description RFC 3339. */
 			date_added: string;
+			/**
+			 * @description The title the Library shows (`appearance.library_title`): the chosen title of the
+			 *     series' accepted MangaBaka match, else MangaBaka's main title, else `title`.
+			 */
+			display_title: string;
 			/** @description Checked by the new-chapter check. */
 			enabled: boolean;
 			/** Format: int64 */
@@ -1291,6 +1303,7 @@ export interface components {
 			new_chapters: number;
 			save_to: string;
 			status: components['schemas']['SeriesStatus'];
+			/** @description As the website names it; download folders and files are named after it. */
 			title: string;
 			/** @description The module's name; its ID when the module is not loaded. */
 			website: string;
@@ -1542,6 +1555,12 @@ export interface components {
 			 */
 			total: number;
 		};
+		/**
+		 * @description Which of a series' titles the Library shows. Series without an accepted MangaBaka match
+		 *     keep the website's title.
+		 * @enum {string}
+		 */
+		LibraryTitle: 'website' | 'english' | 'romanized' | 'native' | 'mangabaka';
 		/**
 		 * @description Limit overrides; 0 means "not overridden" for tasks and threads
 		 *     (baseunits/WebsiteModulesSettings.pas:81-83).
@@ -1949,6 +1968,8 @@ export interface components {
 		 */
 		OutputFormat: 'folder' | 'zip' | 'cbz' | 'pdf' | 'epub';
 		OutputSettings: {
+			/** @default none */
+			comic_metadata: components['schemas']['ComicMetadataFiles'];
 			/** @default folder */
 			format: components['schemas']['OutputFormat'];
 			/**
@@ -2049,6 +2070,7 @@ export interface components {
 			images: components['schemas']['ImageSettings'];
 			/**
 			 * @default {
+			 *       "comic_metadata": "none",
 			 *       "format": "folder",
 			 *       "pdf_quality": 100
 			 *     }
@@ -2303,6 +2325,7 @@ export interface components {
 			/**
 			 * @default {
 			 *       "accent": "teal",
+			 *       "library_title": "website",
 			 *       "mode": "system",
 			 *       "text_size": "normal",
 			 *       "theme": "default"
@@ -2407,6 +2430,7 @@ export interface components {
 			module_updater: components['schemas']['ModuleUpdaterSettingsView'];
 			/**
 			 * @default {
+			 *       "comic_metadata": "none",
 			 *       "format": "folder",
 			 *       "pdf_quality": 100
 			 *     }
@@ -3131,7 +3155,7 @@ export interface operations {
 				filter?: 'all' | 'new' | 'ongoing' | 'completed' | 'disabled';
 				/** @description Only this module's favorites. */
 				module?: string;
-				/** @description Case-insensitive part of the title. */
+				/** @description Case-insensitive part of the shown or the website's title. */
 				q?: string;
 			};
 			header?: never;

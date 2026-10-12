@@ -28,6 +28,7 @@
 //! A task running when the manager is dropped keeps its status, so the next
 //! [`DownloadManager::open`] resumes it (`StopAllDownloadTasksForExit`, :1957-1977).
 
+mod comic_metadata;
 mod files;
 mod manager;
 mod page;
@@ -38,7 +39,7 @@ use std::sync::Arc;
 
 use fmd_http::HttpClient;
 use fmd_lua::{Module, ModuleRegistry, WorkerPool};
-use fmd_store::{AppDb, StoreError};
+use fmd_store::{AppDb, MetadataSeries, StoreError};
 use tokio::sync::broadcast;
 
 use crate::settings::{SettingsError, SettingsService};
@@ -51,6 +52,18 @@ pub use preview::{PagePlacement, SampleChapter, first_page};
 
 pub type ModuleLookup = dyn Fn(&str) -> Option<Arc<Module>> + Send + Sync;
 
+/// A series' accepted MangaBaka match, for the metadata files written into CBZ archives.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SeriesMatch {
+    pub series: MetadataSeries,
+    /// `(site, id)` pairs, `site` a MangaBaka `source` key such as `anilist`.
+    pub xids: Vec<(String, String)>,
+}
+
+/// The accepted MangaBaka match of a module's series link; `None` when there is none, or the
+/// lookup failed.
+pub type SeriesLookup = dyn Fn(&str, &str) -> Option<SeriesMatch> + Send + Sync;
+
 #[derive(Clone)]
 pub struct EngineConfig {
     pub db: AppDb,
@@ -59,6 +72,9 @@ pub struct EngineConfig {
     pub settings: Arc<SettingsService>,
     /// For page `GET`s when a module has no `OnDownloadImage`.
     pub http: HttpClient,
+    /// Fills the CBZ metadata files from MangaBaka; without it they hold only what the
+    /// download knows.
+    pub series: Option<Arc<SeriesLookup>>,
 }
 
 impl EngineConfig {
@@ -75,7 +91,13 @@ impl EngineConfig {
             modules: Arc::new(move |id| registry.get(id).cloned()),
             settings,
             http,
+            series: None,
         }
+    }
+
+    pub fn with_series_lookup(mut self, lookup: Arc<SeriesLookup>) -> EngineConfig {
+        self.series = Some(lookup);
+        self
     }
 }
 

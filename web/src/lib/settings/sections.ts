@@ -174,6 +174,18 @@ export const SETTINGS_SECTIONS: Section[] = [
 						note: 'High contrast keeps its own accent, so links and buttons stay at 7:1.'
 					}
 				}
+			),
+			select(
+				'appearance.library_title',
+				'Library titles',
+				[
+					{ value: 'website', label: 'As the website names it' },
+					{ value: 'english', label: 'English' },
+					{ value: 'romanized', label: 'Romaji' },
+					{ value: 'native', label: 'Native' },
+					{ value: 'mangabaka', label: 'MangaBaka’s main title' }
+				],
+				'Needs the MangaBaka database. Series without a match keep the website’s title.'
 			)
 		]
 	},
@@ -249,7 +261,18 @@ export const SETTINGS_SECTIONS: Section[] = [
 		title: 'Output',
 		fields: [
 			select('output.format', 'Save chapters as', OUTPUT_FORMATS),
-			number('output.pdf_quality', 'PDF image quality', 5, 100)
+			number('output.pdf_quality', 'PDF image quality', 5, 100),
+			select(
+				'output.comic_metadata',
+				'Metadata in CBZ files',
+				[
+					{ value: 'none', label: 'None' },
+					{ value: 'comicinfo', label: 'ComicInfo.xml' },
+					{ value: 'metroninfo', label: 'MetronInfo.xml' },
+					{ value: 'both', label: 'Both' }
+				],
+				'Read by comic readers such as Komga and Kavita. Filled from the MangaBaka database when the series has a match.'
+			)
 		]
 	},
 	{

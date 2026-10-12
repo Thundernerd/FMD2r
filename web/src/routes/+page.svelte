@@ -217,7 +217,7 @@
 						<span class="art">
 							<!-- A check can replace the series cover with the website's: start that one afresh. -->
 							{#key favorite.cover_url}
-								<CoverThumb src={favorite.cover_url} title={favorite.title} />
+								<CoverThumb src={favorite.cover_url} title={favorite.display_title} />
 							{/key}
 							{#if favorite.new_chapters > 0}
 								<span class="badge num" aria-label="{favorite.new_chapters} new chapters"
@@ -225,7 +225,12 @@
 								>
 							{/if}
 						</span>
-						<span class="t">{favorite.title}</span>
+						<!-- The website's own title, when MangaBaka's shows instead. -->
+						<span
+							class="t"
+							title={favorite.display_title === favorite.title ? undefined : favorite.title}
+							>{favorite.display_title}</span
+						>
 						<span class="small muted"
 							>{favorite.website} · {favorite.enabled
 								? STATUS[favorite.status]
@@ -235,7 +240,7 @@
 					<button
 						class="btn ghost sm folder"
 						type="button"
-						aria-label="Download folder of {favorite.title}"
+						aria-label="Download folder of {favorite.display_title}"
 						title={favorite.save_to}
 						onclick={() => (folderOf = favorite)}>Folder…</button
 					>

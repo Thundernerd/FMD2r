@@ -459,7 +459,7 @@ fn publication_of(status: &str) -> Option<&'static str> {
 }
 
 /// `MaybeFillHost` (baseunits/uBaseUnit.pas).
-fn absolute(root: &str, link: &str) -> String {
+pub(crate) fn absolute(root: &str, link: &str) -> String {
     if link.contains("://") {
         link.to_owned()
     } else if let Some(path) = link.strip_prefix('/') {

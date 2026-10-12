@@ -23,7 +23,8 @@ const favorite = (id: number, patch: Partial<FavoriteView> = {}): FavoriteView =
 	date_added: '2026-01-01T00:00:00Z',
 	last_checked: null,
 	last_updated: null,
-	...patch
+	...patch,
+	display_title: patch.display_title ?? patch.title ?? `Series ${id}`
 });
 
 const library: FavoriteView[] = [

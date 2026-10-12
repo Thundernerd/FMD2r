@@ -14,37 +14,85 @@ describe('applying an appearance', () => {
 
 	it('sets each theme as data-style', () => {
 		for (const theme of ['high-contrast', 'warm', 'compact', 'default'] as const) {
-			applyAppearance({ theme, mode: 'system', text_size: 'normal', accent: 'teal' });
+			applyAppearance({
+				theme,
+				mode: 'system',
+				text_size: 'normal',
+				accent: 'teal',
+				library_title: 'website'
+			});
 			expect(html().dataset['style']).toBe(theme);
 		}
 	});
 
 	it('sets the theme, the accent and the text scale on <html>', () => {
-		applyAppearance({ theme: 'default', mode: 'dark', text_size: 'large', accent: 'purple' });
+		applyAppearance({
+			theme: 'default',
+			mode: 'dark',
+			text_size: 'large',
+			accent: 'purple',
+			library_title: 'website'
+		});
 		expect(html().dataset['theme']).toBe('dark');
 		expect(html().dataset['accent']).toBe('purple');
 		expect(html().style.getPropertyValue('--text-scale')).toBe('1.15');
 
-		applyAppearance({ theme: 'default', mode: 'light', text_size: 'larger', accent: 'blue' });
+		applyAppearance({
+			theme: 'default',
+			mode: 'light',
+			text_size: 'larger',
+			accent: 'blue',
+			library_title: 'website'
+		});
 		expect(html().dataset['theme']).toBe('light');
 		expect(html().dataset['accent']).toBe('blue');
 		expect(html().style.getPropertyValue('--text-scale')).toBe('1.3');
 	});
 
 	it('leaves the theme to the device in system mode', () => {
-		applyAppearance({ theme: 'default', mode: 'dark', text_size: 'small', accent: 'red' });
-		applyAppearance({ theme: 'default', mode: 'system', text_size: 'normal', accent: 'teal' });
+		applyAppearance({
+			theme: 'default',
+			mode: 'dark',
+			text_size: 'small',
+			accent: 'red',
+			library_title: 'website'
+		});
+		applyAppearance({
+			theme: 'default',
+			mode: 'system',
+			text_size: 'normal',
+			accent: 'teal',
+			library_title: 'website'
+		});
 		expect(html().hasAttribute('data-theme')).toBe(false);
 		expect(html().dataset['accent']).toBe('teal');
 		expect(html().style.getPropertyValue('--text-scale')).toBe('1');
 
-		applyAppearance({ theme: 'default', mode: 'system', text_size: 'small', accent: 'teal' });
+		applyAppearance({
+			theme: 'default',
+			mode: 'system',
+			text_size: 'small',
+			accent: 'teal',
+			library_title: 'website'
+		});
 		expect(html().style.getPropertyValue('--text-scale')).toBe('0.9');
 	});
 
 	it('keeps showing a preview when the saved appearance arrives, until the preview ends', () => {
-		previewAppearance({ theme: 'default', mode: 'dark', text_size: 'normal', accent: 'green' });
-		adoptAppearance({ theme: 'default', mode: 'light', text_size: 'normal', accent: 'teal' });
+		previewAppearance({
+			theme: 'default',
+			mode: 'dark',
+			text_size: 'normal',
+			accent: 'green',
+			library_title: 'website'
+		});
+		adoptAppearance({
+			theme: 'default',
+			mode: 'light',
+			text_size: 'normal',
+			accent: 'teal',
+			library_title: 'website'
+		});
 		expect(html().dataset['theme']).toBe('dark');
 		expect(html().dataset['accent']).toBe('green');
 
