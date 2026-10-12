@@ -82,4 +82,39 @@ describe('SeriesHeader', () => {
 		expect(facts).toContainEqual(['Format', 'Manhwa']);
 		expect(facts).toContainEqual(['Year', '2022']);
 	});
+
+	it('offers a download folder only for a series in the library', () => {
+		const series: SeriesInfo = {
+			module_id: 'm',
+			link: '/s',
+			title: 'Series',
+			alt_titles: '',
+			authors: '',
+			artists: '',
+			genres: [],
+			summary: '',
+			summary_from_mangabaka: false,
+			status: 'ongoing',
+			in_library: false,
+			chapters: []
+		};
+		const folderButton = () =>
+			[...document.querySelectorAll('button')].find(
+				(b) => b.textContent?.trim() === 'Download folder…'
+			);
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api: {} as Api, series, website: 'Example' }
+		});
+		flushSync();
+		expect(folderButton()).toBeUndefined();
+
+		unmount(component);
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api: {} as Api, series: { ...series, in_library: true }, website: 'Example' }
+		});
+		flushSync();
+		expect(folderButton()).toBeDefined();
+	});
 });
