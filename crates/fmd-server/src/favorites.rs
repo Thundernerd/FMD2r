@@ -9,7 +9,7 @@ use std::sync::Arc;
 use fmd_core::favorites::{CheckMode, CheckScope, favorite_save_to, website_info};
 use fmd_core::metadata::Metadata;
 use fmd_core::settings::LibraryTitle;
-use fmd_store::{Favorite, FavoriteId, ListsDb, NewFavorite, StoreError};
+use fmd_store::{Favorite, FavoriteId, LibraryGroupId, ListsDb, NewFavorite, StoreError};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -52,6 +52,8 @@ pub struct FavoriteView {
     pub last_checked: Option<String>,
     /// RFC 3339: when a check last found new chapters.
     pub last_updated: Option<String>,
+    /// The library group it is in; `null` is "Ungrouped".
+    pub group_id: Option<i64>,
 }
 
 /// Which favorites to list.
@@ -188,6 +190,19 @@ pub struct FavoritePatch {
     pub enabled: Option<bool>,
     pub save_to: Option<String>,
     pub title: Option<String>,
+    /// The library group to put it in; `null` ungroups it.
+    #[serde(default, deserialize_with = "null_or_value")]
+    #[schema(value_type = Option<i64>, nullable)]
+    pub group_id: Option<Option<i64>>,
+}
+
+/// Tells a field that is `null` (`Some(None)`) from a missing one (`None`, by `default`).
+fn null_or_value<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 /// Change a favorite (`UpdateEnabled`, `UpdateSaveTo`, `UpdateTitle`,
@@ -197,6 +212,7 @@ pub struct FavoritePatch {
     request_body = FavoritePatch,
     responses(
         (status = 200, body = FavoriteView),
+        (status = 400, body = Problem, description = "No such group"),
         (status = 404, body = Problem, description = "No such favorite"),
     ))]
 pub(crate) async fn patch(
@@ -224,6 +240,15 @@ pub(crate) async fn patch(
             }
             if let Some(title) = req.title {
                 favorite.title = title.trim().to_owned();
+            }
+            if let Some(group_id) = req.group_id {
+                let group_id = group_id.map(LibraryGroupId);
+                if let Some(id) = group_id
+                    && db.library_groups().get(id)?.is_none()
+                {
+                    return Err(ApiError::BadRequest(format!("no group with id {}", id.0)));
+                }
+                favorite.group_id = group_id;
             }
             db.favorites().update(&favorite)?;
             Ok(favorite)
@@ -448,6 +473,7 @@ fn to_view(
         date_added: rfc3339_from_unix_ms(favorite.date_added),
         last_checked: favorite.date_last_checked.map(rfc3339_from_unix_ms),
         last_updated: favorite.date_last_updated.map(rfc3339_from_unix_ms),
+        group_id: favorite.group_id.map(|g| g.0),
         module_id: favorite.module_id,
         website,
         link: favorite.link,

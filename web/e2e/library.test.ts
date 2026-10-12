@@ -217,6 +217,47 @@ test('the library shows the titles picked in Settings, and sorts and searches by
 	await expect(cards.first()).toContainText('葬送のフリーレン');
 });
 
+test('series put in a group show in its section, which stays folded after a reload', async ({
+	page
+}) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Groups…' }).click();
+	const editor = page.getByRole('dialog', { name: 'Groups' });
+	await editor.getByRole('textbox', { name: 'New group' }).fill('Shounen');
+	await editor.getByRole('button', { name: 'Add' }).click();
+	await expect(editor.getByRole('list', { name: 'Groups' })).toContainText('Shounen · 0');
+	await editor.getByRole('button', { name: 'Close' }).click();
+
+	for (const title of ['Frieren', 'Sakamoto Days']) {
+		await page.getByRole('link', { name: new RegExp(title) }).click();
+		await page.getByRole('combobox', { name: 'Group' }).selectOption({ label: 'Shounen' });
+		await expect(page.getByRole('combobox', { name: 'Group' })).toHaveValue(/\d+/);
+		await page.getByRole('link', { name: '← Library' }).click();
+	}
+
+	const shounen = page.getByRole('list', { name: 'Shounen' }).getByRole('link');
+	await expect(shounen).toHaveCount(2);
+	await expect(shounen.filter({ hasText: 'Frieren' })).toHaveCount(1);
+	const ungrouped = page.getByRole('list', { name: 'Ungrouped' }).getByRole('link');
+	await expect(ungrouped).toHaveCount(6);
+	// A paused series is marked so in its section too.
+	await expect(ungrouped.filter({ hasText: 'Blue Lock' })).toContainText('Paused');
+
+	const header = page.getByRole('button', { name: 'Shounen · 2' });
+	await expect(header).toHaveAttribute('aria-expanded', 'true');
+	await header.click();
+	await expect(header).toHaveAttribute('aria-expanded', 'false');
+	await expect(shounen).toHaveCount(0);
+
+	await page.reload();
+	await expect(page.getByRole('button', { name: 'Shounen · 2' })).toHaveAttribute(
+		'aria-expanded',
+		'false'
+	);
+	await expect(page.getByRole('list', { name: 'Ungrouped' }).getByRole('link')).toHaveCount(6);
+	await expect(shounen).toHaveCount(0);
+});
+
 test('a series paused from its page shows as paused in the library, until resumed', async ({
 	page
 }) => {

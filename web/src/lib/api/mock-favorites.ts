@@ -2,6 +2,8 @@ import type {
 	FavoritePatch,
 	FavoriteView,
 	FavoritesEvent,
+	GroupPatch,
+	GroupView,
 	InboxItem,
 	JobState,
 	LibraryTitle,
@@ -37,6 +39,7 @@ const seedFavorites = (): FavoriteView[] => {
 		date_added: `2026-0${(id % 9) + 1}-01T00:00:00Z`,
 		last_checked: '2026-10-08T09:12:00Z',
 		last_updated: null,
+		group_id: null,
 		...patch
 	});
 	return [
@@ -104,6 +107,23 @@ function displayTitle(favorite: FavoriteView, choice: LibraryTitle): string {
 	return titles[choice] ?? titles.mangabaka ?? favorite.title;
 }
 
+/**
+ * The groups and which favorite is in which, kept in `sessionStorage` so they outlive a reload,
+ * as fmd-server's do.
+ */
+interface StoredGroups {
+	groups: GroupView[];
+	nextId: number;
+	/** Group id by favorite id. */
+	members: Record<number, number>;
+}
+
+/** Where the mock keeps {@link StoredGroups}; absent in unit tests. */
+export interface GroupStorage {
+	get(): string | null;
+	set(value: string): void;
+}
+
 /** What the next check finds, by favorite id. */
 const seedFresh = (): Record<number, number> => ({ 8: 1 });
 
@@ -131,20 +151,55 @@ export interface MockFavorites {
 	cancel(): boolean;
 	/** Checks the next favorite, reporting through `emit`; returns an inbox item when a check found chapters. */
 	tick(emit: (type: string, payload: unknown) => void): InboxItem | null;
+	listGroups(): GroupView[];
+	createGroup(name: unknown): Result;
+	patchGroup(id: number, patch: GroupPatch): Result;
+	deleteGroup(id: number): Result;
+	reorderGroups(ids: number[]): Result;
 }
 
 /**
  * `job` is the `favorites` entry of the jobs list, kept in step with the check; `libraryTitle`
- * reads the `appearance.library_title` setting.
+ * reads the `appearance.library_title` setting; `storage` keeps the groups across reloads.
  */
 export function createMockFavorites(
 	job: JobState,
-	libraryTitle: () => LibraryTitle
+	libraryTitle: () => LibraryTitle,
+	storage?: GroupStorage
 ): MockFavorites {
 	const favorites = seedFavorites();
 	const fresh = seedFresh();
 	let nextId = 100;
 	let check: Check | null = null;
+
+	const loadGroups = (): StoredGroups => {
+		try {
+			const saved = storage?.get();
+			if (saved) return JSON.parse(saved) as StoredGroups;
+		} catch {
+			// Start without groups.
+		}
+		return { groups: [], nextId: 1, members: {} };
+	};
+	const grouping = loadGroups();
+	for (const f of favorites) f.group_id = grouping.members[f.id] ?? null;
+	const saveGroups = () => {
+		grouping.members = {};
+		for (const f of favorites) if (f.group_id != null) grouping.members[f.id] = f.group_id;
+		storage?.set(JSON.stringify(grouping));
+	};
+	const problem = (status: number, detail: string): Result => ({
+		status,
+		body: { status, detail }
+	});
+	/** Like fmd-server: names are trimmed, required, and unique ignoring case. */
+	const nameProblem = (name: string, own: number | null): Result | null => {
+		if (!name) return problem(400, 'the group name cannot be empty');
+		const other = grouping.groups.find(
+			(g) => g.id !== own && g.name.toLowerCase() === name.toLowerCase()
+		);
+		return other ? problem(409, `a group named ${other.name} exists already`) : null;
+	};
 
 	const view = (f: FavoriteView): FavoriteView => ({
 		...f,
@@ -183,7 +238,8 @@ export function createMockFavorites(
 				new_chapters: 0,
 				date_added: new Date().toISOString(),
 				last_checked: null,
-				last_updated: null
+				last_updated: null,
+				group_id: null
 			};
 			favorites.push(favorite);
 			return { status: 201, body: view(favorite) };
@@ -198,12 +254,57 @@ export function createMockFavorites(
 			favorite.enabled = patch.enabled ?? favorite.enabled;
 			favorite.title = patch.title ?? favorite.title;
 			favorite.save_to = patch.save_to ?? favorite.save_to;
+			if (patch.group_id !== undefined) {
+				if (patch.group_id !== null && !grouping.groups.some((g) => g.id === patch.group_id)) {
+					return problem(400, `no group with id ${patch.group_id}`);
+				}
+				favorite.group_id = patch.group_id;
+				saveGroups();
+			}
 			return { status: 200, body: view(favorite) };
 		},
 		remove(id) {
 			const index = favorites.findIndex((f) => f.id === id);
 			if (index < 0) return { status: 404 };
 			favorites.splice(index, 1);
+			saveGroups();
+			return { status: 204 };
+		},
+		listGroups: () => grouping.groups.map((g) => ({ ...g })),
+		createGroup(raw) {
+			const name = typeof raw === 'string' ? raw.trim() : '';
+			const refused = nameProblem(name, null);
+			if (refused) return refused;
+			const group: GroupView = { id: grouping.nextId++, name, collapsed: false };
+			grouping.groups.push(group);
+			saveGroups();
+			return { status: 201, body: { ...group } };
+		},
+		patchGroup(id, patch) {
+			const group = grouping.groups.find((g) => g.id === id);
+			if (!group) return { status: 404 };
+			if (patch.name != null) {
+				const name = patch.name.trim();
+				const refused = nameProblem(name, id);
+				if (refused) return refused;
+				group.name = name;
+			}
+			group.collapsed = patch.collapsed ?? group.collapsed;
+			saveGroups();
+			return { status: 200, body: { ...group } };
+		},
+		deleteGroup(id) {
+			const index = grouping.groups.findIndex((g) => g.id === id);
+			if (index < 0) return { status: 404 };
+			grouping.groups.splice(index, 1);
+			for (const f of favorites) if (f.group_id === id) f.group_id = null;
+			saveGroups();
+			return { status: 204 };
+		},
+		reorderGroups(ids) {
+			const first = ids.flatMap((id) => grouping.groups.filter((g) => g.id === id));
+			grouping.groups = [...first, ...grouping.groups.filter((g) => !first.includes(g))];
+			saveGroups();
 			return { status: 204 };
 		},
 		start(ids, mode) {

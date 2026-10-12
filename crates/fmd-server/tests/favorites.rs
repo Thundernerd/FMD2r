@@ -419,3 +419,210 @@ async fn a_favorite_with_a_stored_cover_gets_the_cover_proxy_url() {
         "/api/covers?module=t&url=https%3A%2F%2Fexample.com%2Fc.jpg"
     );
 }
+
+#[tokio::test]
+async fn groups_are_created_renamed_folded_reordered_and_deleted() {
+    let fx = Fixture::new();
+
+    let created = fx
+        .send(
+            "POST",
+            "/api/library/groups",
+            Some(json!({ "name": "Shounen" })),
+        )
+        .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let shounen = json_body(created).await;
+    assert_eq!(shounen["name"], "Shounen");
+    assert_eq!(shounen["collapsed"], false);
+    let seinen = json_body(
+        fx.send(
+            "POST",
+            "/api/library/groups",
+            Some(json!({ "name": "Seinen" })),
+        )
+        .await,
+    )
+    .await;
+
+    let taken = fx
+        .send(
+            "POST",
+            "/api/library/groups",
+            Some(json!({ "name": "SHOUNEN" })),
+        )
+        .await;
+    assert_eq!(taken.status(), StatusCode::CONFLICT);
+    let empty = fx
+        .send("POST", "/api/library/groups", Some(json!({ "name": "  " })))
+        .await;
+    assert_eq!(empty.status(), StatusCode::BAD_REQUEST);
+
+    let id = shounen["id"].as_i64().unwrap();
+    let patched = fx
+        .send(
+            "PATCH",
+            &format!("/api/library/groups/{id}"),
+            Some(json!({ "collapsed": true })),
+        )
+        .await;
+    assert_eq!(patched.status(), StatusCode::OK);
+    let patched = json_body(patched).await;
+    assert_eq!(patched["name"], "Shounen", "a missing name stays");
+    assert_eq!(patched["collapsed"], true);
+    let renamed = fx
+        .send(
+            "PATCH",
+            &format!("/api/library/groups/{id}"),
+            Some(json!({ "name": "Action" })),
+        )
+        .await;
+    assert_eq!(renamed.status(), StatusCode::OK);
+    let clash = fx
+        .send(
+            "PATCH",
+            &format!("/api/library/groups/{id}"),
+            Some(json!({ "name": "seinen" })),
+        )
+        .await;
+    assert_eq!(clash.status(), StatusCode::CONFLICT);
+    let missing = fx
+        .send(
+            "PATCH",
+            "/api/library/groups/999",
+            Some(json!({ "collapsed": true })),
+        )
+        .await;
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    let reordered = fx
+        .send(
+            "POST",
+            "/api/library/groups/reorder",
+            Some(json!({ "ids": [seinen["id"], id] })),
+        )
+        .await;
+    assert_eq!(reordered.status(), StatusCode::NO_CONTENT);
+    let list = json_body(fx.send("GET", "/api/library/groups", None).await).await;
+    assert_eq!(
+        list,
+        json!([
+            { "id": seinen["id"], "name": "Seinen", "collapsed": false },
+            { "id": id, "name": "Action", "collapsed": true },
+        ])
+    );
+
+    let deleted = fx
+        .send("DELETE", &format!("/api/library/groups/{id}"), None)
+        .await;
+    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+    let gone = fx
+        .send("DELETE", &format!("/api/library/groups/{id}"), None)
+        .await;
+    assert_eq!(gone.status(), StatusCode::NOT_FOUND);
+    let list = json_body(fx.send("GET", "/api/library/groups", None).await).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_favorite_is_grouped_kept_in_its_group_and_ungrouped() {
+    let fx = Fixture::new();
+    let id = fx.add().await["id"].as_i64().unwrap();
+    let group = json_body(
+        fx.send(
+            "POST",
+            "/api/library/groups",
+            Some(json!({ "name": "Shounen" })),
+        )
+        .await,
+    )
+    .await;
+    let listed_group = |list: Value| list[0]["group_id"].clone();
+    assert_eq!(
+        listed_group(json_body(fx.send("GET", "/api/favorites", None).await).await),
+        Value::Null
+    );
+
+    let grouped = fx
+        .send(
+            "PATCH",
+            &format!("/api/favorites/{id}"),
+            Some(json!({ "group_id": group["id"] })),
+        )
+        .await;
+    assert_eq!(grouped.status(), StatusCode::OK);
+    assert_eq!(
+        listed_group(json_body(fx.send("GET", "/api/favorites", None).await).await),
+        group["id"]
+    );
+
+    let untouched = fx
+        .send(
+            "PATCH",
+            &format!("/api/favorites/{id}"),
+            Some(json!({ "enabled": false })),
+        )
+        .await;
+    assert_eq!(untouched.status(), StatusCode::OK);
+    assert_eq!(
+        listed_group(json_body(fx.send("GET", "/api/favorites", None).await).await),
+        group["id"],
+        "a patch without group_id leaves it"
+    );
+
+    let unknown = fx
+        .send(
+            "PATCH",
+            &format!("/api/favorites/{id}"),
+            Some(json!({ "group_id": 999 })),
+        )
+        .await;
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+
+    let ungrouped = fx
+        .send(
+            "PATCH",
+            &format!("/api/favorites/{id}"),
+            Some(json!({ "group_id": null })),
+        )
+        .await;
+    assert_eq!(ungrouped.status(), StatusCode::OK);
+    assert_eq!(
+        listed_group(json_body(fx.send("GET", "/api/favorites", None).await).await),
+        Value::Null
+    );
+}
+
+#[tokio::test]
+async fn deleting_a_group_lists_its_favorites_ungrouped() {
+    let fx = Fixture::new();
+    let id = fx.add().await["id"].as_i64().unwrap();
+    let group = json_body(
+        fx.send(
+            "POST",
+            "/api/library/groups",
+            Some(json!({ "name": "Shounen" })),
+        )
+        .await,
+    )
+    .await;
+    fx.send(
+        "PATCH",
+        &format!("/api/favorites/{id}"),
+        Some(json!({ "group_id": group["id"] })),
+    )
+    .await;
+
+    let deleted = fx
+        .send(
+            "DELETE",
+            &format!("/api/library/groups/{}", group["id"]),
+            None,
+        )
+        .await;
+    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+
+    let list = json_body(fx.send("GET", "/api/favorites", None).await).await;
+    assert_eq!(list.as_array().unwrap().len(), 1, "the series stays");
+    assert_eq!(list[0]["group_id"], Value::Null);
+}

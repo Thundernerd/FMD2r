@@ -7,6 +7,8 @@ import type {
 	AccountRequest,
 	FavoritePatch,
 	FavoriteView,
+	GroupPatch,
+	GroupView,
 	FolderCheck,
 	Health,
 	ImportOptions,
@@ -191,6 +193,19 @@ export interface Api {
 	checkFavorites(ids?: number[]): Promise<void>;
 	/** Starts checking a favorite for chapters missing from its folder; otherwise like {@link checkFavorites}. */
 	checkMissingChapters(id: number): Promise<void>;
+	/** The library's groups, in order. */
+	listGroups(): Promise<GroupView[]>;
+	/**
+	 * Adds a group after the others. Rejects with an {@link ApiError}: 409 when another group has
+	 * the name, ignoring case, 400 when it is empty.
+	 */
+	createGroup(name: string): Promise<GroupView>;
+	/** Renames a group or folds its section; rejects like {@link createGroup}, or with 404. */
+	updateGroup(id: number, patch: GroupPatch): Promise<GroupView>;
+	/** Removes a group; its series stay in the library, ungrouped. */
+	deleteGroup(id: number): Promise<void>;
+	/** Puts the groups in this order. */
+	reorderGroups(ids: number[]): Promise<void>;
 	/** The accounts of the modules with account support. Passwords are never returned. */
 	listAccounts(): Promise<AccountInfo[]>;
 	/** Changes the given fields of a module's account; omitted fields keep their value. */
@@ -257,6 +272,19 @@ export function createApi({
 
 	const unwrap = <T>(what: string, res: { data?: T; response: Response }): T => {
 		if (!res.response.ok || res.data === undefined) throw new ApiError(res.response.status, what);
+		return res.data;
+	};
+
+	/** Like `unwrap`, but keeps the problem's `detail`, saying why the server refused. */
+	const explained = <T>(
+		what: string,
+		res: { data?: T; error?: unknown; response: Response }
+	): T => {
+		if (!res.response.ok || res.data === undefined) {
+			// Every error these operations answer is a `Problem`.
+			const problem = res.error as Partial<Problem> | undefined;
+			throw new ApiError(res.response.status, what, problem?.detail ?? null);
+		}
 		return res.data;
 	};
 
@@ -381,13 +409,10 @@ export function createApi({
 			return unwrap('resolveUrl', res);
 		},
 		async getSeries(module, link) {
-			const res = await client.GET('/api/series', { params: { query: { module, link } } });
-			if (!res.response.ok || res.data === undefined) {
-				// Every error here is a `Problem`.
-				const problem = res.error as Partial<Problem> | undefined;
-				throw new ApiError(res.response.status, 'getSeries', problem?.detail ?? null);
-			}
-			return res.data;
+			return explained(
+				'getSeries',
+				await client.GET('/api/series', { params: { query: { module, link } } })
+			);
 		},
 		async createTask(task) {
 			return validated('createTask', await client.POST('/api/tasks', { body: task }));
@@ -517,15 +542,12 @@ export function createApi({
 			return unwrap('listFavorites', await client.GET('/api/favorites'));
 		},
 		async addFavorite(module, link, saveTo) {
-			const res = await client.POST('/api/favorites', {
-				body: { module_id: module, link, save_to: saveTo || null }
-			});
-			if (!res.response.ok || res.data === undefined) {
-				// Every error here is a `Problem`.
-				const problem = res.error as Partial<Problem> | undefined;
-				throw new ApiError(res.response.status, 'addFavorite', problem?.detail ?? null);
-			}
-			return res.data;
+			return explained(
+				'addFavorite',
+				await client.POST('/api/favorites', {
+					body: { module_id: module, link, save_to: saveTo || null }
+				})
+			);
 		},
 		async updateFavorite(id, patch) {
 			return validated(
@@ -550,6 +572,28 @@ export function createApi({
 				params: { path: { id } }
 			});
 			if (!response.ok) throw new ApiError(response.status, 'checkMissingChapters');
+		},
+		async listGroups() {
+			return unwrap('listGroups', await client.GET('/api/library/groups'));
+		},
+		async createGroup(name) {
+			return explained('createGroup', await client.POST('/api/library/groups', { body: { name } }));
+		},
+		async updateGroup(id, patch) {
+			return explained(
+				'updateGroup',
+				await client.PATCH('/api/library/groups/{id}', { params: { path: { id } }, body: patch })
+			);
+		},
+		async deleteGroup(id) {
+			const { response } = await client.DELETE('/api/library/groups/{id}', {
+				params: { path: { id } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'deleteGroup');
+		},
+		async reorderGroups(ids) {
+			const { response } = await client.POST('/api/library/groups/reorder', { body: { ids } });
+			if (!response.ok) throw new ApiError(response.status, 'reorderGroups');
 		},
 		async listAccounts() {
 			return unwrap('listAccounts', await client.GET('/api/accounts'));
