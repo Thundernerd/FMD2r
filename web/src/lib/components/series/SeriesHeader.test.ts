@@ -266,6 +266,25 @@ describe('SeriesHeader', () => {
 		flushSync();
 	}
 
+	it('says when the groups cannot load, and leaves the select out', async () => {
+		const api = {
+			listFavorites: async () => [{ id: 7, module_id: 'm', link: '/s', enabled: true }],
+			listGroups: async () => {
+				throw new Error('offline');
+			}
+		} as unknown as Api;
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api, series: seriesInfo({ in_library: true }), website: 'E' }
+		});
+		await vi.waitFor(() =>
+			expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+				'Could not load the groups.'
+			)
+		);
+		expect(document.querySelector('select[aria-label="Group"]')).toBeNull();
+	});
+
 	it("shows the series' group and moves it to another or none", async () => {
 		const api = groupedLibrary(1);
 		const select = await groupSelect();

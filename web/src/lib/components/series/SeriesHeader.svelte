@@ -26,7 +26,7 @@
 	let checking = $state(false);
 	let checkNote = $state<string | null>(null);
 
-	/** This series in the library, loaded with the page. */
+	/** This series in the library, loaded with the page; the pause and group controls share it. */
 	let favorite = $state<FavoriteView | null>(null);
 	let loadError = $state<string | null>(null);
 	let folderOpen = $state(false);
@@ -315,7 +315,9 @@
 				<button class="btn" type="button" title={favorite?.save_to} onclick={openFolderDialog}>
 					Download folder…
 				</button>
-				<GroupSelect {api} module={series.module_id} link={series.link} />
+				{#if favorite}
+					<GroupSelect {api} {favorite} onchange={(changed) => (favorite = changed)} />
+				{/if}
 			{:else}
 				<button class="btn" type="button" disabled={adding} onclick={addToLibrary}>
 					{adding ? 'Adding…' : '＋ Add to library'}

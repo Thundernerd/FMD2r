@@ -1,16 +1,24 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
-	import type { GroupView } from '#lib/api/types.ts';
+	import type { FavoriteView, GroupView } from '#lib/api/types.ts';
 
-	let { api, module, link }: { api: Api; module: string; link: string } = $props();
+	let {
+		api,
+		favorite,
+		onchange
+	}: {
+		api: Api;
+		/** This series in the library, as the header loaded it. */
+		favorite: FavoriteView;
+		/** The series moved to another group (or none); passes its entry as the server saved it. */
+		onchange: (favorite: FavoriteView) => void;
+	} = $props();
 
 	/** The `<select>` value that opens the new-group form. */
 	const NEW = 'new';
 
-	let favoriteId = $state<number | null>(null);
-	let groups = $state<GroupView[]>([]);
-	/** The group id as the select shows it; empty for none. */
-	let value = $state('');
+	/** `null` until loaded, or when they could not be. */
+	let groups = $state<GroupView[] | null>(null);
 	let creating = $state(false);
 	let newName = $state('');
 	let busy = $state(false);
@@ -19,37 +27,30 @@
 	/** How the select shows a group id: empty for none. */
 	const shown = (groupId: number | null | undefined) => (groupId == null ? '' : String(groupId));
 
-	/** The series' entry in the library and the groups to choose from. */
-	async function load() {
-		const [favorites, list] = await Promise.all([api.listFavorites(), api.listGroups()]);
-		const favorite = favorites.find((f) => f.module_id === module && f.link === link);
-		if (!favorite) return;
-		favoriteId = favorite.id;
-		groups = list;
-		value = shown(favorite.group_id);
+	async function loadGroups() {
+		groups = await api.listGroups();
 	}
 	$effect(() => {
-		// Without the select, the rest of the header still works.
-		load().catch(() => {});
+		// Any failure, thrown or rejected, leaves the select out and says so.
+		loadGroups().catch(() => (error = 'Could not load the groups.'));
 	});
 
 	async function assign(groupId: number | null) {
-		if (favoriteId === null) return;
-		const favorite = await api.updateFavorite(favoriteId, { group_id: groupId });
-		value = shown(favorite.group_id);
+		onchange(await api.updateFavorite(favorite.id, { group_id: groupId }));
 	}
 
-	async function changed() {
+	async function changed(select: HTMLSelectElement) {
 		error = null;
-		if (value === NEW) {
+		if (select.value === NEW) {
 			creating = true;
 			return;
 		}
 		creating = false;
 		try {
-			await assign(value ? Number(value) : null);
+			await assign(select.value ? Number(select.value) : null);
 		} catch {
 			error = 'Could not change the group.';
+			select.value = shown(favorite.group_id);
 		}
 	}
 
@@ -62,11 +63,9 @@
 		let group: GroupView;
 		try {
 			group = await api.createGroup(name);
-			groups = [...groups, group];
+			groups = [...(groups ?? []), group];
 			creating = false;
 			newName = '';
-			// The group exists now: picking it again from the select retries a failed move.
-			value = shown(group.id);
 		} catch (e) {
 			error =
 				e instanceof ApiError && e.status === 409
@@ -78,6 +77,7 @@
 		try {
 			await assign(group.id);
 		} catch {
+			// The group exists now: picking it from the select retries the move.
 			error = 'Could not change the group.';
 		} finally {
 			busy = false;
@@ -88,13 +88,16 @@
 		creating = false;
 		newName = '';
 		error = null;
-		const current = groups.find((g) => String(g.id) === value);
-		if (!current) value = '';
 	}
 </script>
 
-{#if favoriteId !== null}
-	<select class="input group" aria-label="Group" bind:value onchange={changed}>
+{#if groups}
+	<select
+		class="input group"
+		aria-label="Group"
+		value={creating ? NEW : shown(favorite.group_id)}
+		onchange={(e) => changed(e.currentTarget)}
+	>
 		<option value="">No group</option>
 		{#each groups as group (group.id)}
 			<option value={String(group.id)}>{group.name}</option>
@@ -113,9 +116,9 @@
 			<button class="btn sm ghost" type="button" onclick={cancel}>Cancel</button>
 		</form>
 	{/if}
-	{#if error}
-		<span class="small bad" role="alert">{error}</span>
-	{/if}
+{/if}
+{#if error}
+	<span class="small bad" role="alert">{error}</span>
 {/if}
 
 <style>
