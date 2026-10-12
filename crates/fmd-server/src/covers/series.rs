@@ -279,10 +279,15 @@ async fn website(
 }
 
 /// Stores the cover `GetInfo` gave the series page for `module`'s title at `link`, saving a
-/// lookup later, unless the title's cover comes from MangaBaka. A failure only logs.
-pub(crate) async fn store_learned(state: &AppState, module: &str, link: &str, cover: &str) {
-    if let Err(e) = try_store_learned(state, module, link, cover).await {
-        tracing::warn!(target: "fmd_server", "storing a cover link: {e}");
+/// lookup later, unless the title's cover comes from MangaBaka. Returns whether the website's
+/// cover is the title's cover, i.e. not MangaBaka's. A failure only logs, and returns false.
+pub(crate) async fn store_learned(state: &AppState, module: &str, link: &str, cover: &str) -> bool {
+    match try_store_learned(state, module, link, cover).await {
+        Ok(website) => website,
+        Err(e) => {
+            tracing::warn!(target: "fmd_server", "storing a cover link: {e}");
+            false
+        }
     }
 }
 
@@ -291,28 +296,29 @@ async fn try_store_learned(
     module: &str,
     link: &str,
     cover: &str,
-) -> Result<(), ApiError> {
+) -> Result<bool, ApiError> {
     let (Some(lists), Some(info)) = (state.lists.clone(), state.modules.module(module)) else {
-        return Ok(());
+        return Ok(true);
     };
     let now = now_secs();
     if mangabaka(state, &lists, module, link, now).await?.is_some() {
-        return Ok(());
+        return Ok(false);
     }
     let found = website_link(absolute(&info.root_url, cover), now);
     let (module, link) = (module.to_owned(), link.to_owned());
-    off_thread(move || -> Result<(), fmd_store::StoreError> {
+    let website = off_thread(move || -> Result<bool, fmd_store::StoreError> {
         let covers = lists.cover_links();
         if covers
             .get(&module, &link)?
             .is_some_and(|c| c.source == CoverSource::MangaBaka)
         {
-            return Ok(());
+            return Ok(false);
         }
-        covers.put(&module, &link, &found)
+        covers.put(&module, &link, &found)?;
+        Ok(true)
     })
     .await??;
-    Ok(())
+    Ok(website)
 }
 
 /// A cover link from the website.

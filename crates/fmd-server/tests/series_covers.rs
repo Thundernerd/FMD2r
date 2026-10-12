@@ -815,3 +815,33 @@ async fn during_a_pause_cover_lookups_do_not_ask_the_website() {
         None
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_series_page_does_not_replace_a_favorites_mangabaka_cover() {
+    let h = harness(
+        &[("/shadow", "http://site.test/covers/shadow.png")],
+        0,
+        quick(),
+    );
+    let state = h.state_with_mangabaka();
+    AppDb::open(h.dir.path().join("app.db"))
+        .unwrap()
+        .favorites()
+        .create(&fmd_store::NewFavorite {
+            module_id: "site".into(),
+            link: "/shadow".into(),
+            title: "Shadow Star".into(),
+            save_to: "/downloads".into(),
+            cover_url: None,
+        })
+        .unwrap();
+
+    let res = send(&state, "/api/series?module=site&link=%2Fshadow").await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // The card keeps pointing at the title's cover, which is MangaBaka's thumbnail.
+    let res = send(&state, "/api/favorites").await;
+    let body: serde_json::Value =
+        serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body[0]["cover_url"], series_cover("/shadow", None));
+}

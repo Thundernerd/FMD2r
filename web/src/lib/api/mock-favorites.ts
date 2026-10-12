@@ -94,6 +94,8 @@ export interface MockFavorites {
 	list(): FavoriteView[];
 	has(module: string, link: string): boolean;
 	add(series: SeriesInfo, website: string, saveTo: string): Result;
+	/** Stores `cover` (a `SeriesInfo.cover_url`) as the cover of the favorite at `link`, if any. */
+	storeCover(module: string, link: string, cover: string): void;
 	patch(id: number, patch: FavoritePatch): Result;
 	remove(id: number): Result;
 	/** Starts a check of `ids` (every enabled favorite when `null`); false when one runs. */
@@ -145,6 +147,10 @@ export function createMockFavorites(job: JobState): MockFavorites {
 			};
 			favorites.push(favorite);
 			return { status: 201, body: favorite };
+		},
+		storeCover(module, link, cover) {
+			const favorite = favorites.find((f) => f.module_id === module && f.link === link);
+			if (favorite) favorite.cover_url = cover;
 		},
 		patch(id, patch) {
 			const favorite = favorites.find((f) => f.id === id);

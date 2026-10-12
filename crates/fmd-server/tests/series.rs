@@ -521,3 +521,93 @@ async fn series_chapter_names_lose_the_title_when_the_setting_says_so() {
         .collect();
     assert_eq!(names, ["Chapter 1", "Extra", "One Piece"]);
 }
+
+fn add_favorite(db: &AppDb, link: &str, cover_url: Option<&str>) {
+    db.favorites()
+        .create(&fmd_store::NewFavorite {
+            module_id: "t".into(),
+            link: link.into(),
+            title: "One Piece".into(),
+            save_to: "/downloads".into(),
+            cover_url: cover_url.map(str::to_owned),
+        })
+        .unwrap();
+}
+
+async fn favorite_covers(state: &AppState) -> Vec<Value> {
+    let res = send(
+        state,
+        Request::get("/api/favorites").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    body.as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["cover_url"].clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn opening_a_favorite_without_a_cover_stores_its_cover_for_the_library() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.page("https://example.com/manga/1", SERIES_PAGE);
+    add_favorite(&h.db, "/manga/1", None);
+    assert_eq!(
+        favorite_covers(&h.state).await,
+        [json!("/api/covers/series?module=t&link=%2Fmanga%2F1")]
+    );
+
+    assert_eq!(
+        series(&h.state, "t", "/manga/1").await.status(),
+        StatusCode::OK
+    );
+
+    // The card's URL changes, so the library loads the cover afresh (issue #233).
+    assert_eq!(
+        favorite_covers(&h.state).await,
+        [json!(
+            "/api/covers?module=t&url=https%3A%2F%2Fexample.com%2Fcover%2F1.jpg"
+        )]
+    );
+}
+
+#[tokio::test]
+async fn opening_a_series_that_is_not_a_favorite_changes_no_favorite() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.page("https://example.com/manga/1", SERIES_PAGE);
+    add_favorite(&h.db, "/manga/2", None);
+
+    assert_eq!(
+        series(&h.state, "t", "/manga/1").await.status(),
+        StatusCode::OK
+    );
+
+    assert_eq!(
+        favorite_covers(&h.state).await,
+        [json!("/api/covers/series?module=t&link=%2Fmanga%2F2")]
+    );
+}
+
+#[tokio::test]
+async fn a_series_without_a_cover_leaves_the_favorites_cover_alone() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.page(
+        "https://example.com/manga/1",
+        "Title=One Piece\nCoverLink=\n",
+    );
+    add_favorite(&h.db, "/manga/1", Some("https://example.com/old.jpg"));
+
+    assert_eq!(
+        series(&h.state, "t", "/manga/1").await.status(),
+        StatusCode::OK
+    );
+
+    assert_eq!(
+        favorite_covers(&h.state).await,
+        [json!(
+            "/api/covers?module=t&url=https%3A%2F%2Fexample.com%2Fold.jpg"
+        )]
+    );
+}
