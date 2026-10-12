@@ -8,16 +8,23 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::error::Result;
 
-const SCHEMA: &str = include_str!("migrations/metadata_v1.sql");
+const SCHEMA: &str = include_str!("migrations/metadata_v2.sql");
 
-/// A file with another `user_version` is not read.
-const SCHEMA_VERSION: u32 = 1;
+/// A file with another `user_version` is not read; an older one is rebuilt.
+const SCHEMA_VERSION: u32 = 2;
 
-/// A MangaBaka series. Titles kept only for matching live in the title index.
+/// A MangaBaka series. Titles kept only for matching live in the title index. Empty optional
+/// strings are stored as NULL and read back as `None`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MetadataSeries {
     pub id: i64,
     pub title: String,
+    /// MangaBaka's `native_title`, e.g. `재벌집 막내아들`.
+    pub native_title: Option<String>,
+    /// MangaBaka's `romanized_title`, e.g. `Jaebeoljib Magnaeadeul`.
+    pub romanized_title: Option<String>,
+    /// The first official English entry of MangaBaka's `titles`, else the first primary one.
+    pub english_title: Option<String>,
     /// MangaBaka's `type`: `manga`, `manhwa`, `manhua`, `oel`, `novel`, `other`, ...
     pub kind: String,
     /// MangaBaka's `status`: `releasing`, `completed`, `hiatus`, `cancelled`, `unknown`, ...
@@ -29,10 +36,17 @@ pub struct MetadataSeries {
     pub genres: Vec<String>,
     /// The authors' and artists' names, normalised for matching.
     pub people: Vec<String>,
+    /// MangaBaka's `authors` and `artists`, as written there.
+    pub authors: Vec<String>,
+    pub artists: Vec<String>,
     /// Cover thumbnails 150, 250 and 350 px tall.
     pub cover_x150: Option<String>,
     pub cover_x250: Option<String>,
     pub cover_x350: Option<String>,
+}
+
+fn non_empty(s: Option<&str>) -> Option<&str> {
+    s.filter(|s| !s.is_empty())
 }
 
 /// Writes a new `metadata.db` in one transaction committed by [`MetadataBuilder::finish`];
@@ -54,13 +68,17 @@ impl MetadataBuilder {
 
     pub fn add_series(&mut self, s: &MetadataSeries) -> Result<()> {
         let mut stmt = self.conn.prepare_cached(
-            "INSERT OR REPLACE INTO series (id, title, type, status, year, content_rating,
-                 description, genres, people, cover_x150, cover_x250, cover_x350)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT OR REPLACE INTO series (id, title, native_title, romanized_title,
+                 english_title, type, status, year, content_rating, description, genres, people,
+                 authors, artists, cover_x150, cover_x250, cover_x350)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         )?;
         stmt.execute(params![
             s.id,
             s.title,
+            non_empty(s.native_title.as_deref()),
+            non_empty(s.romanized_title.as_deref()),
+            non_empty(s.english_title.as_deref()),
             s.kind,
             s.status,
             s.year,
@@ -68,6 +86,8 @@ impl MetadataBuilder {
             s.description,
             s.genres.join("\n"),
             s.people.join("\n"),
+            non_empty(Some(s.authors.join("\n").as_str())),
+            non_empty(Some(&s.artists.join("\n"))),
             s.cover_x150,
             s.cover_x250,
             s.cover_x350,
@@ -194,12 +214,14 @@ impl MetadataDb {
     pub fn series(&self, id: i64) -> Result<Option<MetadataSeries>> {
         let conn = self.lock();
         let mut stmt = conn.prepare_cached(
-            "SELECT id, title, type, status, year, content_rating, description, genres, people,
+            "SELECT id, title, native_title, romanized_title, english_title, type, status, year,
+                    content_rating, description, genres, people, authors, artists,
                     cover_x150, cover_x250, cover_x350
              FROM series WHERE id = ?1",
         )?;
-        let split = |s: String| -> Vec<String> {
-            s.split('\n')
+        let split = |s: Option<String>| -> Vec<String> {
+            s.unwrap_or_default()
+                .split('\n')
                 .filter(|v| !v.is_empty())
                 .map(str::to_owned)
                 .collect()
@@ -209,16 +231,21 @@ impl MetadataDb {
                 Ok(MetadataSeries {
                     id: r.get(0)?,
                     title: r.get(1)?,
-                    kind: r.get(2)?,
-                    status: r.get(3)?,
-                    year: r.get(4)?,
-                    content_rating: r.get(5)?,
-                    description: r.get(6)?,
-                    genres: split(r.get(7)?),
-                    people: split(r.get(8)?),
-                    cover_x150: r.get(9)?,
-                    cover_x250: r.get(10)?,
-                    cover_x350: r.get(11)?,
+                    native_title: r.get(2)?,
+                    romanized_title: r.get(3)?,
+                    english_title: r.get(4)?,
+                    kind: r.get(5)?,
+                    status: r.get(6)?,
+                    year: r.get(7)?,
+                    content_rating: r.get(8)?,
+                    description: r.get(9)?,
+                    genres: split(r.get(10)?),
+                    people: split(r.get(11)?),
+                    authors: split(r.get(12)?),
+                    artists: split(r.get(13)?),
+                    cover_x150: r.get(14)?,
+                    cover_x250: r.get(15)?,
+                    cover_x350: r.get(16)?,
                 })
             })
             .optional()?)
@@ -243,6 +270,17 @@ impl MetadataDb {
             "SELECT DISTINCT series FROM xids WHERE site = ?1 AND xid = ?2 ORDER BY series",
             &[site, xid],
         )
+    }
+
+    /// `(site, xid)` pairs, by site then ID, including those of series merged into it.
+    pub fn xids_of(&self, series: i64) -> Result<Vec<(String, String)>> {
+        let conn = self.lock();
+        let mut stmt =
+            conn.prepare_cached("SELECT site, xid FROM xids WHERE series = ?1 ORDER BY site, xid")?;
+        let xids = stmt
+            .query_map([series], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(xids)
     }
 
     fn ids(&self, sql: &str, args: &[&str]) -> Result<Vec<i64>> {

@@ -185,8 +185,17 @@ fn add_record(
         return Ok(());
     }
 
-    let mut names: Vec<&str> = strings(record.get("authors")).collect();
-    names.extend(strings(record.get("artists")));
+    let authors: Vec<String> = strings(record.get("authors"))
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let artists: Vec<String> = strings(record.get("artists"))
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let names = [authors.as_slice(), artists.as_slice()].concat();
+    // Empty ones are stored as NULL.
+    let text = |field: &str| Some(str_field(record, field).to_owned());
     let cover = |size: &str| {
         record
             .get("cover")
@@ -198,6 +207,9 @@ fn add_record(
     builder.add_series(&MetadataSeries {
         id,
         title: str_field(record, "title").to_owned(),
+        native_title: text("native_title"),
+        romanized_title: text("romanized_title"),
+        english_title: english_title(record).map(str::to_owned),
         kind: str_field(record, "type").to_owned(),
         status: str_field(record, "status").to_owned(),
         year: record.get("year").and_then(Value::as_i64),
@@ -205,12 +217,39 @@ fn add_record(
         description: str_field(record, "description").to_owned(),
         genres: strings(record.get("genres")).map(str::to_owned).collect(),
         people: person_keys(&names.join(", ")).into_iter().collect(),
+        authors,
+        artists,
         cover_x150: cover("x150"),
         cover_x250: cover("x250"),
         cover_x350: cover("x350"),
     })?;
     summary.series += 1;
     Ok(())
+}
+
+/// The first `"en"` entry of `titles` with the `official` trait, else the first primary one.
+fn english_title(record: &Map<String, Value>) -> Option<&str> {
+    let english: Vec<&Value> = record
+        .get("titles")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|t| t.get("language").and_then(Value::as_str) == Some("en"))
+        .filter(|t| {
+            t.get("title")
+                .and_then(Value::as_str)
+                .is_some_and(|t| !t.is_empty())
+        })
+        .collect();
+    let official = |t: &&Value| strings(t.get("traits")).any(|trait_| trait_ == "official");
+    let primary = |t: &&Value| t.get("is_primary").and_then(Value::as_bool) == Some(true);
+    english
+        .iter()
+        .copied()
+        .find(official)
+        .or_else(|| english.iter().copied().find(primary))
+        .and_then(|t| t.get("title"))
+        .and_then(Value::as_str)
 }
 
 fn titles(record: &Map<String, Value>) -> Vec<&str> {
