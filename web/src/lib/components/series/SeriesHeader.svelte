@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
-	import type { SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
+	import type { FavoriteView, SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
+	import FolderDialog from './FolderDialog.svelte';
 
 	let {
 		api,
@@ -21,15 +22,37 @@
 	let checking = $state(false);
 	let checkNote = $state<string | null>(null);
 
+	/** This series in the library, loaded when the folder button is first pressed. */
+	let favorite = $state<FavoriteView | null>(null);
+	let folderOpen = $state(false);
+	let folderError = $state<string | null>(null);
+
+	/** This series' entry in the library. */
+	async function findFavorite(): Promise<FavoriteView> {
+		const found = (await api.listFavorites()).find(
+			(f) => f.module_id === series.module_id && f.link === series.link
+		);
+		if (!found) throw new Error('not in the library');
+		return found;
+	}
+
+	/** Opens the dialog that changes where new chapters of this series download. */
+	async function openFolderDialog() {
+		folderError = null;
+		try {
+			favorite = await findFavorite();
+			folderOpen = true;
+		} catch {
+			folderError = 'Could not load the download folder.';
+		}
+	}
+
 	/** Starts a check of this series for chapters missing from its folder. */
 	async function checkMissing() {
 		checking = true;
 		checkNote = null;
 		try {
-			const favorite = (await api.listFavorites()).find(
-				(f) => f.module_id === series.module_id && f.link === series.link
-			);
-			if (!favorite) throw new Error('not in the library');
+			const favorite = await findFavorite();
 			await api.checkMissingChapters(favorite.id);
 			checkNote = 'Checking for missing chapters; the result arrives in the inbox.';
 		} catch (e) {
@@ -170,6 +193,9 @@
 				<button class="btn" type="button" disabled={checking} onclick={checkMissing}>
 					Check missing chapters
 				</button>
+				<button class="btn" type="button" title={favorite?.save_to} onclick={openFolderDialog}>
+					Download folder…
+				</button>
 			{:else}
 				<button class="btn" type="button" disabled={adding} onclick={addToLibrary}>
 					{adding ? 'Adding…' : '＋ Add to library'}
@@ -181,7 +207,18 @@
 			{#if addError}
 				<span class="bad small" role="alert">{addError}</span>
 			{/if}
+			{#if folderError}
+				<span class="bad small" role="alert">{folderError}</span>
+			{/if}
 		</div>
+		{#if folderOpen && favorite}
+			<FolderDialog
+				{api}
+				{favorite}
+				onsaved={(updated) => (favorite = updated)}
+				onclose={() => (folderOpen = false)}
+			/>
+		{/if}
 	</div>
 </header>
 
