@@ -279,11 +279,21 @@ async fn website(
 }
 
 /// Stores the cover `GetInfo` gave the series page for `module`'s title at `link`, saving a
-/// lookup later, unless the title's cover comes from MangaBaka. A failure only logs.
-pub(crate) async fn store_learned(state: &AppState, module: &str, link: &str, cover: &str) {
-    if let Err(e) = try_store_learned(state, module, link, cover).await {
-        tracing::warn!(target: "fmd_server", "storing a cover link: {e}");
-    }
+/// lookup later, unless the title's cover comes from MangaBaka. Returns the website's cover as
+/// an absolute URL when it is the title's cover; `None` when MangaBaka's is, the website gives
+/// none, or storing fails (which only logs).
+pub(crate) async fn store_learned(
+    state: &AppState,
+    module: &str,
+    link: &str,
+    cover: &str,
+) -> Option<String> {
+    try_store_learned(state, module, link, cover)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(target: "fmd_server", "storing a cover link: {e}");
+            None
+        })
 }
 
 async fn try_store_learned(
@@ -291,28 +301,33 @@ async fn try_store_learned(
     module: &str,
     link: &str,
     cover: &str,
-) -> Result<(), ApiError> {
-    let (Some(lists), Some(info)) = (state.lists.clone(), state.modules.module(module)) else {
-        return Ok(());
+) -> Result<Option<String>, ApiError> {
+    let Some(info) = state.modules.module(module) else {
+        return Ok(None);
+    };
+    let url = absolute(&info.root_url, cover);
+    let Some(lists) = state.lists.clone() else {
+        return Ok(url);
     };
     let now = now_secs();
     if mangabaka(state, &lists, module, link, now).await?.is_some() {
-        return Ok(());
+        return Ok(None);
     }
-    let found = website_link(absolute(&info.root_url, cover), now);
+    let found = website_link(url, now);
     let (module, link) = (module.to_owned(), link.to_owned());
-    off_thread(move || -> Result<(), fmd_store::StoreError> {
+    let website = off_thread(move || -> Result<_, fmd_store::StoreError> {
         let covers = lists.cover_links();
         if covers
             .get(&module, &link)?
             .is_some_and(|c| c.source == CoverSource::MangaBaka)
         {
-            return Ok(());
+            return Ok(None);
         }
-        covers.put(&module, &link, &found)
+        covers.put(&module, &link, &found)?;
+        Ok(found.url)
     })
     .await??;
-    Ok(())
+    Ok(website)
 }
 
 /// A cover link from the website.

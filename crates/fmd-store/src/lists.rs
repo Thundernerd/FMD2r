@@ -16,6 +16,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/lists_v2.sql"),
     include_str!("migrations/lists_v3.sql"),
     include_str!("migrations/lists_v4.sql"),
+    include_str!("migrations/lists_v5.sql"),
 ];
 
 /// Run inside the transaction that changed `module_id`'s list.

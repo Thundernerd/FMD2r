@@ -69,6 +69,44 @@ test('library covers load as thumbnails, and a missing one shows the title', asy
 	for (const url of requested) expect(url.searchParams.get('w')).toBe('300');
 });
 
+test('a favorite’s missing cover shows once its series page has loaded one', async ({ page }) => {
+	const requested: URL[] = [];
+	await page.route(
+		(url) => url.pathname.startsWith('/api/covers'),
+		(route) => {
+			const url = new URL(route.request().url());
+			requested.push(url);
+			// The series cover was stored as "no cover" while the website was blocking the server.
+			return url.searchParams.get('link') === '/title/sd/sakamoto-days'
+				? route.fulfill({ status: 404 })
+				: route.fulfill({ contentType: 'image/png', body: PIXEL });
+		}
+	);
+	await page.goto('/');
+	const sakamoto = page
+		.getByRole('list', { name: 'Favorites' })
+		.getByRole('link')
+		.filter({ hasText: 'Sakamoto Days' });
+	await sakamoto.scrollIntoViewIfNeeded();
+	await expect(sakamoto.locator('.blank')).toHaveText('Sakamoto Days');
+	await expect(sakamoto.locator('img')).toHaveCount(0);
+
+	await sakamoto.click();
+	await expect(page.getByRole('heading', { name: 'Sakamoto Days' })).toBeVisible();
+	// Back in the app, without a reload (which would reset the mock backend).
+	await page.goBack();
+
+	await sakamoto.scrollIntoViewIfNeeded();
+	await expect(sakamoto.locator('img.loaded')).toBeVisible();
+	expect(
+		requested.some(
+			(url) =>
+				url.pathname === '/api/covers' &&
+				url.searchParams.get('url') === 'https://mangadex.test/sakamoto-days.jpg'
+		)
+	).toBe(true);
+});
+
 test('Check now shows the check’s progress and the new chapters it found', async ({ page }) => {
 	await page.goto('/');
 	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
