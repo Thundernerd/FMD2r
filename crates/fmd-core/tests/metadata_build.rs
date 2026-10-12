@@ -6,9 +6,16 @@
 
 mod common;
 
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+
 use common::mangabaka::{FixtureSource, fixture_records};
-use fmd_core::metadata::{MangaBakaDb, MetadataError};
-use fmd_http::TerminateToken;
+use fmd_core::metadata::{MangaBakaDb, MangaDexLinks, Matcher, MetadataError, MetadataJobs};
+use fmd_core::settings::SettingsService;
+use fmd_http::{
+    BoxFuture, HttpClient, TerminateToken, Transport, TransportError, WireRequest, WireResponse,
+};
+use fmd_store::{AppDb, ListsDb};
 
 #[test]
 fn active_series_are_kept_with_their_metadata() {
@@ -159,4 +166,126 @@ fn a_cancelled_build_stops_and_keeps_the_old_database() {
         "{result:?}"
     );
     assert_eq!(db.info().unwrap(), before);
+}
+
+#[test]
+fn display_titles_and_credits_are_kept_as_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MangaBakaDb::open(dir.path(), FixtureSource::new(&fixture_records()));
+    db.refresh(&TerminateToken::new(), &mut |_| {}).unwrap();
+    let meta = db.current().unwrap();
+
+    let series = meta.series(189).unwrap().unwrap();
+    assert_eq!(series.native_title.as_deref(), Some("재벌집 막내아들"));
+    assert_eq!(
+        series.romanized_title.as_deref(),
+        Some("Jaebeoljib Magnaeadeul")
+    );
+    // Its official English entry, not the first one ("Chaebeol Jip Mangnaeadeul").
+    assert_eq!(series.english_title.as_deref(), Some("Reborn Rich"));
+    assert_eq!(series.authors, ["JP", "San-Gyeong"]);
+    assert_eq!(series.artists, ["Byeong-Gwan Kim"]);
+}
+
+#[test]
+fn the_english_title_falls_back_to_the_primary_one_and_else_is_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut records = fixture_records();
+    // Reborn Rich without any English entry.
+    let reborn = records.iter_mut().find(|r| r["id"] == 189).unwrap();
+    reborn["titles"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|t| t["language"] != "en");
+    let db = MangaBakaDb::open(dir.path(), FixtureSource::new(&records));
+    db.refresh(&TerminateToken::new(), &mut |_| {}).unwrap();
+    let meta = db.current().unwrap();
+
+    assert_eq!(meta.series(189).unwrap().unwrap().english_title, None);
+    // Shaberi Sugita Onnanoko has no official English entry, only a primary one.
+    assert_eq!(
+        meta.series(74312)
+            .unwrap()
+            .unwrap()
+            .english_title
+            .as_deref(),
+        Some("A Girl Who Says Too Much")
+    );
+    // From Today, I'm a Player has no romanized title.
+    assert_eq!(meta.series(83451).unwrap().unwrap().romanized_title, None);
+}
+
+#[test]
+fn a_series_cross_site_ids_can_be_looked_up() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MangaBakaDb::open(dir.path(), FixtureSource::new(&fixture_records()));
+    db.refresh(&TerminateToken::new(), &mut |_| {}).unwrap();
+    let meta = db.current().unwrap();
+
+    let xids = meta.xids_of(189).unwrap();
+    assert!(
+        xids.contains(&("anilist".to_owned(), "158766".to_owned())),
+        "{xids:?}"
+    );
+    assert!(
+        xids.contains(&("manga_updates".to_owned(), "4v8x87y".to_owned())),
+        "{xids:?}"
+    );
+    // A null ID on a site is no ID.
+    let xids = meta.xids_of(83451).unwrap();
+    assert!(!xids.iter().any(|(site, _)| site == "anilist"), "{xids:?}");
+}
+
+/// Never asked: no list is matched here.
+struct NoNetwork;
+
+impl Transport for NoNetwork {
+    fn send(&self, _: WireRequest) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
+        Box::pin(async { Err(TransportError("no network in tests".into())) })
+    }
+}
+
+#[tokio::test]
+async fn a_v1_database_is_rebuilt_at_startup() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("metadata.db");
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(include_str!(
+        "../../fmd-store/src/migrations/metadata_v1.sql"
+    ))
+    .unwrap();
+    conn.pragma_update(None, "user_version", 1).unwrap();
+    drop(conn);
+
+    let source = FixtureSource::new(&fixture_records());
+    let db = Arc::new(MangaBakaDb::open(dir.path(), source.clone()));
+    // Matching acts as if there is none until the rebuild is done.
+    assert!(db.current().is_none());
+    let lists = ListsDb::open(dir.path().join("lists.db")).unwrap();
+    let settings = SettingsService::load(AppDb::open(dir.path().join("app.db")).unwrap()).unwrap();
+    let http = HttpClient::with_transport(Arc::new(NoNetwork)).unwrap();
+    let jobs = MetadataJobs::new(
+        db.clone(),
+        Matcher::new(lists.clone(), MangaDexLinks::new(http)),
+        lists,
+        |_: &str| None,
+        Arc::new(settings),
+        |_| {},
+    );
+    let schedule = tokio::spawn(jobs.clone().schedule());
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while db.current().is_none() || jobs.is_running() {
+        assert!(std::time::Instant::now() < deadline, "no rebuild started");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    schedule.abort();
+
+    assert_eq!(source.opened.load(Ordering::SeqCst), 1);
+    assert!(
+        fmd_store::MetadataDb::open(&path).is_ok(),
+        "the new file is v2"
+    );
+    let series = db.current().unwrap().series(189).unwrap().unwrap();
+    assert_eq!(series.english_title.as_deref(), Some("Reborn Rich"));
 }

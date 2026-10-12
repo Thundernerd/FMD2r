@@ -271,8 +271,8 @@ impl MetadataJobs {
         registry.changed(Self::ID);
     }
 
-    /// Refreshes a downloaded database every `refresh_days` (0 = never; a day after a failure)
-    /// and runs [`MetadataJobs::catch_up`] at startup and hourly. Runs until dropped.
+    /// Refreshes a downloaded database every `refresh_days` (0 = never; a day after a failure),
+    /// rebuilds one with an older schema at startup, and runs [`MetadataJobs::catch_up`] at startup and hourly. Runs until dropped.
     pub async fn schedule(self) {
         let mut tick = tokio::time::interval(SCHEDULE_TICK);
         let mut settings = self.inner.settings.subscribe();
@@ -328,14 +328,18 @@ impl Inner {
         }
     }
 
+    /// A database with an older schema is due at once, whatever `refresh_days` says.
     fn next_refresh(&self) -> Option<i64> {
+        let retry = lock(&self.failed_at).map(|at| at.saturating_add(DAY_MS));
+        if self.db.is_outdated() {
+            return Some(retry.unwrap_or_else(now_ms));
+        }
         let days = self.settings.get().metadata.mangabaka.refresh_days;
         if days == 0 {
             return None;
         }
         let built_at = self.db.info()?.built_at;
         let due = built_at.saturating_add(i64::from(days) * DAY_MS);
-        let retry = lock(&self.failed_at).map(|at| at.saturating_add(DAY_MS));
         Some(due.max(retry.unwrap_or(due)))
     }
 

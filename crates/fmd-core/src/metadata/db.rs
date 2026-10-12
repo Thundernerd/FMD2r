@@ -1,7 +1,7 @@
 //! The local copy of MangaBaka's database (`metadata.db`).
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use fmd_http::TerminateToken;
@@ -49,6 +49,11 @@ impl Metadata {
         self.db.by_xid(site, xid)
     }
 
+    /// The series' `(site, xid)` pairs; `site` is a MangaBaka `source` key.
+    pub fn xids_of(&self, series: i64) -> Result<Vec<(String, String)>, StoreError> {
+        self.db.xids_of(series)
+    }
+
     /// Only for sites with stable IDs (WebToons).
     pub fn find_by_link(&self, url: &str) -> Result<Vec<i64>, StoreError> {
         match link_key(url) {
@@ -76,18 +81,31 @@ pub struct MangaBakaDb {
     dir: PathBuf,
     source: Arc<dyn DumpSource>,
     current: RwLock<Option<Arc<Metadata>>>,
+    /// The file on disk has an older schema and waits to be rebuilt.
+    outdated: AtomicBool,
     /// Held while a build or removal changes the file.
     changing: Mutex<()>,
 }
 
 impl MangaBakaDb {
-    /// A file that cannot be read counts as none.
+    /// A file that cannot be read counts as none; one with an older schema too, until
+    /// [`MangaBakaDb::is_outdated`] has it rebuilt.
     pub fn open(dir: impl AsRef<Path>, source: Arc<dyn DumpSource>) -> Self {
         let dir = dir.as_ref().to_owned();
         let path = dir.join(METADATA_DB);
+        let mut outdated = false;
         let current = if path.exists() {
             match MetadataDb::open(&path) {
                 Ok(db) => Some(Arc::new(Metadata { db })),
+                Err(StoreError::SchemaMismatch {
+                    found, supported, ..
+                }) if found < supported => {
+                    tracing::info!(target: "fmd_core",
+                        "{} has schema version {found}; rebuilding it as version {supported}",
+                        path.display());
+                    outdated = true;
+                    None
+                }
                 Err(e) => {
                     tracing::warn!(target: "fmd_core", "{}: {e}", path.display());
                     None
@@ -100,8 +118,14 @@ impl MangaBakaDb {
             dir,
             source,
             current: RwLock::new(current),
+            outdated: AtomicBool::new(outdated),
             changing: Mutex::new(()),
         }
+    }
+
+    /// The file on disk has an older schema: it is not read, and is due for a rebuild.
+    pub fn is_outdated(&self) -> bool {
+        self.outdated.load(Ordering::Relaxed)
     }
 
     fn path(&self) -> PathBuf {
@@ -147,7 +171,7 @@ impl MangaBakaDb {
         let total_bytes = download.length;
         let summary = read_dump(jsonl, &mut builder, terminate, |series| {
             progress(&BuildProgress {
-                bytes: bytes.load(std::sync::atomic::Ordering::Relaxed),
+                bytes: bytes.load(Ordering::Relaxed),
                 total_bytes,
                 series,
             });
@@ -162,6 +186,7 @@ impl MangaBakaDb {
         let db = MetadataDb::open(&path)?;
         *self.current.write().unwrap_or_else(PoisonError::into_inner) =
             Some(Arc::new(Metadata { db }));
+        self.outdated.store(false, Ordering::Relaxed);
         Ok(summary)
     }
 
@@ -169,6 +194,7 @@ impl MangaBakaDb {
     pub fn remove(&self) -> Result<(), MetadataError> {
         let _changing = self.changing.lock().unwrap_or_else(PoisonError::into_inner);
         *self.current.write().unwrap_or_else(PoisonError::into_inner) = None;
+        self.outdated.store(false, Ordering::Relaxed);
         match std::fs::remove_file(self.path()) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
