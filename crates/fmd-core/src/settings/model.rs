@@ -394,6 +394,8 @@ pub struct OutputSettings {
     /// (mangadownloader/forms/frmMain.lfm:4245-4246).
     #[schema(minimum = 5, maximum = 100)]
     pub pdf_quality: u32,
+    /// Metadata files written into CBZ archives (not in FMD2). Other formats get none.
+    pub comic_metadata: ComicMetadataFiles,
 }
 
 impl Default for OutputSettings {
@@ -401,7 +403,31 @@ impl Default for OutputSettings {
         Self {
             format: OutputFormat::Folder,
             pdf_quality: 100,
+            comic_metadata: ComicMetadataFiles::None,
         }
+    }
+}
+
+/// Which metadata files comic readers look for go into a CBZ.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ComicMetadataFiles {
+    #[default]
+    None,
+    /// `ComicInfo.xml` (Anansi Project schema v2.0).
+    ComicInfo,
+    /// `MetronInfo.xml` (Metron Project schema v1.0).
+    MetronInfo,
+    Both,
+}
+
+impl ComicMetadataFiles {
+    pub fn comic_info(self) -> bool {
+        matches!(self, Self::ComicInfo | Self::Both)
+    }
+
+    pub fn metron_info(self) -> bool {
+        matches!(self, Self::MetronInfo | Self::Both)
     }
 }
 

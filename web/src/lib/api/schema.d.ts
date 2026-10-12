@@ -1113,6 +1113,11 @@ export interface components {
 			/** @description These favorites; every enabled favorite when missing. */
 			ids?: number[] | null;
 		};
+		/**
+		 * @description Which metadata files comic readers look for go into a CBZ.
+		 * @enum {string}
+		 */
+		ComicMetadataFiles: 'none' | 'comicinfo' | 'metroninfo' | 'both';
 		/** @description [`ConnectionSettings`] with the proxy password left out. */
 		ConnectionSettingsView: {
 			/**
@@ -1963,6 +1968,8 @@ export interface components {
 		 */
 		OutputFormat: 'folder' | 'zip' | 'cbz' | 'pdf' | 'epub';
 		OutputSettings: {
+			/** @default none */
+			comic_metadata: components['schemas']['ComicMetadataFiles'];
 			/** @default folder */
 			format: components['schemas']['OutputFormat'];
 			/**
@@ -2063,6 +2070,7 @@ export interface components {
 			images: components['schemas']['ImageSettings'];
 			/**
 			 * @default {
+			 *       "comic_metadata": "none",
 			 *       "format": "folder",
 			 *       "pdf_quality": 100
 			 *     }
@@ -2422,6 +2430,7 @@ export interface components {
 			module_updater: components['schemas']['ModuleUpdaterSettingsView'];
 			/**
 			 * @default {
+			 *       "comic_metadata": "none",
 			 *       "format": "folder",
 			 *       "pdf_quality": 100
 			 *     }

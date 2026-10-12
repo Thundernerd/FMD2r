@@ -66,7 +66,7 @@ export const defaultSettings = (): Settings => ({
 		digit_chapter_length: 3,
 		illegal_chars: 'posix'
 	},
-	output: { format: 'folder', pdf_quality: 100 },
+	output: { format: 'folder', pdf_quality: 100, comic_metadata: 'none' },
 	images: {
 		png_to_jpeg: false,
 		webp_save_as: 'png',

@@ -1,6 +1,7 @@
 //! Output: folder / zip / cbz (zip crate), pdf (lopdf), epub (custom on zip); image conversion via
 //! `image`, optionally ImageMagick; FMD2-compatible file naming (`CustomRename`) and natural sort.
 
+mod comic_metadata;
 mod convert;
 mod epub;
 mod error;
@@ -11,6 +12,7 @@ mod pack;
 mod pdf;
 mod whole;
 
+pub use comic_metadata::{AlternativeName, ComicMetadata, comic_info_xml, metron_info_xml};
 pub use convert::{ConvertTarget, PngCompression, convert, convert_bytes};
 pub use error::PackError;
 pub use magick::{MagickOptions, magick_available, magick_convert};
@@ -19,5 +21,5 @@ pub use naming::{
     page_file_name,
 };
 pub use natural_sort::natural_cmp;
-pub use pack::{PackFormat, PackOptions, pack};
+pub use pack::{ArchiveEntry, PackFormat, PackOptions, pack};
 pub use whole::{part_path, write_whole};

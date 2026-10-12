@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use fmd_core::accounts::AccountService;
-use fmd_core::download::{DownloadManager, EngineConfig, ModuleLookup};
+use fmd_core::download::{DownloadManager, EngineConfig, ModuleLookup, SeriesLookup};
 use fmd_core::favorites::{CheckerConfig, FavoritesChecker, TaskQueue};
 use fmd_core::lists::{DbImporter, ListJobs, ListUpdater};
 use fmd_core::metadata::{HttpDumpSource, MangaBakaDb, MangaDexLinks, Matcher, MetadataJobs};
@@ -189,6 +189,11 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                 modules: modules.clone(),
                 settings: state.settings.clone(),
                 http: runtime.http.clone(),
+                series: state.metadata.clone().map(|jobs| {
+                    let lookup: Arc<SeriesLookup> =
+                        Arc::new(move |module: &str, link: &str| jobs.series_match(module, link));
+                    lookup
+                }),
             })
             .await;
             let queue = match engine {

@@ -12,11 +12,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fmd_core::download::{ChapterSpec, DownloadManager, EngineConfig, EngineEvent, NewDownload};
+use fmd_core::download::{
+    ChapterSpec, DownloadManager, EngineConfig, EngineEvent, NewDownload, SeriesMatch,
+};
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
-use fmd_store::{AppDb, TaskId, TaskStatus};
+use fmd_store::{AppDb, MetadataSeries, TaskId, TaskStatus};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
@@ -151,15 +153,18 @@ impl Fixture {
         self.dir.path().join("out")
     }
 
-    async fn manager(&self) -> DownloadManager {
-        let config = EngineConfig::new(
+    fn config(&self) -> EngineConfig {
+        EngineConfig::new(
             self.db.clone(),
             self.pool.clone(),
             self.registry.clone(),
             self.settings.clone(),
             self.http.clone(),
-        );
-        DownloadManager::open(config).await.unwrap()
+        )
+    }
+
+    async fn manager(&self) -> DownloadManager {
+        DownloadManager::open(self.config()).await.unwrap()
     }
 
     /// A download of `chapters` (link, title) of module `module`'s manga "Manga".
@@ -935,4 +940,158 @@ async fn the_save_folder_is_the_pick_else_the_websites_destination_else_the_defa
     default.save_to = " ".into();
     let id = manager.add_task(default).await.unwrap();
     assert_eq!(saved_to(id), "/data/manga/Manga");
+}
+
+/// MangaBaka's series 42, as the accepted match of `t`'s `/manga`.
+fn solo_leveling() -> SeriesMatch {
+    SeriesMatch {
+        series: MetadataSeries {
+            id: 42,
+            title: "Solo Leveling".into(),
+            native_title: Some("나 혼자만 레벨업".into()),
+            romanized_title: Some("Na Honjaman Rebeleob".into()),
+            english_title: Some("Solo Leveling".into()),
+            kind: "manhwa".into(),
+            year: Some(2018),
+            content_rating: "safe".into(),
+            description: "E-rank hunter Sung Jinwoo.".into(),
+            genres: vec!["Action".into(), "Fantasy".into()],
+            authors: vec!["Chugong".into()],
+            artists: vec!["DUBU (REDICE STUDIO)".into()],
+            ..MetadataSeries::default()
+        },
+        xids: vec![
+            ("anilist".into(), "105398".into()),
+            ("anime_planet".into(), "solo-leveling".into()),
+        ],
+    }
+}
+
+/// Downloads chapter "One" (2 pages) of `t`'s `/manga` with `settings`, MangaBaka matching
+/// it to `matched`; returns what the lookup was asked and the manga's folder.
+async fn download_matched(
+    settings: Value,
+    matched: Option<SeriesMatch>,
+) -> (Fixture, Vec<(String, String)>) {
+    let f = Fixture::new(&[("T.lua", T)], settings);
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let log = asked.clone();
+    let config = f
+        .config()
+        .with_series_lookup(Arc::new(move |module: &str, link: &str| {
+            log.lock()
+                .unwrap()
+                .push((module.to_owned(), link.to_owned()));
+            matched.clone()
+        }));
+    let manager = DownloadManager::open(config).await.unwrap();
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One")]))
+        .await
+        .unwrap();
+    let seen = statuses(&mut events, id, &[TaskStatus::Finished, TaskStatus::Failed]).await;
+    assert_eq!(seen.last(), Some(&TaskStatus::Finished));
+    let asked = asked.lock().unwrap().clone();
+    (f, asked)
+}
+
+fn read_entry(path: &Path, name: &str) -> String {
+    let mut zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
+    std::io::read_to_string(zip.by_name(name).unwrap()).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_matched_series_gets_a_comic_info_with_mangabakas_title() {
+    let settings = json!({"output": {"format": "cbz", "comic_metadata": "comicinfo"}});
+    let (f, asked) = download_matched(settings, Some(solo_leveling())).await;
+
+    assert_eq!(asked, [("t".to_owned(), "/manga".to_owned())]);
+    let archive = f.out().join("Manga/One.cbz");
+    assert_eq!(entries(&archive), ["001.png", "002.png", "ComicInfo.xml"]);
+    let xml = read_entry(&archive, "ComicInfo.xml");
+    assert!(xml.contains("<Series>Solo Leveling</Series>"), "{xml}");
+    assert!(xml.contains("<Title>One</Title>"), "{xml}");
+    assert!(xml.contains("<Web>https://t/manga</Web>"), "{xml}");
+    assert!(xml.contains("<Writer>Chugong</Writer>"), "{xml}");
+    assert!(xml.contains("<Manga>Yes</Manga>"), "{xml}");
+    assert!(
+        xml.contains(
+            "<Notes>Series metadata from MangaBaka (https://mangabaka.org), CC BY-NC-SA 4.0.</Notes>"
+        ),
+        "{xml}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn both_writes_comic_info_and_metron_info() {
+    let settings = json!({"output": {"format": "cbz", "comic_metadata": "both"}});
+    let (f, _) = download_matched(settings, Some(solo_leveling())).await;
+
+    let archive = f.out().join("Manga/One.cbz");
+    assert_eq!(
+        entries(&archive),
+        ["001.png", "002.png", "ComicInfo.xml", "MetronInfo.xml"]
+    );
+    let xml = read_entry(&archive, "MetronInfo.xml");
+    assert!(xml.contains("<Name>Solo Leveling</Name>"), "{xml}");
+    assert!(
+        xml.contains("<AlternativeName lang=\"ko\">나 혼자만 레벨업</AlternativeName>"),
+        "{xml}"
+    );
+    assert!(xml.contains("<ID source=\"AniList\">105398</ID>"), "{xml}");
+    assert!(
+        !xml.contains("solo-leveling"),
+        "anime_planet is no MetronInfo source: {xml}"
+    );
+    assert!(xml.contains("<URL>https://mangabaka.org/42</URL>"), "{xml}");
+    assert!(xml.contains("<AgeRating>Everyone</AgeRating>"), "{xml}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn none_leaves_the_archive_as_it_was() {
+    let settings = json!({"output": {"format": "cbz", "comic_metadata": "none"}});
+    let (f, asked) = download_matched(settings, Some(solo_leveling())).await;
+
+    assert_eq!(
+        entries(&f.out().join("Manga/One.cbz")),
+        ["001.png", "002.png"]
+    );
+    assert!(asked.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unmatched_series_gets_the_title_chapter_and_url_it_was_downloaded_with() {
+    let settings = json!({"output": {"format": "cbz", "comic_metadata": "both"}});
+    let (f, _) = download_matched(settings, None).await;
+
+    let archive = f.out().join("Manga/One.cbz");
+    assert_eq!(
+        read_entry(&archive, "ComicInfo.xml"),
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
+         <ComicInfo>\n\
+         \x20 <Title>One</Title>\n\
+         \x20 <Series>Manga</Series>\n\
+         \x20 <Web>https://t/manga</Web>\n\
+         </ComicInfo>\n"
+    );
+    let metron = read_entry(&archive, "MetronInfo.xml");
+    assert!(metron.contains("<Name>Manga</Name>"), "{metron}");
+    assert!(metron.contains("<Story>One</Story>"), "{metron}");
+    assert!(
+        metron.contains("<URL primary=\"true\">https://t/manga</URL>"),
+        "{metron}"
+    );
+    assert!(!metron.contains("MangaBaka"), "{metron}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_zip_gets_no_metadata_files() {
+    let settings = json!({"output": {"format": "zip", "comic_metadata": "both"}});
+    let (f, _) = download_matched(settings, Some(solo_leveling())).await;
+
+    assert_eq!(
+        entries(&f.out().join("Manga/One.zip")),
+        ["001.png", "002.png"]
+    );
 }

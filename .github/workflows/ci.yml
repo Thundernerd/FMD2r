@@ -29,6 +29,9 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # fmd-pack validates ComicInfo.xml and MetronInfo.xml against their XSDs with xmllint.
+      - name: Install xmllint
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-utils
       # Includes the smoke list's offline replay (crates/fmd2r/tests/smoke.rs). Only the native
       # XPath backend builds here; xpath-fpc.yml guards the fpc one.
       - name: Test
