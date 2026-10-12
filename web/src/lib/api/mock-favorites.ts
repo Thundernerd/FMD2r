@@ -4,6 +4,7 @@ import type {
 	FavoritesEvent,
 	InboxItem,
 	JobState,
+	LibraryTitle,
 	SeriesInfo
 } from './types';
 import { seriesCover } from './mock-lists';
@@ -30,6 +31,7 @@ const seedFavorites = (): FavoriteView[] => {
 		save_to: `/data/downloads/${title}`,
 		// FMD2's favorites have no cover, so the server points at the series cover.
 		cover_url: seriesCover(module_id, link),
+		display_title: title,
 		current_chapter: 40,
 		new_chapters: 0,
 		date_added: `2026-0${(id % 9) + 1}-01T00:00:00Z`,
@@ -76,6 +78,32 @@ const seedFavorites = (): FavoriteView[] => {
 	];
 };
 
+/** The titles MangaBaka's database has for the favorites the mock matched, by link. */
+const MANGABAKA_TITLES: Record<
+	string,
+	Partial<Record<Exclude<LibraryTitle, 'website'>, string>>
+> = {
+	'/title/abc123/frieren': {
+		english: 'Frieren: Beyond Journey’s End',
+		romanized: 'Sousou no Frieren',
+		native: '葬送のフリーレン',
+		mangabaka: 'Frieren: Beyond Journey’s End'
+	},
+	// No native title: the main title shows instead.
+	'/comic/orv': {
+		english: 'Omniscient Reader',
+		romanized: 'Jeonjijeok Dokja Sijeom',
+		mangabaka: 'Omniscient Reader'
+	}
+};
+
+/** The title the Library shows, as fmd-server picks it (`appearance.library_title`). */
+function displayTitle(favorite: FavoriteView, choice: LibraryTitle): string {
+	const titles = MANGABAKA_TITLES[favorite.link];
+	if (choice === 'website' || !titles) return favorite.title;
+	return titles[choice] ?? titles.mangabaka ?? favorite.title;
+}
+
 /** What the next check finds, by favorite id. */
 const seedFresh = (): Record<number, number> => ({ 8: 1 });
 
@@ -105,12 +133,23 @@ export interface MockFavorites {
 	tick(emit: (type: string, payload: unknown) => void): InboxItem | null;
 }
 
-/** `job` is the `favorites` entry of the jobs list, kept in step with the check. */
-export function createMockFavorites(job: JobState): MockFavorites {
+/**
+ * `job` is the `favorites` entry of the jobs list, kept in step with the check; `libraryTitle`
+ * reads the `appearance.library_title` setting.
+ */
+export function createMockFavorites(
+	job: JobState,
+	libraryTitle: () => LibraryTitle
+): MockFavorites {
 	const favorites = seedFavorites();
 	const fresh = seedFresh();
 	let nextId = 100;
 	let check: Check | null = null;
+
+	const view = (f: FavoriteView): FavoriteView => ({
+		...f,
+		display_title: displayTitle(f, libraryTitle())
+	});
 
 	const event = (kind: FavoritesEvent['kind'], c: Check): FavoritesEvent => ({
 		kind,
@@ -123,7 +162,7 @@ export function createMockFavorites(job: JobState): MockFavorites {
 	});
 
 	return {
-		list: () => favorites,
+		list: () => favorites.map(view),
 		has: (module, link) => favorites.some((f) => f.module_id === module && f.link === link),
 		add(series, website, saveTo) {
 			if (favorites.some((f) => f.module_id === series.module_id && f.link === series.link)) {
@@ -139,6 +178,7 @@ export function createMockFavorites(job: JobState): MockFavorites {
 				enabled: true,
 				save_to: saveTo,
 				cover_url: series.cover_url ?? seriesCover(series.module_id, series.link),
+				display_title: series.title,
 				current_chapter: series.chapters.length,
 				new_chapters: 0,
 				date_added: new Date().toISOString(),
@@ -146,7 +186,7 @@ export function createMockFavorites(job: JobState): MockFavorites {
 				last_updated: null
 			};
 			favorites.push(favorite);
-			return { status: 201, body: favorite };
+			return { status: 201, body: view(favorite) };
 		},
 		storeCover(module, link, cover) {
 			const favorite = favorites.find((f) => f.module_id === module && f.link === link);
@@ -158,7 +198,7 @@ export function createMockFavorites(job: JobState): MockFavorites {
 			favorite.enabled = patch.enabled ?? favorite.enabled;
 			favorite.title = patch.title ?? favorite.title;
 			favorite.save_to = patch.save_to ?? favorite.save_to;
-			return { status: 200, body: favorite };
+			return { status: 200, body: view(favorite) };
 		},
 		remove(id) {
 			const index = favorites.findIndex((f) => f.id === id);

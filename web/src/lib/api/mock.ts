@@ -456,7 +456,10 @@ export function createMockBackend({
 	const about = seedAbout();
 	const favoritesJob = jobs.find((j) => j.id === 'favorites');
 	if (!favoritesJob) throw new Error('the mock jobs lack the favorites check');
-	const favorites = createMockFavorites(favoritesJob);
+	const favorites = createMockFavorites(
+		favoritesJob,
+		() => settings.getSettings().appearance.library_title
+	);
 	const logs: LogLine[] = [];
 	let logSeq = 0;
 	const log = (level: LogLevel, target: string, module: string | null, message: string) => {
