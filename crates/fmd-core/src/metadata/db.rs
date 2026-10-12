@@ -2,16 +2,24 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError, RwLock};
+use std::sync::{Arc, LazyLock, Mutex, PoisonError, RwLock};
 
 use fmd_http::TerminateToken;
 use fmd_store::{MetadataBuilder, MetadataDb, MetadataSeries, StoreError};
+use regex::Regex;
 
 use super::build::{BuildProgress, BuildSummary, Counting, read_dump};
 use super::normalize::{link_key, title_keys};
 use super::{DumpSource, MetadataError};
 
 pub const DUMP_URL: &str = "https://api.mangabaka.org/v1/database/series.jsonl.zst";
+/// Series [`Metadata::search`] returns at most.
+pub const SEARCH_LIMIT: usize = 20;
+
+/// A series' page on MangaBaka, e.g. `https://mangabaka.org/189`.
+static MANGABAKA_URL: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"^(?i:(?:https?://)?(?:www\.)?mangabaka\.org)/(\d+)(?:[/?#].*)?$").ok()
+});
 /// In the data dir.
 pub const METADATA_DB: &str = "metadata.db";
 
@@ -42,6 +50,38 @@ impl Metadata {
         ids.sort_unstable();
         ids.dedup();
         Ok(ids)
+    }
+
+    /// Up to [`SEARCH_LIMIT`] series for picking one by hand. A MangaBaka URL finds its series;
+    /// an ID finds its series first, then titles starting with it. Otherwise titles starting
+    /// with the query, normalised as matching does, those with the shortest such title first.
+    pub fn search(&self, query: &str) -> Result<Vec<MetadataSeries>, StoreError> {
+        let query = query.trim();
+        let url_id = MANGABAKA_URL
+            .as_ref()
+            .and_then(|re| re.captures(query))
+            .and_then(|c| c.get(1)?.as_str().parse::<i64>().ok());
+        if let Some(id) = url_id {
+            return Ok(self.series(id)?.into_iter().collect());
+        }
+        let mut found: Vec<MetadataSeries> = Vec::new();
+        if let Ok(id) = query.parse::<i64>() {
+            found.extend(self.series(id)?);
+        }
+        let Some(key) = title_keys(query).into_iter().next() else {
+            return Ok(found);
+        };
+        let limit = u32::try_from(SEARCH_LIMIT).unwrap_or(u32::MAX);
+        for id in self.db.by_title_prefix(&key, limit)? {
+            if found.len() >= SEARCH_LIMIT {
+                break;
+            }
+            if found.iter().any(|s| s.id == id) {
+                continue;
+            }
+            found.extend(self.series(id)?);
+        }
+        Ok(found)
     }
 
     /// `site` is a MangaBaka `source` key such as `anilist` or `manga_updates`.

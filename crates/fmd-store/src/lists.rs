@@ -550,10 +550,12 @@ pub enum MatchConfidence {
     Ambiguous,
     /// Rejected: no series matches.
     None,
+    /// The user picked the series by hand; matching leaves it alone.
+    Manual,
 }
 
 impl MatchConfidence {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Link,
         Self::CrossId,
         Self::TitleAuthor,
@@ -561,6 +563,7 @@ impl MatchConfidence {
         Self::AuthorConflict,
         Self::Ambiguous,
         Self::None,
+        Self::Manual,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -572,6 +575,7 @@ impl MatchConfidence {
             Self::AuthorConflict => "author-conflict",
             Self::Ambiguous => "ambiguous",
             Self::None => "none",
+            Self::Manual => "manual",
         }
     }
 
@@ -582,12 +586,12 @@ impl MatchConfidence {
     pub fn is_accepted(self) -> bool {
         matches!(
             self,
-            Self::Link | Self::CrossId | Self::TitleAuthor | Self::TitleUnique
+            Self::Link | Self::CrossId | Self::TitleAuthor | Self::TitleUnique | Self::Manual
         )
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MatchInput {
     pub link: String,
     pub title: String,
@@ -734,6 +738,22 @@ impl MatchRepo<'_> {
                 stmt.execute([module_id, link])?;
             }
         }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Deletes the match of `link`, and the cover link taken from it.
+    pub fn remove(&self, module_id: &str, link: &str) -> Result<()> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM metadata_matches WHERE module_id = ?1 AND link = ?2",
+            [module_id, link],
+        )?;
+        tx.execute(
+            "DELETE FROM cover_links WHERE module_id = ?1 AND link = ?2 AND source = ?3",
+            [module_id, link, CoverSource::MangaBaka.as_str()],
+        )?;
         tx.commit()?;
         Ok(())
     }

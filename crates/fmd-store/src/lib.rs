@@ -19,6 +19,7 @@ pub use app::events::{Event, EventId, EventQuery, EventRepo, EventSeverity, NewE
 pub use app::favorites::{
     Favorite, FavoriteId, FavoriteInfo, FavoriteRepo, ImportedFavorite, NewFavorite,
 };
+pub use app::metadata_overrides::MetadataOverrideRepo;
 pub use app::module_files::{ModuleFile, ModuleFileRepo};
 pub use app::module_settings::{ModuleSettings, ModuleSettingsRepo};
 pub use app::sessions::SessionRepo;

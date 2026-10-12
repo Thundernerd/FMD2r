@@ -80,6 +80,10 @@ pub enum MetadataJobError {
     AlreadyRunning,
     #[error("the MangaBaka database is not being downloaded")]
     NotRunning,
+    #[error("the MangaBaka database is not downloaded")]
+    NoDatabase,
+    #[error("MangaBaka series {0} is not in the database")]
+    UnknownSeries(i64),
     #[error("starting the job thread: {0}")]
     Spawn(#[from] std::io::Error),
     #[error(transparent)]
@@ -180,8 +184,7 @@ impl MetadataJobs {
             let Some(db) = self.inner.db.current() else {
                 return Ok(None);
             };
-            let root = self.inner.modules.root_url(module_id);
-            for link in link_forms(link, root.as_deref()) {
+            for link in self.inner.link_forms(module_id, link) {
                 let Some(stored) = self.inner.lists.matches().get(module_id, &link)? else {
                     continue;
                 };
@@ -200,6 +203,65 @@ impl MetadataJobs {
             tracing::warn!(target: "fmd_core", "MangaBaka match of {module_id} {link}: {e}");
             None
         })
+    }
+
+    /// Matches `module_id`'s series `link` to MangaBaka series `series_id` by hand. The match
+    /// outlives matching, list updates, refreshes and removing the database. Blocking.
+    pub fn set_override(
+        &self,
+        module_id: &str,
+        link: &str,
+        series_id: i64,
+    ) -> Result<(), MetadataJobError> {
+        let _matching = lock(&self.inner.matching);
+        let meta = self
+            .inner
+            .db
+            .current()
+            .ok_or(MetadataJobError::NoDatabase)?;
+        // Under every form of the link, so the list's, the favorite's and a download's all see it.
+        for link in self.inner.link_forms(module_id, link) {
+            if !self
+                .inner
+                .matcher
+                .set_override(&meta, module_id, &link, series_id)?
+            {
+                return Err(MetadataJobError::UnknownSeries(series_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// Forgets the MangaBaka series picked by hand for `module_id`'s series `link`, and matches
+    /// the module's titles again. Blocking.
+    pub fn remove_override(&self, module_id: &str, link: &str) -> Result<(), MetadataJobError> {
+        let removed = {
+            let _matching = lock(&self.inner.matching);
+            let mut removed = false;
+            for link in self.inner.link_forms(module_id, link) {
+                removed |= self.inner.matcher.remove_override(module_id, &link)?;
+            }
+            removed
+        };
+        if removed {
+            self.list_changed(module_id, &TerminateToken::new());
+        }
+        Ok(())
+    }
+
+    /// The MangaBaka series picked by hand for `module_id`'s series `link`, whether or not the
+    /// database has it.
+    pub fn override_of(
+        &self,
+        module_id: &str,
+        link: &str,
+    ) -> Result<Option<i64>, MetadataJobError> {
+        for link in self.inner.link_forms(module_id, link) {
+            if let Some(id) = self.inner.matcher.override_of(module_id, &link)? {
+                return Ok(Some(id));
+            }
+        }
+        Ok(None)
     }
 
     pub fn is_running(&self) -> bool {
@@ -377,6 +439,11 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Inner {
+    /// [`link_forms`] against the module's root URL.
+    fn link_forms(&self, module_id: &str, link: &str) -> Vec<String> {
+        link_forms(link, self.modules.root_url(module_id).as_deref())
+    }
+
     fn status(&self) -> MutexGuard<'_, JobStatus> {
         lock(&self.status)
     }

@@ -21,6 +21,7 @@ function seriesInfo(overrides: Partial<SeriesInfo>): SeriesInfo {
 		status: 'ongoing',
 		in_library: false,
 		chapters: [],
+		mangabaka_match: 'unavailable',
 		...overrides
 	};
 }
@@ -166,5 +167,63 @@ describe('SeriesHeader', () => {
 		showAll.click();
 		flushSync();
 		expect(shownLinks()).toHaveLength(11);
+	});
+
+	/** The header's MangaBaka match control: its text and button names. */
+	function matchControl(series: SeriesInfo) {
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api: {} as Api, series, website: 'Example' }
+		});
+		flushSync();
+		const control = document.querySelector('[aria-label="MangaBaka match"]');
+		return {
+			text: control?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
+			buttons: [...(control?.querySelectorAll('button') ?? [])].map((b) => b.textContent?.trim())
+		};
+	}
+
+	const REBORN_RICH = {
+		id: 189,
+		links: [{ label: 'MangaBaka', url: 'https://mangabaka.org/189' }]
+	};
+
+	it('offers to match a series MangaBaka has no match for', () => {
+		const control = matchControl(seriesInfo({ mangabaka_match: 'unmatched' }));
+
+		expect(control.text).toContain('Not matched on MangaBaka');
+		expect(control.buttons).toEqual(['Match…']);
+	});
+
+	it('offers to change an automatic match', () => {
+		const control = matchControl(
+			seriesInfo({ mangabaka_match: 'automatic', mangabaka: REBORN_RICH })
+		);
+
+		expect(control.buttons).toEqual(['Change…']);
+		expect(control.text).not.toContain('by hand');
+	});
+
+	it('offers to change or undo a match made by hand', () => {
+		const control = matchControl(seriesInfo({ mangabaka_match: 'manual', mangabaka: REBORN_RICH }));
+
+		expect(control.text).toContain('matched by hand');
+		expect(control.buttons).toEqual(['Change…', 'Undo']);
+	});
+
+	it('says when the series picked by hand left the database', () => {
+		const control = matchControl(seriesInfo({ mangabaka_match: 'missing' }));
+
+		expect(control.text).toContain(
+			'The MangaBaka series picked by hand is no longer in the database'
+		);
+		expect(control.buttons).toEqual(['Match…']);
+	});
+
+	it('hides the match control without a MangaBaka database', () => {
+		const control = matchControl(seriesInfo({ mangabaka_match: 'unavailable' }));
+
+		expect(control.text).toBeNull();
+		expect(document.body.textContent).not.toContain('Match…');
 	});
 });

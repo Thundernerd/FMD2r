@@ -591,6 +591,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/metadata/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Find MangaBaka series to match a series to by hand: up to 20, by title (normalised as
+		 *     matching does), ID or MangaBaka URL.
+		 */
+		get: operations['searchMangabaka'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/modules': {
 		parameters: {
 			query?: never;
@@ -719,6 +739,27 @@ export interface paths {
 		put?: never;
 		post?: never;
 		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/series/match': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		/**
+		 * Match a series to a MangaBaka series by hand. The match outlives list updates, matching,
+		 *     database refreshes and removing the database.
+		 */
+		put: operations['setSeriesMatch'];
+		post?: never;
+		/** Undo a match by hand: the series is matched automatically again. */
+		delete: operations['removeSeriesMatch'];
 		options?: never;
 		head?: never;
 		patch?: never;
@@ -1718,6 +1759,25 @@ export interface components {
 		Login: {
 			password: string;
 		};
+		/**
+		 * @description How a series is matched to MangaBaka.
+		 * @enum {string}
+		 */
+		MangaBakaMatch: 'unavailable' | 'unmatched' | 'automatic' | 'manual' | 'missing';
+		/** @description A MangaBaka series found by `GET /api/metadata/search`. */
+		MangaBakaSearchResult: {
+			/** @description The cover thumbnail on MangaBaka's CDN, 150 px tall. */
+			cover?: string | null;
+			/** @description The official English title, else the primary one. */
+			english_title?: string | null;
+			/** @description `manga`, `manhwa`, `manhua`, `oel` or `other`, as `SeriesInfo.format`. */
+			format: string;
+			/** Format: int64 */
+			id: number;
+			title: string;
+			/** Format: int64 */
+			year?: number | null;
+		};
 		/** @description The MangaBaka series a series was matched to. */
 		MangaBakaSeries: {
 			/** Format: int64 */
@@ -1755,6 +1815,18 @@ export interface components {
 			progress?: null | components['schemas']['MetadataEvent'];
 			/** @description Whether a download or refresh is running. */
 			running: boolean;
+		};
+		/** @description The MangaBaka series a series is. */
+		MatchRequest: {
+			/** @description The series link relative to the module's `RootURL`, as `GET /api/series` reports it. */
+			link: string;
+			/** @description Module ID. */
+			module: string;
+			/**
+			 * Format: int64
+			 * @description The MangaBaka series ID.
+			 */
+			series_id: number;
 		};
 		/** @description One step of the database job, for the Settings page (`job.metadata.<kind>` events). */
 		MetadataEvent: {
@@ -2270,6 +2342,8 @@ export interface components {
 			/** @description The series link relative to the module's `RootURL`, as the module reports it. */
 			link: string;
 			mangabaka?: null | components['schemas']['MangaBakaSeries'];
+			/** @description How the series is matched to MangaBaka, for the header's match control. */
+			mangabaka_match: components['schemas']['MangaBakaMatch'];
 			module_id: string;
 			status: components['schemas']['SeriesStatus'];
 			/**
@@ -4135,6 +4209,37 @@ export interface operations {
 			};
 		};
 	};
+	searchMangabaka: {
+		parameters: {
+			query: {
+				/** @description The beginning of a title, a MangaBaka series ID, or a `mangabaka.org/<id>` URL. */
+				q: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['MangaBakaSearchResult'][];
+				};
+			};
+			/** @description No MangaBaka database is downloaded */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
 	listModules: {
 		parameters: {
 			query?: never;
@@ -4421,6 +4526,78 @@ export interface operations {
 				};
 			};
 			/** @description The website is limiting requests from this server */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	setSeriesMatch: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['MatchRequest'];
+			};
+		};
+		responses: {
+			/** @description Matched */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description The database has no such MangaBaka series */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description No MangaBaka database is downloaded */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	removeSeriesMatch: {
+		parameters: {
+			query: {
+				/** @description Module ID. */
+				module: string;
+				/** @description The series link relative to the module's `RootURL`. */
+				link: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Matched automatically again, if it can be */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description This server has no MangaBaka database job */
 			503: {
 				headers: {
 					[name: string]: unknown;

@@ -436,3 +436,115 @@ async fn an_unmatched_series_has_no_mangabaka_links() {
     assert_eq!(series["url"], "https://plain.test/reborn-rich");
     assert_eq!(series["mangabaka"], Value::Null);
 }
+
+async fn send_json(state: &AppState, req: axum::http::request::Builder, body: Value) -> Response {
+    send(
+        state,
+        req.header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap(),
+    )
+    .await
+}
+
+/// Adds Reborn Rich of [`PLAIN`] to the library and waits for it to be matched (to 189).
+async fn add_reborn_rich(state: &AppState) {
+    let res = send_json(
+        state,
+        Request::post("/api/favorites"),
+        json!({ "module_id": PLAIN, "link": "/reborn-rich" }),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let series = get(state, "/api/series?module=plain&link=%2Freborn-rich").await;
+        if series["mangabaka"]["id"] == 189 {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "never matched: {series}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+#[tokio::test]
+async fn a_series_matched_by_hand_shows_the_picked_series_until_undone() {
+    let (dir, state, lists) = state();
+    let jobs = built_metadata_jobs(&dir, &state, &lists);
+    let state = state.with_metadata(jobs);
+    add_reborn_rich(&state).await;
+    let series = get(&state, "/api/series?module=plain&link=%2Freborn-rich").await;
+    assert_eq!(series["mangabaka_match"], "automatic");
+
+    // Shadow Star☆, a 1998 manga.
+    let res = send_json(
+        &state,
+        Request::put("/api/series/match"),
+        json!({ "module": PLAIN, "link": "/reborn-rich", "series_id": 2092 }),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    let series = get(&state, "/api/series?module=plain&link=%2Freborn-rich").await;
+    assert_eq!(series["format"], "manga");
+    assert_eq!(series["year"], 1998);
+    assert_eq!(series["mangabaka"]["id"], 2092);
+    assert_eq!(series["mangabaka_match"], "manual");
+
+    let res = send(
+        &state,
+        Request::delete("/api/series/match?module=plain&link=%2Freborn-rich")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    let series = get(&state, "/api/series?module=plain&link=%2Freborn-rich").await;
+    assert_eq!(series["format"], "manhwa");
+    assert_eq!(series["year"], 2022);
+    assert_eq!(series["mangabaka"]["id"], 189);
+    assert_eq!(series["mangabaka_match"], "automatic");
+}
+
+#[tokio::test]
+async fn searching_mangabaka_needs_the_database() {
+    let (dir, state, lists) = state();
+    let uri = "/api/metadata/search?q=reborn%20rich";
+    let res = send(&state, Request::get(uri).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    // Not downloaded yet.
+    let jobs = metadata_jobs(&dir, &state, &lists);
+    let state = state.with_metadata(jobs);
+    let res = send(&state, Request::get(uri).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn searching_mangabaka_finds_series_by_title() {
+    let (dir, state, lists) = state();
+    let jobs = built_metadata_jobs(&dir, &state, &lists);
+    let state = state.with_metadata(jobs);
+
+    let body = get(&state, "/api/metadata/search?q=reborn%20rich").await;
+
+    let found = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"] == 189)
+        .unwrap();
+    assert_eq!(found["title"], "Reborn Rich");
+    assert_eq!(found["year"], 2022);
+    assert_eq!(found["format"], "manhwa");
+    assert!(
+        found["cover"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://cdn.mangabaka.dev/"),
+        "{found}"
+    );
+}

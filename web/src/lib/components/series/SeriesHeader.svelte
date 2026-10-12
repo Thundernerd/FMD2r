@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
 	import type { FavoriteView, SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
+	import { FORMAT } from '#lib/discover/filters.ts';
 	import FolderDialog from './FolderDialog.svelte';
+	import MangaBakaMatchDialog from './MangaBakaMatchDialog.svelte';
 
 	let {
 		api,
@@ -81,19 +83,47 @@
 		}
 	}
 
+	let matchOpen = $state(false);
+	let matchBusy = $state(false);
+	let matchError = $state<string | null>(null);
+
+	/** Loads the series again, so what MangaBaka says of it follows its new match. */
+	async function reload() {
+		matchError = null;
+		try {
+			series = await api.getSeries(series.module_id, series.link);
+		} catch {
+			matchError = 'Could not load the series again; reload the page.';
+		}
+	}
+
+	/** Undoes the match by hand; the series is matched automatically again. */
+	async function undoMatch() {
+		matchBusy = true;
+		matchError = null;
+		try {
+			await api.removeSeriesMatch(series.module_id, series.link);
+			await reload();
+		} catch {
+			matchError = 'Could not undo the match.';
+		} finally {
+			matchBusy = false;
+		}
+	}
+
+	const mangabakaUrl = $derived(
+		series.mangabaka
+			? (series.mangabaka.links.find((l) => l.label === 'MangaBaka')?.url ??
+					`https://mangabaka.org/${series.mangabaka.id}`)
+			: null
+	);
+
 	const STATUS: Record<SeriesStatus, string> = {
 		ongoing: 'Ongoing',
 		completed: 'Completed',
 		hiatus: 'Hiatus',
 		cancelled: 'Cancelled',
 		unknown: 'Status unknown'
-	};
-	const FORMAT: Record<string, string> = {
-		manga: 'Manga',
-		manhwa: 'Manhwa',
-		manhua: 'Manhua',
-		oel: 'OEL',
-		other: 'Other'
 	};
 
 	let coverFailed = $state(false);
@@ -167,6 +197,45 @@
 				</dd>
 			</div>
 		</dl>
+		{#if series.mangabaka_match !== 'unavailable'}
+			<div class="small match" role="group" aria-label="MangaBaka match">
+				{#if series.mangabaka_match === 'unmatched'}
+					<span class="muted">Not matched on MangaBaka</span>
+				{:else if series.mangabaka_match === 'missing'}
+					<span class="warn">The MangaBaka series picked by hand is no longer in the database</span>
+				{:else if mangabakaUrl}
+					<span
+						>Matched on <a href={mangabakaUrl} target="_blank" rel="noreferrer"
+							>MangaBaka #{series.mangabaka?.id}</a
+						></span
+					>
+				{/if}
+				<span class="muted" aria-hidden="true">·</span>
+				<button
+					class="btn sm ghost"
+					type="button"
+					disabled={matchBusy}
+					onclick={() => (matchOpen = true)}
+				>
+					{series.mangabaka_match === 'automatic' || series.mangabaka_match === 'manual'
+						? 'Change…'
+						: 'Match…'}
+				</button>
+				{#if series.mangabaka_match === 'manual'}
+					<span class="muted" aria-hidden="true">·</span>
+					<span class="muted">matched by hand</span>
+					<button class="btn sm ghost" type="button" disabled={matchBusy} onclick={undoMatch}>
+						Undo
+					</button>
+				{/if}
+				{#if matchError}
+					<span class="bad" role="alert">{matchError}</span>
+				{/if}
+			</div>
+		{/if}
+		{#if matchOpen}
+			<MangaBakaMatchDialog {api} {series} onmatched={reload} onclose={() => (matchOpen = false)} />
+		{/if}
 		{#if series.genres.length}
 			<ul class="genres" aria-label="Genres">
 				{#each series.genres as genre (genre)}
@@ -315,6 +384,15 @@
 		align-items: center;
 		gap: var(--sp-1) var(--sp-3);
 		overflow-wrap: anywhere;
+	}
+	.match {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--sp-1) var(--sp-2);
+	}
+	.match .warn {
+		color: var(--warn);
 	}
 	.genres {
 		display: flex;

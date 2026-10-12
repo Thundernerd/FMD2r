@@ -4,6 +4,7 @@ pub(crate) mod accounts;
 pub(crate) mod downloaded_chapters;
 pub(crate) mod events;
 pub(crate) mod favorites;
+pub(crate) mod metadata_overrides;
 pub(crate) mod module_files;
 pub(crate) mod module_settings;
 pub(crate) mod sessions;
@@ -20,6 +21,7 @@ use accounts::AccountRepo;
 use downloaded_chapters::DownloadedChaptersRepo;
 use events::EventRepo;
 use favorites::FavoriteRepo;
+use metadata_overrides::MetadataOverrideRepo;
 use module_files::ModuleFileRepo;
 use module_settings::{ModuleSettings, ModuleSettingsRepo};
 use sessions::SessionRepo;
@@ -32,6 +34,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/app_v3.sql"),
     include_str!("../migrations/app_v4.sql"),
     include_str!("../migrations/app_v5.sql"),
+    include_str!("../migrations/app_v6.sql"),
 ];
 
 const IN_MEMORY: &str = ":memory:";
@@ -130,5 +133,10 @@ impl AppDb {
     /// The library.
     pub fn favorites(&self) -> FavoriteRepo<'_> {
         FavoriteRepo::new(&self.db)
+    }
+
+    /// The MangaBaka series picked by hand, by module and link.
+    pub fn metadata_overrides(&self) -> MetadataOverrideRepo<'_> {
+        MetadataOverrideRepo::new(&self.db)
     }
 }

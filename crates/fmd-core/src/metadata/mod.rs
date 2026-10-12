@@ -11,12 +11,12 @@ mod source;
 use thiserror::Error;
 
 pub use build::{BuildProgress, BuildSummary};
-pub use db::{DUMP_URL, DbInfo, METADATA_DB, MangaBakaDb, Metadata};
+pub use db::{DUMP_URL, DbInfo, METADATA_DB, MangaBakaDb, Metadata, SEARCH_LIMIT};
 pub use jobs::{
     MetadataEvent, MetadataEventKind, MetadataJobError, MetadataJobs, MetadataPhase, ModuleRoots,
 };
-pub use matcher::absolute;
 pub use matcher::{ListModule, MangaDexLinks, MatchReport, MatchScope, Matcher};
+pub use matcher::{absolute, format_of};
 pub use source::{Download, DumpSource, HttpDumpSource, USER_AGENT};
 
 /// A failed build leaves the previous database as it was.
@@ -58,6 +58,8 @@ pub enum MetadataError {
     Lists(fmd_store::StoreError),
     #[error("favorites: {0}")]
     Favorites(fmd_store::StoreError),
+    #[error("MangaBaka series picked by hand: {0}")]
+    Overrides(fmd_store::StoreError),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 }
