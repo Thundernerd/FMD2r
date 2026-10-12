@@ -32,6 +32,7 @@ export type SeriesStatus = Schemas['SeriesStatus'];
 export type NewTask = Schemas['NewTask'];
 export type OutputFormat = Schemas['OutputFormat'];
 export type AppearanceSettings = Schemas['AppearanceSettings'];
+export type LibraryTitle = Schemas['LibraryTitle'];
 export type Accent = Schemas['Accent'];
 export type Theme = Schemas['Theme'];
 export type ModuleCapabilities = Schemas['ModuleCapabilities'];

@@ -182,3 +182,36 @@ test('an upload the server refuses shows why', async ({ page }) => {
 	await dialog.getByRole('button', { name: 'Check' }).click();
 	await expect(dialog.getByRole('alert')).toContainText('not a zip file');
 });
+
+test('the library shows the titles picked in Settings, and sorts and searches by them', async ({
+	page
+}) => {
+	await page.goto('/settings#section-appearance');
+	await page.getByRole('combobox', { name: 'Library titles' }).selectOption({ label: 'Native' });
+	const bar = page.getByRole('region', { name: 'Save changes' });
+	await bar.getByRole('button', { name: 'Save' }).click();
+	await expect(bar).toContainText('Saved');
+
+	// Back in the Library without reloading the app.
+	await page.getByRole('link', { name: 'Library' }).first().click();
+	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
+	await expect(cards).toHaveCount(8);
+	const frieren = cards.locator('.t', { hasText: '葬送のフリーレン' });
+	await expect(frieren).toHaveAttribute('title', 'Frieren');
+	// No native title: MangaBaka's main title shows instead.
+	await expect(cards.locator('.t', { hasText: 'Omniscient Reader' })).toHaveText(
+		'Omniscient Reader'
+	);
+	// Not matched: the website's title, without a tooltip.
+	await expect(cards.locator('.t', { hasText: 'Sakamoto Days' })).not.toHaveAttribute('title');
+
+	await page.getByRole('combobox', { name: 'Sort' }).selectOption({ label: 'Title' });
+	await expect(cards.last()).toContainText('葬送のフリーレン');
+
+	const search = page.getByRole('searchbox', { name: 'Search the library' });
+	await search.fill('フリーレン');
+	await expect(cards).toHaveCount(1);
+	await search.fill('frieren');
+	await expect(cards).toHaveCount(1);
+	await expect(cards.first()).toContainText('葬送のフリーレン');
+});

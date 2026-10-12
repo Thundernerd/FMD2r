@@ -23,7 +23,8 @@ const favorite = (id: number, patch: Partial<FavoriteView> = {}): FavoriteView =
 	date_added: '2026-01-01T00:00:00Z',
 	last_checked: null,
 	last_updated: null,
-	...patch
+	...patch,
+	display_title: patch.display_title ?? patch.title ?? `Series ${id}`
 });
 
 const library: FavoriteView[] = [
@@ -110,5 +111,33 @@ describe('search and sort', () => {
 
 	it('sorts by date added, newest first', () => {
 		expect(titles({ sort: 'added' })[0]).toBe('One Piece');
+	});
+
+	describe('with titles from MangaBaka', () => {
+		// The Library shows Frieren by its native title and One Piece by its English one.
+		const shownAs: FavoriteView[] = library.map((f) =>
+			f.title === 'Frieren'
+				? { ...f, display_title: '葬送のフリーレン' }
+				: f.title === 'One Piece'
+					? { ...f, display_title: 'Wan Pīsu' }
+					: f
+		);
+		const shown = (patch: Partial<LibraryFilters>): string[] =>
+			filterFavorites(shownAs, { ...emptyFilters(), ...patch }).map((f) => f.display_title);
+
+		it('sorts by the shown title', () => {
+			expect(shown({ sort: 'title' })).toEqual([
+				'Blue Lock',
+				'Kagurabachi',
+				'Wan Pīsu',
+				'葬送のフリーレン'
+			]);
+		});
+
+		it('search matches the shown title and the website’s', () => {
+			expect(shown({ q: 'pīsu' })).toEqual(['Wan Pīsu']);
+			expect(shown({ q: 'piece' })).toEqual(['Wan Pīsu']);
+			expect(shown({ q: '葬送' })).toEqual(['葬送のフリーレン']);
+		});
 	});
 });

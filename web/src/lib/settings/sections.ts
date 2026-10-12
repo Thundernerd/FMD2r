@@ -174,6 +174,18 @@ export const SETTINGS_SECTIONS: Section[] = [
 						note: 'High contrast keeps its own accent, so links and buttons stay at 7:1.'
 					}
 				}
+			),
+			select(
+				'appearance.library_title',
+				'Library titles',
+				[
+					{ value: 'website', label: 'As the website names it' },
+					{ value: 'english', label: 'English' },
+					{ value: 'romanized', label: 'Romaji' },
+					{ value: 'native', label: 'Native' },
+					{ value: 'mangabaka', label: 'MangaBaka’s main title' }
+				],
+				'Needs the MangaBaka database. Series without a match keep the website’s title.'
 			)
 		]
 	},

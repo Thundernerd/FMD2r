@@ -51,12 +51,17 @@ const matchesChip = (f: FavoriteView, chip: Chip): boolean => {
 	}
 };
 
+/** The shown title, or the website's: a series is still found by the name the website gives it. */
+const matchesQuery = (f: FavoriteView, q: string): boolean =>
+	f.display_title.toLowerCase().includes(q) || f.title.toLowerCase().includes(q);
+
 /** RFC 3339 times compare as strings; a missing one sorts last. */
 const newestFirst = (a: string | null | undefined, b: string | null | undefined): number =>
 	(b ?? '').localeCompare(a ?? '');
 
 const COMPARE: Record<Exclude<Sort, 'library'>, (a: FavoriteView, b: FavoriteView) => number> = {
-	title: (a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }),
+	title: (a, b) =>
+		a.display_title.localeCompare(b.display_title, undefined, { sensitivity: 'base' }),
 	new: (a, b) => b.new_chapters - a.new_chapters,
 	updated: (a, b) => newestFirst(a.last_updated, b.last_updated),
 	added: (a, b) => newestFirst(a.date_added, b.date_added)
@@ -69,7 +74,7 @@ export function filterFavorites(list: FavoriteView[], filters: LibraryFilters): 
 		(f) =>
 			matchesChip(f, filters.chip) &&
 			(!filters.website || f.module_id === filters.website) &&
-			(!q || f.title.toLowerCase().includes(q))
+			(!q || matchesQuery(f, q))
 	);
 	// `sort` is stable, so ties keep the library order.
 	return filters.sort === 'library' ? shown : shown.sort(COMPARE[filters.sort]);
