@@ -299,79 +299,100 @@ pub(crate) async fn bulk(
             detail: "the destination cannot be empty".into(),
         });
     }
-    if req.remove {
+    let ids: Vec<FavoriteId> = req.ids.iter().copied().map(FavoriteId).collect();
+    let favorites = if req.remove {
         if req.enabled.is_some() || req.group_id.is_some() || req.destination.is_some() {
             return Err(ApiError::BadRequest(
                 "remove cannot be combined with a change".into(),
             ));
         }
-        let ids: Vec<FavoriteId> = req.ids.into_iter().map(FavoriteId).collect();
-        state
-            .blocking(move |db| -> Result<(), ApiError> {
-                if !db.favorites().delete_all(&ids)? {
-                    return Err(ApiError::BadRequest(
-                        "a favorite is not in the library".into(),
-                    ));
-                }
-                Ok(())
-            })
-            .await?;
-        return Ok(Json(Vec::new()));
+        bulk_remove(&state, ids).await?;
+        Vec::new()
+    } else {
+        bulk_change(&state, ids, req).await?
+    };
+    let mut views = Vec::with_capacity(favorites.len());
+    for favorite in favorites {
+        views.push(view(&state, favorite).await?);
     }
-    let ids = req.ids;
+    Ok(Json(views))
+}
+
+async fn bulk_remove(state: &AppState, ids: Vec<FavoriteId>) -> Result<(), ApiError> {
+    state
+        .blocking(move |db| -> Result<(), ApiError> {
+            if !db.favorites().delete_all(&ids)? {
+                return Err(ApiError::BadRequest(
+                    "a favorite is not in the library".into(),
+                ));
+            }
+            Ok(())
+        })
+        .await
+}
+
+/// Each favorite is read again in the transaction that stores it, so a check finishing
+/// meanwhile keeps what it found.
+async fn bulk_change(
+    state: &AppState,
+    ids: Vec<FavoriteId>,
+    req: BulkChange,
+) -> Result<Vec<Favorite>, ApiError> {
     let group_id = req.group_id.map(|g| g.map(LibraryGroupId));
-    let mut favorites = state
+    let read = ids.clone();
+    let favorites = state
         .blocking(move |db| -> Result<Vec<Favorite>, ApiError> {
             if let Some(Some(id)) = group_id
                 && db.library_groups().get(id)?.is_none()
             {
                 return Err(ApiError::BadRequest(format!("no group with id {}", id.0)));
             }
-            ids.into_iter()
+            read.into_iter()
                 .map(|id| {
-                    db.favorites()
-                        .get(FavoriteId(id))?
-                        .ok_or_else(|| ApiError::BadRequest(format!("no favorite with id {id}")))
+                    db.favorites().get(id)?.ok_or_else(|| {
+                        ApiError::BadRequest(format!("no favorite with id {}", id.0))
+                    })
                 })
                 .collect()
         })
         .await?;
-    for favorite in &mut favorites {
-        if let Some(enabled) = req.enabled {
-            favorite.enabled = enabled;
-        }
-        if let Some(group_id) = group_id {
-            favorite.group_id = group_id;
-        }
-        if let Some(destination) = &req.destination {
+    let mut folders = std::collections::HashMap::new();
+    if let Some(destination) = &req.destination {
+        for favorite in favorites {
             // As the series page's folder dialog asks for it (FolderDialog.svelte).
-            favorite.save_to = manga_folder(
-                &state,
+            let folder = manga_folder(
+                state,
                 NewDownload {
-                    module_id: favorite.module_id.clone(),
-                    title: favorite.title.clone(),
+                    module_id: favorite.module_id,
+                    title: favorite.title,
                     save_to: destination.trim().to_owned(),
                     ..NewDownload::default()
                 },
             )
             .await?;
+            folders.insert(favorite.id, folder);
         }
     }
-    let favorites = state
+    let enabled = req.enabled;
+    state
         .blocking(move |db| -> Result<Vec<Favorite>, ApiError> {
-            if !db.favorites().update_all(&favorites)? {
-                return Err(ApiError::BadRequest(
-                    "a favorite was removed while changing it".into(),
-                ));
-            }
-            Ok(favorites)
+            db.favorites()
+                .update_each(&ids, |favorite| {
+                    if let Some(enabled) = enabled {
+                        favorite.enabled = enabled;
+                    }
+                    if let Some(group_id) = group_id {
+                        favorite.group_id = group_id;
+                    }
+                    if let Some(folder) = folders.remove(&favorite.id) {
+                        favorite.save_to = folder;
+                    }
+                })?
+                .ok_or_else(|| {
+                    ApiError::BadRequest("a favorite was removed while changing it".into())
+                })
         })
-        .await?;
-    let mut views = Vec::with_capacity(favorites.len());
-    for favorite in favorites {
-        views.push(view(&state, favorite).await?);
-    }
-    Ok(Json(views))
+        .await
 }
 
 /// Remove a favorite from the library; its downloaded chapters stay recorded.

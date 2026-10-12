@@ -294,18 +294,33 @@ impl<'a> FavoriteRepo<'a> {
         Ok(())
     }
 
-    /// Stores every favorite in one transaction, as [`Self::update`] does: all of them, or
-    /// none and `false` when one of them is not in the library.
-    pub fn update_all(&self, favorites: &[Favorite]) -> Result<bool> {
+    /// Reads, changes and stores each favorite in one transaction, as [`Self::update`] stores
+    /// it: all of them, or none and `None` when one of them is not in the library.
+    pub fn update_each(
+        &self,
+        ids: &[FavoriteId],
+        mut change: impl FnMut(&mut Favorite),
+    ) -> Result<Option<Vec<Favorite>>> {
         let mut conn = self.db.lock();
         let tx = conn.transaction()?;
-        for favorite in favorites {
-            if update_row(&tx, favorite)? == 0 {
-                return Ok(false);
-            }
+        let mut favorites = Vec::with_capacity(ids.len());
+        for id in ids {
+            let Some(mut favorite) = tx
+                .query_row(
+                    &format!("SELECT {COLUMNS} FROM favorites WHERE id = ?1"),
+                    [id.0],
+                    favorite_from_row,
+                )
+                .optional()?
+            else {
+                return Ok(None);
+            };
+            change(&mut favorite);
+            update_row(&tx, &favorite)?;
+            favorites.push(favorite);
         }
         tx.commit()?;
-        Ok(true)
+        Ok(Some(favorites))
     }
 
     /// Puts `ids` first; the rest keep their relative order.
@@ -375,7 +390,7 @@ impl<'a> FavoriteRepo<'a> {
         let mut conn = self.db.lock();
         let tx = conn.transaction()?;
         for id in ids {
-            if tx.execute("DELETE FROM favorites WHERE id = ?1", [id.0])? == 0 {
+            if delete_row(&tx, *id)? == 0 {
                 return Ok(false);
             }
         }
@@ -384,8 +399,7 @@ impl<'a> FavoriteRepo<'a> {
     }
 
     pub fn delete(&self, id: FavoriteId) -> Result<()> {
-        let conn = self.db.lock();
-        conn.execute("DELETE FROM favorites WHERE id = ?1", [id.0])?;
+        delete_row(&self.db.lock(), id)?;
         Ok(())
     }
 }
@@ -412,6 +426,11 @@ fn update_row(conn: &rusqlite::Connection, favorite: &Favorite) -> Result<usize>
             favorite.group_id.map(|g| g.0)
         ],
     )?)
+}
+
+/// The number of rows deleted: 0 when the favorite is not stored.
+fn delete_row(conn: &rusqlite::Connection, id: FavoriteId) -> Result<usize> {
+    Ok(conn.execute("DELETE FROM favorites WHERE id = ?1", [id.0])?)
 }
 
 const GROUP_COLUMNS: &str = "id, name, sort_order, collapsed";

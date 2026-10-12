@@ -329,6 +329,13 @@ test.describe('selecting several series', () => {
 		// The selection stays for the next action.
 		await expect(bar.getByRole('status')).toContainText('3 selected');
 
+		// A folded section's series are hidden: select all leaves them out of view and counts them.
+		await page.getByRole('button', { name: 'Weekly · 3' }).click();
+		await expect(bar.getByRole('status')).toContainText('3 selected (3 hidden)');
+		await page.getByRole('button', { name: 'Select all', exact: true }).click();
+		await expect(bar.getByRole('status')).toContainText('8 selected (3 hidden)');
+		await page.getByRole('button', { name: 'Weekly · 3' }).click();
+
 		await page.getByRole('button', { name: 'Done' }).click();
 		await expect(bar).toHaveCount(0);
 		await expect(page.getByRole('list', { name: 'Weekly' }).getByRole('link')).toHaveCount(3);

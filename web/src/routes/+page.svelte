@@ -16,7 +16,7 @@
 		inLibrary,
 		selectShown,
 		selectionLabel,
-		toggle as flip
+		toggle as toggleSelected
 	} from '#lib/library/selection.ts';
 	import { seriesHref } from '#lib/series/href.ts';
 	import CoverThumb from '#lib/components/CoverThumb.svelte';
@@ -78,7 +78,11 @@
 			return counts;
 		}, {})
 	);
-	const selectedLabel = $derived(selectionLabel(selected, shown));
+	/** The cards on screen: those in folded sections are hidden too. */
+	const visible = $derived(
+		shownSections ? shownSections.filter((s) => !s.collapsed).flatMap((s) => s.favorites) : shown
+	);
+	const selectedLabel = $derived(selectionLabel(selected, visible));
 	/** Paused series in the selection, which "Check now" skips. */
 	const selectedPaused = $derived(favorites.filter((f) => selected.has(f.id) && !f.enabled).length);
 	const job = $derived(events.jobs[JOB]);
@@ -130,18 +134,22 @@
 		load();
 	});
 
+	/** Why a check did not start. */
+	function checkFailure(e: unknown): string {
+		return e instanceof ApiError && e.status === 409
+			? 'A check is already running.'
+			: e instanceof ApiError && e.status === 503
+				? 'The new-chapter check is not running on this server.'
+				: 'Could not start the check.';
+	}
+
 	async function checkNow() {
 		starting = true;
 		checkError = null;
 		try {
 			await api.checkFavorites();
 		} catch (e) {
-			checkError =
-				e instanceof ApiError && e.status === 409
-					? 'A check is already running.'
-					: e instanceof ApiError && e.status === 503
-						? 'The new-chapter check is not running on this server.'
-						: 'Could not start the check.';
+			checkError = checkFailure(e);
 		} finally {
 			starting = false;
 		}
@@ -228,12 +236,7 @@
 				bulkNote = `Checking; the ${selectedPaused} paused series ${selectedPaused === 1 ? 'is' : 'are'} skipped.`;
 			}
 		} catch (e) {
-			bulkError =
-				e instanceof ApiError && e.status === 409
-					? 'A check is already running.'
-					: e instanceof ApiError && e.status === 503
-						? 'The new-chapter check is not running on this server.'
-						: 'Could not start the check.';
+			bulkError = checkFailure(e);
 		} finally {
 			bulkBusy = false;
 		}
@@ -263,7 +266,7 @@
 						role="checkbox"
 						aria-checked={selected.has(favorite.id)}
 						aria-label={favorite.display_title}
-						onclick={() => (selected = flip(selected, favorite.id))}
+						onclick={() => (selected = toggleSelected(selected, favorite.id))}
 					>
 						{@render card(favorite)}
 						<span class="tick" aria-hidden="true">{selected.has(favorite.id) ? '✓' : ''}</span>
@@ -322,8 +325,10 @@
 				<button class="btn primary" type="button" onclick={checkNow}>Check now</button>
 			{/if}
 			{#if selecting}
-				<button class="btn" type="button" onclick={() => (selected = selectShown(selected, shown))}
-					>Select all</button
+				<button
+					class="btn"
+					type="button"
+					onclick={() => (selected = selectShown(selected, visible))}>Select all</button
 				>
 				<button class="btn" type="button" onclick={stopSelecting}>Done</button>
 			{:else}
@@ -435,7 +440,7 @@
 						<span class="chevron" aria-hidden="true">{section.collapsed ? '▸' : '▾'}</span>
 						{section.name} · <span class="num">{section.favorites.length}</span>
 					</button>
-					{#if selecting}
+					{#if selecting && !section.collapsed}
 						<button
 							class="btn sm ghost"
 							type="button"
