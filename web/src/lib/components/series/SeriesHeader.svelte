@@ -37,7 +37,7 @@
 	}
 
 	/** Opens the dialog that changes where new chapters of this series download. */
-	async function openFolder() {
+	async function openFolderDialog() {
 		folderError = null;
 		try {
 			favorite = await findFavorite();
@@ -174,7 +174,7 @@
 				<button class="btn" type="button" disabled={checking} onclick={checkMissing}>
 					Check missing chapters
 				</button>
-				<button class="btn" type="button" title={favorite?.save_to} onclick={openFolder}>
+				<button class="btn" type="button" title={favorite?.save_to} onclick={openFolderDialog}>
 					Download folder…
 				</button>
 			{:else}
