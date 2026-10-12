@@ -3143,6 +3143,16 @@
           }
         }
       },
+      "ComicMetadataFiles": {
+        "type": "string",
+        "description": "Which metadata files comic readers look for go into a CBZ.",
+        "enum": [
+          "none",
+          "comicinfo",
+          "metroninfo",
+          "both"
+        ]
+      },
       "ConnectionSettingsView": {
         "type": "object",
         "description": "[`ConnectionSettings`] with the proxy password left out.",
@@ -4853,6 +4863,15 @@
       "OutputSettings": {
         "type": "object",
         "properties": {
+          "comic_metadata": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComicMetadataFiles",
+                "description": "Metadata files written into CBZ archives (not in FMD2). Other formats get none."
+              }
+            ],
+            "default": "none"
+          },
           "format": {
             "oneOf": [
               {
@@ -5077,6 +5096,7 @@
               }
             ],
             "default": {
+              "comic_metadata": "none",
               "format": "folder",
               "pdf_quality": 100
             }
@@ -5664,6 +5684,7 @@
               }
             ],
             "default": {
+              "comic_metadata": "none",
               "format": "folder",
               "pdf_quality": 100
             }

@@ -2,8 +2,8 @@
 #![allow(clippy::unwrap_used)]
 
 use fmd_core::settings::{
-    Accent, OutputFormat, SettingsError, SettingsService, SymbolMode, TextSize, Theme, ThemeMode,
-    WebpSaveAs, XPathBackend,
+    Accent, ComicMetadataFiles, OutputFormat, SettingsError, SettingsService, SymbolMode, TextSize,
+    Theme, ThemeMode, WebpSaveAs, XPathBackend,
 };
 use fmd_store::{AppDb, ListsDb, MangaListing, NewFavorite, NewTask, TaskStatus};
 use serde_json::json;
@@ -502,5 +502,36 @@ fn the_theme_defaults_to_default_and_takes_only_the_built_in_ones() {
             .update(json!({ "appearance": { "theme": value } }))
             .unwrap();
         assert_eq!(service.get().appearance.theme, theme);
+    }
+}
+
+#[test]
+fn comic_metadata_defaults_to_none_validates_and_round_trips() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db.clone()).unwrap();
+    assert_eq!(
+        service.get().output.comic_metadata,
+        ComicMetadataFiles::None
+    );
+
+    let err = service
+        .update(json!({ "output": { "comic_metadata": "xmp" } }))
+        .unwrap_err();
+    assert!(matches!(err, SettingsError::Invalid(_)), "{err:?}");
+
+    for (value, files) in [
+        ("comicinfo", ComicMetadataFiles::ComicInfo),
+        ("metroninfo", ComicMetadataFiles::MetronInfo),
+        ("both", ComicMetadataFiles::Both),
+        ("none", ComicMetadataFiles::None),
+    ] {
+        service
+            .update(json!({ "output": { "comic_metadata": value } }))
+            .unwrap();
+        assert_eq!(service.get().output.comic_metadata, files);
+        let reloaded = SettingsService::load(db.clone()).unwrap();
+        assert_eq!(reloaded.get().output.comic_metadata, files);
+        let stored: serde_json::Value = db.settings().get("output").unwrap().unwrap();
+        assert_eq!(stored["comic_metadata"], json!(value));
     }
 }

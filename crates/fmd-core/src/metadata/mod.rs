@@ -15,6 +15,7 @@ pub use db::{DUMP_URL, DbInfo, METADATA_DB, MangaBakaDb, Metadata};
 pub use jobs::{
     MetadataEvent, MetadataEventKind, MetadataJobError, MetadataJobs, MetadataPhase, ModuleRoots,
 };
+pub(crate) use matcher::absolute;
 pub use matcher::{ListModule, MangaDexLinks, MatchReport, MatchScope, Matcher};
 pub use source::{Download, DumpSource, HttpDumpSource, USER_AGENT};
 

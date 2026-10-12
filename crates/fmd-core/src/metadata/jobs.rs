@@ -13,6 +13,7 @@ use super::db::now_ms;
 use super::{
     BuildProgress, DbInfo, ListModule, MangaBakaDb, MatchScope, Matcher, Metadata, MetadataError,
 };
+use crate::download::SeriesMatch;
 use crate::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
 use crate::settings::SettingsService;
 
@@ -149,6 +150,31 @@ impl MetadataJobs {
 
     pub fn info(&self) -> Option<DbInfo> {
         self.inner.db.info()
+    }
+
+    /// The accepted match of `module_id`'s series `link`, with its cross-site IDs. `None` when
+    /// there is none, or reading lists.db or metadata.db failed (logged).
+    pub fn series_match(&self, module_id: &str, link: &str) -> Option<SeriesMatch> {
+        let found = (|| -> Result<Option<SeriesMatch>, fmd_store::StoreError> {
+            let Some(stored) = self.inner.lists.matches().get(module_id, link)? else {
+                return Ok(None);
+            };
+            let Some(id) = stored.series_id.filter(|_| stored.confidence.is_accepted()) else {
+                return Ok(None);
+            };
+            let Some(db) = self.inner.db.current() else {
+                return Ok(None);
+            };
+            let Some(series) = db.series(id)? else {
+                return Ok(None);
+            };
+            let xids = db.xids_of(id)?;
+            Ok(Some(SeriesMatch { series, xids }))
+        })();
+        found.unwrap_or_else(|e| {
+            tracing::warn!(target: "fmd_core", "MangaBaka match of {module_id} {link}: {e}");
+            None
+        })
     }
 
     pub fn is_running(&self) -> bool {

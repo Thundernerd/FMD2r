@@ -1,5 +1,5 @@
 // Test helpers outside `#[test]` fns are not covered by clippy.toml's allow-unwrap-in-tests.
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

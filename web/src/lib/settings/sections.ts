@@ -249,7 +249,18 @@ export const SETTINGS_SECTIONS: Section[] = [
 		title: 'Output',
 		fields: [
 			select('output.format', 'Save chapters as', OUTPUT_FORMATS),
-			number('output.pdf_quality', 'PDF image quality', 5, 100)
+			number('output.pdf_quality', 'PDF image quality', 5, 100),
+			select(
+				'output.comic_metadata',
+				'Metadata in CBZ files',
+				[
+					{ value: 'none', label: 'None' },
+					{ value: 'comicinfo', label: 'ComicInfo.xml' },
+					{ value: 'metroninfo', label: 'MetronInfo.xml' },
+					{ value: 'both', label: 'Both' }
+				],
+				'Read by comic readers such as Komga and Kavita. Filled from the MangaBaka database when the series has a match.'
+			)
 		]
 	},
 	{

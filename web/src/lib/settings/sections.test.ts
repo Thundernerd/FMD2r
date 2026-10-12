@@ -58,6 +58,7 @@ describe('settings sections', () => {
 			return control ? choicesOf(control).map((c) => c.value) : [];
 		};
 		expect(values('output.format')).toEqual(schemas['OutputFormat']?.enum);
+		expect(values('output.comic_metadata')).toEqual(schemas['ComicMetadataFiles']?.enum);
 		expect(values('images.webp_save_as')).toEqual(schemas['WebpSaveAs']?.enum);
 		expect(values('images.png_compression')).toEqual(schemas['PngCompression']?.enum);
 		expect(values('connections.proxy.type')).toEqual(schemas['ProxyType']?.enum);
