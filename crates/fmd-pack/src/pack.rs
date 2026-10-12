@@ -1,7 +1,7 @@
 //! Packing a folder of page images (baseunits/uPacker.pas).
 
 use std::fs::{self, File};
-use std::io::{self, BufWriter};
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use zip::ZipWriter;
@@ -46,6 +46,9 @@ pub struct PackOptions {
     /// Delete the packed images, and the folder once empty, after a successful pack
     /// (baseunits/uPacker.pas:318-329).
     pub remove_sources: bool,
+    /// Written into ZIP and CBZ archives after the pages, e.g. `ComicInfo.xml`; other formats
+    /// leave them out.
+    pub extra_entries: Vec<ArchiveEntry>,
 }
 
 impl Default for PackOptions {
@@ -53,8 +56,16 @@ impl Default for PackOptions {
         Self {
             pdf_quality: 95,
             remove_sources: true,
+            extra_entries: Vec::new(),
         }
     }
+}
+
+/// A file written into an archive from memory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchiveEntry {
+    pub name: String,
+    pub bytes: Vec<u8>,
 }
 
 /// Packs the images directly in `dir`, in natural order, into `out_path` plus the format's
@@ -92,7 +103,7 @@ pub fn pack(
 
     // The book title is the folder's name (`GetLastDir(Path)`, baseunits/uPacker.pas:186, :225).
     write_whole(&saved, |part| match format {
-        PackFormat::Zip | PackFormat::Cbz => write_zip(&files, part),
+        PackFormat::Zip | PackFormat::Cbz => write_zip(&files, &opts.extra_entries, part),
         PackFormat::Epub => write_epub(&files, &file_name(dir), part),
         PackFormat::Pdf => write_pdf(&files, &file_name(dir), opts.pdf_quality, part),
         PackFormat::Folder => Err(PackError::Io(io::Error::other("a folder is not written"))),
@@ -135,13 +146,18 @@ fn file_name(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// `DoZipCbz` (baseunits/uPacker.pas:55-86): stored entries named after the files.
-fn write_zip(files: &[PathBuf], saved: &Path) -> Result<(), PackError> {
+/// `DoZipCbz` (baseunits/uPacker.pas:55-86): stored entries named after the files, then
+/// `extra`.
+fn write_zip(files: &[PathBuf], extra: &[ArchiveEntry], saved: &Path) -> Result<(), PackError> {
     let mut zip = ZipWriter::new(BufWriter::new(File::create(saved)?));
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     for file in files {
         zip.start_file(file_name(file), options)?;
         io::copy(&mut File::open(file)?, &mut zip)?;
+    }
+    for entry in extra {
+        zip.start_file(entry.name.as_str(), options)?;
+        zip.write_all(&entry.bytes)?;
     }
     zip.finish()?;
     Ok(())

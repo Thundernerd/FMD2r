@@ -5,7 +5,7 @@ mod common;
 
 use std::fs::File;
 
-use fmd_pack::{PackFormat, PackOptions, pack};
+use fmd_pack::{ArchiveEntry, PackFormat, PackOptions, pack};
 use zip::ZipArchive;
 
 fn entries(path: &std::path::Path) -> Vec<(String, zip::CompressionMethod)> {
@@ -298,4 +298,39 @@ fn pdf_low_quality_reencodes_jpeg() {
     let (_, pages) = pdf_pages(&out);
     assert_eq!(pages[0].filter, "DCTDecode");
     assert_ne!(pages[0].data, jpeg);
+}
+
+#[test]
+fn cbz_extra_entries_follow_the_pages() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = common::chapter_dir(tmp.path());
+    let opts = PackOptions {
+        extra_entries: vec![
+            ArchiveEntry {
+                name: "ComicInfo.xml".into(),
+                bytes: b"<ComicInfo/>".to_vec(),
+            },
+            ArchiveEntry {
+                name: "MetronInfo.xml".into(),
+                bytes: b"<MetronInfo/>".to_vec(),
+            },
+        ],
+        ..Default::default()
+    };
+    let out = pack(&dir, PackFormat::Cbz, &tmp.path().join("Ch. 1"), &opts).unwrap();
+
+    let names: Vec<_> = entries(&out).into_iter().map(|(n, _)| n).collect();
+    assert_eq!(
+        names,
+        [
+            "1.jpg",
+            "2.jpg",
+            "10.png",
+            "ComicInfo.xml",
+            "MetronInfo.xml"
+        ]
+    );
+    assert_eq!(read_entry(&out, "ComicInfo.xml"), "<ComicInfo/>");
+    assert_eq!(read_entry(&out, "MetronInfo.xml"), "<MetronInfo/>");
+    assert!(!dir.exists(), "the extra entries are not files to remove");
 }
