@@ -10,6 +10,7 @@ use thiserror::Error;
 use utoipa::ToSchema;
 
 use super::db::now_ms;
+use super::matcher::absolute;
 use super::{
     BuildProgress, DbInfo, ListModule, MangaBakaDb, MatchScope, Matcher, Metadata, MetadataError,
 };
@@ -19,6 +20,22 @@ use crate::settings::SettingsService;
 
 const SCHEDULE_TICK: Duration = Duration::from_secs(60 * 60);
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// `link` as given, then made absolute against `root`, then relative to it.
+fn link_forms(link: &str, root: Option<&str>) -> Vec<String> {
+    let mut forms = vec![link.to_owned()];
+    if let Some(root) = root
+        .map(|r| r.trim_end_matches('/'))
+        .filter(|r| !r.is_empty())
+    {
+        forms.push(absolute(root, link));
+        if let Some(path) = link.strip_prefix(root).filter(|p| p.starts_with('/')) {
+            forms.push(path.to_owned());
+        }
+    }
+    forms.dedup();
+    forms
+}
 
 /// What happened to the database job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
@@ -153,23 +170,29 @@ impl MetadataJobs {
     }
 
     /// The accepted match of `module_id`'s series `link`, with its cross-site IDs. `None` when
-    /// there is none, or reading lists.db or metadata.db failed (logged).
+    /// there is none, or reading lists.db or metadata.db failed (logged). A download's link is
+    /// the one the module reported, which may be absolute where the list's is relative, or the
+    /// other way round; both forms are tried.
     pub fn series_match(&self, module_id: &str, link: &str) -> Option<SeriesMatch> {
         let found = (|| -> Result<Option<SeriesMatch>, fmd_store::StoreError> {
-            let Some(stored) = self.inner.lists.matches().get(module_id, link)? else {
-                return Ok(None);
-            };
-            let Some(id) = stored.series_id.filter(|_| stored.confidence.is_accepted()) else {
-                return Ok(None);
-            };
             let Some(db) = self.inner.db.current() else {
                 return Ok(None);
             };
-            let Some(series) = db.series(id)? else {
-                return Ok(None);
-            };
-            let xids = db.xids_of(id)?;
-            Ok(Some(SeriesMatch { series, xids }))
+            let root = self.inner.modules.root_url(module_id);
+            for link in link_forms(link, root.as_deref()) {
+                let Some(stored) = self.inner.lists.matches().get(module_id, &link)? else {
+                    continue;
+                };
+                let Some(id) = stored.series_id.filter(|_| stored.confidence.is_accepted()) else {
+                    return Ok(None);
+                };
+                let Some(series) = db.series(id)? else {
+                    return Ok(None);
+                };
+                let xids = db.xids_of(id)?;
+                return Ok(Some(SeriesMatch { series, xids }));
+            }
+            Ok(None)
         })();
         found.unwrap_or_else(|e| {
             tracing::warn!(target: "fmd_core", "MangaBaka match of {module_id} {link}: {e}");

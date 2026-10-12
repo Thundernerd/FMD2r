@@ -18,9 +18,6 @@ pub(super) fn entries(
     url: &str,
     matched: Option<&SeriesMatch>,
 ) -> Vec<ArchiveEntry> {
-    if files == ComicMetadataFiles::None {
-        return Vec::new();
-    }
     let meta = comic_metadata(title, chapter, url, matched);
     let mut entries = Vec::new();
     if files.comic_info() {
