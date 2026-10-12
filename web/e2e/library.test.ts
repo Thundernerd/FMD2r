@@ -216,3 +216,32 @@ test('the library shows the titles picked in Settings, and sorts and searches by
 	await expect(cards).toHaveCount(1);
 	await expect(cards.first()).toContainText('葬送のフリーレン');
 });
+
+test('a series paused from its page shows as paused in the library, until resumed', async ({
+	page
+}) => {
+	await page.goto('/');
+	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
+	const show = page.getByRole('group', { name: 'Show' });
+	await expect(show.getByRole('button', { name: /^Paused/ })).toContainText('1');
+
+	await cards.filter({ hasText: 'Frieren' }).click();
+	await page.getByRole('button', { name: 'Pause checking' }).click();
+	await expect(page.getByText('Paused: not checked for new chapters')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Check missing chapters' })).toBeDisabled();
+
+	await page.goBack();
+	await expect(cards.filter({ hasText: 'Frieren' })).toContainText('Paused');
+	await expect(show.getByRole('button', { name: /^Paused/ })).toContainText('2');
+	await show.getByRole('button', { name: /^Paused/ }).click();
+	await expect(cards.filter({ hasText: 'Frieren' })).toHaveCount(1);
+
+	await cards.filter({ hasText: 'Frieren' }).click();
+	await page.getByRole('button', { name: 'Resume checking' }).click();
+	await expect(page.getByText('Paused: not checked for new chapters')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Check missing chapters' })).toBeEnabled();
+
+	await page.goBack();
+	await expect(cards.filter({ hasText: 'Frieren' })).toContainText('MangaDex · Ongoing');
+	await expect(show.getByRole('button', { name: /^Paused/ })).toContainText('1');
+});

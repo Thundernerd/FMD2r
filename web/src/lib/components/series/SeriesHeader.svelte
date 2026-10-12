@@ -2,6 +2,7 @@
 	import { ApiError, type Api } from '#lib/api/client.ts';
 	import type { FavoriteView, SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
 	import { FORMAT } from '#lib/discover/filters.ts';
+	import { untrack } from 'svelte';
 	import FolderDialog from './FolderDialog.svelte';
 	import MangaBakaMatchDialog from './MangaBakaMatchDialog.svelte';
 
@@ -24,7 +25,7 @@
 	let checking = $state(false);
 	let checkNote = $state<string | null>(null);
 
-	/** This series in the library, loaded when the folder button is first pressed. */
+	/** This series in the library, loaded with the page and again when the folder button is pressed. */
 	let favorite = $state<FavoriteView | null>(null);
 	let folderOpen = $state(false);
 	let folderError = $state<string | null>(null);
@@ -36,6 +37,38 @@
 		);
 		if (!found) throw new Error('not in the library');
 		return found;
+	}
+
+	/** Which series' library entry to load; null for a series not in the library. */
+	const libraryKey = $derived(series.in_library ? `${series.module_id}\n${series.link}` : null);
+	$effect(() => {
+		if (libraryKey === null) return;
+		untrack(async () => {
+			try {
+				favorite = await findFavorite();
+			} catch {
+				// Without its entry the header only offers what works without one.
+			}
+		});
+	});
+
+	/** A series the check skips: its favorite is disabled. */
+	const paused = $derived(favorite !== null && !favorite.enabled);
+	let pausing = $state(false);
+	let pauseError = $state<string | null>(null);
+
+	/** Pauses checking this series for new chapters, or resumes it. */
+	async function togglePaused() {
+		if (!favorite) return;
+		pausing = true;
+		pauseError = null;
+		try {
+			favorite = await api.updateFavorite(favorite.id, { enabled: !favorite.enabled });
+		} catch {
+			pauseError = paused ? 'Could not resume checking.' : 'Could not pause checking.';
+		} finally {
+			pausing = false;
+		}
 	}
 
 	/** Opens the dialog that changes where new chapters of this series download. */
@@ -259,7 +292,18 @@
 		<div class="actions">
 			{#if series.in_library}
 				<span class="btn in-library">★ In library</span>
-				<button class="btn" type="button" disabled={checking} onclick={checkMissing}>
+				{#if favorite}
+					<button class="btn" type="button" disabled={pausing} onclick={togglePaused}>
+						{paused ? 'Resume checking' : 'Pause checking'}
+					</button>
+				{/if}
+				<button
+					class="btn"
+					type="button"
+					disabled={checking || paused}
+					title={paused ? 'Resume checking to look for missing chapters' : undefined}
+					onclick={checkMissing}
+				>
 					Check missing chapters
 				</button>
 				<button class="btn" type="button" title={favorite?.save_to} onclick={openFolderDialog}>
@@ -279,7 +323,15 @@
 			{#if folderError}
 				<span class="bad small" role="alert">{folderError}</span>
 			{/if}
+			{#if pauseError}
+				<span class="bad small" role="alert">{pauseError}</span>
+			{/if}
 		</div>
+		{#if series.in_library && paused}
+			<p class="small muted paused">
+				Paused: not checked for new chapters, so nothing new downloads.
+			</p>
+		{/if}
 		{#if folderOpen && favorite}
 			<FolderDialog
 				{api}
@@ -441,6 +493,9 @@
 	}
 	.bad {
 		color: var(--bad);
+	}
+	.paused {
+		margin: 0;
 	}
 	.in-library {
 		color: var(--accent);

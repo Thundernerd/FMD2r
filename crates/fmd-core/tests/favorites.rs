@@ -506,6 +506,27 @@ async fn with_auto_download_new_chapters_are_queued_and_marked_downloaded() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_paused_favorite_is_not_checked_so_nothing_new_is_queued() {
+    let fx = Fixture::new(json!({ "favorites": { "auto_download": true } }));
+    let id = fx.favorite();
+    let mut paused = fx.db.favorites().get(id).unwrap().unwrap();
+    paused.enabled = false;
+    fx.db.favorites().update(&paused).unwrap();
+    let manager = fx.manager().await;
+    let checker = fx.checker_with(Some(manager.clone()));
+
+    for scope in [CheckScope::All, CheckScope::Only(vec![id])] {
+        let report = checker.check(scope, CheckMode::New).await.unwrap();
+        assert!(report.found.is_empty(), "{:?}", report.found);
+    }
+
+    assert_eq!(fx.site.requested("/manga"), 0);
+    assert!(fx.db.tasks().list().unwrap().is_empty());
+    let after = fx.db.favorites().get(id).unwrap().unwrap();
+    assert_eq!(after.date_last_checked, None);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_missing_check_looks_for_chapter_files_not_the_downloaded_list() {
     let fx = Fixture::new(json!({ "saveto": { "chapter_rename": "%NUMBERING%" } }));
     fx.favorite();
