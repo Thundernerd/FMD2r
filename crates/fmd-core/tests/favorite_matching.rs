@@ -273,3 +273,19 @@ fn a_database_refresh_matches_favorites_again() {
     assert_eq!(f.mangadex.requests.load(Ordering::SeqCst), 2);
     assert_eq!(f.series_id(MANGADEX, SCHOLAR), Some(2723));
 }
+
+#[test]
+fn a_download_finds_the_match_of_a_favorite_without_a_list() {
+    let f = fixture();
+    f.favorite(FIRE, "/manga/reborn-rich", &reborn_rich());
+    f.jobs.catch_up();
+
+    // The link as stored, and as a module may report it for a download (issue #239).
+    for link in [
+        "/manga/reborn-rich",
+        "https://mangafire.to/manga/reborn-rich",
+    ] {
+        let found = f.jobs.series_match(FIRE, link).unwrap();
+        assert_eq!(found.series.id, 189, "{link}");
+    }
+}
