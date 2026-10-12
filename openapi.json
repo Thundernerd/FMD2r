@@ -3775,7 +3775,7 @@
           },
           "enabled": {
             "type": "boolean",
-            "description": "Checked by the new-chapter check."
+            "description": "Checked by the new-chapter check; `false` for a paused favorite, which no check looks at."
           },
           "group_id": {
             "type": [

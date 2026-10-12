@@ -177,7 +177,7 @@
 						>{favorite.display_title}</span
 					>
 					<span class="small muted"
-						>{favorite.website} · {favorite.enabled ? STATUS[favorite.status] : 'Not checked'}</span
+						>{favorite.website} · {favorite.enabled ? STATUS[favorite.status] : 'Paused'}</span
 					>
 				</a>
 			</li>

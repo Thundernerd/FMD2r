@@ -317,4 +317,93 @@ describe('SeriesHeader', () => {
 		const select = document.querySelector('select[aria-label="Group"]') as HTMLSelectElement;
 		expect([...select.options].map((o) => o.textContent)).toContain('Isekai');
 	});
+
+	/** This series' library entry, `enabled` unless `overrides` say otherwise. */
+	function favoriteView(overrides: Partial<FavoriteView>): FavoriteView {
+		return {
+			id: 7,
+			module_id: 'm',
+			website: 'Example',
+			link: '/s',
+			title: 'Series',
+			display_title: 'Series',
+			status: 'ongoing',
+			enabled: true,
+			save_to: '/data/Series',
+			cover_url: '',
+			current_chapter: 0,
+			new_chapters: 0,
+			date_added: '2026-01-01T00:00:00Z',
+			...overrides
+		};
+	}
+
+	/** A library with this series in it, whose updates are recorded in `patches`. */
+	function libraryApi(entry: FavoriteView) {
+		const patches: [number, FavoritePatch][] = [];
+		const api = {
+			listFavorites: async () => [entry],
+			updateFavorite: async (id: number, patch: FavoritePatch) => {
+				patches.push([id, patch]);
+				entry = { ...entry, enabled: patch.enabled ?? entry.enabled };
+				return entry;
+			}
+		} as unknown as Api;
+		return { api, patches };
+	}
+
+	const button = (name: string) =>
+		[...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === name);
+
+	it('pauses checking a library series, then offers to resume it', async () => {
+		const { api, patches } = libraryApi(favoriteView({ enabled: true }));
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api, series: seriesInfo({ in_library: true }), website: 'Example' }
+		});
+		await vi.waitFor(() => expect(button('Pause checking')).toBeDefined());
+		expect(document.body.textContent).not.toContain('Paused:');
+
+		button('Pause checking')?.click();
+
+		await vi.waitFor(() => expect(button('Resume checking')).toBeDefined());
+		expect(patches).toEqual([[7, { enabled: false }]]);
+		expect(document.body.textContent).toContain(
+			'Paused: not checked for new chapters, so nothing new downloads.'
+		);
+	});
+
+	it("can't check a paused series for missing chapters", async () => {
+		const { api } = libraryApi(favoriteView({ enabled: false }));
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api, series: seriesInfo({ in_library: true }), website: 'Example' }
+		});
+		await vi.waitFor(() => expect(button('Resume checking')).toBeDefined());
+
+		const check = button('Check missing chapters');
+		expect(check?.disabled).toBe(true);
+		expect(check?.title).toBe('Resume checking to look for missing chapters');
+	});
+
+	it("can't check for missing chapters before knowing whether the series is paused", async () => {
+		const api = {
+			listFavorites: async () => {
+				throw new Error('offline');
+			}
+		} as unknown as Api;
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api, series: seriesInfo({ in_library: true }), website: 'Example' }
+		});
+		flushSync();
+		expect(button('Check missing chapters')?.disabled).toBe(true);
+
+		await vi.waitFor(() =>
+			expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+				'Could not load this series from the library.'
+			)
+		);
+		expect(button('Check missing chapters')?.disabled).toBe(true);
+	});
 });
