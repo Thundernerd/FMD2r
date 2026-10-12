@@ -191,6 +191,15 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         bad_flaresolverr
             .then(|| "must be empty or an http(s) URL such as http://flaresolverr:8191".into()),
     );
+    for (field, template) in [
+        ("saveto.manga_rename", &s.saveto.manga_rename),
+        ("saveto.chapter_rename", &s.saveto.chapter_rename),
+        ("saveto.filename_rename", &s.saveto.filename_rename),
+    ] {
+        for reason in template_problems(template) {
+            check(field, Some(reason));
+        }
+    }
     check(
         "server.bind",
         s.server
@@ -200,6 +209,101 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
             .then(|| "must be a socket address such as 0.0.0.0:8080".into()),
     );
     errors
+}
+
+/// A `%` followed by letters in a rename template.
+struct Word<'a> {
+    /// The letters after the `%`.
+    name: &'a str,
+    /// Where the letters end in the template.
+    end: usize,
+    /// A `%` follows the letters.
+    closed: bool,
+}
+
+impl Word<'_> {
+    fn token_where(&self, same: fn(&str, &str) -> bool) -> Option<&'static str> {
+        fmd_pack::RENAME_TOKENS
+            .into_iter()
+            .find(|t| same(&t[1..t.len() - 1], self.name))
+    }
+
+    /// The token this word names exactly.
+    fn exact_token(&self) -> Option<&'static str> {
+        self.token_where(str::eq)
+    }
+
+    /// The token this word names in another case, e.g. `%CHAPTER%` for `chapter`.
+    fn token_ignoring_case(&self) -> Option<&'static str> {
+        self.token_where(str::eq_ignore_ascii_case)
+    }
+
+    /// A token name without its closing `%`, e.g. `%CHAPTER - `.
+    fn is_unclosed_token(&self) -> bool {
+        !self.closed && self.exact_token().is_some()
+    }
+}
+
+/// Every `%` in `template` that is followed by a letter. A closing `%` is not read as the start
+/// of the next word.
+fn words(template: &str) -> Vec<Word<'_>> {
+    let mut words = Vec::new();
+    let mut from = 0;
+    while let Some(at) = template[from..].find('%') {
+        let start = from + at + 1;
+        let after = &template[start..];
+        let len = after
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(after.len());
+        let end = start + len;
+        let closed = template[end..].starts_with('%');
+        if len > 0 {
+            words.push(Word {
+                name: &template[start..end],
+                end,
+                closed,
+            });
+        }
+        from = if closed { end + 1 } else { end };
+    }
+    words
+}
+
+/// What is wrong with the tokens of a rename template. `custom_rename` replaces only exact
+/// tokens (baseunits/uBaseUnit.pas:251-257), so anything else would land in every file name as
+/// plain text. A `%` not followed by a letter, or followed by a word that is neither a token nor
+/// closed, is a literal `%` and fine.
+fn template_problems(template: &str) -> Vec<String> {
+    let mut problems = Vec::new();
+    for word in words(template) {
+        let name = word.name;
+        if word.is_unclosed_token() {
+            problems.push(format!("%{name} is missing its closing %"));
+        } else if word.closed && word.exact_token().is_none() {
+            problems.push(match word.token_ignoring_case() {
+                Some(token) => format!("%{name}% is not a token; did you mean {token}?"),
+                None => format!(
+                    "%{name}% is not a token. Tokens: {}",
+                    fmd_pack::RENAME_TOKENS.join(" ")
+                ),
+            });
+        }
+    }
+    problems
+}
+
+/// `template` with the missing closing `%` added to every token name that lacks it
+/// (`%CHAPTER - ` → `%CHAPTER% - `). Other problems are left for validation to report.
+pub fn close_rename_tokens(template: &str) -> String {
+    let mut closed = String::with_capacity(template.len());
+    let mut from = 0;
+    for word in words(template).iter().filter(|w| w.is_unclosed_token()) {
+        closed.push_str(&template[from..word.end]);
+        closed.push('%');
+        from = word.end;
+    }
+    closed.push_str(&template[from..]);
+    closed
 }
 
 /// Why `value` is not in `range`, if it is not.

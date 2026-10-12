@@ -575,3 +575,137 @@ fn the_library_title_defaults_to_the_websites_and_takes_only_the_known_choices()
     let reloaded = SettingsService::load(db).unwrap().get();
     assert_eq!(reloaded.appearance.library_title, LibraryTitle::Native);
 }
+
+/// The `FieldError`s an update was rejected with, as `(field, reason)` pairs.
+fn rejected(service: &SettingsService, patch: serde_json::Value) -> Vec<(String, String)> {
+    match service.update(patch).unwrap_err() {
+        SettingsError::Invalid(errors) => errors.into_iter().map(|e| (e.field, e.reason)).collect(),
+        // Shows up in the failing assertion's diff.
+        err => vec![("not Invalid".into(), err.to_string())],
+    }
+}
+
+#[test]
+fn a_rename_template_with_an_unclosed_token_is_rejected() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db).unwrap();
+
+    let errors = rejected(
+        &service,
+        json!({ "saveto": { "filename_rename": "%MANGA% - %CHAPTER - %FILENAME%" } }),
+    );
+    assert_eq!(
+        errors,
+        [(
+            "saveto.filename_rename".to_string(),
+            "%CHAPTER is missing its closing %".to_string()
+        )]
+    );
+    assert_eq!(service.get().saveto.filename_rename, "%FILENAME%");
+}
+
+#[test]
+fn a_rename_template_with_an_unknown_token_is_rejected() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db).unwrap();
+
+    for field in ["manga_rename", "chapter_rename"] {
+        let errors = rejected(
+            &service,
+            json!({ "saveto": { field: "%WEBSITE% - %CHAPTR%" } }),
+        );
+        assert_eq!(
+            errors,
+            [(
+                format!("saveto.{field}"),
+                "%CHAPTR% is not a token. Tokens: %MANGA% %CHAPTER% %NUMBERING% %WEBSITE% \
+                 %AUTHOR% %ARTIST% %FILENAME%"
+                    .to_string()
+            )]
+        );
+    }
+}
+
+#[test]
+fn a_wrongly_cased_token_names_the_right_one() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db).unwrap();
+
+    for field in ["manga_rename", "chapter_rename"] {
+        let errors = rejected(&service, json!({ "saveto": { field: "Ch. %chapter%" } }));
+        assert_eq!(
+            errors,
+            [(
+                format!("saveto.{field}"),
+                "%chapter% is not a token; did you mean %CHAPTER%?".to_string()
+            )]
+        );
+    }
+}
+
+#[test]
+fn a_literal_percent_and_known_tokens_still_save() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db).unwrap();
+
+    service
+        .update(json!({ "saveto": {
+            "manga_rename": "100% %MANGA%",
+            "chapter_rename": "Chapter %NUMBERING%",
+            "filename_rename": "50%off %FILENAME%",
+        } }))
+        .unwrap();
+    assert_eq!(service.get().saveto.manga_rename, "100% %MANGA%");
+    assert_eq!(service.get().saveto.chapter_rename, "Chapter %NUMBERING%");
+    assert_eq!(service.get().saveto.filename_rename, "50%off %FILENAME%");
+}
+
+#[test]
+fn every_problem_in_a_template_is_reported() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db).unwrap();
+
+    let errors = rejected(
+        &service,
+        json!({ "saveto": { "filename_rename": "%MANGA - %Filename%" } }),
+    );
+    assert_eq!(
+        errors,
+        [
+            (
+                "saveto.filename_rename".to_string(),
+                "%MANGA is missing its closing %".to_string()
+            ),
+            (
+                "saveto.filename_rename".to_string(),
+                "%Filename% is not a token; did you mean %FILENAME%?".to_string()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_stored_broken_template_loads_and_the_next_save_reports_it() {
+    let (_dir, db) = open_db();
+    db.settings()
+        .set(
+            "saveto",
+            &json!({ "filename_rename": "%MANGA% - %CHAPTER - %FILENAME%" }),
+        )
+        .unwrap();
+
+    let service = SettingsService::load(db).unwrap();
+    assert_eq!(
+        service.get().saveto.filename_rename,
+        "%MANGA% - %CHAPTER - %FILENAME%"
+    );
+
+    let errors = rejected(&service, json!({ "general": { "language": "nl" } }));
+    assert_eq!(
+        errors,
+        [(
+            "saveto.filename_rename".to_string(),
+            "%CHAPTER is missing its closing %".to_string()
+        )]
+    );
+}

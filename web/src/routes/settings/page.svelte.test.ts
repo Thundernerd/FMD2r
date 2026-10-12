@@ -78,4 +78,21 @@ describe('the settings page', () => {
 		expect(field.getAttribute('aria-invalid')).toBe('true');
 		await waitFor(() => expect(document.activeElement).toBe(field));
 	});
+
+	it('shows why the server rejected a rename template under its field', async () => {
+		await open('#section-saveto');
+		const filename = screen.getByRole('textbox', { name: 'Page file name' });
+		await fireEvent.input(filename, {
+			target: { value: '%MANGA% - %CHAPTER - %FILENAME%' }
+		});
+
+		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+		await within(saveBar()).findByText('Fix the highlighted settings to save');
+		expect(filename.getAttribute('aria-invalid')).toBe('true');
+		const describedBy = filename.getAttribute('aria-describedby') ?? '';
+		const messages = describedBy
+			.split(' ')
+			.map((id) => document.getElementById(id)?.textContent ?? '');
+		expect(messages).toContain('%CHAPTER is missing its closing %');
+	});
 });

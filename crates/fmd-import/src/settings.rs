@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use fmd_core::settings::{SettingsError, SettingsService};
+use fmd_core::settings::{SettingsError, SettingsService, close_rename_tokens};
 use fmd_lua::crypto::decrypt_string;
 use fmd_store::AppDb;
 use serde_json::{Map, Value};
@@ -38,6 +38,9 @@ enum Conv {
     /// Items joined by commas, as `MangaListSelect` (mangadownloader/forms/frmMain.pas:5990-6004,
     /// split at :6465); empty items are dropped.
     List,
+    /// A `CustomRename` template (baseunits/uBaseUnit.pas:251-257). A token name missing its
+    /// closing `%` is repaired.
+    Template,
     /// Stored with `EncryptString` (read with `DecryptString`, mangadownloader/forms/frmMain.pas:5878-5879).
     Encrypted,
 }
@@ -170,7 +173,7 @@ const MAP: &[(&str, &str, &str, Conv)] = &[
         "saveto",
         "MangaCustomRename",
         "saveto.manga_rename",
-        Conv::Str,
+        Conv::Template,
     ),
     (
         "saveto",
@@ -182,7 +185,7 @@ const MAP: &[(&str, &str, &str, Conv)] = &[
         "saveto",
         "ChapterCustomRename",
         "saveto.chapter_rename",
-        Conv::Str,
+        Conv::Template,
     ),
     (
         "saveto",
@@ -212,7 +215,7 @@ const MAP: &[(&str, &str, &str, Conv)] = &[
         "saveto",
         "FilenameCustomRename",
         "saveto.filename_rename",
-        Conv::Str,
+        Conv::Template,
     ),
     ("saveto", "PNGSaveAsJPEG", "images.png_to_jpeg", Conv::Bool),
     // cbWebPSaveAs items (mangadownloader/forms/frmMain.lfm:4363-4367).
@@ -324,6 +327,7 @@ fn convert(
         Conv::Bool => Value::Bool(json_bool(Some(value)).ok_or_else(|| not("a boolean"))?),
         Conv::Int => Value::from(json_int(Some(value)).ok_or_else(|| not("an integer"))?),
         Conv::Str => Value::String(display(value)),
+        Conv::Template => Value::String(close_rename_tokens(&display(value))),
         Conv::Path => Value::String(translate(&opts.path_maps, &display(value), report)),
         Conv::Index(items) => {
             let i = json_int(Some(value)).ok_or_else(|| not("an integer"))?;
@@ -397,6 +401,7 @@ pub(crate) fn import(
                 });
                 continue;
             };
+            let original = value;
             let value = match convert(conv, value, opts, report) {
                 Ok(value) => value,
                 Err(why) => {
@@ -404,8 +409,20 @@ pub(crate) fn import(
                     continue;
                 }
             };
+            let repaired = (matches!(conv, Conv::Template) && display(original) != display(&value))
+                .then(|| {
+                    format!(
+                        "{item} {} was repaired to {}",
+                        display(original),
+                        display(&value)
+                    )
+                });
             let before = service.get();
-            match service.update(patch(setting, value)) {
+            let result = service.update(patch(setting, value));
+            if result.is_ok() {
+                report.warnings.extend(repaired);
+            }
+            match result {
                 Ok(after) if Arc::ptr_eq(&before, &after) => {
                     report.settings.skip(item, SkipReason::AlreadyExists);
                 }
