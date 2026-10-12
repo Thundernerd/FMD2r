@@ -2,6 +2,7 @@ import DownloadFoldersStep from '#lib/components/setup/DownloadFoldersStep.svelt
 import FinishStep from '#lib/components/setup/FinishStep.svelte';
 import ImportStep from '#lib/components/setup/ImportStep.svelte';
 import FormatStep from '#lib/components/setup/FormatStep.svelte';
+import ListsStep from '#lib/components/setup/ListsStep.svelte';
 import MangaBakaStep from '#lib/components/setup/MangaBakaStep.svelte';
 import PasswordStep from '#lib/components/setup/PasswordStep.svelte';
 import WebsitesStep from '#lib/components/setup/WebsitesStep.svelte';
@@ -17,7 +18,8 @@ const needsPassword = (health: Health): boolean =>
 /**
  * The setup wizard's steps, in order. Each step ticket adds its entry here: after the welcome,
  * import from FMD2 (T84), download folders (T79), download format (T80), MangaBaka (T81),
- * websites (T82) and password (T83, only when the server is open), then the finish. A step that
+ * websites (T82), the websites' ready-made lists (#248) and password (T83, only when the server
+ * is open), then the finish. A step that
  * edits settings an FMD2 import brings lists them in `paths`, so it says when it starts from them.
  */
 export const SETUP_STEPS: SetupStep[] = [
@@ -38,6 +40,7 @@ export const SETUP_STEPS: SetupStep[] = [
 		component: WebsitesStep,
 		paths: ['general.selected_websites']
 	},
+	{ id: 'lists', title: 'Ready-made lists', component: ListsStep },
 	// Last before the finish: setting a password ends every session, this one included.
 	{ id: 'password', title: 'Password', component: PasswordStep, shows: needsPassword },
 	{ id: 'finish', title: 'Finish', component: FinishStep }

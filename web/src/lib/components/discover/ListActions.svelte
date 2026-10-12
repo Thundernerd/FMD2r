@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
-	import type { ListEvent, ListFailureReason, ListJobKind, ModuleSummary } from '#lib/api/types.ts';
+	import type { ListEvent, ListJobKind, ModuleSummary } from '#lib/api/types.ts';
+	import { listFailedText, listUpdatedText } from '#lib/discover/list-jobs.ts';
 	import type { EventStore } from '#lib/events.svelte.ts';
 
 	let {
@@ -28,26 +29,6 @@
 		import_db: 'Getting the ready-made list'
 	};
 
-	/** What a failed job of the module says, by why it failed; the server words the Jobs panel's
-	 * "Last error" the same (`crates/fmd-core/src/lists/jobs.rs`). */
-	function failedText(reason: ListFailureReason | null | undefined, job: ListJobKind): string {
-		const site = module.name;
-		switch (reason) {
-			case 'no_dump':
-				return module.capabilities.update_list
-					? `There is no ready-made list for ${site} yet. Use Update list to build it from the website.`
-					: `There is no ready-made list for ${site} yet, and this website cannot build one itself.`;
-			case 'unreachable':
-				return `Could not reach the ready-made lists to get the list of ${site}. Check the connection and try again later.`;
-			case 'bad_archive':
-				return `The ready-made list of ${site} is damaged or empty.`;
-			default:
-				return job === 'update'
-					? `Updating the list of ${site} failed.`
-					: `Getting the ready-made list of ${site} failed.`;
-		}
-	}
-
 	// Reload once a job ends; the event that ended it is the last one until the next job.
 	let ended: ListEvent | null = null;
 	$effect(() => {
@@ -57,11 +38,7 @@
 		}
 	});
 
-	const updatedText = $derived(
-		module.list_updated
-			? `updated ${new Date(module.list_updated).toLocaleDateString()}`
-			: 'never updated'
-	);
+	const updatedText = $derived(listUpdatedText(module));
 
 	async function start(kind: ListJobKind) {
 		busy = true;
@@ -142,7 +119,7 @@
 			</p>
 		{:else if event?.kind === 'failed'}
 			<div class="failed small" role="alert">
-				<p class="bad">{failedText(event.reason, event.job)}</p>
+				<p class="bad">{listFailedText(module, event.reason, event.job)}</p>
 				{#if event.reason === 'no_dump' && module.capabilities.update_list}
 					<div class="row">
 						<button class="btn sm" type="button" disabled={busy} onclick={() => start('update')}

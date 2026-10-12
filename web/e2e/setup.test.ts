@@ -21,10 +21,17 @@ async function toWebsites(page: Page) {
 	await expect(page.getByRole('heading', { level: 2, name: 'Websites' })).toBeVisible();
 }
 
-/** Chooses MangaDex on the websites step and goes on to the finish. */
+/** Skips the ready-made lists step, which follows the websites. */
+async function skipLists(page: Page) {
+	await expect(page.getByRole('heading', { level: 2, name: 'Ready-made lists' })).toBeVisible();
+	await page.getByRole('button', { name: 'Skip' }).click();
+}
+
+/** Chooses MangaDex on the websites step and goes on to the finish, getting no lists. */
 async function pastWebsites(page: Page) {
 	await page.getByRole('checkbox', { name: 'MangaDex' }).check();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await skipLists(page);
 	await expect(page.getByRole('heading', { level: 2, name: 'Finish' })).toBeVisible();
 }
 
@@ -44,20 +51,23 @@ test('a fresh install goes through setup first, and only once', async ({ page })
 
 	await page.goto('/');
 	await expect(wizard(page)).toBeVisible();
-	await expect(page.getByText('Step 1 of 7')).toBeVisible();
+	await expect(page.getByText('Step 1 of 8')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 2 of 7')).toBeVisible();
+	await expect(page.getByText('Step 2 of 8')).toBeVisible();
 	await page.getByRole('button', { name: 'Skip' }).click();
-	await expect(page.getByText('Step 3 of 7')).toBeVisible();
+	await expect(page.getByText('Step 3 of 8')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 4 of 7')).toBeVisible();
+	await expect(page.getByText('Step 4 of 8')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 5 of 7')).toBeVisible();
+	await expect(page.getByText('Step 5 of 8')).toBeVisible();
 	await page.getByRole('button', { name: 'Skip' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 6 of 7')).toBeVisible();
-	await pastWebsites(page);
-	await expect(page.getByText('Step 7 of 7')).toBeVisible();
+	await expect(page.getByText('Step 6 of 8')).toBeVisible();
+	await page.getByRole('checkbox', { name: 'MangaDex' }).check();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByText('Step 7 of 8')).toBeVisible();
+	await skipLists(page);
+	await expect(page.getByText('Step 8 of 8')).toBeVisible();
 	await page.getByRole('button', { name: 'Finish' }).click();
 
 	await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
@@ -73,10 +83,10 @@ test('a reload during setup resumes at the step it was on', async ({ page }) => 
 	await freshInstall(page);
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByText('Step 2 of 7')).toBeVisible();
+	await expect(page.getByText('Step 2 of 8')).toBeVisible();
 
 	await page.reload();
-	await expect(page.getByText('Step 2 of 7')).toBeVisible();
+	await expect(page.getByText('Step 2 of 8')).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Import from FMD2' })).toBeVisible();
 });
 
@@ -92,7 +102,7 @@ test('setup can be run again from Settings without redirecting other pages', asy
 	await page.goto('/settings#section-general');
 	await page.getByRole('button', { name: 'Run setup again' }).click();
 	await expect(wizard(page)).toBeVisible();
-	await expect(page.getByText('Step 1 of 7')).toBeVisible();
+	await expect(page.getByText('Step 1 of 8')).toBeVisible();
 
 	await page.goto('/discover');
 	await expect(page).toHaveURL(/\/discover$/);
@@ -192,6 +202,7 @@ test('the websites chosen during setup are the ones Discover lists', async ({ pa
 	await page.getByRole('checkbox', { name: 'MangaDex' }).check();
 	await page.getByRole('checkbox', { name: 'Webtoons' }).check();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await skipLists(page);
 
 	// The finish step points to Discover, where each website's list is fetched; going there
 	// finishes the setup.
@@ -206,6 +217,41 @@ test('the websites chosen during setup are the ones Discover lists', async ({ pa
 	await expect(website.getByRole('option')).toHaveText(['All websites', 'MangaDex', 'Webtoons']);
 });
 
+test('the ready-made lists of the websites chosen during setup download in one go', async ({
+	page
+}, info) => {
+	await freshInstall(page);
+	await page.goto('/');
+	await toWebsites(page);
+	await page.getByRole('checkbox', { name: 'Bato.to' }).check();
+	await page.getByRole('checkbox', { name: 'MangaAe' }).check();
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	await expect(page.getByRole('heading', { level: 2, name: 'Ready-made lists' })).toBeVisible();
+	const batoto = page.getByRole('group', { name: 'Bato.to' });
+	const mangaae = page.getByRole('group', { name: 'MangaAe' });
+	await expect(batoto.getByRole('checkbox')).toBeChecked();
+	await expect(mangaae.getByRole('checkbox')).toBeChecked();
+	await page.getByRole('button', { name: 'Download selected' }).click();
+	await expect(batoto).toContainText('Imported 60 titles.');
+	await expect(mangaae).toContainText('Imported 60 titles.');
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	// Going to Discover from the finish finishes the setup.
+	await expect(page.getByRole('heading', { level: 2, name: 'Finish' })).toBeVisible();
+	await page.getByRole('link', { name: 'Discover' }).click();
+	await expect(page).toHaveURL(/\/discover$/);
+	const count = page.getByRole('region', { name: 'Results' }).getByRole('status');
+	await expect(count).toHaveText('120 titles');
+	// On a phone the picker is in the filters drawer.
+	if (info.project.name === 'phone') await page.getByRole('button', { name: 'Filters' }).click();
+	const picker = page.getByRole('combobox', { name: 'Website' });
+	for (const website of ['Bato.to', 'MangaAe']) {
+		await picker.selectOption({ label: website });
+		await expect(count).toHaveText('60 titles');
+	}
+});
+
 /** Makes the mock backend listen where other machines can reach it, with no password. */
 const openServer = (page: Page) =>
 	page.addInitScript(() => sessionStorage.setItem('fmd2r.mock.open', '1'));
@@ -217,6 +263,7 @@ async function toPassword(page: Page) {
 	await toWebsites(page);
 	await page.getByRole('checkbox', { name: 'MangaDex' }).check();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await skipLists(page);
 	await expect(page.getByRole('heading', { level: 2, name: 'Password' })).toBeVisible();
 }
 
@@ -224,9 +271,9 @@ test('an open server can set a password during setup without logging out', async
 	await freshInstall(page);
 	await openServer(page);
 	await page.goto('/');
-	await expect(page.getByText('Step 1 of 8')).toBeVisible();
+	await expect(page.getByText('Step 1 of 9')).toBeVisible();
 	await toPassword(page);
-	await expect(page.getByText('Step 7 of 8')).toBeVisible();
+	await expect(page.getByText('Step 8 of 9')).toBeVisible();
 	await page.getByRole('textbox', { name: 'Password', exact: true }).fill('hunter2');
 	await page.getByLabel('Confirm password').fill('hunter2');
 	await page.getByRole('button', { name: 'Next' }).click();
@@ -322,6 +369,7 @@ test('an FMD2 import during setup brings its settings to the later steps', async
 	await expect(page.getByRole('checkbox', { name: 'Webtoons' })).not.toBeChecked();
 	await expect(fromFmd2).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await skipLists(page);
 
 	const summary = page.getByRole('region', { name: 'Finish' });
 	await expect(summary.getByText('CBZ', { exact: true })).toBeVisible();
@@ -346,7 +394,7 @@ test('a failed import keeps the user on the step, able to retry or skip', async 
 	});
 	await step.getByRole('button', { name: 'Check' }).click();
 	await expect(step.getByRole('alert')).toContainText('not a zip file');
-	await expect(page.getByText('Step 2 of 7')).toBeVisible();
+	await expect(page.getByText('Step 2 of 8')).toBeVisible();
 
 	await step.getByLabel('FMD2 userdata folder, zipped').setInputFiles(USERDATA_ZIP);
 	await step.getByRole('button', { name: 'Check' }).click();
