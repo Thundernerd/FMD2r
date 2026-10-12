@@ -49,7 +49,9 @@ pub use events::{
     EventBus, JobState, ServerEvent, TaskProgress, TaskRemoved, TaskState, TaskStatusChange,
     TasksReordered,
 };
-pub use favorites::{AddFavorite, CheckRequest, FavoriteFilter, FavoritePatch, FavoriteView};
+pub use favorites::{
+    AddFavorite, BulkChange, CheckRequest, FavoriteFilter, FavoritePatch, FavoriteView,
+};
 pub use fmd_core::jobs::JobPhase;
 pub use fmd_core::lists::{ListEvent, ListEventKind};
 pub use import::ImportLimits;
@@ -148,6 +150,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(favorites::list, favorites::add))
         .routes(routes!(favorites::patch, favorites::delete))
         .routes(routes!(favorites::check))
+        .routes(routes!(favorites::bulk))
         .routes(routes!(favorites::check_missing))
         .routes(routes!(groups::list, groups::create))
         .routes(routes!(groups::patch, groups::delete))

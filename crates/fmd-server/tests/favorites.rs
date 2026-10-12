@@ -626,3 +626,193 @@ async fn deleting_a_group_lists_its_favorites_ungrouped() {
     assert_eq!(list.as_array().unwrap().len(), 1, "the series stays");
     assert_eq!(list[0]["group_id"], Value::Null);
 }
+
+impl Fixture {
+    /// Favorites in the store named `titles`, each with its own link; their ids.
+    fn create(&self, titles: &[&str]) -> Vec<i64> {
+        titles
+            .iter()
+            .map(|title| {
+                self.db
+                    .favorites()
+                    .create(&NewFavorite {
+                        module_id: "t".into(),
+                        link: format!("/{title}"),
+                        title: (*title).into(),
+                        save_to: "/old".into(),
+                        cover_url: None,
+                    })
+                    .unwrap()
+                    .id
+                    .0
+            })
+            .collect()
+    }
+
+    fn stored(&self, id: i64) -> fmd_store::Favorite {
+        self.db.favorites().get(FavoriteId(id)).unwrap().unwrap()
+    }
+}
+
+#[tokio::test]
+async fn a_bulk_change_pauses_every_listed_favorite() {
+    let fx = Fixture::new();
+    let ids = fx.create(&["A", "B", "C"]);
+
+    let response = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": [ids[0], ids[2]], "enabled": false })),
+        )
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated = json_body(response).await;
+    let updated = updated.as_array().unwrap();
+    assert_eq!(updated.len(), 2);
+    assert_eq!(updated[0]["id"], ids[0]);
+    assert_eq!(updated[0]["enabled"], false);
+    assert_eq!(updated[1]["id"], ids[2]);
+    assert!(!fx.stored(ids[0]).enabled);
+    assert!(fx.stored(ids[1]).enabled, "an unlisted favorite stays");
+    assert!(!fx.stored(ids[2]).enabled);
+}
+
+#[tokio::test]
+async fn a_bulk_change_groups_the_listed_favorites() {
+    let fx = Fixture::new();
+    let ids = fx.create(&["A", "B"]);
+    let group = json_body(
+        fx.send(
+            "POST",
+            "/api/library/groups",
+            Some(json!({ "name": "Shounen" })),
+        )
+        .await,
+    )
+    .await;
+
+    let response = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": ids, "group_id": group["id"] })),
+        )
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let list = json_body(fx.send("GET", "/api/favorites", None).await).await;
+    assert_eq!(list[0]["group_id"], group["id"]);
+    assert_eq!(list[1]["group_id"], group["id"]);
+
+    let ungrouped = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": [ids[0]], "group_id": null })),
+        )
+        .await;
+    assert_eq!(ungrouped.status(), StatusCode::OK);
+    let list = json_body(fx.send("GET", "/api/favorites", None).await).await;
+    assert_eq!(list[0]["group_id"], Value::Null);
+    assert_eq!(list[1]["group_id"], group["id"]);
+}
+
+#[tokio::test]
+async fn a_bulk_change_with_an_unknown_id_or_group_changes_nothing() {
+    let fx = Fixture::new();
+    let ids = fx.create(&["A", "B"]);
+
+    let unknown_id = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": [ids[0], 999, ids[1]], "enabled": false })),
+        )
+        .await;
+    assert_eq!(unknown_id.status(), StatusCode::BAD_REQUEST);
+
+    let unknown_group = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": ids, "enabled": false, "group_id": 999 })),
+        )
+        .await;
+    assert_eq!(unknown_group.status(), StatusCode::BAD_REQUEST);
+
+    for id in ids {
+        let stored = fx.stored(id);
+        assert!(stored.enabled);
+        assert_eq!(stored.group_id, None);
+    }
+}
+
+#[tokio::test]
+async fn a_bulk_destination_gives_each_favorite_its_own_manga_folder_in_it() {
+    let fx = Fixture::new();
+    let ids = fx.create(&["Alpha", "Beta"]);
+
+    let response = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": ids, "destination": "/library/new" })),
+        )
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    for (id, title) in ids.into_iter().zip(["Alpha", "Beta"]) {
+        let folder = json_body(
+            fx.send(
+                "POST",
+                "/api/save-folder",
+                Some(json!({ "module_id": "t", "title": title, "save_to": "/library/new" })),
+            )
+            .await,
+        )
+        .await["folder"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(folder.starts_with("/library/new"), "{folder}");
+        assert_eq!(fx.stored(id).save_to, folder);
+    }
+}
+
+#[tokio::test]
+async fn a_bulk_removal_removes_every_listed_favorite_or_none() {
+    let fx = Fixture::new();
+    let ids = fx.create(&["A", "B", "C"]);
+
+    let unknown = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": [ids[0], 999], "remove": true })),
+        )
+        .await;
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(fx.db.favorites().list().unwrap().len(), 3);
+
+    let response = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": [ids[0], ids[2]], "remove": true })),
+        )
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json_body(response).await, json!([]));
+    let left: Vec<i64> = fx
+        .db
+        .favorites()
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|f| f.id.0)
+        .collect();
+    assert_eq!(left, [ids[1]]);
+}

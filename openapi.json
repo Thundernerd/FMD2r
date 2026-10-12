@@ -579,6 +579,60 @@
         }
       }
     },
+    "/api/favorites/bulk": {
+      "post": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Change or remove several favorites at once, all of them or none.",
+        "operationId": "bulkUpdateFavorites",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The changed favorites, in the order of `ids`; none after a removal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FavoriteView"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No such favorite or group, and nothing changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An empty destination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/favorites/check": {
       "post": {
         "tags": [
@@ -3438,6 +3492,48 @@
               }
             ],
             "default": "default"
+          }
+        }
+      },
+      "BulkChange": {
+        "type": "object",
+        "description": "One change to several favorites.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "destination": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A parent folder: each favorite downloads to its own manga folder in it, as\n`POST /api/save-folder` makes it. Chapters already downloaded are not moved."
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Resume (`true`) or pause (`false`) them."
+          },
+          "group_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The library group to put them in; `null` ungroups them."
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "remove": {
+            "type": "boolean",
+            "description": "Remove them from the library instead; their downloaded chapters stay recorded. Cannot be\ncombined with a change."
           }
         }
       },
