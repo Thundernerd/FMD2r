@@ -7,6 +7,7 @@ test('the library shows its favorites as a cover grid that chips filter', async 
 	const cards = grid.getByRole('link');
 	await expect(cards).toHaveCount(8);
 	await expect(cards.filter({ hasText: 'Frieren' })).toContainText('+4');
+	await expect(page.getByRole('button', { name: /^Download folder of / })).toHaveCount(0);
 
 	const show = page.getByRole('group', { name: 'Show' });
 	await show.getByRole('button', { name: /^New/ }).click();

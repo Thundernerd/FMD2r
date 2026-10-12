@@ -5,6 +5,25 @@ import type { Api } from '#lib/api/client.ts';
 import type { SeriesInfo } from '#lib/api/types.ts';
 import SeriesHeader from './SeriesHeader.svelte';
 
+/** A series with no facts beyond its title, changed by `overrides`. */
+function seriesInfo(overrides: Partial<SeriesInfo>): SeriesInfo {
+	return {
+		module_id: 'm',
+		link: '/s',
+		title: 'Series',
+		alt_titles: '',
+		authors: '',
+		artists: '',
+		genres: [],
+		summary: '',
+		summary_from_mangabaka: false,
+		status: 'ongoing',
+		in_library: false,
+		chapters: [],
+		...overrides
+	};
+}
+
 describe('SeriesHeader', () => {
 	let component: ReturnType<typeof mount> | null = null;
 
@@ -17,24 +36,14 @@ describe('SeriesHeader', () => {
 	// Adding a series to the library marks its chapters too (frmMain.pas:2797-2846), so the count
 	// is of chapters seen, not necessarily downloaded.
 	it('counts the marked chapters as seen', () => {
-		const series: SeriesInfo = {
-			module_id: 'm',
-			link: '/s',
-			title: 'Series',
-			alt_titles: '',
-			authors: '',
-			artists: '',
-			genres: [],
-			summary: '',
-			summary_from_mangabaka: false,
-			status: 'ongoing',
+		const series = seriesInfo({
 			in_library: true,
 			chapters: [
 				{ name: 'Chapter 1', link: '/c/1', downloaded: true },
 				{ name: 'Chapter 2', link: '/c/2', downloaded: false },
 				{ name: 'Chapter 3', link: '/c/3', downloaded: true }
 			]
-		};
+		});
 		// The header only reads `api` from its buttons, which this test doesn't press.
 		component = mount(SeriesHeader, {
 			target: document.body,
@@ -50,22 +59,12 @@ describe('SeriesHeader', () => {
 	});
 
 	it("marks MangaBaka's description and shows its format and year", () => {
-		const series: SeriesInfo = {
-			module_id: 'm',
-			link: '/s',
-			title: 'Series',
-			alt_titles: '',
-			authors: '',
-			artists: '',
-			genres: [],
+		const series = seriesInfo({
 			summary: 'A description from MangaBaka.',
 			summary_from_mangabaka: true,
 			format: 'manhwa',
-			year: 2022,
-			status: 'ongoing',
-			in_library: false,
-			chapters: []
-		};
+			year: 2022
+		});
 		component = mount(SeriesHeader, {
 			target: document.body,
 			props: { api: {} as Api, series, website: 'Example' }
@@ -81,5 +80,26 @@ describe('SeriesHeader', () => {
 		]);
 		expect(facts).toContainEqual(['Format', 'Manhwa']);
 		expect(facts).toContainEqual(['Year', '2022']);
+	});
+
+	it('offers a download folder only for a series in the library', () => {
+		const folderButton = () =>
+			[...document.querySelectorAll('button')].find(
+				(b) => b.textContent?.trim() === 'Download folder…'
+			);
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api: {} as Api, series: seriesInfo({}), website: 'Example' }
+		});
+		flushSync();
+		expect(folderButton()).toBeUndefined();
+
+		unmount(component);
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api: {} as Api, series: seriesInfo({ in_library: true }), website: 'Example' }
+		});
+		flushSync();
+		expect(folderButton()).toBeDefined();
 	});
 });
