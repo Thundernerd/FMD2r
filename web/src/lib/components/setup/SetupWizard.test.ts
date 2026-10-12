@@ -5,6 +5,7 @@ import { createApi } from '#lib/api/client.ts';
 import { createMockBackend } from '#lib/api/mock.ts';
 import { EventStore } from '#lib/events.svelte.ts';
 import type { SetupStep } from '#lib/setup/steps.ts';
+import { SETUP_STEPS } from '#lib/setup/wizard.ts';
 import FakeStep from './FakeStep.fixture.svelte';
 import SetupWizard from './SetupWizard.svelte';
 
@@ -114,5 +115,17 @@ describe('the setup wizard', () => {
 		const settings = await api.getSettings();
 		expect(settings.general.setup_completed).toBe(true);
 		expect(settings.general.language).toBe('nl');
+	});
+});
+
+describe("the setup wizard's steps", () => {
+	it('offer the ready-made lists right after the websites, before the password', () => {
+		const ids = SETUP_STEPS.map((step) => step.id);
+		expect(ids.slice(ids.indexOf('websites'), ids.indexOf('password') + 1)).toEqual([
+			'websites',
+			'lists',
+			'password'
+		]);
+		expect(SETUP_STEPS.find((step) => step.id === 'lists')?.title).toBe('Ready-made lists');
 	});
 });
