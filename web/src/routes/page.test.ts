@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/app.ts';
 import Library from './+page.svelte';
@@ -50,5 +50,22 @@ describe('Library titles', () => {
 		// A series MangaBaka does not know keeps the website's title, and needs no tooltip.
 		const sakamoto = screen.getByText('Sakamoto Days', { selector: '.t' });
 		expect(sakamoto.getAttribute('title')).toBeNull();
+	});
+
+	it('sorts and searches by the shown title, and still finds the website’s', async () => {
+		await api.patchSettings({ appearance: { library_title: 'native' } });
+		render(Library);
+		await waitFor(async () => expect(await cardTitles()).toContain('葬送のフリーレン'));
+
+		await fireEvent.change(screen.getByRole('combobox', { name: 'Sort' }), {
+			target: { value: 'title' }
+		});
+		await waitFor(async () => expect((await cardTitles()).at(-1)).toBe('葬送のフリーレン'));
+
+		const search = screen.getByRole('searchbox', { name: 'Search the library' });
+		await fireEvent.input(search, { target: { value: 'フリーレン' } });
+		await waitFor(async () => expect(await cardTitles()).toEqual(['葬送のフリーレン']));
+		await fireEvent.input(search, { target: { value: 'frieren' } });
+		await waitFor(async () => expect(await cardTitles()).toEqual(['葬送のフリーレン']));
 	});
 });

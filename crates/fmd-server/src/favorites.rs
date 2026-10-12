@@ -15,7 +15,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::covers::series::cover_url as series_cover_url;
 use crate::error::{ApiJson, ApiQuery};
-use crate::series::{SeriesStatus, fetch_info};
+use crate::series::{SeriesStatus, accepted_match, fetch_info};
 use crate::services::FavoritesJobs;
 use crate::time::rfc3339_from_unix_ms;
 use crate::{ApiError, AppState, Problem, cover_url};
@@ -359,10 +359,7 @@ impl DisplayTitles {
         let Some((meta, lists)) = &self.sources else {
             return Ok(None);
         };
-        let Some(m) = lists.matches().get(module, link)? else {
-            return Ok(None);
-        };
-        let Some(id) = m.series_id.filter(|_| m.confidence.is_accepted()) else {
+        let Some((id, _)) = accepted_match(lists, module, link)? else {
             return Ok(None);
         };
         let Some(series) = meta.series(id)? else {
