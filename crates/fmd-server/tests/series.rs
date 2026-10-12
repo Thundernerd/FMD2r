@@ -476,15 +476,7 @@ async fn series_info_is_cached_briefly_but_library_and_downloaded_state_are_live
     h.db.downloaded_chapters()
         .mark("t", "/manga/1", &["/manga/1/c2"])
         .unwrap();
-    h.db.favorites()
-        .create(&fmd_store::NewFavorite {
-            module_id: "t".into(),
-            link: "/manga/1".into(),
-            title: "One Piece".into(),
-            save_to: "/downloads".into(),
-            cover_url: None,
-        })
-        .unwrap();
+    add_favorite(&h.db, "/manga/1", None);
     let second = body_json(series(&h.state, "t", "/manga/1").await).await;
 
     assert_eq!(h.site.hits("https://example.com/manga/1"), 1);
@@ -608,6 +600,29 @@ async fn a_series_without_a_cover_leaves_the_favorites_cover_alone() {
         favorite_covers(&h.state).await,
         [json!(
             "/api/covers?module=t&url=https%3A%2F%2Fexample.com%2Fold.jpg"
+        )]
+    );
+}
+
+#[tokio::test]
+async fn a_relative_cover_link_is_stored_on_the_favorite_as_an_absolute_url() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.page(
+        "https://example.com/manga/1",
+        "Title=One Piece\nCoverLink=/cover/1.jpg\n",
+    );
+    add_favorite(&h.db, "/manga/1", None);
+
+    assert_eq!(
+        series(&h.state, "t", "/manga/1").await.status(),
+        StatusCode::OK
+    );
+
+    // `/api/covers` fetches absolute URLs only.
+    assert_eq!(
+        favorite_covers(&h.state).await,
+        [json!(
+            "/api/covers?module=t&url=https%3A%2F%2Fexample.com%2Fcover%2F1.jpg"
         )]
     );
 }

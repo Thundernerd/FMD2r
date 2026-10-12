@@ -279,16 +279,21 @@ async fn website(
 }
 
 /// Stores the cover `GetInfo` gave the series page for `module`'s title at `link`, saving a
-/// lookup later, unless the title's cover comes from MangaBaka. Returns whether the website's
-/// cover is the title's cover, i.e. not MangaBaka's. A failure only logs, and returns false.
-pub(crate) async fn store_learned(state: &AppState, module: &str, link: &str, cover: &str) -> bool {
-    match try_store_learned(state, module, link, cover).await {
-        Ok(website) => website,
-        Err(e) => {
+/// lookup later, unless the title's cover comes from MangaBaka. Returns the website's cover as
+/// an absolute URL when it is the title's cover; `None` when MangaBaka's is, the website gives
+/// none, or storing fails (which only logs).
+pub(crate) async fn store_learned(
+    state: &AppState,
+    module: &str,
+    link: &str,
+    cover: &str,
+) -> Option<String> {
+    try_store_learned(state, module, link, cover)
+        .await
+        .unwrap_or_else(|e| {
             tracing::warn!(target: "fmd_server", "storing a cover link: {e}");
-            false
-        }
-    }
+            None
+        })
 }
 
 async fn try_store_learned(
@@ -296,26 +301,30 @@ async fn try_store_learned(
     module: &str,
     link: &str,
     cover: &str,
-) -> Result<bool, ApiError> {
-    let (Some(lists), Some(info)) = (state.lists.clone(), state.modules.module(module)) else {
-        return Ok(true);
+) -> Result<Option<String>, ApiError> {
+    let Some(info) = state.modules.module(module) else {
+        return Ok(None);
+    };
+    let url = absolute(&info.root_url, cover);
+    let Some(lists) = state.lists.clone() else {
+        return Ok(url);
     };
     let now = now_secs();
     if mangabaka(state, &lists, module, link, now).await?.is_some() {
-        return Ok(false);
+        return Ok(None);
     }
-    let found = website_link(absolute(&info.root_url, cover), now);
+    let found = website_link(url, now);
     let (module, link) = (module.to_owned(), link.to_owned());
-    let website = off_thread(move || -> Result<bool, fmd_store::StoreError> {
+    let website = off_thread(move || -> Result<_, fmd_store::StoreError> {
         let covers = lists.cover_links();
         if covers
             .get(&module, &link)?
             .is_some_and(|c| c.source == CoverSource::MangaBaka)
         {
-            return Ok(false);
+            return Ok(None);
         }
         covers.put(&module, &link, &found)?;
-        Ok(true)
+        Ok(found.url)
     })
     .await??;
     Ok(website)
