@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { api, events } from '#lib/app.ts';
 	import { ApiError } from '#lib/api/client.ts';
-	import type { FavoriteView, SeriesStatus } from '#lib/api/types.ts';
+	import type { FavoriteView, GroupView, SeriesStatus } from '#lib/api/types.ts';
 	import {
 		CHIPS,
 		SORTS,
@@ -11,9 +11,14 @@
 		websites,
 		type LibraryFilters
 	} from '#lib/library/filters.ts';
+	import { sections, type Section } from '#lib/library/sections.ts';
 	import { seriesHref } from '#lib/series/href.ts';
 	import CoverThumb from '#lib/components/CoverThumb.svelte';
 	import ImportDialog from '#lib/components/library/ImportDialog.svelte';
+	import GroupsDialog from '#lib/components/library/GroupsDialog.svelte';
+
+	/** Where this browser keeps whether "Ungrouped" is folded; groups keep theirs on the server. */
+	const UNGROUPED_KEY = 'fmd2r.library.ungrouped-collapsed';
 
 	/** The background job behind "Check now" (`GET /api/jobs/favorites`). */
 	const JOB = 'favorites';
@@ -33,18 +38,44 @@
 	let starting = $state(false);
 	let checkError = $state<string | null>(null);
 	let importing = $state(false);
+	let groups = $state<GroupView[]>([]);
+	let editingGroups = $state(false);
+	let ungroupedCollapsed = $state(readUngroupedCollapsed());
 
 	const shown = $derived(filterFavorites(favorites, filters));
 	const counts = $derived(chipCounts(favorites));
 	const sites = $derived(websites(favorites));
+	/** With no groups, the grid is not split. */
+	const shownSections = $derived(
+		groups.length > 0
+			? sections(favorites, groups, filters).map((s) =>
+					s.group ? s : { ...s, collapsed: ungroupedCollapsed }
+				)
+			: null
+	);
+	const groupCounts = $derived(
+		favorites.reduce<Record<number, number>>((counts, f) => {
+			if (f.group_id != null) counts[f.group_id] = (counts[f.group_id] ?? 0) + 1;
+			return counts;
+		}, {})
+	);
 	const job = $derived(events.jobs[JOB]);
 	const checking = $derived(starting || job?.state === 'running');
 
+	function readUngroupedCollapsed(): boolean {
+		try {
+			return localStorage.getItem(UNGROUPED_KEY) === 'true';
+		} catch {
+			return false;
+		}
+	}
+
 	function load() {
-		api
-			.listFavorites()
-			.then((list) => {
+		// Without its groups, the library still shows, as one grid.
+		Promise.all([api.listFavorites(), api.listGroups().catch(() => [])])
+			.then(([list, groupList]) => {
 				favorites = list;
+				groups = groupList;
 				error = null;
 			})
 			.catch(() => (error = 'Could not load the library.'))
@@ -88,6 +119,28 @@
 		}
 	}
 
+	/** Folds or unfolds a section; a group's fold state is saved for every device. */
+	async function toggle(section: Section) {
+		const collapsed = !section.collapsed;
+		if (!section.group) {
+			ungroupedCollapsed = collapsed;
+			try {
+				localStorage.setItem(UNGROUPED_KEY, String(collapsed));
+			} catch {
+				// Folded for this visit only.
+			}
+			return;
+		}
+		const { id } = section.group;
+		try {
+			// Folded once saved, so the section shows what every device will see.
+			const saved = await api.updateGroup(id, { collapsed });
+			groups = groups.map((g) => (g.id === id ? saved : g));
+		} catch {
+			checkError = 'Could not fold the section.';
+		}
+	}
+
 	async function cancel() {
 		try {
 			await api.cancelJob(JOB);
@@ -98,6 +151,37 @@
 </script>
 
 <svelte:head><title>Library · FMD2r</title></svelte:head>
+
+{#snippet grid(list: FavoriteView[], label: string)}
+	<ul class="grid" aria-label={label}>
+		{#each list as favorite (favorite.id)}
+			<li>
+				<a class="card" class:disabled={!favorite.enabled} href={seriesHref(favorite)}>
+					<span class="art">
+						<!-- A check can replace the series cover with the website's: start that one afresh. -->
+						{#key favorite.cover_url}
+							<CoverThumb src={favorite.cover_url} title={favorite.display_title} />
+						{/key}
+						{#if favorite.new_chapters > 0}
+							<span class="badge num" aria-label="{favorite.new_chapters} new chapters"
+								>+{favorite.new_chapters}</span
+							>
+						{/if}
+					</span>
+					<!-- The website's own title, when MangaBaka's shows instead. -->
+					<span
+						class="t"
+						title={favorite.display_title === favorite.title ? undefined : favorite.title}
+						>{favorite.display_title}</span
+					>
+					<span class="small muted"
+						>{favorite.website} · {favorite.enabled ? STATUS[favorite.status] : 'Not checked'}</span
+					>
+				</a>
+			</li>
+		{/each}
+	</ul>
+{/snippet}
 
 <div class="page">
 	<div class="head">
@@ -121,6 +205,7 @@
 			{:else}
 				<button class="btn primary" type="button" onclick={checkNow}>Check now</button>
 			{/if}
+			<button class="btn" type="button" onclick={() => (editingGroups = true)}>Groups…</button>
 			<button class="btn" type="button" onclick={() => (importing = true)}>Import from FMD2</button>
 		</div>
 	</div>
@@ -133,6 +218,18 @@
 			job={events.jobs['import']}
 			onimported={load}
 			onclose={() => (importing = false)}
+		/>
+	{/if}
+	{#if editingGroups}
+		<GroupsDialog
+			{api}
+			counts={groupCounts}
+			onchange={(list) => {
+				groups = list;
+				// A deleted group's series are ungrouped now.
+				load();
+			}}
+			onclose={() => (editingGroups = false)}
 		/>
 	{/if}
 
@@ -196,37 +293,29 @@
 		</p>
 	{:else if shown.length === 0}
 		<p class="muted empty">No favorites match.</p>
+	{:else if shownSections}
+		{#each shownSections as section (section.group?.id ?? 'ungrouped')}
+			{@const id = `section-${section.group?.id ?? 'ungrouped'}`}
+			<section class="section">
+				<h2>
+					<button
+						class="section-head"
+						type="button"
+						aria-expanded={!section.collapsed}
+						aria-controls={id}
+						onclick={() => toggle(section)}
+					>
+						<span class="chevron" aria-hidden="true">{section.collapsed ? '▸' : '▾'}</span>
+						{section.name} · <span class="num">{section.favorites.length}</span>
+					</button>
+				</h2>
+				<div {id} hidden={section.collapsed}>
+					{@render grid(section.favorites, section.name)}
+				</div>
+			</section>
+		{/each}
 	{:else}
-		<ul class="grid" aria-label="Favorites">
-			{#each shown as favorite (favorite.id)}
-				<li>
-					<a class="card" class:disabled={!favorite.enabled} href={seriesHref(favorite)}>
-						<span class="art">
-							<!-- A check can replace the series cover with the website's: start that one afresh. -->
-							{#key favorite.cover_url}
-								<CoverThumb src={favorite.cover_url} title={favorite.display_title} />
-							{/key}
-							{#if favorite.new_chapters > 0}
-								<span class="badge num" aria-label="{favorite.new_chapters} new chapters"
-									>+{favorite.new_chapters}</span
-								>
-							{/if}
-						</span>
-						<!-- The website's own title, when MangaBaka's shows instead. -->
-						<span
-							class="t"
-							title={favorite.display_title === favorite.title ? undefined : favorite.title}
-							>{favorite.display_title}</span
-						>
-						<span class="small muted"
-							>{favorite.website} · {favorite.enabled
-								? STATUS[favorite.status]
-								: 'Not checked'}</span
-						>
-					</a>
-				</li>
-			{/each}
-		</ul>
+		{@render grid(shown, 'Favorites')}
 	{/if}
 </div>
 
@@ -242,6 +331,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--sp-2);
+		flex-wrap: wrap;
 	}
 	.bar {
 		width: 120px;
@@ -302,6 +392,31 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 		gap: 20px 16px;
+	}
+	.section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-3);
+	}
+	.section h2 {
+		margin: 0;
+		font-size: var(--fs-lg);
+	}
+	.section-head {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--sp-2);
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		font-weight: 700;
+		padding: 2px 0;
+		cursor: pointer;
+	}
+	.chevron {
+		width: 1em;
+		opacity: 0.7;
 	}
 	.card {
 		display: flex;

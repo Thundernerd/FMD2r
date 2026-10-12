@@ -3,6 +3,7 @@
 	import type { FavoriteView, SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
 	import { FORMAT } from '#lib/discover/filters.ts';
 	import FolderDialog from './FolderDialog.svelte';
+	import GroupSelect from './GroupSelect.svelte';
 	import MangaBakaMatchDialog from './MangaBakaMatchDialog.svelte';
 
 	let {
@@ -265,6 +266,7 @@
 				<button class="btn" type="button" title={favorite?.save_to} onclick={openFolderDialog}>
 					Download folder…
 				</button>
+				<GroupSelect {api} module={series.module_id} link={series.link} />
 			{:else}
 				<button class="btn" type="button" disabled={adding} onclick={addToLibrary}>
 					{adding ? 'Adding…' : '＋ Add to library'}

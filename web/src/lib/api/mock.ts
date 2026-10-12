@@ -10,6 +10,7 @@ import type {
 	AccountInfo,
 	AccountRequest,
 	FavoritePatch,
+	GroupPatch,
 	InboxItem,
 	JobState,
 	LogLevel,
@@ -399,6 +400,8 @@ const FRESH_INSTALL_KEY = 'fmd2r.mock.fresh-install';
 const OPEN_KEY = 'fmd2r.mock.open';
 const MANGABAKA_KEY = 'fmd2r.mock.mangabaka';
 const SAVED_PASSWORD_KEY = 'fmd2r.mock.saved-password';
+/** The library groups, which outlive a reload as fmd-server's do. */
+const GROUPS_KEY = 'fmd2r.mock.library-groups';
 
 /** A sessionStorage item, or `null` without storage (tests, private mode). */
 const stored = (key: string): string | null => {
@@ -473,7 +476,8 @@ export function createMockBackend({
 	if (!favoritesJob) throw new Error('the mock jobs lack the favorites check');
 	const favorites = createMockFavorites(
 		favoritesJob,
-		() => settings.getSettings().appearance.library_title
+		() => settings.getSettings().appearance.library_title,
+		{ get: () => stored(GROUPS_KEY), set: (value) => store(GROUPS_KEY, value) }
 	);
 	const logs: LogLine[] = [];
 	let logSeq = 0;
@@ -887,6 +891,24 @@ export function createMockBackend({
 			return favorites.start([id], 'missing')
 				? new Response(null, { status: 202 })
 				: json({ status: 409, detail: 'a favorites check is already running' }, 409);
+		}
+		if (route === 'GET /api/library/groups') return json(favorites.listGroups());
+		if (route === 'POST /api/library/groups') {
+			const body = (await req.json()) as { name?: unknown } | null;
+			const { status, body: created } = favorites.createGroup(body?.name);
+			return json(created, status);
+		}
+		if (route === 'POST /api/library/groups/reorder') {
+			const body = (await req.json()) as { ids?: number[] } | null;
+			return new Response(null, { status: favorites.reorderGroups(body?.ids ?? []).status });
+		}
+		const group = /^(PATCH|DELETE) \/api\/library\/groups\/(\d+)$/.exec(route);
+		if (group) {
+			const id = Number(group[2]);
+			if (group[1] === 'DELETE')
+				return new Response(null, { status: favorites.deleteGroup(id).status });
+			const { status, body } = favorites.patchGroup(id, (await req.json()) as GroupPatch);
+			return body ? json(body, status) : new Response(null, { status });
 		}
 		if (route === 'POST /api/import') return importUserdata(req, searchParams);
 		if (route === 'GET /api/logs') return json(logs);

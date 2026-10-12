@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import type { Api } from '#lib/api/client.ts';
-import type { SeriesInfo } from '#lib/api/types.ts';
+import type { FavoritePatch, FavoriteView, SeriesInfo } from '#lib/api/types.ts';
 import SeriesHeader from './SeriesHeader.svelte';
 
 /** A series with no facts beyond its title, changed by `overrides`. */
@@ -46,7 +46,8 @@ describe('SeriesHeader', () => {
 				{ name: 'Chapter 3', link: '/c/3', downloaded: true }
 			]
 		});
-		// The header only reads `api` from its buttons, which this test doesn't press.
+		// The header reads `api` from its buttons, which this test doesn't press, and for the group
+		// select, which stays hidden when it cannot load.
 		component = mount(SeriesHeader, {
 			target: document.body,
 			props: { api: {} as Api, series, website: 'Example' }
@@ -225,5 +226,77 @@ describe('SeriesHeader', () => {
 
 		expect(control.text).toBeNull();
 		expect(document.body.textContent).not.toContain('Match…');
+	});
+
+	/** A library holding this series (favorite 7, in group `groupId`) and groups 1 and 2. */
+	function groupedLibrary(groupId: number | null) {
+		const favorite = { id: 7, module_id: 'm', link: '/s', group_id: groupId } as FavoriteView;
+		const api = {
+			listFavorites: vi.fn(() => Promise.resolve([favorite])),
+			listGroups: vi.fn(() =>
+				Promise.resolve([
+					{ id: 1, name: 'Shounen', collapsed: false },
+					{ id: 2, name: 'Seinen', collapsed: false }
+				])
+			),
+			createGroup: vi.fn((name: string) => Promise.resolve({ id: 3, name, collapsed: false })),
+			updateFavorite: vi.fn((id: number, patch: FavoritePatch) =>
+				Promise.resolve({ ...favorite, ...patch })
+			)
+		};
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api: api as unknown as Api, series: seriesInfo({ in_library: true }), website: 'E' }
+		});
+		return api;
+	}
+
+	async function groupSelect(): Promise<HTMLSelectElement> {
+		await vi.waitFor(() => {
+			if (!document.querySelector('select[aria-label="Group"] option[value="2"]')) {
+				throw new Error('groups not loaded');
+			}
+		});
+		return document.querySelector('select[aria-label="Group"]') as HTMLSelectElement;
+	}
+
+	function choose(select: HTMLSelectElement, value: string) {
+		select.value = value;
+		select.dispatchEvent(new Event('change', { bubbles: true }));
+		flushSync();
+	}
+
+	it("shows the series' group and moves it to another or none", async () => {
+		const api = groupedLibrary(1);
+		const select = await groupSelect();
+		expect([...select.options].map((o) => o.textContent)).toEqual([
+			'No group',
+			'Shounen',
+			'Seinen',
+			'New group…'
+		]);
+		expect(select.value).toBe('1');
+
+		choose(select, '2');
+		expect(api.updateFavorite).toHaveBeenLastCalledWith(7, { group_id: 2 });
+		choose(select, '');
+		expect(api.updateFavorite).toHaveBeenLastCalledWith(7, { group_id: null });
+	});
+
+	it('creates a group from the select and puts the series in it', async () => {
+		const api = groupedLibrary(null);
+		choose(await groupSelect(), 'new');
+
+		const name = document.querySelector('input[aria-label="New group name"]') as HTMLInputElement;
+		name.value = 'Isekai';
+		name.dispatchEvent(new Event('input', { bubbles: true }));
+		(name.form as HTMLFormElement).requestSubmit();
+		await vi.waitFor(() => expect(api.updateFavorite).toHaveBeenCalledWith(7, { group_id: 3 }));
+		expect(api.createGroup).toHaveBeenCalledWith('Isekai');
+		await vi.waitFor(() =>
+			expect(
+				(document.querySelector('select[aria-label="Group"]') as HTMLSelectElement).value
+			).toBe('3')
+		);
 	});
 });

@@ -7,6 +7,8 @@ import type {
 	AccountRequest,
 	FavoritePatch,
 	FavoriteView,
+	GroupPatch,
+	GroupView,
 	FolderCheck,
 	Health,
 	ImportOptions,
@@ -191,6 +193,19 @@ export interface Api {
 	checkFavorites(ids?: number[]): Promise<void>;
 	/** Starts checking a favorite for chapters missing from its folder; otherwise like {@link checkFavorites}. */
 	checkMissingChapters(id: number): Promise<void>;
+	/** The library's groups, in order. */
+	listGroups(): Promise<GroupView[]>;
+	/**
+	 * Adds a group after the others. Rejects with an {@link ApiError}: 409 when another group has
+	 * the name, ignoring case, 400 when it is empty.
+	 */
+	createGroup(name: string): Promise<GroupView>;
+	/** Renames a group or folds its section; rejects like {@link createGroup}, or with 404. */
+	updateGroup(id: number, patch: GroupPatch): Promise<GroupView>;
+	/** Removes a group; its series stay in the library, ungrouped. */
+	deleteGroup(id: number): Promise<void>;
+	/** Puts the groups in this order. */
+	reorderGroups(ids: number[]): Promise<void>;
 	/** The accounts of the modules with account support. Passwords are never returned. */
 	listAccounts(): Promise<AccountInfo[]>;
 	/** Changes the given fields of a module's account; omitted fields keep their value. */
@@ -550,6 +565,36 @@ export function createApi({
 				params: { path: { id } }
 			});
 			if (!response.ok) throw new ApiError(response.status, 'checkMissingChapters');
+		},
+		async listGroups() {
+			return unwrap('listGroups', await client.GET('/api/library/groups'));
+		},
+		async createGroup(name) {
+			const res = await client.POST('/api/library/groups', { body: { name } });
+			if (!res.response.ok || res.data === undefined) {
+				throw new ApiError(res.response.status, 'createGroup', res.error?.detail ?? null);
+			}
+			return res.data;
+		},
+		async updateGroup(id, patch) {
+			const res = await client.PATCH('/api/library/groups/{id}', {
+				params: { path: { id } },
+				body: patch
+			});
+			if (!res.response.ok || res.data === undefined) {
+				throw new ApiError(res.response.status, 'updateGroup', res.error?.detail ?? null);
+			}
+			return res.data;
+		},
+		async deleteGroup(id) {
+			const { response } = await client.DELETE('/api/library/groups/{id}', {
+				params: { path: { id } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'deleteGroup');
+		},
+		async reorderGroups(ids) {
+			const { response } = await client.POST('/api/library/groups/reorder', { body: { ids } });
+			if (!response.ok) throw new ApiError(response.status, 'reorderGroups');
 		},
 		async listAccounts() {
 			return unwrap('listAccounts', await client.GET('/api/accounts'));
