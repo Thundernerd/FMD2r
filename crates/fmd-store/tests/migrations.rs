@@ -52,10 +52,10 @@ fn fresh_lists_db_runs_all_migrations_and_reopen_is_a_noop() {
     let path = dir.path().join("lists.db");
 
     let db = ListsDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 4);
+    assert_eq!(db.schema_version().unwrap(), 5);
     drop(db);
     let db = ListsDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 4);
+    assert_eq!(db.schema_version().unwrap(), 5);
     drop(db);
 
     let names = tables(&path);
@@ -76,4 +76,51 @@ fn opening_a_db_newer_than_this_build_is_an_error() {
         AppDb::open(&path),
         Err(fmd_store::StoreError::SchemaTooNew { found: 99, .. })
     ));
+}
+
+#[test]
+fn upgrading_lists_db_forgets_website_no_cover_links_only() {
+    use fmd_store::{CoverLink, CoverSource};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lists.db");
+    let link = |url: Option<&str>, source| CoverLink {
+        url: url.map(str::to_owned),
+        large_url: None,
+        source,
+        series_id: None,
+        checked_at: 1_760_210_700,
+    };
+    let rows = [
+        ("/blocked", link(None, CoverSource::Website)),
+        (
+            "/website",
+            link(Some("https://site.test/c.jpg"), CoverSource::Website),
+        ),
+        (
+            "/mangabaka",
+            link(Some("https://cdn.test/c.jpg"), CoverSource::MangaBaka),
+        ),
+        ("/mangabaka-none", link(None, CoverSource::MangaBaka)),
+    ];
+    let db = ListsDb::open(&path).unwrap();
+    for (l, cover) in &rows {
+        db.cover_links().put("site", l, cover).unwrap();
+    }
+    drop(db);
+    // As stored by a v4 build, before the website "no cover" rows were cleared (issue #233).
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .pragma_update(None, "user_version", 4)
+        .unwrap();
+
+    let db = ListsDb::open(&path).unwrap();
+
+    assert_eq!(db.cover_links().get("site", "/blocked").unwrap(), None);
+    for (l, cover) in &rows[1..] {
+        assert_eq!(
+            db.cover_links().get("site", l).unwrap().as_ref(),
+            Some(cover),
+            "{l}"
+        );
+    }
 }
