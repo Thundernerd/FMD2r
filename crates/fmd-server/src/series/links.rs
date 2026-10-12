@@ -37,7 +37,7 @@ pub(crate) fn mangabaka_links(
     id: i64,
     xids: &[(String, String)],
     urls: &[String],
-    website_url: Option<&str>,
+    website_url: &str,
 ) -> Vec<SeriesLink> {
     let mangabaka = SeriesLink {
         label: "MangaBaka".to_owned(),
@@ -58,7 +58,7 @@ pub(crate) fn mangabaka_links(
             url: url.clone(),
         })
     });
-    let mut seen: HashSet<String> = website_url.map(str::to_owned).into_iter().collect();
+    let mut seen = HashSet::from([website_url.to_owned()]);
     std::iter::once(mangabaka)
         .chain(trackers)
         .chain(listed)
@@ -99,7 +99,7 @@ mod tests {
         .map(str::to_owned);
 
         assert_eq!(
-            mangabaka_links(189, &xids, &urls, None),
+            mangabaka_links(189, &xids, &urls, "https://example.com/reborn-rich"),
             vec![
                 link("MangaBaka", "https://mangabaka.org/189"),
                 link("AniList", "https://anilist.co/manga/158766"),
@@ -133,7 +133,7 @@ mod tests {
             189,
             &[],
             &urls,
-            Some("https://www.webtoons.com/en/drama/reborn-rich/list?title_no=4956"),
+            "https://www.webtoons.com/en/drama/reborn-rich/list?title_no=4956",
         );
 
         assert_eq!(

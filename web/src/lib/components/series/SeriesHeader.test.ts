@@ -91,6 +91,10 @@ describe('SeriesHeader', () => {
 			props: { api: {} as Api, series, website: 'Example' }
 		});
 		flushSync();
+		return shownLinks();
+	}
+
+	function shownLinks() {
 		const row = [...document.querySelectorAll('.facts > div')].find(
 			(d) => d.querySelector('dt')?.textContent === 'Links'
 		);
@@ -158,9 +162,6 @@ describe('SeriesHeader', () => {
 		) as HTMLButtonElement;
 		showAll.click();
 		flushSync();
-		const row = [...document.querySelectorAll('.facts > div')].find(
-			(d) => d.querySelector('dt')?.textContent === 'Links'
-		);
-		expect(row?.querySelectorAll('a')).toHaveLength(11);
+		expect(shownLinks()).toHaveLength(11);
 	});
 });

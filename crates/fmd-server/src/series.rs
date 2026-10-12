@@ -165,7 +165,7 @@ pub(crate) async fn get(
         .module(&query.module)
         .map(|m| m.root_url)
         .unwrap_or_default();
-    let url = website_url(&root_url, &info.link);
+    let url = fmd_core::metadata::absolute(&root_url, &info.link);
     let mangabaka =
         mangabaka_metadata(&state, &query.module, [&query.link, &info.link], &url).await;
     let (module, link) = (query.module.clone(), info.link.clone());
@@ -191,19 +191,15 @@ pub(crate) async fn get(
         }
         series.format = m.format;
         series.year = m.year;
-        series.mangabaka = Some(MangaBakaSeries {
-            id: m.id,
-            links: m.links,
-        });
+        series.mangabaka = Some(m.series);
     }
     Ok(Json(series))
 }
 
 /// What MangaBaka's database says about a series.
 struct MangaBakaMetadata {
-    id: i64,
+    series: MangaBakaSeries,
     description: String,
-    links: Vec<SeriesLink>,
     format: Option<String>,
     year: Option<i64>,
 }
@@ -226,12 +222,10 @@ async fn mangabaka_metadata(
                 continue;
             };
             let series = meta.series(id)?.unwrap_or_default();
-            let links =
-                links::mangabaka_links(id, &meta.xids_of(id)?, &series.urls, Some(&website_url));
+            let links = links::mangabaka_links(id, &meta.xids_of(id)?, &series.urls, &website_url);
             return Ok(Some(MangaBakaMetadata {
-                id,
+                series: MangaBakaSeries { id, links },
                 description: series.description,
-                links,
                 format: m.format,
                 year: m.year,
             }));
@@ -377,20 +371,6 @@ fn view(
             .collect(),
         in_library,
         mangabaka: None,
-    }
-}
-
-/// `link` on the website at `root_url`: kept when it has a scheme, else joined to the root, as
-/// `MaybeFillHost` (baseunits/uBaseUnit.pas:943-950) fills in the host of a module-relative link.
-fn website_url(root_url: &str, link: &str) -> String {
-    if link.contains("://") {
-        link.to_owned()
-    } else {
-        let root = root_url.trim_end_matches('/');
-        match link.strip_prefix('/') {
-            Some(path) => format!("{root}/{path}"),
-            None => format!("{root}/{link}"),
-        }
     }
 }
 
