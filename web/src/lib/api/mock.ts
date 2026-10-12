@@ -257,7 +257,7 @@ const MODULES: Record<string, string> = {
 /** Series the mock knows, by link; `chapters` of them, the first `downloaded` seen. */
 const SERIES: Record<
 	string,
-	Omit<SeriesInfo, 'module_id' | 'link' | 'chapters'> & {
+	Omit<SeriesInfo, 'module_id' | 'link' | 'url' | 'chapters'> & {
 		count: number;
 		downloaded: number;
 	}
@@ -308,6 +308,16 @@ const SERIES: Record<
 		year: 1997,
 		cover_url: null,
 		in_library: false,
+		mangabaka: {
+			id: 377,
+			links: [
+				{ label: 'MangaBaka', url: 'https://mangabaka.org/377' },
+				{ label: 'AniList', url: 'https://anilist.co/manga/30013' },
+				{ label: 'MangaUpdates', url: 'https://www.mangaupdates.com/series/pb8uwds' },
+				{ label: 'MyAnimeList', url: 'https://myanimelist.net/manga/13' },
+				{ label: 'viz.com', url: 'https://www.viz.com/one-piece' }
+			]
+		},
 		count: 2000,
 		downloaded: 0
 	}
@@ -506,7 +516,15 @@ export function createMockBackend({
 			link: `${link}/chapter/${i + 1}`,
 			downloaded: i < downloaded
 		}));
-		return { ...info, module_id, link, chapters, in_library: favorites.has(module_id, link) };
+		const host = Object.keys(MODULES).find((h) => MODULES[h] === module_id);
+		return {
+			...info,
+			module_id,
+			link,
+			url: `https://${host}${link}`,
+			chapters,
+			in_library: favorites.has(module_id, link)
+		};
 	};
 
 	let nextTaskId = 100;

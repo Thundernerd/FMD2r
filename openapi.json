@@ -4304,6 +4304,27 @@
           }
         }
       },
+      "MangaBakaSeries": {
+        "type": "object",
+        "description": "The MangaBaka series a series was matched to.",
+        "required": [
+          "id",
+          "links"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeriesLink"
+            },
+            "description": "MangaBaka itself, then the tracker sites and other URLs MangaBaka lists; without the\nseries' `url`."
+          }
+        }
+      },
       "MangaBakaSettings": {
         "type": "object",
         "description": "The local copy of MangaBaka's database (`metadata.db`), downloaded only when asked for.",
@@ -5373,6 +5394,7 @@
         "required": [
           "module_id",
           "link",
+          "url",
           "title",
           "alt_titles",
           "authors",
@@ -5430,6 +5452,17 @@
             "type": "string",
             "description": "The series link relative to the module's `RootURL`, as the module reports it."
           },
+          "mangabaka": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MangaBakaSeries",
+                "description": "The series' MangaBaka match; `None` without an accepted one."
+              }
+            ]
+          },
           "module_id": {
             "type": "string"
           },
@@ -5447,6 +5480,10 @@
           "title": {
             "type": "string"
           },
+          "url": {
+            "type": "string",
+            "description": "The series on its website: `link` joined to the module's `RootURL`."
+          },
           "year": {
             "type": [
               "integer",
@@ -5454,6 +5491,23 @@
             ],
             "format": "int64",
             "description": "The year of the series' MangaBaka match."
+          }
+        }
+      },
+      "SeriesLink": {
+        "type": "object",
+        "description": "A link to the series on another site.",
+        "required": [
+          "label",
+          "url"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "The site's name, or the URL's host without `www.`."
+          },
+          "url": {
+            "type": "string"
           }
         }
       },

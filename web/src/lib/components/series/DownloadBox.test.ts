@@ -8,6 +8,7 @@ import DownloadBox from './DownloadBox.svelte';
 const series: SeriesInfo = {
 	module_id: 'm',
 	link: '/s',
+	url: 'https://example.com/s',
 	title: 'Series',
 	alt_titles: '',
 	authors: '',

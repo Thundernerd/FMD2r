@@ -377,6 +377,19 @@ async fn series_shows_the_modules_info_and_chapters_with_their_downloaded_state(
 }
 
 #[tokio::test]
+async fn series_links_to_itself_on_its_website() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.page("https://example.com/manga/1", SERIES_PAGE);
+
+    let body = body_json(series(&h.state, "t", "/manga/1").await).await;
+
+    // The module-relative link joined to the module's `RootURL`, as `MaybeFillHost` does.
+    assert_eq!(body["url"], "https://example.com/manga/1");
+    // No MangaBaka database here: nothing matched.
+    assert_eq!(body["mangabaka"], Value::Null);
+}
+
+#[tokio::test]
 async fn series_info_is_cleaned_up_as_get_info_from_url_does() {
     let h = harness(&[("T.lua", T)]);
     h.site.page(

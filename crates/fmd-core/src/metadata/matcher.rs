@@ -458,8 +458,9 @@ fn publication_of(status: &str) -> Option<&'static str> {
     }
 }
 
-/// `MaybeFillHost` (baseunits/uBaseUnit.pas).
-pub(crate) fn absolute(root: &str, link: &str) -> String {
+/// `link` on the website at `root`: kept when it has a scheme, else joined to the root, as
+/// `MaybeFillHost` (baseunits/uBaseUnit.pas:943-950) fills in the host of a module-relative link.
+pub fn absolute(root: &str, link: &str) -> String {
     if link.contains("://") {
         link.to_owned()
     } else if let Some(path) = link.strip_prefix('/') {

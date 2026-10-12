@@ -10,6 +10,7 @@ function seriesInfo(overrides: Partial<SeriesInfo>): SeriesInfo {
 	return {
 		module_id: 'm',
 		link: '/s',
+		url: 'https://example.com/s',
 		title: 'Series',
 		alt_titles: '',
 		authors: '',
@@ -101,5 +102,69 @@ describe('SeriesHeader', () => {
 		});
 		flushSync();
 		expect(folderButton()).toBeDefined();
+	});
+
+	function linksOf(series: SeriesInfo) {
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api: {} as Api, series, website: 'Example' }
+		});
+		flushSync();
+		return shownLinks();
+	}
+
+	function shownLinks() {
+		const row = [...document.querySelectorAll('.facts > div')].find(
+			(d) => d.querySelector('dt')?.textContent === 'Links'
+		);
+		return [...(row?.querySelectorAll('a') ?? [])];
+	}
+
+	it('links to the series on its website, and only there without a MangaBaka match', () => {
+		const links = linksOf(seriesInfo({}));
+
+		expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+			['Example', 'https://example.com/s']
+		]);
+	});
+
+	it("shows MangaBaka's links after the website's, each in a new tab", () => {
+		const links = linksOf(
+			seriesInfo({
+				mangabaka: {
+					id: 189,
+					links: [
+						{ label: 'MangaBaka', url: 'https://mangabaka.org/189' },
+						{ label: 'AniList', url: 'https://anilist.co/manga/158766' }
+					]
+				}
+			})
+		);
+
+		expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+			['Example', 'https://example.com/s'],
+			['MangaBaka', 'https://mangabaka.org/189'],
+			['AniList', 'https://anilist.co/manga/158766']
+		]);
+		for (const a of links) {
+			expect(a.getAttribute('target')).toBe('_blank');
+			expect(a.getAttribute('rel')).toBe('noreferrer');
+		}
+	});
+
+	it('hides the links past eight behind "Show all"', () => {
+		const many = Array.from({ length: 10 }, (_, i) => ({
+			label: `site${i}.com`,
+			url: `https://site${i}.com/s`
+		}));
+		const shown = linksOf(seriesInfo({ mangabaka: { id: 1, links: many } }));
+
+		expect(shown).toHaveLength(8);
+		const showAll = [...document.querySelectorAll('.facts button')].find(
+			(b) => b.textContent === 'Show all'
+		) as HTMLButtonElement;
+		showAll.click();
+		flushSync();
+		expect(shownLinks()).toHaveLength(11);
 	});
 });
