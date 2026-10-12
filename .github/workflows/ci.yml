@@ -33,7 +33,7 @@ jobs:
       # XPath backend builds here; xpath-fpc.yml guards the fpc one.
       # fmd-pack validates ComicInfo.xml and MetronInfo.xml against their XSDs with xmllint.
       - name: Install xmllint
-        run: sudo apt-get install -y --no-install-recommends libxml2-utils
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-utils
       - name: Test
         run: cargo test --workspace
       # Prints how many upstream modules pass `Init` (the test itself fails on any failure).
