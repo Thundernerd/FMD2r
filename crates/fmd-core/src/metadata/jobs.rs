@@ -223,6 +223,8 @@ impl MetadataJobs {
 
     /// Matches new or changed titles of the module's list and favorites. Blocking.
     pub fn list_changed(&self, module_id: &str, terminate: &TerminateToken) {
+        // Locked first, so a refresh that holds it is not undone with its old database.
+        let _matching = lock(&self.inner.matching);
         let Some(meta) = self.inner.db.current() else {
             return;
         };
@@ -233,7 +235,6 @@ impl MetadataJobs {
             id: module_id.to_owned(),
             root_url,
         };
-        let _matching = lock(&self.inner.matching);
         match self
             .inner
             .matcher

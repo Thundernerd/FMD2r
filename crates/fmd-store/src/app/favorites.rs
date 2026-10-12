@@ -89,10 +89,20 @@ fn favorite_from_row(row: &Row<'_>) -> rusqlite::Result<Favorite> {
     })
 }
 
+/// The title matching reads: a favorite whose info was never fetched (imported) matches on its
+/// title.
+macro_rules! match_title {
+    () => {
+        "IIF(info_title = '', title, info_title)"
+    };
+}
+
 /// What matching reads of a favorite, plus the database build ID in `?2`, joined like the list
-/// titles' fingerprint. A favorite whose info was never fetched (imported) matches on its title.
-const FINGERPRINT: &str = "IIF(info_title = '', title, info_title) || char(31) || alt_titles \
-    || char(31) || authors || char(31) || artists || char(31) || ?2";
+/// titles' fingerprint.
+const FINGERPRINT: &str = concat!(
+    match_title!(),
+    " || char(31) || alt_titles || char(31) || authors || char(31) || artists || char(31) || ?2"
+);
 
 pub struct FavoriteRepo<'a> {
     db: &'a Db,
@@ -207,9 +217,9 @@ impl<'a> FavoriteRepo<'a> {
     pub fn match_inputs(&self, module_id: &str, build_id: &str) -> Result<Vec<MatchInput>> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare_cached(&format!(
-            "SELECT link, IIF(info_title = '', title, info_title), alt_titles, authors, artists,
-                    {FINGERPRINT}
-             FROM favorites WHERE module_id = ?1 ORDER BY id"
+            "SELECT link, {}, alt_titles, authors, artists, {FINGERPRINT}
+             FROM favorites WHERE module_id = ?1 ORDER BY id",
+            match_title!()
         ))?;
         let rows = stmt.query_map([module_id, build_id], |r| {
             Ok(MatchInput {
