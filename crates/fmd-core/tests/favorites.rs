@@ -19,7 +19,7 @@ use fmd_core::jobs::{Job, JobPhase, JobRegistry};
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
-use fmd_store::{AppDb, EventQuery, FavoriteId, NewFavorite};
+use fmd_store::{AppDb, EventQuery, FavoriteId, FavoriteInfo, NewFavorite};
 use serde_json::{Value, json};
 
 /// Answers each URL from a table (404 with an empty body for anything else) and counts requests.
@@ -103,7 +103,8 @@ impl Transport for Site {
 }
 
 /// A module (and, at `other.test`, its copy `other`) whose series page holds a status line, then
-/// one `link name` chapter per line; a `cover <link>` line sets the cover link.
+/// one `link name` chapter per line; a `cover <link>` line sets the cover link, an `author
+/// <name>` line the authors.
 const SITE: &str = r#"
 function Init()
   local m = NewWebsiteModule()
@@ -121,6 +122,8 @@ function GetInfo()
       first = false
     elseif line:match('^cover ') then
       MANGAINFO.CoverLink = line:sub(7)
+    elseif line:match('^author ') then
+      MANGAINFO.Authors = line:sub(8)
     else
       local link, name = line:match('^(%S+) (.+)$')
       MANGAINFO.ChapterLinks.Add(link)
@@ -300,6 +303,50 @@ async fn a_check_stores_the_sites_cover_link() {
     assert_eq!(
         after.cover_url.as_deref(),
         Some("https://site.test/cover.jpg")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_check_stores_the_sites_info_and_says_when_it_changed() {
+    let fx = Fixture::new(json!({}));
+    let id = fx.favorite();
+    fx.site.set("/manga", "1\nauthor Someone\n/c1 Chapter 1");
+    let mut renamed = fx.db.favorites().get(id).unwrap().unwrap();
+    renamed.title = "My Name For It".into();
+    fx.db.favorites().update(&renamed).unwrap();
+    let checker = fx.checker();
+    let changed: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = changed.clone();
+    checker.on_info_changed(move |module_id| seen.lock().unwrap().push(module_id.to_owned()));
+
+    checker
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        fx.db.favorites().info(id).unwrap(),
+        Some(FavoriteInfo {
+            title: "Manga".into(),
+            authors: "Someone".into(),
+            ..FavoriteInfo::default()
+        })
+    );
+    assert_eq!(
+        fx.db.favorites().get(id).unwrap().unwrap().title,
+        "My Name For It",
+        "the user's title stays"
+    );
+    assert_eq!(*changed.lock().unwrap(), ["site"]);
+
+    checker
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+    assert_eq!(
+        *changed.lock().unwrap(),
+        ["site"],
+        "unchanged the second time"
     );
 }
 

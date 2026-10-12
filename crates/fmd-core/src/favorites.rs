@@ -1,16 +1,18 @@
 //! The library's new-chapter check, mirroring FMD2's `TFavoriteManager`, `TFavoriteTask` and
 //! `TFavoriteThread` (baseunits/uFavoritesManager.pas:302-1178).
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fmd_lua::WorkerPool;
-use fmd_store::{AppDb, Event, EventSeverity, Favorite, FavoriteId, NewEvent, StoreError};
+use fmd_store::{
+    AppDb, Event, EventSeverity, Favorite, FavoriteId, FavoriteInfo, NewEvent, StoreError,
+};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::{Semaphore, watch};
@@ -75,6 +77,16 @@ pub fn favorite_save_to(
         ..NewDownload::default()
     };
     save_to(saveto, website, website_dir, &download)
+}
+
+/// What a favorite keeps of the website's info for MangaBaka matching.
+pub fn website_info(info: &MangaInfo) -> FavoriteInfo {
+    FavoriteInfo {
+        title: info.title.clone(),
+        alt_titles: info.alt_titles.clone(),
+        authors: info.authors.clone(),
+        artists: info.artists.clone(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,6 +207,8 @@ pub enum CheckError {
     Join(String),
 }
 
+type InfoHook = dyn Fn(&str) + Send + Sync;
+
 /// Checks favorites for new chapters (`TFavoriteManager`) as the `favorites` background job.
 /// Clones share the runs.
 #[derive(Clone)]
@@ -210,6 +224,7 @@ struct Inner {
     cancelled: AtomicBool,
     /// Counts the runs that ended, so a scheduled check can wait for a manual one.
     ended: watch::Sender<u64>,
+    on_info_changed: OnceLock<Box<InfoHook>>,
 }
 
 struct CompletedSeries {
@@ -245,8 +260,16 @@ impl FavoritesChecker {
                 }),
                 cancelled: AtomicBool::new(false),
                 ended: watch::channel(0).0,
+                on_info_changed: OnceLock::new(),
             }),
         }
+    }
+
+    /// Calls `hook` at the end of a run with each module whose favorites' website info (title,
+    /// alt titles, authors, artists) changed, so they can be matched again. It runs on the async
+    /// runtime: hand blocking work off. Set once; later hooks are ignored.
+    pub fn on_info_changed(&self, hook: impl Fn(&str) + Send + Sync + 'static) {
+        let _ = self.inner.on_info_changed.set(Box::new(hook));
     }
 
     /// Starts a background run unless one is going (`CheckForNewChapter`/
@@ -411,17 +434,21 @@ impl FavoritesChecker {
             .max(1);
         let permits = Arc::new(Semaphore::new(threads as usize));
         let skipped: Arc<Mutex<HashSet<String>>> = Arc::default();
+        let info_changed: Arc<Mutex<BTreeSet<String>>> = Arc::default();
         let mut running = JoinSet::new();
         for (index, favorite) in favorites.into_iter().enumerate() {
             let permit = permits.clone().acquire_owned().await;
             let this = self.clone();
             let skipped = skipped.clone();
+            let info_changed = info_changed.clone();
             running.spawn(async move {
                 let _permit = permit;
                 if this.inner.cancelled.load(Ordering::SeqCst) {
                     return (index, Ok(None));
                 }
-                let checked = this.check_one(&favorite, mode, &skipped).await;
+                let checked = this
+                    .check_one(&favorite, mode, &skipped, &info_changed)
+                    .await;
                 let done = {
                     let mut status = lock(&this.inner.status);
                     status.done += 1;
@@ -440,6 +467,11 @@ impl FavoritesChecker {
             match joined {
                 Ok(result) => results.push(result),
                 Err(e) => tracing::warn!(target: "fmd_core", "favorites check: {e}"),
+            }
+        }
+        if let Some(hook) = self.inner.on_info_changed.get() {
+            for module_id in lock(&info_changed).iter() {
+                hook(module_id);
             }
         }
         // In library order, as FMD2 lists them.
@@ -477,12 +509,14 @@ impl FavoritesChecker {
 
     /// `DoCheck`/`DoCheckMissing` (baseunits/uFavoritesManager.pas:329-531). Beyond FMD2, a
     /// favorite of a website paused after a rate-limited answer is skipped; the first skip of
-    /// each website in a run (`skipped`) logs.
+    /// each website in a run (`skipped`) logs. A favorite whose website info changed adds its
+    /// module to `info_changed`.
     async fn check_one(
         &self,
         favorite: &Favorite,
         mode: CheckMode,
         skipped: &Mutex<HashSet<String>>,
+        info_changed: &Mutex<BTreeSet<String>>,
     ) -> Result<Option<Checked>, CheckError> {
         let rate_limits = &self.inner.config.rate_limits;
         if rate_limits.paused(&favorite.module_id).is_some() {
@@ -511,12 +545,15 @@ impl FavoritesChecker {
             return Ok(None);
         }
         // Re-read: it may have been edited or removed during the check.
-        let Some(favorite) = self
+        let Some((favorite, changed)) = self
             .store_checked(favorite.id, &info, !chapters.is_empty())
             .await?
         else {
             return Ok(None);
         };
+        if changed {
+            lock(info_changed).insert(favorite.module_id.clone());
+        }
         let website = self.website(&favorite.module_id);
         if !chapters.is_empty() {
             return Ok(Some(Checked::Found(FavoriteFound {
@@ -657,12 +694,13 @@ impl FavoritesChecker {
         id: FavoriteId,
         info: &MangaInfo,
         found: bool,
-    ) -> Result<Option<Favorite>, CheckError> {
+    ) -> Result<Option<(Favorite, bool)>, CheckError> {
         let now = now_ms();
         let chapters = u32::try_from(info.chapters.len()).unwrap_or(u32::MAX);
         let status = info.status.clone();
         let links: Vec<String> = info.chapters.iter().map(|c| c.link.clone()).collect();
         let cover = Some(info.cover_link.clone()).filter(|c| !c.is_empty());
+        let website_info = website_info(info);
         let db = self.inner.config.db.clone();
         // Not atomic: it only races with another write to this favorite, which a PATCH redoes.
         blocking(move || {
@@ -681,7 +719,8 @@ impl FavoritesChecker {
             db.favorites().update(&favorite)?;
             let links: Vec<&str> = links.iter().map(String::as_str).collect();
             db.favorites().set_chapter_links(id, &links)?;
-            Ok(Some(favorite))
+            let changed = db.favorites().set_info(id, &website_info)?;
+            Ok(Some((favorite, changed)))
         })
         .await
     }

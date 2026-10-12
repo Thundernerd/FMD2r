@@ -47,7 +47,7 @@ impl ListsDb {
         MasterListRepo { db: &self.db }
     }
 
-    /// The list titles' MangaBaka matches.
+    /// The MangaBaka matches of list titles and favorites (from `app.db`), by module and link.
     pub fn matches(&self) -> MatchRepo<'_> {
         MatchRepo { db: &self.db }
     }
@@ -694,13 +694,47 @@ impl MatchRepo<'_> {
         Ok(())
     }
 
-    pub fn prune(&self, module_id: &str) -> Result<()> {
+    /// What each title was matched on, by link.
+    pub fn fingerprints(&self, module_id: &str) -> Result<HashMap<String, String>> {
         let conn = self.db.lock();
-        conn.execute(
-            "DELETE FROM metadata_matches WHERE module_id = ?1
-             AND link NOT IN (SELECT link FROM masterlist WHERE module_id = ?1)",
-            [module_id],
+        let mut stmt = conn.prepare_cached(
+            "SELECT link, fingerprint FROM metadata_matches WHERE module_id = ?1",
         )?;
+        let rows = stmt.query_map([module_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The modules with matches.
+    pub fn module_ids(&self) -> Result<Vec<String>> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare_cached("SELECT DISTINCT module_id FROM metadata_matches ORDER BY module_id")?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Deletes the matches of links neither in `module_id`'s list nor in `keep` (its favorites).
+    pub fn prune(&self, module_id: &str, keep: &HashSet<String>) -> Result<()> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        let gone: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT link FROM metadata_matches WHERE module_id = ?1
+                 AND link NOT IN (SELECT link FROM masterlist WHERE module_id = ?1)",
+            )?;
+            let rows = stmt.query_map([module_id], |r| r.get::<_, String>(0))?;
+            rows.filter(|link| link.as_ref().map_or(true, |l| !keep.contains(l)))
+                .collect::<rusqlite::Result<_>>()?
+        };
+        {
+            let mut stmt = tx.prepare_cached(
+                "DELETE FROM metadata_matches WHERE module_id = ?1 AND link = ?2",
+            )?;
+            for link in &gone {
+                stmt.execute([module_id, link])?;
+            }
+        }
+        tx.commit()?;
         Ok(())
     }
 

@@ -260,7 +260,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     Ok(())
 }
 
-/// Registers the `favorites` job and starts its schedule (`tmStartupTimer`/`tmCheckFavorites`,
+/// Registers the `favorites` job, whose checks have changed favorites matched against MangaBaka,
+/// and starts its schedule (`tmStartupTimer`/`tmCheckFavorites`,
 /// mangadownloader/forms/frmMain.pas:1871-1878, :2078-2082). Found chapters go to `queue` when
 /// `favorites.auto_download` is on and there is one, else to the inbox.
 fn start_favorites(
@@ -281,6 +282,12 @@ fn start_favorites(
         },
         state.favorites_events(),
     );
+    if let Some(jobs) = state.metadata.clone() {
+        checker.on_info_changed(move |module_id| {
+            let (jobs, module_id) = (jobs.clone(), module_id.to_owned());
+            tokio::task::spawn_blocking(move || jobs.favorites_changed(&module_id));
+        });
+    }
     state.jobs.register(checker.clone());
     state.jobs.changed(FavoritesChecker::ID);
     tokio::spawn(checker.clone().schedule());
@@ -314,7 +321,11 @@ fn metadata_jobs(
     let lists = state.lists.clone()?;
     let source = HttpDumpSource::new(state.settings.clone());
     let db = Arc::new(MangaBakaDb::open(data_dir, Arc::new(source)));
-    let matcher = Matcher::new(lists.clone(), MangaDexLinks::new(runtime.http.clone()));
+    let matcher = Matcher::new(
+        lists.clone(),
+        state.db.clone(),
+        MangaDexLinks::new(runtime.http.clone()),
+    );
     Some(MetadataJobs::new(
         db,
         matcher,

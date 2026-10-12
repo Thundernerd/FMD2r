@@ -205,6 +205,10 @@ async fn import_upload(
         if let Err(e) = state.engine.activate_waiting().await {
             tracing::warn!(target: "fmd_server", "starting imported tasks: {e}");
         }
+        // Imported favorites match on their titles until their first check.
+        if let Some(jobs) = state.metadata.clone() {
+            tokio::task::spawn_blocking(move || jobs.catch_up());
+        }
     }
     Ok(report)
 }

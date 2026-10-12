@@ -19,7 +19,8 @@ use fmd_http::{
 };
 use fmd_server::{AppState, ModuleCatalog, ModulesReport, build_router};
 use fmd_store::{
-    AppDb, ListsDb, MangaListing, MatchConfidence, MatchInput, NewFavorite, StoredMatch,
+    AppDb, FavoriteInfo, ListsDb, MangaListing, MatchConfidence, MatchInput, NewFavorite,
+    StoredMatch,
 };
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -105,6 +106,28 @@ fn accepted(id: i64) -> StoredMatch {
     }
 }
 
+/// `db` and `lists` served with MangaBaka's database built from the fixture.
+fn with_mangabaka(dir: &TempDir, db: AppDb, lists: ListsDb) -> (AppState, MetadataJobs) {
+    let mangabaka = Arc::new(MangaBakaDb::open(dir.path(), Arc::new(FixtureDump)));
+    mangabaka
+        .refresh(&TerminateToken::new(), &mut |_| {})
+        .unwrap();
+    let state = AppState::new(db.clone())
+        .unwrap()
+        .with_modules(Modules)
+        .with_lists(lists.clone());
+    let http = HttpClient::with_transport(Arc::new(NoNetwork)).unwrap();
+    let jobs = MetadataJobs::new(
+        mangabaka,
+        Matcher::new(lists.clone(), db, MangaDexLinks::new(http)),
+        lists,
+        |id: &str| (id == "fire").then(|| "https://mangafire.to".to_owned()),
+        state.settings().clone(),
+        state.metadata_events(),
+    );
+    (state.with_metadata(jobs.clone()), jobs)
+}
+
 struct Library {
     _dir: TempDir,
     state: AppState,
@@ -152,24 +175,7 @@ impl Library {
                 .unwrap();
         }
 
-        let mangabaka = Arc::new(MangaBakaDb::open(dir.path(), Arc::new(FixtureDump)));
-        mangabaka
-            .refresh(&TerminateToken::new(), &mut |_| {})
-            .unwrap();
-        let state = AppState::new(db)
-            .unwrap()
-            .with_modules(Modules)
-            .with_lists(lists.clone());
-        let http = HttpClient::with_transport(Arc::new(NoNetwork)).unwrap();
-        let jobs = MetadataJobs::new(
-            mangabaka,
-            Matcher::new(lists.clone(), MangaDexLinks::new(http)),
-            lists,
-            |id: &str| (id == "fire").then(|| "https://mangafire.to".to_owned()),
-            state.settings().clone(),
-            state.metadata_events(),
-        );
-        let state = state.with_metadata(jobs);
+        let (state, _) = with_mangabaka(&dir, db, lists);
         Library { _dir: dir, state }
     }
 
@@ -359,5 +365,45 @@ async fn without_mangabakas_database_the_websites_title_shows() {
     assert_eq!(
         library.titles("/api/favorites").await,
         pairs(&[("Narutaru", "Narutaru")])
+    );
+}
+
+#[tokio::test]
+async fn a_favorite_matched_without_its_websites_list_shows_the_chosen_title() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    // The list of `fire` was never downloaded (issue #242).
+    let lists = ListsDb::open(dir.path().join("lists.db")).unwrap();
+    let favorite = db
+        .favorites()
+        .create(&NewFavorite {
+            module_id: "fire".into(),
+            link: "/reborn-rich".into(),
+            title: "Reborn Rich".into(),
+            save_to: "downloads/Reborn Rich".into(),
+            cover_url: None,
+        })
+        .unwrap();
+    db.favorites()
+        .set_info(
+            favorite.id,
+            &FavoriteInfo {
+                title: "Reborn Rich".into(),
+                authors: "San-Gyeong, JP".into(),
+                ..FavoriteInfo::default()
+            },
+        )
+        .unwrap();
+    let (state, jobs) = with_mangabaka(&dir, db, lists);
+    tokio::task::spawn_blocking(move || jobs.catch_up())
+        .await
+        .unwrap();
+    let library = Library { _dir: dir, state };
+    library.show("native");
+
+    // Series 189's native title in the fixture.
+    assert_eq!(
+        library.titles("/api/favorites").await,
+        pairs(&[("Reborn Rich", "재벌집 막내아들")])
     );
 }
