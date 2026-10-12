@@ -88,6 +88,8 @@ pub struct AppearanceSettings {
     pub text_size: TextSize,
     /// The accent colour, one of a fixed set of swatches.
     pub accent: Accent,
+    /// Which title the Library shows for a series MangaBaka's database matched.
+    pub library_title: LibraryTitle,
 }
 
 /// The built-in themes, each a set of style tokens (`data-style` in `web/src/lib/styles/tokens.css`)
@@ -139,6 +141,25 @@ pub enum Accent {
     Purple,
     Orange,
     Red,
+}
+
+/// Which of a series' titles the Library shows. Series without an accepted MangaBaka match
+/// keep the website's title.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum LibraryTitle {
+    /// As the website names it.
+    #[default]
+    Website,
+    /// MangaBaka's English title.
+    English,
+    /// MangaBaka's romanized title.
+    Romanized,
+    /// MangaBaka's native title.
+    Native,
+    /// MangaBaka's main title.
+    #[serde(rename = "mangabaka")]
+    MangaBaka,
 }
 
 /// User agent FMD2 sends when none is configured (`UserAgentDefault`,
