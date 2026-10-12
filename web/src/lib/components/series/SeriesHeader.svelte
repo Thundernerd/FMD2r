@@ -25,8 +25,9 @@
 	let checking = $state(false);
 	let checkNote = $state<string | null>(null);
 
-	/** This series in the library, loaded with the page and again when the folder button is pressed. */
+	/** This series in the library, loaded with the page. */
 	let favorite = $state<FavoriteView | null>(null);
+	let loadError = $state<string | null>(null);
 	let folderOpen = $state(false);
 	let folderError = $state<string | null>(null);
 
@@ -39,15 +40,19 @@
 		return found;
 	}
 
-	/** Which series' library entry to load; null for a series not in the library. */
+	/**
+	 * Which series' library entry to load; null for a series not in the library. A string, so the
+	 * entry loads again only when the series joins the library, not when its info reloads.
+	 */
 	const libraryKey = $derived(series.in_library ? `${series.module_id}\n${series.link}` : null);
 	$effect(() => {
 		if (libraryKey === null) return;
 		untrack(async () => {
+			loadError = null;
 			try {
 				favorite = await findFavorite();
 			} catch {
-				// Without its entry the header only offers what works without one.
+				loadError = 'Could not load this series from the library.';
 			}
 		});
 	});
@@ -75,7 +80,7 @@
 	async function openFolderDialog() {
 		folderError = null;
 		try {
-			favorite = await findFavorite();
+			favorite ??= await findFavorite();
 			folderOpen = true;
 		} catch {
 			folderError = 'Could not load the download folder.';
@@ -84,10 +89,10 @@
 
 	/** Starts a check of this series for chapters missing from its folder. */
 	async function checkMissing() {
+		if (!favorite) return;
 		checking = true;
 		checkNote = null;
 		try {
-			const favorite = await findFavorite();
 			await api.checkMissingChapters(favorite.id);
 			checkNote = 'Checking for missing chapters; the result arrives in the inbox.';
 		} catch (e) {
@@ -300,7 +305,7 @@
 				<button
 					class="btn"
 					type="button"
-					disabled={checking || paused}
+					disabled={checking || !favorite || paused}
 					title={paused ? 'Resume checking to look for missing chapters' : undefined}
 					onclick={checkMissing}
 				>
@@ -322,6 +327,9 @@
 			{/if}
 			{#if folderError}
 				<span class="bad small" role="alert">{folderError}</span>
+			{/if}
+			{#if loadError}
+				<span class="bad small" role="alert">{loadError}</span>
 			{/if}
 			{#if pauseError}
 				<span class="bad small" role="alert">{pauseError}</span>

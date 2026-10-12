@@ -294,4 +294,25 @@ describe('SeriesHeader', () => {
 		expect(check?.disabled).toBe(true);
 		expect(check?.title).toBe('Resume checking to look for missing chapters');
 	});
+
+	it("can't check for missing chapters before knowing whether the series is paused", async () => {
+		const api = {
+			listFavorites: async () => {
+				throw new Error('offline');
+			}
+		} as unknown as Api;
+		component = mount(SeriesHeader, {
+			target: document.body,
+			props: { api, series: seriesInfo({ in_library: true }), website: 'Example' }
+		});
+		flushSync();
+		expect(button('Check missing chapters')?.disabled).toBe(true);
+
+		await vi.waitFor(() =>
+			expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+				'Could not load this series from the library.'
+			)
+		);
+		expect(button('Check missing chapters')?.disabled).toBe(true);
+	});
 });
