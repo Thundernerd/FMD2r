@@ -1,6 +1,10 @@
 //! `POST /api/resolve` (which module handles a pasted URL) and `GET /api/series` (a series'
 //! info and chapters, as FMD2's info panel shows them).
 
+mod links;
+
+pub use links::SeriesLink;
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -65,6 +69,8 @@ pub struct SeriesInfo {
     pub module_id: String,
     /// The series link relative to the module's `RootURL`, as the module reports it.
     pub link: String,
+    /// The series on its website: `link` joined to the module's `RootURL`.
+    pub url: String,
     pub title: String,
     pub alt_titles: String,
     pub authors: String,
@@ -87,6 +93,17 @@ pub struct SeriesInfo {
     pub chapters: Vec<ChapterInfo>,
     /// Whether the series is a favorite.
     pub in_library: bool,
+    /// The series' MangaBaka match; `None` without an accepted one.
+    pub mangabaka: Option<MangaBakaSeries>,
+}
+
+/// The MangaBaka series a series was matched to.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MangaBakaSeries {
+    pub id: i64,
+    /// MangaBaka itself, then the tracker sites and other URLs MangaBaka lists; without the
+    /// series' `url`.
+    pub links: Vec<SeriesLink>,
 }
 
 /// One chapter of a series.
@@ -143,7 +160,14 @@ pub(crate) async fn get(
             .await;
     // FMD2 looks up the downloaded chapters by the link the module reports
     // (mangadownloader/forms/frmMain.pas:2207).
-    let mangabaka = mangabaka_metadata(&state, &query.module, [&query.link, &info.link]).await;
+    let root_url = state
+        .modules
+        .module(&query.module)
+        .map(|m| m.root_url)
+        .unwrap_or_default();
+    let url = website_url(&root_url, &info.link);
+    let mangabaka =
+        mangabaka_metadata(&state, &query.module, [&query.link, &info.link], &url).await;
     let (module, link) = (query.module.clone(), info.link.clone());
     let (downloaded, favorite) = state
         .blocking(move |db| -> Result<_, ApiError> {
@@ -159,7 +183,7 @@ pub(crate) async fn get(
             Ok((downloaded, in_library))
         })
         .await?;
-    let mut series = view(&query.module, info, &downloaded, favorite);
+    let mut series = view(&query.module, url, info, &downloaded, favorite);
     if let Some(m) = mangabaka {
         if series.summary.trim().is_empty() && !m.description.trim().is_empty() {
             series.summary = m.description;
@@ -167,13 +191,19 @@ pub(crate) async fn get(
         }
         series.format = m.format;
         series.year = m.year;
+        series.mangabaka = Some(MangaBakaSeries {
+            id: m.id,
+            links: m.links,
+        });
     }
     Ok(Json(series))
 }
 
 /// What MangaBaka's database says about a series.
 struct MangaBakaMetadata {
+    id: i64,
     description: String,
+    links: Vec<SeriesLink>,
     format: Option<String>,
     year: Option<i64>,
 }
@@ -183,19 +213,25 @@ async fn mangabaka_metadata(
     state: &AppState,
     module: &str,
     links: [&String; 2],
+    website_url: &str,
 ) -> Option<MangaBakaMetadata> {
     let meta = state.metadata.as_ref()?.current()?;
     let lists = state.lists.clone()?;
     let module = module.to_owned();
     let links = links.map(String::clone);
+    let website_url = website_url.to_owned();
     let found = crate::state::off_thread(move || -> Result<_, fmd_store::StoreError> {
         for link in &links {
             let Some((id, m)) = accepted_match(&lists, &module, link)? else {
                 continue;
             };
-            let description = meta.series(id)?.map(|s| s.description).unwrap_or_default();
+            let series = meta.series(id)?.unwrap_or_default();
+            let links =
+                links::mangabaka_links(id, &meta.xids_of(id)?, &series.urls, Some(&website_url));
             return Ok(Some(MangaBakaMetadata {
-                description,
+                id,
+                description: series.description,
+                links,
                 format: m.format,
                 year: m.year,
             }));
@@ -301,12 +337,19 @@ pub(crate) fn info_error(err: InfoError) -> ApiError {
 
 /// `info` with each chapter's downloaded state: FMD2 finds chapter links among the downloaded
 /// ones case-insensitively (`GetDownloadedChaptersState`, baseunits/uDownloadsManager.pas:1747-1768).
-fn view(module: &str, info: MangaInfo, downloaded: &[String], in_library: bool) -> SeriesInfo {
+fn view(
+    module: &str,
+    url: String,
+    info: MangaInfo,
+    downloaded: &[String],
+    in_library: bool,
+) -> SeriesInfo {
     let downloaded: HashSet<String> = downloaded.iter().map(|l| l.to_lowercase()).collect();
     SeriesInfo {
         module_id: module.to_owned(),
         cover_url: (!info.cover_link.is_empty()).then(|| cover_url(module, &info.cover_link)),
         link: info.link,
+        url,
         title: info.title,
         alt_titles: info.alt_titles,
         authors: info.authors,
@@ -333,6 +376,21 @@ fn view(module: &str, info: MangaInfo, downloaded: &[String], in_library: bool) 
             })
             .collect(),
         in_library,
+        mangabaka: None,
+    }
+}
+
+/// `link` on the website at `root_url`: kept when it has a scheme, else joined to the root, as
+/// `MaybeFillHost` (baseunits/uBaseUnit.pas:943-950) fills in the host of a module-relative link.
+fn website_url(root_url: &str, link: &str) -> String {
+    if link.contains("://") {
+        link.to_owned()
+    } else {
+        let root = root_url.trim_end_matches('/');
+        match link.strip_prefix('/') {
+            Some(path) => format!("{root}/{path}"),
+            None => format!("{root}/{link}"),
+        }
     }
 }
 

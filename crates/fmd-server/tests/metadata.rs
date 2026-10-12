@@ -399,4 +399,40 @@ async fn a_favorite_added_without_its_websites_list_gets_mangabaka_metadata() {
     // Series 189 in the fixture.
     assert_eq!(series["format"], "manhwa");
     assert_eq!(series["year"], 2022);
+    assert_eq!(series["url"], "https://plain.test/reborn-rich");
+    assert_eq!(series["mangabaka"]["id"], 189);
+    let links = series["mangabaka"]["links"].as_array().unwrap();
+    assert_eq!(
+        links[0],
+        json!({ "label": "MangaBaka", "url": "https://mangabaka.org/189" })
+    );
+    assert_eq!(
+        links[1],
+        json!({ "label": "AniList", "url": "https://anilist.co/manga/158766" })
+    );
+    assert!(
+        links.contains(&json!({
+            "label": "webtoons.com",
+            "url": "https://www.webtoons.com/en/drama/reborn-rich/list?title_no=4956",
+        })),
+        "{links:?}"
+    );
+    // Listed in `links` too, but shown once.
+    let mangabaka = links
+        .iter()
+        .filter(|l| l["url"] == "https://mangabaka.org/189")
+        .count();
+    assert_eq!(mangabaka, 1);
+}
+
+#[tokio::test]
+async fn an_unmatched_series_has_no_mangabaka_links() {
+    let (dir, state, lists) = state();
+    let jobs = built_metadata_jobs(&dir, &state, &lists);
+    let state = state.with_metadata(jobs);
+
+    let series = get(&state, "/api/series?module=plain&link=%2Freborn-rich").await;
+
+    assert_eq!(series["url"], "https://plain.test/reborn-rich");
+    assert_eq!(series["mangabaka"], Value::Null);
 }

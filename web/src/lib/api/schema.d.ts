@@ -1718,6 +1718,16 @@ export interface components {
 		Login: {
 			password: string;
 		};
+		/** @description The MangaBaka series a series was matched to. */
+		MangaBakaSeries: {
+			/** Format: int64 */
+			id: number;
+			/**
+			 * @description MangaBaka itself, then the tracker sites and other URLs MangaBaka lists; without the
+			 *     series' `url`.
+			 */
+			links: components['schemas']['SeriesLink'][];
+		};
 		/** @description The local copy of MangaBaka's database (`metadata.db`), downloaded only when asked for. */
 		MangaBakaSettings: {
 			/**
@@ -2259,6 +2269,7 @@ export interface components {
 			in_library: boolean;
 			/** @description The series link relative to the module's `RootURL`, as the module reports it. */
 			link: string;
+			mangabaka?: null | components['schemas']['MangaBakaSeries'];
 			module_id: string;
 			status: components['schemas']['SeriesStatus'];
 			/**
@@ -2269,11 +2280,19 @@ export interface components {
 			/** @description Whether `summary` is MangaBaka's description, for the UI to say so. */
 			summary_from_mangabaka: boolean;
 			title: string;
+			/** @description The series on its website: `link` joined to the module's `RootURL`. */
+			url: string;
 			/**
 			 * Format: int64
 			 * @description The year of the series' MangaBaka match.
 			 */
 			year?: number | null;
+		};
+		/** @description A link to the series on another site. */
+		SeriesLink: {
+			/** @description The site's name, or the URL's host without `www.`. */
+			label: string;
+			url: string;
 		};
 		/** @description A series: its module and its link relative to the module's `RootURL`. */
 		SeriesRef: {
