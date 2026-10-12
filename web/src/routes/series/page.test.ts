@@ -39,6 +39,7 @@ const { default: SeriesPage } = await import('./+page.svelte');
 const frieren: SeriesInfo = {
 	module_id: 'mangadex',
 	link: '/title/frieren',
+	url: 'https://mangadex.org/title/frieren',
 	title: 'Frieren',
 	alt_titles: '',
 	authors: '',

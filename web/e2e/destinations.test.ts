@@ -41,7 +41,7 @@ test('a missing destination folder gets a warning, not an error', async ({ page 
 	await expect(bar).toContainText('Saved');
 });
 
-test("a library series' destination is changed from the library", async ({ page }) => {
+test("a library series' download folder is changed from its series page", async ({ page }) => {
 	await page.goto('/settings#section-saveto');
 	const section = page.getByRole('region', { name: 'Save to' });
 	await section.getByRole('button', { name: 'Add destination' }).click();
@@ -51,22 +51,21 @@ test("a library series' destination is changed from the library", async ({ page 
 	await bar.getByRole('button', { name: 'Save' }).click();
 	await expect(bar).toContainText('Saved');
 
-	await page.goto('/');
-	const button = page.getByRole('button', { name: /^Download folder of / }).first();
-	const title = (await button.getAttribute('aria-label'))?.replace('Download folder of ', '') ?? '';
+	// Frieren is in the library.
+	await page.goto('/series?module=mangadex&link=%2Ftitle%2Fabc123%2Ffrieren');
+	const button = page.getByRole('button', { name: 'Download folder…' });
 	await button.click();
 	const dialog = page.getByRole('dialog', { name: 'Download folder' });
 	await expect(dialog).toContainText('they are not moved');
+	await expect(button).toHaveAttribute('title', '/data/downloads/Frieren');
 	await dialog.getByRole('combobox', { name: 'Destination' }).selectOption({
 		label: 'New destination'
 	});
-	await expect(dialog.getByRole('textbox', { name: 'Folder' })).toHaveValue(
-		`/data/manhwa/${title}`
-	);
+	await expect(dialog.getByRole('textbox', { name: 'Folder' })).toHaveValue('/data/manhwa/Frieren');
 	await dialog.getByRole('button', { name: 'Save' }).click();
 	await expect(dialog).toBeHidden();
-	await expect(page.getByRole('button', { name: `Download folder of ${title}` })).toHaveAttribute(
-		'title',
-		`/data/manhwa/${title}`
-	);
+
+	await button.click();
+	await expect(dialog.getByRole('textbox', { name: 'Folder' })).toHaveValue('/data/manhwa/Frieren');
+	await expect(button).toHaveAttribute('title', '/data/manhwa/Frieren');
 });

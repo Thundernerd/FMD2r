@@ -58,7 +58,9 @@ pub use log_files::{LogRotation, LogWriter};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use metadata::MangaBakaStatus;
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
-pub use series::{ChapterInfo, ResolveRequest, SeriesInfo, SeriesRef, SeriesStatus};
+pub use series::{
+    ChapterInfo, MangaBakaSeries, ResolveRequest, SeriesInfo, SeriesLink, SeriesRef, SeriesStatus,
+};
 pub use serve::{ServeConfig, ServeError, serve};
 pub use services::{
     DownloadEngine, FavoritesJobs, Idle, LoadFailure, ModuleCatalog, ModulesReport,

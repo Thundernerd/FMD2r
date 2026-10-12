@@ -49,7 +49,7 @@ fn a_v1_file_reports_its_version() {
             err,
             StoreError::SchemaMismatch {
                 found: 1,
-                supported: 2,
+                supported: 3,
                 ..
             }
         ),
