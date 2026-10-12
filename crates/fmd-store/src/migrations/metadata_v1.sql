@@ -1,3 +1,4 @@
+-- No longer built: kept so tests can write a v1 file and check it is rebuilt.
 -- metadata.db schema v1: MangaBaka's series, reduced to what matching list titles and showing
 -- their metadata need. Built in one go by MetadataBuilder and only read afterwards.
 CREATE TABLE series (

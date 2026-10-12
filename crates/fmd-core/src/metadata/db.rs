@@ -99,7 +99,7 @@ impl MangaBakaDb {
                 Ok(db) => Some(Arc::new(Metadata { db })),
                 Err(StoreError::SchemaMismatch {
                     found, supported, ..
-                }) if found < supported => {
+                }) if (1..supported).contains(&found) => {
                     tracing::info!(target: "fmd_core",
                         "{} has schema version {found}; rebuilding it as version {supported}",
                         path.display());
@@ -126,6 +126,11 @@ impl MangaBakaDb {
     /// The file on disk has an older schema: it is not read, and is due for a rebuild.
     pub fn is_outdated(&self) -> bool {
         self.outdated.load(Ordering::Relaxed)
+    }
+
+    /// A cancelled rebuild is not started again; downloading by hand still replaces the file.
+    pub(super) fn forget_outdated(&self) {
+        self.outdated.store(false, Ordering::Relaxed);
     }
 
     fn path(&self) -> PathBuf {

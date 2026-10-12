@@ -185,10 +185,17 @@ fn add_record(
         return Ok(());
     }
 
-    let authors: Vec<String> = strings(record.get("authors")).map(str::to_owned).collect();
-    let artists: Vec<String> = strings(record.get("artists")).map(str::to_owned).collect();
+    let authors: Vec<String> = strings(record.get("authors"))
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let artists: Vec<String> = strings(record.get("artists"))
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect();
     let names = [authors.as_slice(), artists.as_slice()].concat();
-    let optional = |field: &str| Some(str_field(record, field).to_owned());
+    // Empty ones are stored as NULL.
+    let text = |field: &str| Some(str_field(record, field).to_owned());
     let cover = |size: &str| {
         record
             .get("cover")
@@ -200,8 +207,8 @@ fn add_record(
     builder.add_series(&MetadataSeries {
         id,
         title: str_field(record, "title").to_owned(),
-        native_title: optional("native_title"),
-        romanized_title: optional("romanized_title"),
+        native_title: text("native_title"),
+        romanized_title: text("romanized_title"),
         english_title: english_title(record).map(str::to_owned),
         kind: str_field(record, "type").to_owned(),
         status: str_field(record, "status").to_owned(),
@@ -228,6 +235,11 @@ fn english_title(record: &Map<String, Value>) -> Option<&str> {
         .into_iter()
         .flatten()
         .filter(|t| t.get("language").and_then(Value::as_str) == Some("en"))
+        .filter(|t| {
+            t.get("title")
+                .and_then(Value::as_str)
+                .is_some_and(|t| !t.is_empty())
+        })
         .collect();
     let official = |t: &&Value| strings(t.get("traits")).any(|trait_| trait_ == "official");
     let primary = |t: &&Value| t.get("is_primary").and_then(Value::as_bool) == Some(true);

@@ -272,7 +272,8 @@ impl MetadataJobs {
     }
 
     /// Refreshes a downloaded database every `refresh_days` (0 = never; a day after a failure),
-    /// rebuilds one with an older schema at startup, and runs [`MetadataJobs::catch_up`] at startup and hourly. Runs until dropped.
+    /// rebuilds one with an older schema at startup, and runs [`MetadataJobs::catch_up`] at
+    /// startup and hourly. Runs until dropped.
     pub async fn schedule(self) {
         let mut tick = tokio::time::interval(SCHEDULE_TICK);
         let mut settings = self.inner.settings.subscribe();
@@ -384,7 +385,10 @@ impl Inner {
         });
         let summary = match built {
             Ok(summary) => summary,
-            Err(MetadataError::Cancelled) => return self.end_cancelled(MetadataPhase::Downloading),
+            Err(MetadataError::Cancelled) => {
+                self.db.forget_outdated();
+                return self.end_cancelled(MetadataPhase::Downloading);
+            }
             Err(e) => return self.end_failed(MetadataPhase::Downloading, &e),
         };
         tracing::info!(target: "fmd_core",

@@ -289,3 +289,14 @@ async fn a_v1_database_is_rebuilt_at_startup() {
     let series = db.current().unwrap().series(189).unwrap().unwrap();
     assert_eq!(series.english_title.as_deref(), Some("Reborn Rich"));
 }
+
+#[test]
+fn a_file_without_a_schema_version_is_not_taken_for_an_old_database() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("metadata.db"), b"").unwrap();
+
+    let db = MangaBakaDb::open(dir.path(), FixtureSource::new(&fixture_records()));
+
+    assert!(db.current().is_none());
+    assert!(!db.is_outdated());
+}

@@ -86,7 +86,7 @@ impl MetadataBuilder {
             s.description,
             s.genres.join("\n"),
             s.people.join("\n"),
-            non_empty(Some(&s.authors.join("\n"))),
+            non_empty(Some(s.authors.join("\n").as_str())),
             non_empty(Some(&s.artists.join("\n"))),
             s.cover_x150,
             s.cover_x250,
