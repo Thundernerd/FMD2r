@@ -40,6 +40,7 @@
 	let importing = $state(false);
 	let groups = $state<GroupView[]>([]);
 	let editingGroups = $state(false);
+	let foldError = $state<string | null>(null);
 	let ungroupedCollapsed = $state(readUngroupedCollapsed());
 
 	const shown = $derived(filterFavorites(favorites, filters));
@@ -132,12 +133,13 @@
 			return;
 		}
 		const { id } = section.group;
+		foldError = null;
 		try {
 			// Folded once saved, so the section shows what every device will see.
 			const saved = await api.updateGroup(id, { collapsed });
 			groups = groups.map((g) => (g.id === id ? saved : g));
 		} catch {
-			checkError = 'Could not fold the section.';
+			foldError = `Could not save whether ${section.name} is folded.`;
 		}
 	}
 
@@ -219,6 +221,9 @@
 			onimported={load}
 			onclose={() => (importing = false)}
 		/>
+	{/if}
+	{#if foldError}
+		<p class="bad" role="alert">{foldError}</p>
 	{/if}
 	{#if editingGroups}
 		<GroupsDialog

@@ -191,13 +191,13 @@ pub struct FavoritePatch {
     pub save_to: Option<String>,
     pub title: Option<String>,
     /// The library group to put it in; `null` ungroups it.
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "null_or_value")]
     #[schema(value_type = Option<i64>, nullable)]
     pub group_id: Option<Option<i64>>,
 }
 
 /// Tells a field that is `null` (`Some(None)`) from a missing one (`None`, by `default`).
-fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+fn null_or_value<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: Deserialize<'de>,

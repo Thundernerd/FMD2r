@@ -16,6 +16,9 @@
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 
+	/** How the select shows a group id: empty for none. */
+	const shown = (groupId: number | null | undefined) => (groupId == null ? '' : String(groupId));
+
 	/** The series' entry in the library and the groups to choose from. */
 	async function load() {
 		const [favorites, list] = await Promise.all([api.listFavorites(), api.listGroups()]);
@@ -23,7 +26,7 @@
 		if (!favorite) return;
 		favoriteId = favorite.id;
 		groups = list;
-		value = favorite.group_id == null ? '' : String(favorite.group_id);
+		value = shown(favorite.group_id);
 	}
 	$effect(() => {
 		// Without the select, the rest of the header still works.
@@ -33,7 +36,7 @@
 	async function assign(groupId: number | null) {
 		if (favoriteId === null) return;
 		const favorite = await api.updateFavorite(favoriteId, { group_id: groupId });
-		value = favorite.group_id == null ? '' : String(favorite.group_id);
+		value = shown(favorite.group_id);
 	}
 
 	async function changed() {
@@ -56,17 +59,26 @@
 		if (!name) return;
 		busy = true;
 		error = null;
+		let group: GroupView;
 		try {
-			const group = await api.createGroup(name);
+			group = await api.createGroup(name);
 			groups = [...groups, group];
-			await assign(group.id);
 			creating = false;
 			newName = '';
+			// The group exists now: picking it again from the select retries a failed move.
+			value = shown(group.id);
 		} catch (e) {
 			error =
 				e instanceof ApiError && e.status === 409
 					? `A group named ${name} exists already.`
 					: 'Could not create the group.';
+			busy = false;
+			return;
+		}
+		try {
+			await assign(group.id);
+		} catch {
+			error = 'Could not change the group.';
 		} finally {
 			busy = false;
 		}

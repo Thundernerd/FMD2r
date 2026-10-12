@@ -299,4 +299,22 @@ describe('SeriesHeader', () => {
 			).toBe('3')
 		);
 	});
+
+	it('keeps a group it created when moving the series into it fails', async () => {
+		const api = groupedLibrary(null);
+		api.updateFavorite.mockImplementationOnce(() => Promise.reject(new Error('offline')));
+		choose(await groupSelect(), 'new');
+
+		const name = document.querySelector('input[aria-label="New group name"]') as HTMLInputElement;
+		name.value = 'Isekai';
+		name.dispatchEvent(new Event('input', { bubbles: true }));
+		(name.form as HTMLFormElement).requestSubmit();
+		await vi.waitFor(() =>
+			expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+				'Could not change the group.'
+			)
+		);
+		const select = document.querySelector('select[aria-label="Group"]') as HTMLSelectElement;
+		expect([...select.options].map((o) => o.textContent)).toContain('Isekai');
+	});
 });

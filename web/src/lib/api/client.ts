@@ -275,6 +275,19 @@ export function createApi({
 		return res.data;
 	};
 
+	/** Like `unwrap`, but keeps the problem's `detail`, saying why the server refused. */
+	const explained = <T>(
+		what: string,
+		res: { data?: T; error?: unknown; response: Response }
+	): T => {
+		if (!res.response.ok || res.data === undefined) {
+			// Every error these operations answer is a `Problem`.
+			const problem = res.error as Partial<Problem> | undefined;
+			throw new ApiError(res.response.status, what, problem?.detail ?? null);
+		}
+		return res.data;
+	};
+
 	/** Like `unwrap`, but turns a 422 problem into a {@link ValidationError}. */
 	const validated = <T>(
 		what: string,
@@ -396,13 +409,10 @@ export function createApi({
 			return unwrap('resolveUrl', res);
 		},
 		async getSeries(module, link) {
-			const res = await client.GET('/api/series', { params: { query: { module, link } } });
-			if (!res.response.ok || res.data === undefined) {
-				// Every error here is a `Problem`.
-				const problem = res.error as Partial<Problem> | undefined;
-				throw new ApiError(res.response.status, 'getSeries', problem?.detail ?? null);
-			}
-			return res.data;
+			return explained(
+				'getSeries',
+				await client.GET('/api/series', { params: { query: { module, link } } })
+			);
 		},
 		async createTask(task) {
 			return validated('createTask', await client.POST('/api/tasks', { body: task }));
@@ -532,15 +542,12 @@ export function createApi({
 			return unwrap('listFavorites', await client.GET('/api/favorites'));
 		},
 		async addFavorite(module, link, saveTo) {
-			const res = await client.POST('/api/favorites', {
-				body: { module_id: module, link, save_to: saveTo || null }
-			});
-			if (!res.response.ok || res.data === undefined) {
-				// Every error here is a `Problem`.
-				const problem = res.error as Partial<Problem> | undefined;
-				throw new ApiError(res.response.status, 'addFavorite', problem?.detail ?? null);
-			}
-			return res.data;
+			return explained(
+				'addFavorite',
+				await client.POST('/api/favorites', {
+					body: { module_id: module, link, save_to: saveTo || null }
+				})
+			);
 		},
 		async updateFavorite(id, patch) {
 			return validated(
@@ -570,21 +577,13 @@ export function createApi({
 			return unwrap('listGroups', await client.GET('/api/library/groups'));
 		},
 		async createGroup(name) {
-			const res = await client.POST('/api/library/groups', { body: { name } });
-			if (!res.response.ok || res.data === undefined) {
-				throw new ApiError(res.response.status, 'createGroup', res.error?.detail ?? null);
-			}
-			return res.data;
+			return explained('createGroup', await client.POST('/api/library/groups', { body: { name } }));
 		},
 		async updateGroup(id, patch) {
-			const res = await client.PATCH('/api/library/groups/{id}', {
-				params: { path: { id } },
-				body: patch
-			});
-			if (!res.response.ok || res.data === undefined) {
-				throw new ApiError(res.response.status, 'updateGroup', res.error?.detail ?? null);
-			}
-			return res.data;
+			return explained(
+				'updateGroup',
+				await client.PATCH('/api/library/groups/{id}', { params: { path: { id } }, body: patch })
+			);
 		},
 		async deleteGroup(id) {
 			const { response } = await client.DELETE('/api/library/groups/{id}', {
