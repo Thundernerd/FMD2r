@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { Api } from '#lib/api/client.ts';
+	import { FORMAT } from '#lib/discover/filters.ts';
 	import type { MangaBakaSearchResult, SeriesInfo } from '#lib/api/types.ts';
 
 	let {
@@ -80,14 +81,6 @@
 			picking = null;
 		}
 	}
-
-	const FORMAT: Record<string, string> = {
-		manga: 'Manga',
-		manhwa: 'Manhwa',
-		manhua: 'Manhua',
-		oel: 'OEL',
-		other: 'Other'
-	};
 </script>
 
 <dialog class="dialog" bind:this={dialog} aria-labelledby="{uid}-title" {onclose}>

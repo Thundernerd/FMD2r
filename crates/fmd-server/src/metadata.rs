@@ -169,7 +169,7 @@ pub(crate) async fn search(
 ) -> Result<Json<Vec<MangaBakaSearchResult>>, ApiError> {
     let meta = jobs(&state)?
         .current()
-        .ok_or_else(|| ApiError::Unavailable("the MangaBaka database is not downloaded".into()))?;
+        .ok_or(MetadataJobError::NoDatabase)?;
     let found = off_thread(move || meta.search(&query.q)).await??;
     Ok(Json(
         found

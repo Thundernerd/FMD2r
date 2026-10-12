@@ -212,3 +212,28 @@ fn a_series_picked_by_hand_that_a_new_build_lacks_stays_stored_but_unused() {
     f.download();
     f.assert_reborn_rich_by_hand(BLUE);
 }
+
+#[test]
+fn a_series_picked_by_hand_applies_to_the_link_in_either_form() {
+    let f = fixture();
+    f.lists
+        .masterlist()
+        .replace_module(WEBTOONS, [blue()])
+        .unwrap();
+    f.download();
+    let absolute = format!("https://www.webtoons.com{BLUE}");
+
+    f.jobs
+        .set_override(WEBTOONS, &absolute, REBORN_RICH)
+        .unwrap();
+    f.assert_reborn_rich_by_hand(BLUE);
+    f.assert_reborn_rich_by_hand(&absolute);
+    assert_eq!(
+        f.jobs.override_of(WEBTOONS, BLUE).unwrap(),
+        Some(REBORN_RICH)
+    );
+
+    f.jobs.remove_override(WEBTOONS, BLUE).unwrap();
+    assert_eq!(f.get(BLUE).unwrap().confidence, MatchConfidence::Ambiguous);
+    assert_eq!(f.jobs.override_of(WEBTOONS, &absolute).unwrap(), None);
+}

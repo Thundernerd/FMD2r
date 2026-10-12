@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
 	import type { FavoriteView, SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
+	import { FORMAT } from '#lib/discover/filters.ts';
 	import FolderDialog from './FolderDialog.svelte';
 	import MangaBakaMatchDialog from './MangaBakaMatchDialog.svelte';
 
@@ -123,13 +124,6 @@
 		hiatus: 'Hiatus',
 		cancelled: 'Cancelled',
 		unknown: 'Status unknown'
-	};
-	const FORMAT: Record<string, string> = {
-		manga: 'Manga',
-		manhwa: 'Manhwa',
-		manhua: 'Manhua',
-		oel: 'OEL',
-		other: 'Other'
 	};
 
 	let coverFailed = $state(false);
