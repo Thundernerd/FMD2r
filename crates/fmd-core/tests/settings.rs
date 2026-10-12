@@ -609,19 +609,21 @@ fn a_rename_template_with_an_unknown_token_is_rejected() {
     let (_dir, db) = open_db();
     let service = SettingsService::load(db).unwrap();
 
-    let errors = rejected(
-        &service,
-        json!({ "saveto": { "manga_rename": "%WEBSITE% - %CHAPTR%" } }),
-    );
-    assert_eq!(
-        errors,
-        [(
-            "saveto.manga_rename".to_string(),
-            "%CHAPTR% is not a token. Tokens: %MANGA% %CHAPTER% %NUMBERING% %WEBSITE% %AUTHOR% \
-             %ARTIST% %FILENAME%"
-                .to_string()
-        )]
-    );
+    for field in ["manga_rename", "chapter_rename"] {
+        let errors = rejected(
+            &service,
+            json!({ "saveto": { field: "%WEBSITE% - %CHAPTR%" } }),
+        );
+        assert_eq!(
+            errors,
+            [(
+                format!("saveto.{field}"),
+                "%CHAPTR% is not a token. Tokens: %MANGA% %CHAPTER% %NUMBERING% %WEBSITE% \
+                 %AUTHOR% %ARTIST% %FILENAME%"
+                    .to_string()
+            )]
+        );
+    }
 }
 
 #[test]
@@ -629,17 +631,16 @@ fn a_wrongly_cased_token_names_the_right_one() {
     let (_dir, db) = open_db();
     let service = SettingsService::load(db).unwrap();
 
-    let errors = rejected(
-        &service,
-        json!({ "saveto": { "chapter_rename": "Ch. %chapter%" } }),
-    );
-    assert_eq!(
-        errors,
-        [(
-            "saveto.chapter_rename".to_string(),
-            "%chapter% is not a token; did you mean %CHAPTER%?".to_string()
-        )]
-    );
+    for field in ["manga_rename", "chapter_rename"] {
+        let errors = rejected(&service, json!({ "saveto": { field: "Ch. %chapter%" } }));
+        assert_eq!(
+            errors,
+            [(
+                format!("saveto.{field}"),
+                "%chapter% is not a token; did you mean %CHAPTER%?".to_string()
+            )]
+        );
+    }
 }
 
 #[test]

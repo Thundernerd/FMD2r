@@ -418,15 +418,15 @@ pub(crate) fn import(
                     )
                 });
             let before = service.get();
-            match service.update(patch(setting, value)) {
+            let result = service.update(patch(setting, value));
+            if result.is_ok() {
+                report.warnings.extend(repaired);
+            }
+            match result {
                 Ok(after) if Arc::ptr_eq(&before, &after) => {
-                    report.warnings.extend(repaired);
                     report.settings.skip(item, SkipReason::AlreadyExists);
                 }
-                Ok(_) => {
-                    report.warnings.extend(repaired);
-                    report.settings.imported += 1;
-                }
+                Ok(_) => report.settings.imported += 1,
                 Err(e @ SettingsError::Invalid(_)) => {
                     report
                         .settings

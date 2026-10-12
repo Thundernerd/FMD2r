@@ -214,7 +214,7 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
 /// A `%` followed by letters in a rename template.
 struct Word<'a> {
     /// The letters after the `%`.
-    word: &'a str,
+    name: &'a str,
     /// Where the letters end in the template.
     end: usize,
     /// A `%` follows the letters.
@@ -222,16 +222,25 @@ struct Word<'a> {
 }
 
 impl Word<'_> {
-    /// The token whose name equals the word under `same`.
-    fn token(&self, same: fn(&str, &str) -> bool) -> Option<&'static str> {
+    fn token_where(&self, same: fn(&str, &str) -> bool) -> Option<&'static str> {
         fmd_pack::RENAME_TOKENS
             .into_iter()
-            .find(|t| same(&t[1..t.len() - 1], self.word))
+            .find(|t| same(&t[1..t.len() - 1], self.name))
+    }
+
+    /// The token this word names exactly.
+    fn exact_token(&self) -> Option<&'static str> {
+        self.token_where(str::eq)
+    }
+
+    /// The token this word names in another case, e.g. `%CHAPTER%` for `chapter`.
+    fn token_ignoring_case(&self) -> Option<&'static str> {
+        self.token_where(str::eq_ignore_ascii_case)
     }
 
     /// A token name without its closing `%`, e.g. `%CHAPTER - `.
     fn is_unclosed_token(&self) -> bool {
-        !self.closed && self.token(str::eq).is_some()
+        !self.closed && self.exact_token().is_some()
     }
 }
 
@@ -250,7 +259,7 @@ fn words(template: &str) -> Vec<Word<'_>> {
         let closed = template[end..].starts_with('%');
         if len > 0 {
             words.push(Word {
-                word: &template[start..end],
+                name: &template[start..end],
                 end,
                 closed,
             });
@@ -267,14 +276,14 @@ fn words(template: &str) -> Vec<Word<'_>> {
 fn template_problems(template: &str) -> Vec<String> {
     let mut problems = Vec::new();
     for word in words(template) {
-        let w = word.word;
+        let name = word.name;
         if word.is_unclosed_token() {
-            problems.push(format!("%{w} is missing its closing %"));
-        } else if word.closed && word.token(str::eq).is_none() {
-            problems.push(match word.token(str::eq_ignore_ascii_case) {
-                Some(right) => format!("%{w}% is not a token; did you mean {right}?"),
+            problems.push(format!("%{name} is missing its closing %"));
+        } else if word.closed && word.exact_token().is_none() {
+            problems.push(match word.token_ignoring_case() {
+                Some(token) => format!("%{name}% is not a token; did you mean {token}?"),
                 None => format!(
-                    "%{w}% is not a token. Tokens: {}",
+                    "%{name}% is not a token. Tokens: {}",
                     fmd_pack::RENAME_TOKENS.join(" ")
                 ),
             });
