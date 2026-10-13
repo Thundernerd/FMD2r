@@ -105,6 +105,8 @@ export interface Api {
 	taskFilesUrl(id: number): string;
 	/** Where the persisted log files download from, as one JSON-lines file. */
 	logsDownloadUrl(): string;
+	/** Where a backup of the library, settings and saved logins downloads from, as a zip. */
+	backupDownloadUrl(): string;
 	/** The series a manga URL points at, or `null` when no module handles the URL. */
 	resolveUrl(url: string): Promise<SeriesRef | null>;
 	/**
@@ -409,6 +411,9 @@ export function createApi({
 		},
 		logsDownloadUrl() {
 			return logsDownloadUrl ? logsDownloadUrl() : `${baseUrl}/api/logs/download`;
+		},
+		backupDownloadUrl() {
+			return `${baseUrl}/api/backup`;
 		},
 		async resolveUrl(url) {
 			const res = await client.POST('/api/resolve', { body: { url } });

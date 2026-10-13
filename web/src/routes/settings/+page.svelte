@@ -363,6 +363,13 @@
 										: 'Goes through the setup with the current values.'}
 								</span>
 							</p>
+							<p class="backup">
+								<a class="btn" href={api.backupDownloadUrl()} download>Download backup</a>
+								<span class="small muted">
+									Includes your library, settings and saved logins. Keep it private: it holds the
+									key to your saved passwords.
+								</span>
+							</p>
 						{/if}
 						{#if section.id === 'appearance'}
 							<p class="custom-css small muted">
@@ -547,7 +554,8 @@
 			padding: 10px 14px;
 		}
 	}
-	.setup-again {
+	.setup-again,
+	.backup {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
