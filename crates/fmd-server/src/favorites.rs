@@ -280,7 +280,8 @@ pub struct BulkChange {
     /// `POST /api/save-folder` makes it. Chapters already downloaded are not moved.
     pub destination: Option<String>,
     /// Mark every chapter listed at their last check seen, as downloading them would, which
-    /// clears their new chapters. No file is downloaded.
+    /// clears their new chapters. No file is downloaded. A favorite not checked since it was
+    /// imported from FMD2 has no chapter links to mark, so its count stays until its next check.
     #[serde(default)]
     pub mark_seen: bool,
     /// Remove them from the library instead; their downloaded chapters stay recorded. Cannot be
@@ -409,12 +410,7 @@ async fn bulk_change(
                     ApiError::BadRequest("a favorite was removed while changing it".into())
                 })?;
             if mark_seen {
-                for favorite in &favorites {
-                    let links = db.favorites().chapter_links(favorite.id)?;
-                    let links: Vec<&str> = links.iter().map(String::as_str).collect();
-                    db.downloaded_chapters()
-                        .mark(&favorite.module_id, &favorite.link, &links)?;
-                }
+                db.favorites().mark_checked_chapters_seen(&ids)?;
             }
             Ok(favorites)
         })

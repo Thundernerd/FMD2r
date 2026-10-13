@@ -3567,7 +3567,7 @@
           },
           "mark_seen": {
             "type": "boolean",
-            "description": "Mark every chapter listed at their last check seen, as downloading them would, which\nclears their new chapters. No file is downloaded."
+            "description": "Mark every chapter listed at their last check seen, as downloading them would, which\nclears their new chapters. No file is downloaded. A favorite not checked since it was\nimported from FMD2 has no chapter links to mark, so its count stays until its next check."
           },
           "remove": {
             "type": "boolean",

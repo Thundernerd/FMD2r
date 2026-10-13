@@ -1236,7 +1236,8 @@ export interface components {
 			ids: number[];
 			/**
 			 * @description Mark every chapter listed at their last check seen, as downloading them would, which
-			 *     clears their new chapters. No file is downloaded.
+			 *     clears their new chapters. No file is downloaded. A favorite not checked since it was
+			 *     imported from FMD2 has no chapter links to mark, so its count stays until its next check.
 			 */
 			mark_seen?: boolean;
 			/**

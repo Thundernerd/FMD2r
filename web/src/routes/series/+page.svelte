@@ -72,7 +72,9 @@
 			.catch(() => {});
 	});
 
-	function marked(indices: number[], seen: boolean) {
+	/** Shows the marks the server stored, unless another series was opened meanwhile. */
+	function marked(of: { module_id: string; link: string }, indices: number[], seen: boolean) {
+		if (series?.module_id !== of.module_id || series.link !== of.link) return;
 		for (const i of indices) {
 			const chapter = series?.chapters[i];
 			if (chapter) chapter.downloaded = seen;

@@ -12,8 +12,12 @@
 		api: Api;
 		series: SeriesInfo;
 		selected: Set<number>;
-		/** The chapters at `indices` are now `seen`, as the server stored them. */
-		onmarked: (indices: number[], seen: boolean) => void;
+		/** The chapters at `indices` of the series at `link` are now `seen`, as the server stored them. */
+		onmarked: (
+			series: { module_id: string; link: string },
+			indices: number[],
+			seen: boolean
+		) => void;
 	} = $props();
 
 	let busy = $state(false);
@@ -24,7 +28,7 @@
 	/** Marks the selected chapters seen, or clears their marks; no file is touched. */
 	async function mark(seen: boolean) {
 		if (count === 0 || busy) return;
-		const picked = [...selected].sort((a, b) => a - b).filter((i) => series.chapters[i]);
+		const picked = [...selected].sort((a, b) => a - b);
 		const { module_id, link } = series;
 		busy = true;
 		error = null;
@@ -35,7 +39,7 @@
 				chapters: picked.flatMap((i) => series.chapters[i]?.link ?? []),
 				seen
 			});
-			onmarked(picked, seen);
+			onmarked({ module_id, link }, picked, seen);
 		} catch (e) {
 			error =
 				e instanceof ApiError
