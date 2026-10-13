@@ -116,7 +116,7 @@ fn flag(key: &str, value: &str) -> Result<bool, ApiError> {
 
 /// A zip file as the request body: `string` with format `binary`, which the derive does not
 /// produce for bytes.
-struct ZipFile;
+pub(crate) struct ZipFile;
 
 impl PartialSchema for ZipFile {
     fn schema() -> RefOr<Schema> {
@@ -154,13 +154,7 @@ pub(crate) async fn import(
         .clone()
         .ok_or_else(|| ApiError::Unavailable("the server has no data directory".into()))?;
     let limit = state.import_limits.upload_bytes;
-    let declared = headers
-        .get(header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok());
-    if declared.is_some_and(|len| len > limit) {
-        return Err(too_large("the upload", limit));
-    }
+    refuse_declared_over(&headers, limit)?;
     let run = ImportRun::start(&state)?;
     let scratch = match receive(body, &data_dir, limit).await {
         Ok(scratch) => scratch,
@@ -232,8 +226,20 @@ fn import_error(e: ImportError) -> ApiError {
     }
 }
 
+/// Refuses an upload whose declared length is over `limit` before receiving it.
+pub(crate) fn refuse_declared_over(headers: &HeaderMap, limit: u64) -> Result<(), ApiError> {
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    match declared {
+        Some(len) if len > limit => Err(too_large("the upload", limit)),
+        _ => Ok(()),
+    }
+}
+
 /// Saves the body as [`UPLOAD`] in a new folder in `data_dir`, refusing more than `limit` bytes.
-async fn receive(body: Body, data_dir: &Path, limit: u64) -> Result<TempDir, ApiError> {
+pub(crate) async fn receive(body: Body, data_dir: &Path, limit: u64) -> Result<TempDir, ApiError> {
     let saving = |e: io::Error| ApiError::Internal(format!("saving the upload: {e}"));
     let scratch = tempfile::Builder::new()
         .prefix(".import-")
@@ -257,12 +263,12 @@ async fn receive(body: Body, data_dir: &Path, limit: u64) -> Result<TempDir, Api
 }
 
 /// The uploaded zip's name in the upload folder.
-const UPLOAD: &str = "upload.zip";
+pub(crate) const UPLOAD: &str = "upload.zip";
 
 /// Zip entries an upload may have: a userdata folder has a handful of files.
 const MAX_ENTRIES: usize = 10_000;
 
-fn too_large(what: &str, limit: u64) -> ApiError {
+pub(crate) fn too_large(what: &str, limit: u64) -> ApiError {
     let limit = if limit >= 1 << 20 {
         format!("{} MiB", limit >> 20)
     } else {

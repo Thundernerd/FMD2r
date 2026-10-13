@@ -23,10 +23,10 @@ use crate::task_files::{attachment, io_error};
 use crate::{ApiError, AppState, Problem, custom_css};
 
 /// The database's name in the data folder and in the zip.
-const APP_DB: &str = "app.db";
+pub(crate) const APP_DB: &str = "app.db";
 
 /// The zip entry describing the backup.
-const BACKUP_JSON: &str = "backup.json";
+pub(crate) const BACKUP_JSON: &str = "backup.json";
 
 /// What the backup is, for restoring it.
 #[derive(Serialize)]

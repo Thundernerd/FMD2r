@@ -23,6 +23,7 @@ mod metadata;
 mod module_settings;
 mod module_updates;
 mod notifications;
+mod restore;
 mod series;
 mod serve;
 mod services;
@@ -66,6 +67,7 @@ pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use metadata::{MangaBakaSearchResult, MangaBakaStatus};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
 pub use notifications::NotificationTest;
+pub use restore::{RestoreError, apply_staged_restore, restore_backup};
 pub use series::{
     ChapterInfo, MangaBakaMatch, MangaBakaSeries, MatchRequest, ResolveRequest, SeenChange,
     SeriesInfo, SeriesLink, SeriesRef, SeriesStatus,
@@ -130,6 +132,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(about::about))
         .routes(routes!(backup::download))
         .routes(routes!(import::import))
+        .routes(routes!(restore::upload))
         .routes(routes!(covers::get))
         .routes(routes!(covers::series::get))
         .routes(routes!(settings::get, settings::patch))
