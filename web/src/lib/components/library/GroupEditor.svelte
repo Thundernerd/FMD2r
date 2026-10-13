@@ -187,6 +187,13 @@
 		flex-direction: column;
 		gap: var(--sp-3);
 		overflow-y: auto;
+		/* Scrolling clips on every side. Leave room for the focus outline (outline + 1px offset),
+		   pulling the edges back out so the dialog's layout doesn't move, and keep that room where
+		   focus scrolls a control into view (1px more, as scrolling snaps to whole pixels). */
+		--ring: calc(var(--focus-w) + 1px);
+		padding: var(--ring);
+		margin: calc(-1 * var(--ring));
+		scroll-padding: calc(var(--ring) + 1px);
 	}
 	ul {
 		list-style: none;
