@@ -27,6 +27,7 @@ pub struct Settings {
     pub covers: CoverSettings,
     pub logs: LogSettings,
     pub metadata: MetadataSettings,
+    pub notifications: NotificationSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -652,6 +653,9 @@ pub struct ServerSettings {
     /// so an open server is not warned about. Changes nothing about access.
     /// `--external-auth` / `FMD2R_EXTERNAL_AUTH` overrides it.
     pub external_auth: bool,
+    /// The address FMD2r is reached at, e.g. `https://fmd.example.org`; empty when unknown.
+    /// Notifications link to it.
+    pub public_url: String,
 }
 
 impl Default for ServerSettings {
@@ -662,6 +666,7 @@ impl Default for ServerSettings {
             session_idle_days: 7,
             session_lifetime_days: 30,
             external_auth: false,
+            public_url: String::new(),
         }
     }
 }
@@ -751,5 +756,95 @@ pub struct MangaBakaSettings {
 impl Default for MangaBakaSettings {
     fn default() -> Self {
         Self { refresh_days: 7 }
+    }
+}
+
+/// Pushes of inbox events to other services. No FMD2 counterpart: FMD2 shows balloon hints on
+/// the desktop (baseunits/uDownloadsManager.pas:741-803). Every channel is off by default.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct NotificationSettings {
+    pub ntfy: NtfySettings,
+    pub discord: DiscordSettings,
+    pub webhook: WebhookSettings,
+}
+
+/// An ntfy topic (https://docs.ntfy.sh/publish/).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct NtfySettings {
+    pub enabled: bool,
+    /// The topic to publish to, e.g. `https://ntfy.sh/my-topic`.
+    pub topic_url: String,
+    /// Access token sent as `Authorization: Bearer <token>`; empty for none. Stored encrypted;
+    /// the API only shows whether it is set.
+    pub token: String,
+    /// Send new and missing chapters.
+    pub new_chapters: bool,
+    /// Send warnings and errors: failed downloads, a failed library check, module problems.
+    pub problems: bool,
+}
+
+impl Default for NtfySettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            topic_url: String::new(),
+            token: String::new(),
+            new_chapters: true,
+            problems: true,
+        }
+    }
+}
+
+/// A Discord channel webhook.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct DiscordSettings {
+    pub enabled: bool,
+    /// `https://discord.com/api/webhooks/<id>/<token>`. It carries its own token, so it is stored
+    /// encrypted and the API only shows whether it is set.
+    pub webhook_url: String,
+    /// Send new and missing chapters.
+    pub new_chapters: bool,
+    /// Send warnings and errors: failed downloads, a failed library check, module problems.
+    pub problems: bool,
+}
+
+impl Default for DiscordSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            webhook_url: String::new(),
+            new_chapters: true,
+            problems: true,
+        }
+    }
+}
+
+/// Any HTTP endpoint taking a JSON `POST` (Home Assistant, n8n, an Apprise server…).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct WebhookSettings {
+    pub enabled: bool,
+    pub url: String,
+    /// The `Authorization` header's value, e.g. `Bearer <token>`; empty for none. Stored
+    /// encrypted; the API only shows whether it is set.
+    pub authorization: String,
+    /// Send new and missing chapters.
+    pub new_chapters: bool,
+    /// Send warnings and errors: failed downloads, a failed library check, module problems.
+    pub problems: bool,
+}
+
+impl Default for WebhookSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: String::new(),
+            authorization: String::new(),
+            new_chapters: true,
+            problems: true,
+        }
     }
 }

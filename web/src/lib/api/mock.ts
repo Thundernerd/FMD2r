@@ -930,6 +930,24 @@ export function createMockBackend({
 			const paths = Array.isArray(body?.paths) ? body.paths.map(String) : [];
 			return json(settings.checkFolders(paths));
 		}
+		const notificationTest = route.match(/^POST \/api\/notifications\/([^/]+)\/test$/);
+		if (notificationTest) {
+			const channel = notificationTest[1];
+			const { ntfy, discord, webhook } = settings.getSettings().notifications;
+			const urls: Record<string, boolean> = {
+				ntfy: ntfy.topic_url !== '',
+				discord: discord.has_webhook_url,
+				webhook: webhook.url !== ''
+			};
+			if (channel === undefined || !(channel in urls)) {
+				return json({ status: 400, detail: `unknown channel ${channel}` }, 400);
+			}
+			return json(
+				urls[channel]
+					? { delivered: true, error: null }
+					: { delivered: false, error: 'No URL is set.' }
+			);
+		}
 		if (route === 'POST /api/save-folder') {
 			const body = (await req.json()) as Partial<SaveFolderRequest> | null;
 			if (typeof body?.module_id !== 'string' || typeof body.title !== 'string') {

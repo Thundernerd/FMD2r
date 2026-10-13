@@ -11,7 +11,7 @@ use fmd_lua::{
     Invalidate, LoadFailure, MemorySettingsStore, Module, ModuleRegistry, ModuleSettingsStore,
     WorkerPool,
 };
-use fmd_store::{AppDb, EventSeverity, ModuleFile, NewEvent, StoreError};
+use fmd_store::{AppDb, Event, EventSeverity, ModuleFile, NewEvent, StoreError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -259,6 +259,7 @@ pub fn synced_commit(db: &AppDb) -> Result<String, UpdateError> {
 }
 
 type AfterSync = dyn Fn(&SyncReport) + Send + Sync;
+type OnEvent = dyn Fn(Event) + Send + Sync;
 
 /// Syncs the Lua tree with upstream and reloads the modules that changed.
 pub struct ModuleUpdater {
@@ -268,6 +269,7 @@ pub struct ModuleUpdater {
     modules: Arc<LiveModules>,
     pool: Option<Arc<WorkerPool>>,
     after_sync: Option<Box<AfterSync>>,
+    on_event: Option<Box<OnEvent>>,
     /// Unix seconds when an exhausted API rate limit resets.
     rate_limit_reset: Mutex<Option<i64>>,
     terminate: Mutex<TerminateToken>,
@@ -314,6 +316,7 @@ impl ModuleUpdater {
             modules,
             pool: None,
             after_sync: None,
+            on_event: None,
             rate_limit_reset: Mutex::new(None),
             terminate: Mutex::default(),
             running: Mutex::new(()),
@@ -332,6 +335,12 @@ impl ModuleUpdater {
         hook: impl Fn(&SyncReport) + Send + Sync + 'static,
     ) -> ModuleUpdater {
         self.after_sync = Some(Box::new(hook));
+        self
+    }
+
+    /// Calls `hook` with each inbox event the updater stores, e.g. to announce it.
+    pub fn with_on_event(mut self, hook: impl Fn(Event) + Send + Sync + 'static) -> ModuleUpdater {
+        self.on_event = Some(Box::new(hook));
         self
     }
 
@@ -689,7 +698,7 @@ impl ModuleUpdater {
         title: String,
         body: serde_json::Value,
     ) -> Result<(), UpdateError> {
-        self.db.events().push(&NewEvent {
+        let stored = self.db.events().push(&NewEvent {
             kind: EVENT_KIND.into(),
             severity,
             module_id: module.map(|m| m.def().id),
@@ -697,6 +706,9 @@ impl ModuleUpdater {
             title,
             body,
         })?;
+        if let Some(hook) = &self.on_event {
+            hook(stored);
+        }
         Ok(())
     }
 

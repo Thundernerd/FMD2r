@@ -15,6 +15,7 @@
 	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
 	import DestinationsEditor from '#lib/components/settings/DestinationsEditor.svelte';
 	import MangaBakaPanel from '#lib/components/settings/MangaBakaPanel.svelte';
+	import NotificationChannels from '#lib/components/settings/NotificationChannels.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
@@ -346,9 +347,17 @@
 						{#if section.id === 'saveto'}
 							<DestinationsEditor {draft} checkFolders={(paths) => api.checkFolders(paths)} />
 						{/if}
-						{#each section.fields as field (field.path)}
-							<SettingField {field} {draft} overridden={session.overridden(field.path)} />
-						{/each}
+						{#if section.id === 'notifications'}
+							<NotificationChannels
+								{draft}
+								fields={section.fields}
+								test={(channel) => api.testNotification(channel)}
+							/>
+						{:else}
+							{#each section.fields as field (field.path)}
+								<SettingField {field} {draft} overridden={session.overridden(field.path)} />
+							{/each}
+						{/if}
 						{#if section.id === 'metadata'}
 							<MangaBakaPanel {api} store={events} />
 						{/if}

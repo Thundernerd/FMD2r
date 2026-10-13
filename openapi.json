@@ -2221,6 +2221,48 @@
         }
       }
     },
+    "/api/notifications/{channel}/test": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Send a test notification to a channel with its saved settings, whether or not it is on.",
+        "operationId": "testNotification",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "description": "The channel to send to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Channel"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether it was delivered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationTest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No such channel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/preview-rename": {
       "post": {
         "tags": [
@@ -3537,6 +3579,15 @@
           }
         }
       },
+      "Channel": {
+        "type": "string",
+        "description": "A service notifications are sent to.",
+        "enum": [
+          "ntfy",
+          "discord",
+          "webhook"
+        ]
+      },
       "ChapterInfo": {
         "type": "object",
         "description": "One chapter of a series.",
@@ -3745,6 +3796,33 @@
           },
           "path": {
             "type": "string"
+          }
+        }
+      },
+      "DiscordSettingsView": {
+        "type": "object",
+        "description": "[`DiscordSettings`] with the webhook URL, which carries a token, left out.",
+        "required": [
+          "enabled",
+          "has_webhook_url",
+          "new_chapters",
+          "problems"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "has_webhook_url": {
+            "type": "boolean",
+            "description": "Whether a webhook URL is set. Patch `webhook_url` to set it; an empty one clears it."
+          },
+          "new_chapters": {
+            "type": "boolean",
+            "description": "Send new and missing chapters."
+          },
+          "problems": {
+            "type": "boolean",
+            "description": "Send warnings and errors: failed downloads, a failed library check, module problems."
           }
         }
       },
@@ -5549,6 +5627,77 @@
           }
         }
       },
+      "NotificationSettingsView": {
+        "type": "object",
+        "description": "[`NotificationSettings`] with the tokens and Discord's webhook URL left out.",
+        "required": [
+          "ntfy",
+          "discord",
+          "webhook"
+        ],
+        "properties": {
+          "discord": {
+            "$ref": "#/components/schemas/DiscordSettingsView"
+          },
+          "ntfy": {
+            "$ref": "#/components/schemas/NtfySettingsView"
+          },
+          "webhook": {
+            "$ref": "#/components/schemas/WebhookSettingsView"
+          }
+        }
+      },
+      "NotificationTest": {
+        "type": "object",
+        "description": "How a test notification went.",
+        "required": [
+          "delivered"
+        ],
+        "properties": {
+          "delivered": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why it was not delivered."
+          }
+        }
+      },
+      "NtfySettingsView": {
+        "type": "object",
+        "description": "[`NtfySettings`] with the access token left out.",
+        "required": [
+          "enabled",
+          "topic_url",
+          "has_token",
+          "new_chapters",
+          "problems"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "has_token": {
+            "type": "boolean",
+            "description": "Whether an access token is set. Patch `token` to set it; an empty one clears it."
+          },
+          "new_chapters": {
+            "type": "boolean",
+            "description": "Send new and missing chapters."
+          },
+          "problems": {
+            "type": "boolean",
+            "description": "Send warnings and errors: failed downloads, a failed library check, module problems."
+          },
+          "topic_url": {
+            "type": "string",
+            "description": "The topic to publish to, e.g. `https://ntfy.sh/my-topic`."
+          }
+        }
+      },
       "OutputFormat": {
         "type": "string",
         "description": "`rgOptionCompress` items None/ZIP/CBZ/PDF/EPUB (mangadownloader/forms/frmMain.lfm:3912-3918).",
@@ -6228,7 +6377,8 @@
           "has_auth_token",
           "session_idle_days",
           "session_lifetime_days",
-          "external_auth"
+          "external_auth",
+          "public_url"
         ],
         "properties": {
           "bind": {
@@ -6242,6 +6392,10 @@
           "has_auth_token": {
             "type": "boolean",
             "description": "Whether a password is set. Patch `auth_token` to set it; an empty one clears it."
+          },
+          "public_url": {
+            "type": "string",
+            "description": "The address FMD2r is reached at; empty when unknown. Notifications link to it."
           },
           "session_idle_days": {
             "type": "integer",
@@ -6440,6 +6594,35 @@
               "repo_ref": "master"
             }
           },
+          "notifications": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotificationSettingsView"
+              }
+            ],
+            "default": {
+              "discord": {
+                "enabled": false,
+                "has_webhook_url": false,
+                "new_chapters": true,
+                "problems": true
+              },
+              "ntfy": {
+                "enabled": false,
+                "has_token": false,
+                "new_chapters": true,
+                "problems": true,
+                "topic_url": ""
+              },
+              "webhook": {
+                "enabled": false,
+                "has_authorization": false,
+                "new_chapters": true,
+                "problems": true,
+                "url": ""
+              }
+            }
+          },
           "output": {
             "oneOf": [
               {
@@ -6492,6 +6675,7 @@
               "bind": "127.0.0.1:8080",
               "external_auth": false,
               "has_auth_token": false,
+              "public_url": "",
               "session_idle_days": 7,
               "session_lifetime_days": 30
             }
@@ -7109,6 +7293,37 @@
             "type": "boolean",
             "description": "`update/UpdateListRemoveDuplicateLocalData`, default false\n(mangadownloader/forms/frmMain.pas:5957).",
             "default": false
+          }
+        }
+      },
+      "WebhookSettingsView": {
+        "type": "object",
+        "description": "[`WebhookSettings`] with the `Authorization` header left out.",
+        "required": [
+          "enabled",
+          "url",
+          "has_authorization",
+          "new_chapters",
+          "problems"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "has_authorization": {
+            "type": "boolean",
+            "description": "Whether an `Authorization` header is set. Patch `authorization` to set it; an empty one\nclears it."
+          },
+          "new_chapters": {
+            "type": "boolean",
+            "description": "Send new and missing chapters."
+          },
+          "problems": {
+            "type": "boolean",
+            "description": "Send warnings and errors: failed downloads, a failed library check, module problems."
+          },
+          "url": {
+            "type": "string"
           }
         }
       },
