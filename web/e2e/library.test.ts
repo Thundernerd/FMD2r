@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { USERDATA_ZIP } from './userdata.ts';
 
 test('the library shows its favorites as a cover grid that chips filter', async ({ page }) => {
@@ -258,6 +258,129 @@ test('series put in a group show in its section, which stays folded after a relo
 	await expect(shounen).toHaveCount(0);
 });
 
+/** Fails unless `control`'s focus outline, as drawn, fits inside every ancestor that clips it. */
+async function expectWholeOutline(control: Locator) {
+	await expect(control).toBeFocused();
+	const clipped = await control.evaluate((el) => {
+		const style = getComputedStyle(el);
+		const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+		if (style.outlineStyle === 'none' || !(ring > 0)) return 'no outline';
+		const box = el.getBoundingClientRect();
+		for (let ancestor = el.parentElement; ancestor; ancestor = ancestor.parentElement) {
+			const overflow = getComputedStyle(ancestor);
+			if (overflow.overflowX === 'visible' && overflow.overflowY === 'visible') continue;
+			// The padding box, at fractional pixels: borders and a scrollbar don't show content.
+			const rect = ancestor.getBoundingClientRect();
+			const left = rect.left + ancestor.clientLeft;
+			const top = rect.top + ancestor.clientTop;
+			const right =
+				rect.right - (ancestor.offsetWidth - ancestor.clientWidth - ancestor.clientLeft);
+			const bottom =
+				rect.bottom - (ancestor.offsetHeight - ancestor.clientHeight - ancestor.clientTop);
+			if (
+				box.left - ring < left ||
+				box.top - ring < top ||
+				box.right + ring > right ||
+				box.bottom + ring > bottom
+			)
+				return `clipped by <${ancestor.tagName.toLowerCase()} class="${ancestor.className}">`;
+		}
+		return null;
+	});
+	expect(clipped, 'the whole focus outline shows').toBeNull();
+}
+
+/** Opens the Groups dialog and adds `names` from its "New group" box; the dialog. */
+async function openGroups(page: Page, names: string[]) {
+	await page.getByRole('button', { name: 'Groups…' }).click();
+	const editor = page.getByRole('dialog', { name: 'Groups' });
+	const name = editor.getByRole('textbox', { name: 'New group' });
+	for (const group of names) {
+		await name.fill(group);
+		await name.press('Enter');
+		await expect(editor.getByRole('list', { name: 'Groups' })).toContainText(`${group} · 0`);
+	}
+	return editor;
+}
+
+for (const [style, focusWidth] of [
+	['default', '2px'],
+	['high-contrast', '3px']
+] as const) {
+	test(`the Groups dialog shows the whole focus outline of its controls (${style})`, async ({
+		page
+	}) => {
+		await page.goto('/');
+		const editor = await openGroups(page, ['Shounen', 'Seinen']);
+		// Shown without saving, once the app has applied the saved settings.
+		await page.evaluate((s) => document.documentElement.setAttribute('data-style', s), style);
+		const name = editor.getByRole('textbox', { name: 'New group' });
+		await name.focus();
+		await expect(name).toHaveCSS('outline-width', focusWidth);
+		await expectWholeOutline(name);
+		await name.fill('Josei');
+		await page.keyboard.press('Tab');
+		await expectWholeOutline(editor.getByRole('button', { name: 'Add' }));
+
+		for (const button of [
+			'Move Seinen up',
+			'Move Shounen down',
+			'Rename Shounen',
+			'Delete Shounen'
+		]) {
+			const control = editor.getByRole('button', { name: button });
+			await control.focus();
+			await expectWholeOutline(control);
+		}
+
+		// The buttons of the rename and delete rows, reached from the keyboard.
+		await editor.getByRole('button', { name: 'Rename Shounen' }).press('Enter');
+		const rename = editor.getByRole('textbox', { name: 'Name of Shounen' });
+		await rename.focus();
+		await expectWholeOutline(rename);
+		for (const button of ['Save', 'Cancel']) {
+			await page.keyboard.press('Tab');
+			await expectWholeOutline(editor.getByRole('button', { name: button, exact: true }));
+		}
+		await page.keyboard.press('Enter');
+
+		await editor.getByRole('button', { name: 'Delete Shounen' }).press('Enter');
+		for (const button of ['Delete', 'Cancel']) {
+			const control = editor.getByRole('button', { name: button, exact: true });
+			await control.focus();
+			await expectWholeOutline(control);
+		}
+	});
+}
+
+test('a long group list scrolls inside the Groups dialog', async ({ page }) => {
+	await page.goto('/');
+	const editor = await openGroups(
+		page,
+		Array.from({ length: 40 }, (_, i) => `Group ${i + 1}`)
+	);
+	const groups = editor.getByRole('list', { name: 'Groups' });
+
+	// The list's container scrolls, not the dialog, which stays within the window.
+	const scrolls = (el: Element) => el.scrollHeight > el.clientHeight;
+	expect(await groups.locator('..').evaluate(scrolls)).toBe(true);
+	expect(await editor.evaluate(scrolls)).toBe(false);
+	const box = await editor.boundingBox();
+	expect((box?.y ?? Infinity) + (box?.height ?? 0)).toBeLessThanOrEqual(
+		page.viewportSize()?.height ?? 0
+	);
+
+	// Focus scrolls a row into view, and its outline isn't cut off at the scrolling edge.
+	const below = editor.getByRole('button', { name: 'Rename Group 30' });
+	await below.focus();
+	await expectWholeOutline(below);
+	// Back to the top, so the next row scrolls in at the bottom edge.
+	await editor.getByRole('button', { name: 'Rename Group 1', exact: true }).focus();
+	const middle = editor.getByRole('button', { name: 'Rename Group 20' });
+	await middle.focus();
+	await expectWholeOutline(middle);
+});
+
 test('a series paused from its page shows as paused in the library, until resumed', async ({
 	page
 }) => {
@@ -291,7 +414,7 @@ test.describe('selecting several series', () => {
 	const THREE = ['Frieren', 'Kagurabachi', 'Sakamoto Days'];
 
 	/** Turns on selection mode and selects `titles`; the cards, as checkboxes. */
-	async function select(page: import('@playwright/test').Page, titles: string[]) {
+	async function select(page: Page, titles: string[]) {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Select', exact: true }).click();
 		for (const title of titles) {
