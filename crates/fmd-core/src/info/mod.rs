@@ -34,6 +34,16 @@ pub struct MangaInfo {
     pub chapters: Vec<Chapter>,
 }
 
+/// FMD2's comma-separated genre list ([`MangaInfo::genres`]) as items.
+pub fn split_genres(genres: &str) -> Vec<String> {
+    genres
+        .split(',')
+        .map(str::trim)
+        .filter(|g| !g.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Chapter {
     pub name: String,

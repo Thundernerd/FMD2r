@@ -104,7 +104,7 @@ impl Transport for Site {
 
 /// A module (and, at `other.test`, its copy `other`) whose series page holds a status line, then
 /// one `link name` chapter per line; a `cover <link>` line sets the cover link, an `author
-/// <name>` line the authors.
+/// <name>` line the authors, a `genres <list>` line the genres.
 const SITE: &str = r#"
 function Init()
   local m = NewWebsiteModule()
@@ -124,6 +124,8 @@ function GetInfo()
       MANGAINFO.CoverLink = line:sub(7)
     elseif line:match('^author ') then
       MANGAINFO.Authors = line:sub(8)
+    elseif line:match('^genres ') then
+      MANGAINFO.Genres = line:sub(8)
     else
       local link, name = line:match('^(%S+) (.+)$')
       MANGAINFO.ChapterLinks.Add(link)
@@ -347,6 +349,43 @@ async fn a_check_stores_the_sites_info_and_says_when_it_changed() {
         *changed.lock().unwrap(),
         ["site"],
         "unchanged the second time"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_check_keeps_the_sites_genres_without_calling_a_genres_change_a_change() {
+    let fx = Fixture::new(json!({}));
+    let id = fx.favorite();
+    fx.site.set(
+        "/manga",
+        "1\nauthor Someone\ngenres Action, Drama\n/c1 Chapter 1",
+    );
+    let checker = fx.checker();
+    let changed: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = changed.clone();
+    checker.on_info_changed(move |module_id| seen.lock().unwrap().push(module_id.to_owned()));
+    checker
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+    fx.site.set(
+        "/manga",
+        "1\nauthor Someone\ngenres Action, Drama, Romance\n/c1 Chapter 1",
+    );
+
+    checker
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        fx.db.favorites().info(id).unwrap().unwrap().genres,
+        "Action, Drama, Romance"
+    );
+    assert_eq!(
+        *changed.lock().unwrap(),
+        ["site"],
+        "only the first check changed what matching reads"
     );
 }
 
