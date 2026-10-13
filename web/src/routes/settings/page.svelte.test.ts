@@ -119,6 +119,19 @@ describe('the settings page', () => {
 		expect(messages).toContain('%CHAPTER is missing its closing %');
 	});
 
+	it('offers a backup download from the server in General, with a warning to keep it private', async () => {
+		await open('#section-general');
+
+		const link = screen.getByRole('link', { name: 'Download backup' });
+		expect(link.getAttribute('href')).toBe('http://fmd2r.test/api/backup');
+		expect(link.hasAttribute('download')).toBe(true);
+		expect(
+			screen.getByText(
+				'Includes your library, settings and saved logins. Keep it private: it holds the key to your saved passwords.'
+			)
+		).toBeTruthy();
+	});
+
 	it('saves each notification channel, keeping its secrets write-only', async () => {
 		await open('#section-notifications');
 		const ntfy = within(screen.getByRole('group', { name: 'ntfy' }));

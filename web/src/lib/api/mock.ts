@@ -339,6 +339,8 @@ export interface MockBackend {
 	/** A small fake archive for a task's "Get files" link (there is no server to link to). */
 	taskFilesUrl: (id: number) => string;
 	logsDownloadUrl: () => string;
+	/** A small fake archive for the "Download backup" link (there is no server to link to). */
+	backupDownloadUrl: () => string;
 }
 
 export interface MockOptions {
@@ -1231,5 +1233,8 @@ export function createMockBackend({
 		return logsUrl;
 	};
 
-	return { fetch, eventSource, taskFilesUrl, logsDownloadUrl };
+	const backupDownloadUrl = () =>
+		URL.createObjectURL(new Blob(['mock backup'], { type: 'application/zip' }));
+
+	return { fetch, eventSource, taskFilesUrl, logsDownloadUrl, backupDownloadUrl };
 }

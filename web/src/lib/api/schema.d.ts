@@ -80,6 +80,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/backup': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Download a backup of the library, settings and saved logins, as
+		 *     `fmd2r-backup-<YYYY-MM-DD>.zip`.
+		 */
+		get: operations['downloadBackup'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/check-folders': {
 		parameters: {
 			query?: never;
@@ -3365,6 +3385,35 @@ export interface operations {
 			};
 			/** @description The module has no login, or a login is already running */
 			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	downloadBackup: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description app.db, accounts.key, backup.json and custom.css when present */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/zip': unknown;
+				};
+			};
+			/** @description The server runs without a data folder */
+			404: {
 				headers: {
 					[name: string]: unknown;
 				};
