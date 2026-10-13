@@ -17,6 +17,9 @@ use crate::settings::Settings;
 /// (https://docs.discord.com/developers/resources/webhook, Execute Webhook).
 const DISCORD_CONTENT_LIMIT: usize = 2000;
 
+/// The inbox event kinds of a library check's finds (`fmd_core::favorites`).
+const NEW_CHAPTER_KINDS: [&str; 2] = ["new_chapters", "missing_chapters"];
+
 /// A service notifications are sent to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
@@ -40,10 +43,15 @@ pub struct Notification {
 }
 
 impl Notification {
-    /// A warning or an error, sent to the channels that take "Problems"; anything else goes to
-    /// the ones that take "New chapters".
+    /// A warning or an error, sent to the channels that take "Problems".
     pub fn is_problem(&self) -> bool {
         self.severity != EventSeverity::Info
+    }
+
+    /// New or missing chapters found by a library check, sent to the channels that take "New
+    /// chapters".
+    pub fn is_new_chapters(&self) -> bool {
+        !self.is_problem() && NEW_CHAPTER_KINDS.contains(&self.kind.as_str())
     }
 }
 
@@ -84,11 +92,8 @@ impl Channel {
             ),
         };
         enabled
-            && if notification.is_problem() {
-                problems
-            } else {
-                new_chapters
-            }
+            && ((problems && notification.is_problem())
+                || (new_chapters && notification.is_new_chapters()))
     }
 }
 

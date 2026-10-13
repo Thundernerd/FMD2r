@@ -1382,7 +1382,7 @@ export interface components {
 			enabled: boolean;
 			/** @description Whether a webhook URL is set. Patch `webhook_url` to set it; an empty one clears it. */
 			has_webhook_url: boolean;
-			/** @description Send new and missing chapters, and other library news. */
+			/** @description Send new and missing chapters. */
 			new_chapters: boolean;
 			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
 			problems: boolean;
@@ -2227,7 +2227,7 @@ export interface components {
 			enabled: boolean;
 			/** @description Whether an access token is set. Patch `token` to set it; an empty one clears it. */
 			has_token: boolean;
-			/** @description Send new and missing chapters, and other library news. */
+			/** @description Send new and missing chapters. */
 			new_chapters: boolean;
 			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
 			problems: boolean;
@@ -3093,7 +3093,7 @@ export interface components {
 			 *     clears it.
 			 */
 			has_authorization: boolean;
-			/** @description Send new and missing chapters, and other library news. */
+			/** @description Send new and missing chapters. */
 			new_chapters: boolean;
 			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
 			problems: boolean;

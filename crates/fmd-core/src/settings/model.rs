@@ -779,7 +779,7 @@ pub struct NtfySettings {
     /// Access token sent as `Authorization: Bearer <token>`; empty for none. Stored encrypted;
     /// the API only shows whether it is set.
     pub token: String,
-    /// Send new and missing chapters, and other library news.
+    /// Send new and missing chapters.
     pub new_chapters: bool,
     /// Send warnings and errors: failed downloads, a failed library check, module problems.
     pub problems: bool,
@@ -805,7 +805,7 @@ pub struct DiscordSettings {
     /// `https://discord.com/api/webhooks/<id>/<token>`. It carries its own token, so it is stored
     /// encrypted and the API only shows whether it is set.
     pub webhook_url: String,
-    /// Send new and missing chapters, and other library news.
+    /// Send new and missing chapters.
     pub new_chapters: bool,
     /// Send warnings and errors: failed downloads, a failed library check, module problems.
     pub problems: bool,
@@ -831,7 +831,7 @@ pub struct WebhookSettings {
     /// The `Authorization` header's value, e.g. `Bearer <token>`; empty for none. Stored
     /// encrypted; the API only shows whether it is set.
     pub authorization: String,
-    /// Send new and missing chapters, and other library news.
+    /// Send new and missing chapters.
     pub new_chapters: bool,
     /// Send warnings and errors: failed downloads, a failed library check, module problems.
     pub problems: bool,

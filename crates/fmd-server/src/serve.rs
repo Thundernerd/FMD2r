@@ -207,8 +207,9 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                     None
                 }
             };
-            state = start_favorites(state, &runtime, modules, queue);
+            // Before the jobs whose failures and finds it sends start.
             state.start_notifications();
+            state = start_favorites(state, &runtime, modules, queue);
             if config.module_updates {
                 module_updates::start(
                     state.clone(),
@@ -221,6 +222,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         Err(e) => {
             tracing::error!(target: "fmd_server", "Lua modules: {e}");
             state = state.with_covers(covers, Idle);
+            state.start_notifications();
         }
     }
     if flaresolverr_override.is_none() {

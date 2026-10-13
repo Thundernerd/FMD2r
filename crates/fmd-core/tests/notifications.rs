@@ -207,3 +207,16 @@ fn a_channel_on_without_a_url_is_not_sent_to() {
     let settings = settings(json!({"notifications": {"ntfy": {"enabled": true}}}));
     assert_eq!(channels(&settings, &new_chapters()), []);
 }
+
+/// "New chapters" takes new and missing chapters only, "Problems" warnings and errors: other
+/// news, like a completed series removed from the library, goes to neither.
+#[test]
+fn other_library_news_goes_to_no_channel() {
+    let settings = ntfy();
+    let mut missing = new_chapters();
+    missing.kind = "missing_chapters".into();
+    assert_eq!(channels(&settings, &missing), [Channel::Ntfy]);
+    let mut completed = new_chapters();
+    completed.kind = "completed".into();
+    assert_eq!(channels(&settings, &completed), []);
+}

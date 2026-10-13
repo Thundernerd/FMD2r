@@ -7,7 +7,7 @@ use axum::Json;
 use axum::extract::State;
 use fmd_core::download::{EngineEvent, TaskId, TaskStatus};
 use fmd_core::favorites::FavoritesEventKind;
-use fmd_core::notifications::{Channel, Notification, Sender, request, requests};
+use fmd_core::notifications::{Channel, Notification, SendError, Sender, request, requests};
 use fmd_store::{EventSeverity, NewEvent};
 use serde::Serialize;
 use tokio::sync::broadcast::error::RecvError;
@@ -21,8 +21,12 @@ use crate::{AppState, Problem};
 /// How long a channel gets to accept a notification; there are no retries.
 pub(crate) const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// The inbox event kind of a failed download.
+/// The kind of a failed download's inbox event.
 const DOWNLOAD_FAILED: &str = "download_failed";
+/// The kind reported for a favorites check that failed, which has no inbox event.
+const FAVORITES_CHECK_FAILED: &str = "favorites_check_failed";
+/// The kind of a "Send test" notification.
+const TEST: &str = "test";
 
 impl AppState {
     /// Adds each download that fails to the inbox, and sends every new inbox item and failed
@@ -74,7 +78,7 @@ async fn forward(
     }
 }
 
-fn warn_unsent(channel: Channel, error: &dyn std::fmt::Display) {
+fn warn_unsent(channel: Channel, error: &SendError) {
     tracing::warn!(target: "fmd_server",
         "the {} notification was not delivered: {error}", channel.name());
 }
@@ -84,7 +88,7 @@ fn notification(event: &ServerEvent) -> Option<Notification> {
     match event {
         ServerEvent::InboxNew(item) => Some(from_inbox(item)),
         ServerEvent::Favorites(e) if e.kind == FavoritesEventKind::Failed => Some(Notification {
-            kind: "favorites_check_failed".into(),
+            kind: FAVORITES_CHECK_FAILED.into(),
             severity: EventSeverity::Error,
             title: "Checking the library for new chapters failed".into(),
             body: e.error.clone().unwrap_or_default(),
@@ -96,7 +100,7 @@ fn notification(event: &ServerEvent) -> Option<Notification> {
 
 fn from_inbox(item: &InboxItem) -> Notification {
     Notification {
-        kind: item.event.clone(),
+        kind: item.event_kind.clone(),
         severity: match item.kind {
             InboxKind::Info => EventSeverity::Info,
             InboxKind::Warn => EventSeverity::Warning,
@@ -176,7 +180,7 @@ pub(crate) async fn test(
     ApiPath(channel): ApiPath<Channel>,
 ) -> Json<NotificationTest> {
     let notification = Notification {
-        kind: "test".into(),
+        kind: TEST.into(),
         severity: EventSeverity::Info,
         title: "FMD2r test notification".into(),
         body: "Notifications from FMD2r arrive here.".into(),

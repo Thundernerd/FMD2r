@@ -3818,7 +3818,7 @@
           },
           "new_chapters": {
             "type": "boolean",
-            "description": "Send new and missing chapters, and other library news."
+            "description": "Send new and missing chapters."
           },
           "problems": {
             "type": "boolean",
@@ -5653,7 +5653,7 @@
           },
           "new_chapters": {
             "type": "boolean",
-            "description": "Send new and missing chapters, and other library news."
+            "description": "Send new and missing chapters."
           },
           "problems": {
             "type": "boolean",
@@ -7259,7 +7259,7 @@
           },
           "new_chapters": {
             "type": "boolean",
-            "description": "Send new and missing chapters, and other library news."
+            "description": "Send new and missing chapters."
           },
           "problems": {
             "type": "boolean",

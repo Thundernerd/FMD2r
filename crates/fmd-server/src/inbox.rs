@@ -35,7 +35,7 @@ pub struct InboxItem {
     pub read: bool,
     /// The `events` row's kind, e.g. `new_chapters`: what notifications report.
     #[serde(skip)]
-    pub(crate) event: String,
+    pub(crate) event_kind: String,
 }
 
 impl From<Event> for InboxItem {
@@ -53,7 +53,7 @@ impl From<Event> for InboxItem {
             body,
             created_at: crate::time::rfc3339_from_unix_ms(event.ts),
             read: event.read,
-            event: event.kind,
+            event_kind: event.kind,
         }
     }
 }

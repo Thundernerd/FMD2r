@@ -317,7 +317,7 @@ pub struct NtfySettingsView {
     pub topic_url: String,
     /// Whether an access token is set. Patch `token` to set it; an empty one clears it.
     pub has_token: bool,
-    /// Send new and missing chapters, and other library news.
+    /// Send new and missing chapters.
     pub new_chapters: bool,
     /// Send warnings and errors: failed downloads, a failed library check, module problems.
     pub problems: bool,
@@ -348,7 +348,7 @@ pub struct DiscordSettingsView {
     pub enabled: bool,
     /// Whether a webhook URL is set. Patch `webhook_url` to set it; an empty one clears it.
     pub has_webhook_url: bool,
-    /// Send new and missing chapters, and other library news.
+    /// Send new and missing chapters.
     pub new_chapters: bool,
     /// Send warnings and errors: failed downloads, a failed library check, module problems.
     pub problems: bool,
@@ -379,7 +379,7 @@ pub struct WebhookSettingsView {
     /// Whether an `Authorization` header is set. Patch `authorization` to set it; an empty one
     /// clears it.
     pub has_authorization: bool,
-    /// Send new and missing chapters, and other library news.
+    /// Send new and missing chapters.
     pub new_chapters: bool,
     /// Send warnings and errors: failed downloads, a failed library check, module problems.
     pub problems: bool,
