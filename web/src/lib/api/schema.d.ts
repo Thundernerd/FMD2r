@@ -1275,7 +1275,7 @@ export interface components {
 		 * @enum {string}
 		 */
 		ComicServerKind: 'none' | 'komga' | 'kavita';
-		/** @description A Komga library. */
+		/** @description A library a Komga API key can see. */
 		ComicServerLibrary: {
 			id: string;
 			name: string;

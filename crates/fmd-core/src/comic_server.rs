@@ -4,9 +4,10 @@
 use std::future::Future;
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc;
+use utoipa::ToSchema;
 
 use crate::settings::{ComicServerKind, ComicServerSettings};
 
@@ -141,7 +142,8 @@ impl ComicServer {
 }
 
 /// A library a Komga API key can see.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[schema(as = ComicServerLibrary)]
 pub struct Library {
     pub id: String,
     pub name: String,
@@ -172,17 +174,20 @@ impl ComicServerClient {
     }
 
     /// Asks `server` to scan: Komga's library, or each library the key can see; every Kavita
-    /// library.
+    /// library. A library that fails does not stop the others; the first failure is returned.
     pub async fn scan(&self, server: &ComicServer) -> Result<(), ComicServerError> {
         let libraries = match server.libraries_request() {
             Some(request) => self.libraries(request).await?,
             None => Vec::new(),
         };
         let ids: Vec<String> = libraries.into_iter().map(|l| l.id).collect();
+        let mut first_error = None;
         for request in server.scan_requests(&ids) {
-            self.send(request).await?;
+            if let Err(e) = self.send(request).await {
+                first_error.get_or_insert(e);
+            }
         }
-        Ok(())
+        first_error.map_or(Ok(()), Err)
     }
 
     /// Checks the URL and API key with a request that changes nothing.

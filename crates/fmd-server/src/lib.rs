@@ -42,7 +42,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange};
-pub use comic_server::{ComicServerLibrary, ComicServerTest, ComicServerTestRequest};
+pub use comic_server::{ComicServerTest, ComicServerTestRequest};
 pub use covers::{
     CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
 };

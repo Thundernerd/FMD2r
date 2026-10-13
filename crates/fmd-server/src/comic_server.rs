@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use axum::Json;
 use axum::extract::State;
-use fmd_core::comic_server::{ComicServer, ComicServerClient, Connection, Debounce};
+use fmd_core::comic_server::{ComicServer, ComicServerClient, Connection, Debounce, Library};
 use fmd_core::download::{EngineEvent, TaskStatus};
 use fmd_core::settings::{ComicServerKind, ComicServerSettings};
 use fmd_store::{EventSeverity, NewEvent};
@@ -47,7 +47,9 @@ impl AppState {
                         status: TaskStatus::Finished,
                         ..
                     }) => debounce.trigger(),
-                    Ok(_) | Err(RecvError::Lagged(_)) => {}
+                    // Missed events may have held a finish; a spare scan does no harm.
+                    Err(RecvError::Lagged(_)) => debounce.trigger(),
+                    Ok(_) => {}
                     Err(RecvError::Closed) => return,
                 }
             }
@@ -101,14 +103,7 @@ pub struct ComicServerTest {
     /// What happened, as a sentence to show.
     pub message: String,
     /// Komga: the libraries the API key can see. Empty for Kavita or on failure.
-    pub libraries: Vec<ComicServerLibrary>,
-}
-
-/// A Komga library.
-#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
-pub struct ComicServerLibrary {
-    pub id: String,
-    pub name: String,
+    pub libraries: Vec<Library>,
 }
 
 impl ComicServerTest {
@@ -164,13 +159,7 @@ pub(crate) async fn test(
             ComicServerTest {
                 ok: true,
                 message,
-                libraries: libraries
-                    .into_iter()
-                    .map(|l| ComicServerLibrary {
-                        id: l.id,
-                        name: l.name,
-                    })
-                    .collect(),
+                libraries,
             }
         }
         Ok(Connection::Kavita { key_expires }) => ComicServerTest {

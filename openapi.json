@@ -3655,7 +3655,7 @@
       },
       "ComicServerLibrary": {
         "type": "object",
-        "description": "A Komga library.",
+        "description": "A library a Komga API key can see.",
         "required": [
           "id",
           "name"

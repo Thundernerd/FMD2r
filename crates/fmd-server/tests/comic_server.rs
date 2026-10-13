@@ -88,6 +88,8 @@ struct Stub {
     seen: Arc<Mutex<Vec<Seen>>>,
     /// Answer 401 to everything.
     unauthorized: bool,
+    /// Answer 500 to this path.
+    broken: Option<&'static str>,
 }
 
 /// Komga's and Kavita's endpoints, answering every scan with 202 and Komga's libraries with
@@ -105,6 +107,9 @@ async fn stub_handler(State(stub): State<Stub>, headers: HeaderMap, req: StubReq
     });
     if stub.unauthorized {
         return StatusCode::UNAUTHORIZED.into_response();
+    }
+    if stub.broken == Some(path.as_str()) {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
     match path.as_str() {
         "/api/v1/libraries" => axum::Json(json!([
@@ -305,6 +310,29 @@ async fn komga_without_a_library_id_scans_every_library_the_key_can_see() {
             seen("POST", "/api/v1/libraries/L1/scan", "key-1"),
             seen("POST", "/api/v1/libraries/L2/scan", "key-1"),
         ]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_komga_library_failing_to_scan_does_not_stop_the_others() {
+    let stub = Stub {
+        broken: Some("/api/v1/libraries/L1/scan"),
+        ..Stub::default()
+    };
+    let h = harness(stub, json!({"library_id": null})).await;
+    let id = add(&h.state, "/c/1").await;
+    wait_for(&h.state, id, "finished").await;
+
+    after_the_window().await;
+    assert_eq!(
+        requests(&h).last(),
+        Some(&seen("POST", "/api/v1/libraries/L2/scan", "key-1"))
+    );
+    let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
+    assert_eq!(inbox[0]["title"], "Could not ask Komga to scan", "{inbox}");
+    assert!(
+        inbox[0]["body"].as_str().unwrap().contains("500"),
+        "{inbox}"
     );
 }
 
