@@ -1,4 +1,5 @@
-import type { FavoriteView } from '#lib/api/types.ts';
+import type { FacetValue, FavoriteView } from '#lib/api/types.ts';
+import { FORMAT, UNKNOWN, type Tri } from '#lib/discover/filters.ts';
 
 export type Chip = 'all' | 'new' | 'ongoing' | 'completed' | 'disabled';
 
@@ -26,6 +27,10 @@ export interface LibraryFilters {
 	/** Module ID; empty for every website. */
 	website: string;
 	q: string;
+	/** Tags not listed are ignored; compared without case. */
+	tags: Record<string, Tri>;
+	/** The MangaBaka format (`manga`, …, `unknown`); empty for any. */
+	format: string;
 	sort: Sort;
 }
 
@@ -33,6 +38,8 @@ export const emptyFilters = (): LibraryFilters => ({
 	chip: 'all',
 	website: '',
 	q: '',
+	tags: {},
+	format: '',
 	sort: 'library'
 });
 
@@ -55,6 +62,17 @@ const matchesChip = (f: FavoriteView, chip: Chip): boolean => {
 const matchesQuery = (f: FavoriteView, q: string): boolean =>
 	f.display_title.toLowerCase().includes(q) || f.title.toLowerCase().includes(q);
 
+/** Every included tag and none of the excluded ones, compared without case. */
+const matchesTags = (f: FavoriteView, tags: Record<string, Tri>): boolean => {
+	const has = new Set(f.tags.map((t) => t.toLowerCase()));
+	return Object.entries(tags).every(([tag, state]) =>
+		state === 'ignore' ? true : has.has(tag.toLowerCase()) === (state === 'include')
+	);
+};
+
+/** A series' format; `unknown` without a MangaBaka match. */
+const formatOf = (f: FavoriteView): string => f.format ?? UNKNOWN;
+
 /** RFC 3339 times compare as strings; a missing one sorts last. */
 const newestFirst = (a: string | null | undefined, b: string | null | undefined): number =>
 	(b ?? '').localeCompare(a ?? '');
@@ -74,7 +92,9 @@ export function filterFavorites(list: FavoriteView[], filters: LibraryFilters): 
 		(f) =>
 			matchesChip(f, filters.chip) &&
 			(!filters.website || f.module_id === filters.website) &&
-			(!q || matchesQuery(f, q))
+			(!q || matchesQuery(f, q)) &&
+			matchesTags(f, filters.tags) &&
+			(!filters.format || formatOf(f) === filters.format)
 	);
 	// `sort` is stable, so ties keep the library order.
 	return filters.sort === 'library' ? shown : shown.sort(COMPARE[filters.sort]);
@@ -99,3 +119,37 @@ export function websites(list: FavoriteView[]): { id: string; name: string; coun
 	}
 	return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * The tags in the library with their series counts, most common first, then by name; a tag
+ * spelled in several cases counts once, under its first spelling. And the formats, in
+ * `FORMAT` order with `unknown` last.
+ */
+export function facets(list: FavoriteView[]): { tags: FacetValue[]; formats: FacetValue[] } {
+	const tags = new Map<string, FacetValue>();
+	const formats = new Map<string, number>();
+	for (const f of list) {
+		for (const tag of new Set(f.tags.map((t) => t.toLowerCase()))) {
+			const first = f.tags.find((t) => t.toLowerCase() === tag) ?? tag;
+			const facet = tags.get(tag) ?? { value: first, count: 0 };
+			facet.count++;
+			tags.set(tag, facet);
+		}
+		const format = formatOf(f);
+		formats.set(format, (formats.get(format) ?? 0) + 1);
+	}
+	const order = [...Object.keys(FORMAT), UNKNOWN];
+	return {
+		tags: [...tags.values()].sort(
+			(a, b) =>
+				b.count - a.count || a.value.localeCompare(b.value, undefined, { sensitivity: 'base' })
+		),
+		formats: [...formats.entries()]
+			.map(([value, count]) => ({ value, count }))
+			.sort((a, b) => rank(order, a.value) - rank(order, b.value))
+	};
+}
+
+/** Where `value` is in `order`; values it lacks go last. */
+const rank = (order: string[], value: string): number =>
+	order.includes(value) ? order.indexOf(value) : order.length;

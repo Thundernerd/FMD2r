@@ -7,11 +7,13 @@
 		SORTS,
 		chipCounts,
 		emptyFilters,
+		facets,
 		filterFavorites,
 		websites,
 		type LibraryFilters
 	} from '#lib/library/filters.ts';
 	import { sections, type Section } from '#lib/library/sections.ts';
+	import { FORMAT, UNKNOWN } from '#lib/discover/filters.ts';
 	import {
 		inLibrary,
 		selectShown,
@@ -20,6 +22,7 @@
 	} from '#lib/library/selection.ts';
 	import { seriesHref } from '#lib/series/href.ts';
 	import CoverThumb from '#lib/components/CoverThumb.svelte';
+	import GenreChips from '#lib/components/discover/GenreChips.svelte';
 	import ImportDialog from '#lib/components/library/ImportDialog.svelte';
 	import GroupsDialog from '#lib/components/library/GroupsDialog.svelte';
 	import BulkGroupDialog from '#lib/components/library/BulkGroupDialog.svelte';
@@ -64,6 +67,15 @@
 	const shown = $derived(filterFavorites(favorites, filters));
 	const counts = $derived(chipCounts(favorites));
 	const sites = $derived(websites(favorites));
+	const libraryFacets = $derived(facets(favorites));
+	/** Whether a tag is included or excluded; its chips stay while it is, even with no tags left. */
+	const tagFilter = $derived(Object.values(filters.tags).some((s) => s !== 'ignore'));
+	/** The formats in the library, plus a chosen one it no longer holds. */
+	const formats = $derived(
+		filters.format && !libraryFacets.formats.some((f) => f.value === filters.format)
+			? [...libraryFacets.formats, { value: filters.format, count: 0 }]
+			: libraryFacets.formats
+	);
 	/** With no groups, the grid is not split. */
 	const shownSections = $derived(
 		groups.length > 0
@@ -87,6 +99,11 @@
 	const selectedPaused = $derived(favorites.filter((f) => selected.has(f.id) && !f.enabled).length);
 	const job = $derived(events.jobs[JOB]);
 	const checking = $derived(starting || job?.state === 'running');
+
+	/** `unknown` is the series without a MangaBaka match; a format `FORMAT` lacks shows as is. */
+	function formatLabel(format: string): string {
+		return format === UNKNOWN ? 'Unknown' : (FORMAT[format] ?? format);
+	}
 
 	function readUngroupedCollapsed(): boolean {
 		try {
@@ -413,6 +430,24 @@
 			{/each}
 		</div>
 	{/if}
+	{#if libraryFacets.tags.length > 0 || tagFilter || formats.length > 1}
+		<div class="facets">
+			{#if formats.length > 1}
+				<label class="field">
+					<span class="label">Format</span>
+					<select class="input" bind:value={filters.format}>
+						<option value="">Any</option>
+						{#each formats as format (format.value)}
+							<option value={format.value}>{formatLabel(format.value)} ({format.count})</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+			{#if libraryFacets.tags.length > 0 || tagFilter}
+				<GenreChips genres={libraryFacets.tags} bind:states={filters.tags} label="Tags" />
+			{/if}
+		</div>
+	{/if}
 
 	{#if error}
 		<p class="bad" role="alert">{error}</p>
@@ -580,9 +615,15 @@
 		font-size: var(--fs-search);
 		padding: 8px 12px;
 	}
-	.sort {
+	.sort,
+	.field {
 		display: flex;
 		align-items: center;
+		gap: var(--sp-2);
+	}
+	.facets {
+		display: flex;
+		flex-direction: column;
 		gap: var(--sp-2);
 	}
 	.chips {

@@ -31,6 +31,32 @@ test('the library shows its favorites as a cover grid that chips filter', async 
 	await expect(page).toHaveURL('/series?module=comick&link=%2Fcomic%2Fblue-lock');
 });
 
+test('the library filters by tag and format, with counts', async ({ page }) => {
+	await page.goto('/');
+	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
+	await expect(cards).toHaveCount(8);
+
+	const tags = page.getByRole('group', { name: 'Tags' });
+	const action = tags.getByRole('button', { name: 'Action: ignored' });
+	await expect(action.locator('.count')).toHaveText('2');
+	await action.click();
+	await expect(cards).toHaveCount(2);
+	await expect(cards.filter({ hasText: 'Kagurabachi' })).toHaveCount(1);
+
+	const format = page.getByRole('combobox', { name: 'Format' });
+	await expect(format.getByRole('option', { name: 'Manhwa (1)' })).toHaveCount(1);
+	await expect(format.getByRole('option', { name: 'Unknown (6)' })).toHaveCount(1);
+	await format.selectOption({ label: 'Manhwa (1)' });
+	await expect(cards).toHaveCount(1);
+	await expect(cards.first()).toContainText('Omniscient Reader');
+
+	// A second click excludes the tag.
+	await format.selectOption({ label: 'Any' });
+	await tags.getByRole('button', { name: 'Action: included' }).click();
+	await expect(cards).toHaveCount(6);
+	await expect(cards.filter({ hasText: 'Kagurabachi' })).toHaveCount(0);
+});
+
 /** A 1x1 PNG. */
 const PIXEL = Buffer.from(
 	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
