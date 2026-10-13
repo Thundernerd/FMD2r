@@ -20,11 +20,11 @@ fn fresh_app_db_runs_all_migrations_and_reopen_is_a_noop() {
     let path = dir.path().join("app.db");
 
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 7);
+    assert_eq!(db.schema_version().unwrap(), 8);
     drop(db);
 
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 7);
+    assert_eq!(db.schema_version().unwrap(), 8);
     drop(db);
 
     let names = tables(&path);
@@ -158,6 +158,41 @@ fn upgrading_app_db_gives_favorites_empty_website_info() {
         db.favorites().info(favorite.id).unwrap(),
         Some(fmd_store::FavoriteInfo::default())
     );
+}
+
+#[test]
+fn upgrading_app_db_gives_favorites_empty_website_genres() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("app.db");
+    // As stored by a v7 build.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    for sql in [
+        include_str!("../src/migrations/app_v1.sql"),
+        include_str!("../src/migrations/app_v2.sql"),
+        include_str!("../src/migrations/app_v3.sql"),
+        include_str!("../src/migrations/app_v4.sql"),
+        include_str!("../src/migrations/app_v5.sql"),
+        include_str!("../src/migrations/app_v6.sql"),
+        include_str!("../src/migrations/app_v7.sql"),
+    ] {
+        conn.execute_batch(sql).unwrap();
+    }
+    conn.execute(
+        "INSERT INTO favorites (module_id, link, title, save_to, sort_order, date_added,
+            info_title, authors)
+         VALUES ('site', '/a', 'A Title', '/library', 1, 1760210700000, 'A Title', 'Someone')",
+        [],
+    )
+    .unwrap();
+    conn.pragma_update(None, "user_version", 7).unwrap();
+    drop(conn);
+
+    let db = AppDb::open(&path).unwrap();
+
+    let favorite = db.favorites().find("site", "/a").unwrap().unwrap();
+    let info = db.favorites().info(favorite.id).unwrap().unwrap();
+    assert_eq!(info.authors, "Someone");
+    assert_eq!(info.genres, "");
 }
 
 #[test]

@@ -71,6 +71,7 @@ fn saving_a_favorites_website_info_survives_a_rename() {
         alt_titles: "재벌집 막내아들".into(),
         authors: "SAN.G".into(),
         artists: "JP".into(),
+        genres: "Drama, Fantasy".into(),
     };
 
     assert!(favorites.set_info(favorite.id, &info).unwrap(), "changed");
@@ -86,6 +87,30 @@ fn saving_a_favorites_website_info_survives_a_rename() {
         favorites.get(favorite.id).unwrap().unwrap().title,
         "My Name For It"
     );
+}
+
+#[test]
+fn changing_only_a_favorites_website_genres_is_saved_but_not_a_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let favorites = db.favorites();
+    let favorite = favorites.create(&new_favorite("/a")).unwrap();
+    let mut info = FavoriteInfo {
+        title: "Reborn Rich".into(),
+        alt_titles: String::new(),
+        authors: "SAN.G".into(),
+        artists: "JP".into(),
+        genres: "Drama".into(),
+    };
+    assert!(favorites.set_info(favorite.id, &info).unwrap(), "changed");
+
+    info.genres = "Drama, Fantasy".into();
+
+    assert!(
+        !favorites.set_info(favorite.id, &info).unwrap(),
+        "a genres-only change is not a change"
+    );
+    assert_eq!(favorites.info(favorite.id).unwrap(), Some(info));
 }
 
 #[test]
