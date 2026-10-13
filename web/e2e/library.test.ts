@@ -258,6 +258,106 @@ test('series put in a group show in its section, which stays folded after a relo
 	await expect(shounen).toHaveCount(0);
 });
 
+/** Fails unless `control`'s focus outline, as drawn, fits inside every ancestor that clips it. */
+async function expectWholeOutline(control: import('@playwright/test').Locator) {
+	await expect(control).toBeFocused();
+	const clipped = await control.evaluate((el) => {
+		const style = getComputedStyle(el);
+		const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+		if (style.outlineStyle === 'none' || !(ring > 0)) return 'no outline';
+		const box = el.getBoundingClientRect();
+		for (let up = el.parentElement; up; up = up.parentElement) {
+			const s = getComputedStyle(up);
+			if (s.overflowX === 'visible' && s.overflowY === 'visible') continue;
+			// The padding box, at fractional pixels: borders and a scrollbar don't show content.
+			const r = up.getBoundingClientRect();
+			const left = r.left + up.clientLeft;
+			const top = r.top + up.clientTop;
+			const right = r.right - (up.offsetWidth - up.clientWidth - up.clientLeft);
+			const bottom = r.bottom - (up.offsetHeight - up.clientHeight - up.clientTop);
+			if (
+				box.left - ring < left ||
+				box.top - ring < top ||
+				box.right + ring > right ||
+				box.bottom + ring > bottom
+			)
+				return `clipped by <${up.tagName.toLowerCase()} class="${up.className}">`;
+		}
+		return null;
+	});
+	expect(clipped, 'the whole focus outline shows').toBeNull();
+}
+
+for (const style of ['default', 'high-contrast']) {
+	test(`the Groups dialog shows the whole focus outline of its controls (${style})`, async ({
+		page
+	}) => {
+		await page.goto('/');
+		await page.evaluate((s) => document.documentElement.setAttribute('data-style', s), style);
+		await page.getByRole('button', { name: 'Groups…' }).click();
+		const editor = page.getByRole('dialog', { name: 'Groups' });
+		const name = editor.getByRole('textbox', { name: 'New group' });
+		for (const group of ['Shounen', 'Seinen']) {
+			await name.fill(group);
+			await page.keyboard.press('Enter');
+			await expect(editor.getByRole('list', { name: 'Groups' })).toContainText(`${group} · 0`);
+		}
+		await name.focus();
+		await expectWholeOutline(name);
+
+		// The row buttons, reached from the keyboard.
+		for (const button of [
+			'Move Seinen up',
+			'Move Shounen down',
+			'Rename Shounen',
+			'Delete Shounen'
+		]) {
+			const control = editor.getByRole('button', { name: button });
+			await control.focus();
+			await expectWholeOutline(control);
+		}
+
+		await editor.getByRole('button', { name: 'Rename Shounen' }).press('Enter');
+		const rename = editor.getByRole('textbox', { name: 'Name of Shounen' });
+		await rename.focus();
+		await expectWholeOutline(rename);
+		for (const button of ['Save', 'Cancel']) {
+			await page.keyboard.press('Tab');
+			await expectWholeOutline(editor.getByRole('button', { name: button, exact: true }));
+		}
+	});
+}
+
+test('a long group list scrolls inside the Groups dialog', async ({ page }) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Groups…' }).click();
+	const editor = page.getByRole('dialog', { name: 'Groups' });
+	const name = editor.getByRole('textbox', { name: 'New group' });
+	const groups = editor.getByRole('list', { name: 'Groups' });
+	for (let i = 1; i <= 40; i++) {
+		await name.fill(`Group ${i}`);
+		await page.keyboard.press('Enter');
+		await expect(groups).toContainText(`Group ${i} · 0`);
+	}
+
+	const box = await editor.boundingBox();
+	const viewport = page.viewportSize();
+	expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
+	await expect(
+		editor.getByRole('button', { name: 'Delete Group 1', exact: true })
+	).not.toBeInViewport();
+
+	// Focus scrolls a row into view, and its outline isn't cut off at the scrolling edge.
+	await name.focus();
+	const row = editor.getByRole('button', { name: 'Rename Group 30' });
+	await row.focus();
+	await expectWholeOutline(row);
+	await editor.getByRole('button', { name: 'Rename Group 1', exact: true }).focus();
+	const middle = editor.getByRole('button', { name: 'Rename Group 20' });
+	await middle.focus();
+	await expectWholeOutline(middle);
+});
+
 test('a series paused from its page shows as paused in the library, until resumed', async ({
 	page
 }) => {
