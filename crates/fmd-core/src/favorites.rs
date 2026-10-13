@@ -572,6 +572,9 @@ impl FavoritesChecker {
             Err(e) => {
                 rate_limits.pause_if_limited(&favorite.module_id, &e);
                 tracing::warn!(target: "fmd_core", "checking favorite {}: {e}", favorite.title);
+                if !matches!(e, InfoError::RateLimited { .. }) {
+                    self.record_failure(favorite.id, e.to_string()).await?;
+                }
                 return Ok(None);
             }
         };
@@ -725,8 +728,8 @@ impl FavoritesChecker {
 
     /// Stores chapter count and status (`DoCheck`, baseunits/uFavoritesManager.pas:351-353),
     /// check time, and update time when chapters were found (:373-378); beyond FMD2, also the
-    /// chapter links for the new-chapter badge and a non-empty cover link for the library.
-    /// `None` when the favorite was removed meanwhile.
+    /// chapter links for the new-chapter badge and a non-empty cover link for the library, and
+    /// forgets earlier failed checks. `None` when the favorite was removed meanwhile.
     async fn store_checked(
         &self,
         id: FavoriteId,
@@ -755,6 +758,10 @@ impl FavoritesChecker {
                 favorite.date_last_updated = Some(now);
             }
             db.favorites().update(&favorite)?;
+            db.favorites().clear_check_failures(id)?;
+            favorite.check_failures = 0;
+            favorite.last_check_error = None;
+            favorite.date_last_failed = None;
             let links: Vec<&str> = links.iter().map(String::as_str).collect();
             db.favorites().set_chapter_links(id, &links)?;
             let changed = db.favorites().set_info(id, &website_info)?;
@@ -763,14 +770,25 @@ impl FavoritesChecker {
         .await
     }
 
+    /// Beyond FMD2, which only logs a failed check (baseunits/uFavoritesManager.pas:391-394),
+    /// counts it so the library can flag a series whose website keeps failing.
+    async fn record_failure(&self, id: FavoriteId, error: String) -> Result<(), CheckError> {
+        let db = self.inner.config.db.clone();
+        let now = now_ms();
+        blocking(move || db.favorites().record_check_failure(id, &error, now)).await
+    }
+
+    /// Beyond FMD2, a run over all favorites skips one that has [`FAILING_CHECKS`] or more failed
+    /// checks until [`FAILING_RETRY`] after the last.
     async fn favorites(&self, scope: CheckScope) -> Result<Vec<Favorite>, CheckError> {
         let db = self.inner.config.db.clone();
         let all = blocking(move || db.favorites().list()).await?;
+        let now = now_ms();
         Ok(all
             .into_iter()
             .filter(|f| f.enabled && !f.link.trim().is_empty())
             .filter(|f| match &scope {
-                CheckScope::All => true,
+                CheckScope::All => !backing_off(f, now),
                 CheckScope::Only(ids) => ids.contains(&f.id),
             })
             .collect())
@@ -866,6 +884,22 @@ impl FavoritesChecker {
             .map(|((i, c), _)| found_chapter(i, c))
             .collect())
     }
+}
+
+/// Consecutive failed checks after which a series counts as failing: the library flags it and
+/// runs over all favorites check it at most every [`FAILING_RETRY`].
+pub const FAILING_CHECKS: u32 = 3;
+
+/// How long runs over all favorites leave a failing series alone after its last failed check.
+pub const FAILING_RETRY: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Whether `favorite` is failing and failed within [`FAILING_RETRY`] of `now` (Unix ms).
+fn backing_off(favorite: &Favorite, now: i64) -> bool {
+    let retry = i64::try_from(FAILING_RETRY.as_millis()).unwrap_or(i64::MAX);
+    favorite.check_failures >= FAILING_CHECKS
+        && favorite
+            .date_last_failed
+            .is_some_and(|at| now.saturating_sub(at) < retry)
 }
 
 fn found_chapter(index: usize, chapter: &crate::info::Chapter) -> FoundChapter {

@@ -63,6 +63,11 @@ pub struct FavoriteView {
     /// The accepted MangaBaka match's type: `manga`, `manhwa`, `manhua`, `oel` or `other`;
     /// `null` without a match.
     pub format: Option<String>,
+    /// Consecutive checks whose fetch from the website failed; from 3 on (`FAILING_CHECKS`) the
+    /// series is failing, and checks of all favorites look at it at most daily.
+    pub check_failures: u32,
+    /// Why the last of them failed; `null` once a check succeeds.
+    pub last_check_error: Option<String>,
 }
 
 /// Which favorites to list.
@@ -647,6 +652,8 @@ fn to_view(
         last_checked: favorite.date_last_checked.map(rfc3339_from_unix_ms),
         last_updated: favorite.date_last_updated.map(rfc3339_from_unix_ms),
         group_id: favorite.group_id.map(|g| g.0),
+        check_failures: favorite.check_failures,
+        last_check_error: favorite.last_check_error,
         module_id: favorite.module_id,
         website,
         link: favorite.link,
