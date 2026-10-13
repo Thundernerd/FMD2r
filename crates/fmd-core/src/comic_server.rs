@@ -4,6 +4,8 @@
 use std::future::Future;
 use std::time::Duration;
 
+use serde::Deserialize;
+use thiserror::Error;
 use tokio::sync::mpsc;
 
 use crate::settings::{ComicServerKind, ComicServerSettings};
@@ -11,6 +13,22 @@ use crate::settings::{ComicServerKind, ComicServerSettings};
 /// How long after the last download finished the comic server is asked to scan, so a batch of
 /// downloads gives one scan.
 pub const SCAN_DELAY: Duration = Duration::from_secs(60);
+
+/// How long one request to the comic server may take.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+#[derive(Debug, Error)]
+pub enum ComicServerError {
+    /// The server answered with a status other than 2xx.
+    #[error("the server answered {0}")]
+    Status(u16),
+    /// No answer: the server is unreachable, the URL is wrong, or it timed out.
+    #[error("{0}")]
+    Request(String),
+    /// An answer that is not what the API documents.
+    #[error("unexpected answer: {0}")]
+    Body(String),
+}
 
 /// The methods the comic server requests use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +115,14 @@ impl ComicServer {
         }
     }
 
+    /// "Komga" or "Kavita".
+    pub fn name(&self) -> &'static str {
+        match self.kind {
+            Kind::Komga { .. } => "Komga",
+            Kind::Kavita => "Kavita",
+        }
+    }
+
     fn komga_libraries(&self) -> ApiRequest {
         self.request(HttpMethod::Get, "/api/v1/libraries")
     }
@@ -112,6 +138,116 @@ impl ComicServer {
             headers: vec![(header.into(), self.api_key.clone())],
         }
     }
+}
+
+/// A library a Komga API key can see.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Library {
+    pub id: String,
+    pub name: String,
+}
+
+/// What "Test connection" found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Connection {
+    /// The libraries the key can see.
+    Komga { libraries: Vec<Library> },
+    /// When the key expires (as Kavita writes it); `None` when it never does.
+    Kavita { key_expires: Option<String> },
+}
+
+/// Sends [`ComicServer`] requests. Cheap to clone.
+#[derive(Debug, Clone)]
+pub struct ComicServerClient {
+    http: reqwest::Client,
+}
+
+impl ComicServerClient {
+    pub fn new() -> Result<Self, ComicServerError> {
+        let http = reqwest::Client::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .map_err(|e| ComicServerError::Request(describe(&e)))?;
+        Ok(Self { http })
+    }
+
+    /// Asks `server` to scan: Komga's library, or each library the key can see; every Kavita
+    /// library.
+    pub async fn scan(&self, server: &ComicServer) -> Result<(), ComicServerError> {
+        let libraries = match server.libraries_request() {
+            Some(request) => self.libraries(request).await?,
+            None => Vec::new(),
+        };
+        let ids: Vec<String> = libraries.into_iter().map(|l| l.id).collect();
+        for request in server.scan_requests(&ids) {
+            self.send(request).await?;
+        }
+        Ok(())
+    }
+
+    /// Checks the URL and API key with a request that changes nothing.
+    pub async fn test(&self, server: &ComicServer) -> Result<Connection, ComicServerError> {
+        let request = server.test_request();
+        match server.kind {
+            Kind::Komga { .. } => Ok(Connection::Komga {
+                libraries: self.libraries(request).await?,
+            }),
+            Kind::Kavita => {
+                let expires: serde_json::Value = json(self.send(request).await?).await?;
+                let key_expires = match expires {
+                    serde_json::Value::Null => None,
+                    serde_json::Value::String(date) => Some(date),
+                    other => Some(other.to_string()),
+                };
+                Ok(Connection::Kavita { key_expires })
+            }
+        }
+    }
+
+    async fn libraries(&self, request: ApiRequest) -> Result<Vec<Library>, ComicServerError> {
+        json(self.send(request).await?).await
+    }
+
+    async fn send(&self, request: ApiRequest) -> Result<reqwest::Response, ComicServerError> {
+        let method = match request.method {
+            HttpMethod::Get => reqwest::Method::GET,
+            HttpMethod::Post => reqwest::Method::POST,
+        };
+        let mut builder = self.http.request(method, &request.url);
+        for (name, value) in &request.headers {
+            builder = builder.header(name, value);
+        }
+        let response = builder
+            .send()
+            .await
+            .map_err(|e| ComicServerError::Request(describe(&e)))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(ComicServerError::Status(status.as_u16()));
+        }
+        Ok(response)
+    }
+}
+
+async fn json<T: serde::de::DeserializeOwned>(
+    response: reqwest::Response,
+) -> Result<T, ComicServerError> {
+    let body = response
+        .bytes()
+        .await
+        .map_err(|e| ComicServerError::Request(describe(&e)))?;
+    serde_json::from_slice(&body).map_err(|e| ComicServerError::Body(e.to_string()))
+}
+
+/// The error with its causes, e.g. "error sending request: connection refused".
+fn describe(error: &reqwest::Error) -> String {
+    let mut text = error.to_string();
+    let mut source = std::error::Error::source(error);
+    while let Some(cause) = source {
+        text = format!("{text}: {cause}");
+        source = cause.source();
+    }
+    text
 }
 
 /// Runs an action once, `window` after the last of a burst of triggers. Stops when dropped.

@@ -2659,6 +2659,47 @@
         }
       }
     },
+    "/api/settings/comic-server/test": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Check a comic server's URL and API key with a request that changes nothing: Komga's library\nlist, Kavita's API key expiry.",
+        "operationId": "testComicServer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComicServerTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the server answered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComicServerTest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks": {
       "get": {
         "tags": [
@@ -3602,6 +3643,115 @@
           "metroninfo",
           "both"
         ]
+      },
+      "ComicServerKind": {
+        "type": "string",
+        "description": "The comic servers FMD2r can ask to scan.",
+        "enum": [
+          "none",
+          "komga",
+          "kavita"
+        ]
+      },
+      "ComicServerLibrary": {
+        "type": "object",
+        "description": "A Komga library.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ComicServerSettingsView": {
+        "type": "object",
+        "description": "[`ComicServerSettings`] with the API key left out.",
+        "required": [
+          "kind",
+          "url",
+          "has_api_key"
+        ],
+        "properties": {
+          "has_api_key": {
+            "type": "boolean",
+            "description": "Whether an API key is set. Patch `api_key` to set it; an empty one clears it."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ComicServerKind"
+          },
+          "library_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Komga only: the library to scan; `None` scans every library the key can see."
+          },
+          "url": {
+            "type": "string",
+            "description": "The server's base URL, e.g. `http://nas:25600`."
+          }
+        }
+      },
+      "ComicServerTest": {
+        "type": "object",
+        "description": "What \"Test connection\" found.",
+        "required": [
+          "ok",
+          "message",
+          "libraries"
+        ],
+        "properties": {
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComicServerLibrary"
+            },
+            "description": "Komga: the libraries the API key can see. Empty for Kavita or on failure."
+          },
+          "message": {
+            "type": "string",
+            "description": "What happened, as a sentence to show."
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "The server answered and accepted the API key."
+          }
+        }
+      },
+      "ComicServerTestRequest": {
+        "type": "object",
+        "description": "The comic server to test: the `comic_server` settings as the form holds them, saved or not.",
+        "required": [
+          "kind",
+          "url"
+        ],
+        "properties": {
+          "api_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A key typed but not saved yet; without one, the stored key, if `kind` and `url` are the\nstored ones (so the stored key goes nowhere else)."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ComicServerKind"
+          },
+          "library_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        }
       },
       "ConnectionSettingsView": {
         "type": "object",
@@ -6253,6 +6403,19 @@
               "mode": "system",
               "text_size": "normal",
               "theme": "default"
+            }
+          },
+          "comic_server": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComicServerSettingsView"
+              }
+            ],
+            "default": {
+              "has_api_key": false,
+              "kind": "none",
+              "library_id": null,
+              "url": ""
             }
           },
           "connections": {
