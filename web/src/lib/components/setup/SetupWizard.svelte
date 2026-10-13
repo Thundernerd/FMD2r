@@ -38,6 +38,7 @@
 	const busy = $derived(saving || (current?.busy?.() ?? false));
 	const startsFromFmd2 = $derived(step?.paths?.some((p) => fromFmd2.includes(p)) ?? false);
 	const nextLabel = $derived(current?.nextLabel?.() ?? 'Next');
+	const ended = $derived(current?.ended?.() ?? false);
 
 	$effect(() => {
 		Promise.all([api.getSettings(), api.health()])
@@ -144,16 +145,23 @@
 			{/if}
 		</section>
 
-		<div class="actions">
-			{#if index > 0}
-				<button class="btn" type="button" disabled={busy} onclick={() => go(index - 1)}>
-					Back
+		{#if !ended}
+			<div class="actions">
+				{#if index > 0}
+					<button class="btn" type="button" disabled={busy} onclick={() => go(index - 1)}>
+						Back
+					</button>
+				{/if}
+				<button
+					class="btn primary"
+					type="button"
+					disabled={!ready || busy}
+					onclick={() => advance()}
+				>
+					{last ? 'Finish' : nextLabel}
 				</button>
-			{/if}
-			<button class="btn primary" type="button" disabled={!ready || busy} onclick={() => advance()}>
-				{last ? 'Finish' : nextLabel}
-			</button>
-		</div>
+			</div>
+		{/if}
 	{/if}
 </div>
 

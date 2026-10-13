@@ -22,6 +22,11 @@ export interface StepExports {
 	ready?: () => boolean;
 	/** Whether the step's own work runs, e.g. an import; Back and Next wait for it. Read reactively. */
 	busy?: () => boolean;
+	/**
+	 * Whether the step ended the setup without finishing it, e.g. a backup restored at the next
+	 * start: the wizard then offers no Back or Next. Read reactively.
+	 */
+	ended?: () => boolean;
 	/** What Next reads instead, e.g. "Skip" while nothing was entered. Read reactively. */
 	nextLabel?: () => string | undefined;
 	/**
