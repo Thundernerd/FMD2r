@@ -41,6 +41,8 @@ const seedFavorites = (): FavoriteView[] => {
 		last_checked: '2026-10-08T09:12:00Z',
 		last_updated: null,
 		group_id: null,
+		tags: [],
+		format: null,
 		...patch
 	});
 	return [
@@ -49,17 +51,24 @@ const seedFavorites = (): FavoriteView[] => {
 			cover_url: `/api/covers?${new URLSearchParams({ module: 'mangadex', url: 'https://mangadex.test/frieren.jpg' })}`,
 			current_chapter: 142,
 			new_chapters: 4,
-			last_updated: '2026-10-08T09:12:00Z'
+			last_updated: '2026-10-08T09:12:00Z',
+			// The website's genres, then the rest of its MangaBaka match's.
+			tags: ['Adventure', 'Drama', 'Fantasy', 'Shounen'],
+			format: 'manga'
 		}),
 		favorite(2, 'Kagurabachi', 'mangadex', 'MangaDex', '/title/kgb/kagurabachi', {
 			current_chapter: 98,
 			new_chapters: 2,
-			last_updated: '2026-10-08T09:12:00Z'
+			last_updated: '2026-10-08T09:12:00Z',
+			// Unmatched: the website's genres only, and no format.
+			tags: ['Action', 'Supernatural']
 		}),
 		favorite(3, 'Omniscient Reader’s Viewpoint', 'comick', 'ComicK', '/comic/orv', {
 			current_chapter: 241,
 			new_chapters: 3,
-			last_updated: '2026-10-07T18:00:00Z'
+			last_updated: '2026-10-07T18:00:00Z',
+			tags: ['Action', 'Fantasy', 'Apocalypse'],
+			format: 'manhwa'
 		}),
 		favorite(4, 'Sakamoto Days', 'mangadex', 'MangaDex', '/title/sd/sakamoto-days', {
 			current_chapter: 190
@@ -245,7 +254,12 @@ export function createMockFavorites(
 				date_added: new Date().toISOString(),
 				last_checked: null,
 				last_updated: null,
-				group_id: null
+				group_id: null,
+				// Not matched yet: the website's genres, without case duplicates.
+				tags: series.genres.filter(
+					(g, i) => series.genres.findIndex((h) => h.toLowerCase() === g.toLowerCase()) === i
+				),
+				format: null
 			};
 			favorites.push(favorite);
 			return { status: 201, body: view(favorite) };

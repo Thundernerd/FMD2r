@@ -353,6 +353,7 @@ describe('SeriesHeader', () => {
 			current_chapter: 0,
 			new_chapters: 0,
 			date_added: '2026-01-01T00:00:00Z',
+			tags: [],
 			...overrides
 		};
 	}

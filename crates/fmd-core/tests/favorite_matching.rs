@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use common::mangabaka::{FixtureSource, fixture_records};
+use fmd_core::favorites::{TagsAndFormat, tags_and_format};
 use fmd_core::metadata::{MangaBakaDb, MangaDexLinks, Matcher, MetadataJobs};
 use fmd_core::settings::SettingsService;
 use fmd_http::{
@@ -152,6 +153,84 @@ fn a_favorite_matches_without_its_websites_list() {
     assert_eq!(m.series_id, Some(189));
     assert_eq!(m.format.as_deref(), Some("manhwa"));
     assert_eq!(m.year, Some(2022));
+}
+
+#[test]
+fn a_matched_favorites_tags_add_mangabaka_genres_without_case_duplicates() {
+    let f = fixture();
+    let favorite = f.favorite(FIRE, "/manga/reborn-rich", &reborn_rich());
+    f.jobs.catch_up();
+
+    let tagged = tags_and_format(Some(&f.jobs), &favorite, " drama, Action ,, Revenge");
+
+    // MangaBaka's Reborn Rich (189): Drama, Fantasy, Psychological, Seinen; manhwa.
+    assert_eq!(
+        tagged,
+        TagsAndFormat {
+            tags: vec![
+                "drama".into(),
+                "Action".into(),
+                "Revenge".into(),
+                "Fantasy".into(),
+                "Psychological".into(),
+                "Seinen".into(),
+            ],
+            format: Some("manhwa".into()),
+        }
+    );
+}
+
+#[test]
+fn a_series_matched_by_hand_takes_the_format_of_the_picked_series() {
+    let f = fixture();
+    let favorite = f.favorite(
+        FIRE,
+        "/manga/skip-loafer",
+        &FavoriteInfo {
+            title: "Some Other Name".into(),
+            ..FavoriteInfo::default()
+        },
+    );
+    f.jobs.catch_up();
+    // MangaBaka's Skip and Loafer (86) is a manga.
+    f.jobs.set_override(FIRE, "/manga/skip-loafer", 86).unwrap();
+
+    let tagged = tags_and_format(Some(&f.jobs), &favorite, "");
+
+    assert_eq!(tagged.format.as_deref(), Some("manga"));
+    assert!(
+        tagged.tags.contains(&"Slice of Life".to_owned()),
+        "{tagged:?}"
+    );
+}
+
+#[test]
+fn without_a_match_or_a_database_a_favorite_has_only_its_websites_genres() {
+    let f = fixture();
+    let favorite = f.favorite(
+        FIRE,
+        "/manga/unknown",
+        &FavoriteInfo {
+            title: "Nothing MangaBaka Knows".into(),
+            ..FavoriteInfo::default()
+        },
+    );
+    f.jobs.catch_up();
+    let expected = TagsAndFormat {
+        tags: vec!["Action".into(), "Comedy".into()],
+        format: None,
+    };
+
+    assert_eq!(
+        tags_and_format(Some(&f.jobs), &favorite, "Action, Comedy, action"),
+        expected,
+        "no match"
+    );
+    assert_eq!(
+        tags_and_format(None, &favorite, "Action, Comedy, action"),
+        expected,
+        "no database"
+    );
 }
 
 #[test]

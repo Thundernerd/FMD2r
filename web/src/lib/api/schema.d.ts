@@ -1424,6 +1424,11 @@ export interface components {
 			/** @description Checked by the new-chapter check; `false` for a paused favorite, which no check looks at. */
 			enabled: boolean;
 			/**
+			 * @description The accepted MangaBaka match's type: `manga`, `manhwa`, `manhua`, `oel` or `other`;
+			 *     `null` without a match.
+			 */
+			format?: string | null;
+			/**
 			 * Format: int64
 			 * @description The library group it is in; `null` is "Ungrouped".
 			 */
@@ -1445,6 +1450,11 @@ export interface components {
 			new_chapters: number;
 			save_to: string;
 			status: components['schemas']['SeriesStatus'];
+			/**
+			 * @description The website's genres, then those of the series' accepted MangaBaka match, without
+			 *     duplicates ignoring case.
+			 */
+			tags: string[];
 			/** @description As the website names it; download folders and files are named after it. */
 			title: string;
 			/** @description The module's name; its ID when the module is not loaded. */

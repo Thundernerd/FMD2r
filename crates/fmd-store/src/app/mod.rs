@@ -36,6 +36,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/app_v5.sql"),
     include_str!("../migrations/app_v6.sql"),
     include_str!("../migrations/app_v7.sql"),
+    include_str!("../migrations/app_v8.sql"),
 ];
 
 const IN_MEMORY: &str = ":memory:";

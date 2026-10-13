@@ -3848,7 +3848,8 @@
           "cover_url",
           "current_chapter",
           "new_chapters",
-          "date_added"
+          "date_added",
+          "tags"
         ],
         "properties": {
           "cover_url": {
@@ -3872,6 +3873,13 @@
           "enabled": {
             "type": "boolean",
             "description": "Checked by the new-chapter check; `false` for a paused favorite, which no check looks at."
+          },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The accepted MangaBaka match's type: `manga`, `manhwa`, `manhua`, `oel` or `other`;\n`null` without a match."
           },
           "group_id": {
             "type": [
@@ -3917,6 +3925,13 @@
           },
           "status": {
             "$ref": "#/components/schemas/SeriesStatus"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The website's genres, then those of the series' accepted MangaBaka match, without\nduplicates ignoring case."
           },
           "title": {
             "type": "string",

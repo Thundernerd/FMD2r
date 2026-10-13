@@ -26,8 +26,9 @@ use crate::download::{
     ChapterSpec, DownloadManager, EngineError, ModuleLookup, NewDownload, TaskId, rename_options,
     save_to,
 };
-use crate::info::{InfoError, InfoOptions, MangaInfo, RateLimits, get_info};
+use crate::info::{InfoError, InfoOptions, MangaInfo, RateLimits, get_info, split_genres};
 use crate::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
+use crate::metadata::{MetadataJobs, format_of};
 use crate::settings::{OutputFormat, SaveToSettings, SettingsService};
 
 /// `MangaInfo_StatusCompleted` (baseunits/uBaseUnit.pas:230).
@@ -79,13 +80,50 @@ pub fn favorite_save_to(
     save_to(saveto, website, website_dir, &download)
 }
 
-/// What a favorite keeps of the website's info for MangaBaka matching.
+/// What a favorite keeps of the website's info: what MangaBaka matching reads, and its genres.
 pub fn website_info(info: &MangaInfo) -> FavoriteInfo {
     FavoriteInfo {
         title: info.title.clone(),
         alt_titles: info.alt_titles.clone(),
         authors: info.authors.clone(),
         artists: info.artists.clone(),
+        genres: info.genres.clone(),
+    }
+}
+
+/// A library series' tags and format, as auto groups read them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TagsAndFormat {
+    /// The website's genres, then those of the accepted MangaBaka match; trimmed, and without
+    /// duplicates ignoring case (the first spelling stays).
+    pub tags: Vec<String>,
+    /// The accepted match's type as [`format_of`] gives it; `None` without a match.
+    pub format: Option<String>,
+}
+
+/// `favorite`'s tags and format from its `website_genres` (FMD2's comma-separated list) and its
+/// accepted MangaBaka match, if `metadata` has one. Blocking.
+pub fn tags_and_format(
+    metadata: Option<&MetadataJobs>,
+    favorite: &Favorite,
+    website_genres: &str,
+) -> TagsAndFormat {
+    let found = metadata.and_then(|m| m.series_match(&favorite.module_id, &favorite.link));
+    let mut seen = HashSet::new();
+    let tags = split_genres(website_genres)
+        .into_iter()
+        .chain(found.iter().flat_map(|m| {
+            m.series
+                .genres
+                .iter()
+                .map(|g| g.trim().to_owned())
+                .filter(|g| !g.is_empty())
+        }))
+        .filter(|g| seen.insert(g.to_lowercase()))
+        .collect();
+    TagsAndFormat {
+        tags,
+        format: found.map(|m| format_of(&m.series.kind).to_owned()),
     }
 }
 

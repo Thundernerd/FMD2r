@@ -60,14 +60,16 @@ pub struct LibraryGroup {
     pub collapsed: bool,
 }
 
-/// What the website says about a favorite, as MangaBaka matching reads it. Apart from
-/// [`Favorite::title`], which the user can rename; empty until the website's info is fetched.
+/// What the website says about a favorite, as MangaBaka matching reads it, plus its genres. Apart
+/// from [`Favorite::title`], which the user can rename; empty until the website's info is fetched.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FavoriteInfo {
     pub title: String,
     pub alt_titles: String,
     pub authors: String,
     pub artists: String,
+    /// FMD2's comma-separated genre list. Matching doesn't read it.
+    pub genres: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,7 +199,8 @@ impl<'a> FavoriteRepo<'a> {
         let conn = self.db.lock();
         Ok(conn
             .query_row(
-                "SELECT info_title, alt_titles, authors, artists FROM favorites WHERE id = ?1",
+                "SELECT info_title, alt_titles, authors, artists, genres FROM favorites
+                 WHERE id = ?1",
                 [id.0],
                 |r| {
                     Ok(FavoriteInfo {
@@ -205,16 +208,23 @@ impl<'a> FavoriteRepo<'a> {
                         alt_titles: r.get(1)?,
                         authors: r.get(2)?,
                         artists: r.get(3)?,
+                        genres: r.get(4)?,
                     })
                 },
             )
             .optional()?)
     }
 
-    /// Returns whether it changed what was stored.
+    /// Returns whether it changed what matching reads: a change to only the genres is stored but
+    /// returns `false`.
     pub fn set_info(&self, id: FavoriteId, info: &FavoriteInfo) -> Result<bool> {
-        let conn = self.db.lock();
-        let changed = conn.execute(
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "UPDATE favorites SET genres = ?2 WHERE id = ?1",
+            params![id.0, info.genres],
+        )?;
+        let changed = tx.execute(
             "UPDATE favorites SET info_title = ?2, alt_titles = ?3, authors = ?4, artists = ?5
              WHERE id = ?1
              AND (info_title, alt_titles, authors, artists) IS NOT (?2, ?3, ?4, ?5)",
@@ -226,6 +236,7 @@ impl<'a> FavoriteRepo<'a> {
                 info.artists
             ],
         )?;
+        tx.commit()?;
         Ok(changed > 0)
     }
 
