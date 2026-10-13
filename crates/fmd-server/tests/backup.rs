@@ -85,7 +85,8 @@ async fn the_zip_holds_app_db_its_key_and_backup_json_named_after_the_day() {
     assert_eq!(header_of(&res, header::CONTENT_TYPE), "application/zip");
     let disposition = header_of(&res, header::CONTENT_DISPOSITION).to_owned();
     let name = disposition
-        .strip_prefix("attachment; filename=\"fmd2r-backup-")
+        .split("; ")
+        .find_map(|part| part.strip_prefix("filename=\"fmd2r-backup-"))
         .and_then(|rest| rest.strip_suffix(".zip\""))
         .unwrap_or_else(|| panic!("unexpected Content-Disposition {disposition:?}"));
     assert!(

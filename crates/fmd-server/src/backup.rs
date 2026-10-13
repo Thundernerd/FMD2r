@@ -19,10 +19,14 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 use crate::state::off_thread;
+use crate::task_files::{attachment, io_error};
 use crate::{ApiError, AppState, Problem, custom_css};
 
 /// The database's name in the data folder and in the zip.
 const APP_DB: &str = "app.db";
+
+/// The zip entry describing the backup.
+const BACKUP_JSON: &str = "backup.json";
 
 /// What the backup is, for restoring it.
 #[derive(Serialize)]
@@ -57,10 +61,7 @@ pub(crate) async fn download(State(state): State<AppState>) -> Result<Response, 
         [
             (header::CONTENT_TYPE, "application/zip".to_owned()),
             (header::CONTENT_LENGTH, len.to_string()),
-            (
-                header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{name}\""),
-            ),
+            (header::CONTENT_DISPOSITION, attachment(&name)),
         ],
         body,
     )
@@ -83,7 +84,7 @@ fn write_backup(db: &AppDb, dir: &Path, now: OffsetDateTime) -> Result<File, Api
     let mut zip = ZipWriter::new(tempfile::tempfile().map_err(io_error)?);
     add_file(&mut zip, &copy, APP_DB)?;
     add_file(&mut zip, &dir.join(ACCOUNTS_KEY_FILE), ACCOUNTS_KEY_FILE)?;
-    add_bytes(&mut zip, "backup.json", &info)?;
+    add_bytes(&mut zip, BACKUP_JSON, &info)?;
     let css = dir.join(custom_css::FILE);
     if css.is_file() {
         add_file(&mut zip, &css, custom_css::FILE)?;
@@ -93,7 +94,8 @@ fn write_backup(db: &AppDb, dir: &Path, now: OffsetDateTime) -> Result<File, Api
     Ok(file)
 }
 
-fn options() -> SimpleFileOptions {
+/// Deflated: the database and text compress well. Zip64, as `app.db` may outgrow 4 GiB.
+fn deflated_entry() -> SimpleFileOptions {
     SimpleFileOptions::default()
         .compression_method(CompressionMethod::Deflated)
         .large_file(true)
@@ -102,18 +104,14 @@ fn options() -> SimpleFileOptions {
 fn add_file(zip: &mut ZipWriter<File>, path: &Path, name: &str) -> Result<(), ApiError> {
     let mut source =
         File::open(path).map_err(|e| ApiError::Internal(format!("opening {name}: {e}")))?;
-    zip.start_file(name, options()).map_err(zip_error)?;
+    zip.start_file(name, deflated_entry()).map_err(zip_error)?;
     io::copy(&mut source, zip).map_err(|e| ApiError::Internal(format!("zipping {name}: {e}")))?;
     Ok(())
 }
 
 fn add_bytes(zip: &mut ZipWriter<File>, name: &str, bytes: &[u8]) -> Result<(), ApiError> {
-    zip.start_file(name, options()).map_err(zip_error)?;
+    zip.start_file(name, deflated_entry()).map_err(zip_error)?;
     zip.write_all(bytes).map_err(io_error)
-}
-
-fn io_error(err: io::Error) -> ApiError {
-    ApiError::Internal(err.to_string())
 }
 
 fn zip_error(err: zip::result::ZipError) -> ApiError {
