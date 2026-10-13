@@ -27,6 +27,7 @@ pub struct Settings {
     pub covers: CoverSettings,
     pub logs: LogSettings,
     pub metadata: MetadataSettings,
+    pub comic_server: ComicServerSettings,
     pub notifications: NotificationSettings,
 }
 
@@ -757,6 +758,29 @@ impl Default for MangaBakaSettings {
     fn default() -> Self {
         Self { refresh_days: 7 }
     }
+}
+
+/// The comic server asked to scan after downloads finish (issue #269). No FMD2 counterpart.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct ComicServerSettings {
+    pub kind: ComicServerKind,
+    /// The server's base URL, e.g. `http://nas:25600`.
+    pub url: String,
+    /// Stored encrypted; the API only shows whether it is set.
+    pub api_key: Option<String>,
+    /// Komga only: the library to scan; `None` scans every library the key can see.
+    pub library_id: Option<String>,
+}
+
+/// The comic servers FMD2r can ask to scan.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ComicServerKind {
+    #[default]
+    None,
+    Komga,
+    Kavita,
 }
 
 /// Pushes of inbox events to other services. No FMD2 counterpart: FMD2 shows balloon hints on

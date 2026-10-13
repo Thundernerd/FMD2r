@@ -320,6 +320,32 @@ export const SETTINGS_SECTIONS: Section[] = [
 		]
 	},
 	{
+		id: 'comic_server',
+		title: 'Comic server',
+		fields: [
+			select(
+				'comic_server.kind',
+				'Server',
+				[
+					{ value: 'none', label: 'None' },
+					{ value: 'komga', label: 'Komga' },
+					{ value: 'kavita', label: 'Kavita' }
+				],
+				'Asked to scan its libraries a minute after downloads finish, so new chapters show up right away.'
+			),
+			text('comic_server.url', 'URL', 'Where the server is reached from FMD2r.', {
+				placeholder: 'http://nas:25600'
+			}),
+			secret('comic_server.api_key', 'API key', 'Made in the server’s account settings.'),
+			text(
+				'comic_server.library_id',
+				'Komga library ID',
+				'Komga only. Leave empty to scan every library the API key can see.',
+				{ nullable: true }
+			)
+		]
+	},
+	{
 		id: 'images',
 		title: 'Images',
 		fields: [

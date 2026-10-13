@@ -1,6 +1,8 @@
 import { getPath, isObject } from '#lib/settings/draft.svelte.ts';
 import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 import type {
+	ComicServerTest,
+	ComicServerTestRequest,
 	FieldProblem,
 	ModuleOptionSetting,
 	ModuleSettingsView,
@@ -111,6 +113,7 @@ export const defaultSettings = (): Settings => ({
 		public_url: ''
 	},
 	xpath: { backend: 'native' },
+	comic_server: { kind: 'none', url: '', has_api_key: false, library_id: null },
 	notifications: {
 		ntfy: { enabled: false, topic_url: '', has_token: false, new_chapters: true, problems: true },
 		discord: { enabled: false, has_webhook_url: false, new_chapters: true, problems: true },
@@ -622,6 +625,40 @@ export function createMockSettings(setUp = true) {
 				.replaceAll('%WEBSITE%', website)
 				.trim();
 			return dir.includes(manga) ? dir : `${dir.replace(/\/+$/, '')}/${manga}`;
+		},
+
+		/** Komga answers with two libraries and Kavita with an expiry, unless the URL holds `down`. */
+		testComicServer(request: ComicServerTestRequest): ComicServerTest {
+			const name = request.kind === 'kavita' ? 'Kavita' : 'Komga';
+			if (request.kind === 'none' || !request.url.trim()) {
+				return {
+					ok: false,
+					message: 'Choose Komga or Kavita and enter its URL first.',
+					libraries: []
+				};
+			}
+			if (request.url.includes('down')) {
+				return {
+					ok: false,
+					message: `Could not connect to ${name}: connection refused.`,
+					libraries: []
+				};
+			}
+			if (request.kind === 'kavita') {
+				return {
+					ok: true,
+					message: 'Connected to Kavita. The API key does not expire.',
+					libraries: []
+				};
+			}
+			return {
+				ok: true,
+				message: 'Connected to Komga. Libraries: Manga, Comics.',
+				libraries: [
+					{ id: '0B79XX3NP97K9', name: 'Manga' },
+					{ id: '0B79XX3NP97KA', name: 'Comics' }
+				]
+			};
 		},
 
 		/** Every folder is usable except those under `/mnt/`, as if their disk were unmounted. */

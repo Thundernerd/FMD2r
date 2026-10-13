@@ -10,6 +10,7 @@ import type {
 	AccountInfo,
 	AccountRequest,
 	BulkChange,
+	ComicServerTestRequest,
 	FavoritePatch,
 	GroupPatch,
 	InboxItem,
@@ -925,6 +926,9 @@ export function createMockBackend({
 		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
 		if (route === 'PATCH /api/settings/all')
 			return update(req, settings.patchAll, (save) => save['settings']);
+		if (route === 'POST /api/settings/comic-server/test') {
+			return json(settings.testComicServer((await req.json()) as ComicServerTestRequest));
+		}
 		if (route === 'POST /api/check-folders') {
 			const body = (await req.json()) as { paths?: unknown } | null;
 			const paths = Array.isArray(body?.paths) ? body.paths.map(String) : [];

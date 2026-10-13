@@ -743,6 +743,7 @@ fn set_every_secret() -> Request<Body> {
             "connections": { "proxy": { "password": "proxy-secret" } },
             "module_updater": { "github_token": "token-secret" },
             "server": { "auth_token": "server-secret" },
+            "comic_server": { "api_key": "comic-secret" },
             "notifications": {
                 "ntfy": { "token": "ntfy-secret" },
                 "discord": { "webhook_url": "https://discord.com/api/webhooks/1/discord-secret" },
@@ -767,6 +768,7 @@ fn assert_no_secret(body: &serde_json::Value) {
         "proxy-secret",
         "token-secret",
         "server-secret",
+        "comic-secret",
         "ntfy-secret",
         "discord-secret",
         "webhook-secret",
@@ -776,6 +778,7 @@ fn assert_no_secret(body: &serde_json::Value) {
     assert!(body["connections"]["proxy"].get("password").is_none());
     assert!(body["module_updater"].get("github_token").is_none());
     assert!(body["server"].get("auth_token").is_none());
+    assert!(body["comic_server"].get("api_key").is_none());
     let n = &body["notifications"];
     assert!(n["ntfy"].get("token").is_none());
     assert!(n["discord"].get("webhook_url").is_none());
@@ -802,6 +805,7 @@ async fn settings_secrets_are_never_returned_only_whether_they_are_set() {
     assert_eq!(body["connections"]["proxy"]["has_password"], false);
     assert_eq!(body["module_updater"]["has_github_token"], false);
     assert_eq!(body["server"]["has_auth_token"], false);
+    assert_eq!(body["comic_server"]["has_api_key"], false);
     assert_eq!(notification_flags(&body), [false; 3]);
 
     let res = send(&h.state, set_every_secret()).await;
@@ -813,6 +817,7 @@ async fn settings_secrets_are_never_returned_only_whether_they_are_set() {
     assert_eq!(body["connections"]["proxy"]["has_password"], true);
     assert_eq!(body["module_updater"]["has_github_token"], true);
     assert_eq!(body["server"]["has_auth_token"], true);
+    assert_eq!(body["comic_server"]["has_api_key"], true);
     assert_eq!(notification_flags(&body), [true; 3]);
 }
 

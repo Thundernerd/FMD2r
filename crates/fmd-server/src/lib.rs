@@ -3,6 +3,7 @@
 mod about;
 mod accounts;
 mod auth;
+mod comic_server;
 mod covers;
 mod custom_css;
 mod error;
@@ -42,6 +43,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange};
+pub use comic_server::{ComicServerTest, ComicServerTestRequest};
 pub use covers::{
     CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
 };
@@ -132,6 +134,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(settings::patch_all))
         .routes(routes!(settings::preview_rename))
         .routes(routes!(settings::check_folders))
+        .routes(routes!(comic_server::test))
         .routes(routes!(notifications::test))
         .routes(routes!(module_settings::list))
         .routes(routes!(module_settings::get, module_settings::patch))

@@ -6,6 +6,8 @@ import type {
 	AccountInfo,
 	AccountRequest,
 	BulkChange,
+	ComicServerTest,
+	ComicServerTestRequest,
 	Channel,
 	FavoritePatch,
 	FavoriteView,
@@ -138,6 +140,8 @@ export interface Api {
 	previewRename(draft: RenamePreviewRequest): Promise<RenamePreview>;
 	/** Whether downloads can be saved in each folder now, in order. */
 	checkFolders(paths: string[]): Promise<FolderCheck[]>;
+	/** Whether the comic server answers with the API key; changes nothing on it. */
+	testComicServer(request: ComicServerTestRequest): Promise<ComicServerTest>;
 	/** Sends a test notification with the channel's saved settings. */
 	testNotification(channel: Channel): Promise<NotificationTest>;
 	/** The folder a download of a series goes to, the manga folder included. */
@@ -471,6 +475,12 @@ export function createApi({
 		},
 		async checkFolders(paths) {
 			return unwrap('checkFolders', await client.POST('/api/check-folders', { body: { paths } }));
+		},
+		async testComicServer(request) {
+			return unwrap(
+				'testComicServer',
+				await client.POST('/api/settings/comic-server/test', { body: request })
+			);
 		},
 		async testNotification(channel) {
 			return unwrap(

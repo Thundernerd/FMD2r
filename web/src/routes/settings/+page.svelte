@@ -13,6 +13,7 @@
 		Settings
 	} from '#lib/api/types.ts';
 	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
+	import ComicServerPanel from '#lib/components/settings/ComicServerPanel.svelte';
 	import DestinationsEditor from '#lib/components/settings/DestinationsEditor.svelte';
 	import MangaBakaPanel from '#lib/components/settings/MangaBakaPanel.svelte';
 	import NotificationChannels from '#lib/components/settings/NotificationChannels.svelte';
@@ -360,6 +361,9 @@
 						{/if}
 						{#if section.id === 'metadata'}
 							<MangaBakaPanel {api} store={events} />
+						{/if}
+						{#if section.id === 'comic_server'}
+							<ComicServerPanel {api} {draft} />
 						{/if}
 						{#if section.id === 'general'}
 							<p class="setup-again">
