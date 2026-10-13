@@ -8,10 +8,11 @@ use std::io::{Cursor, Read};
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use axum::response::Response;
+use fmd_core::settings::SettingsService;
 use fmd_server::{AppState, build_router};
 use fmd_store::{Account, AccountStatus, AppDb};
 use http_body_util::BodyExt;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tempfile::TempDir;
 use tower::ServiceExt;
 
@@ -148,6 +149,39 @@ async fn the_copy_s_secrets_decrypt_with_the_zipped_key() {
         copy.settings().get::<String>("general.language").unwrap(),
         Some("nl".into())
     );
+}
+
+#[tokio::test]
+async fn the_copy_s_settings_secrets_decrypt_with_the_zipped_key() {
+    let h = harness();
+    SettingsService::load(h.db.clone())
+        .unwrap()
+        .update(json!({
+            "comic_server": {"kind": "komga", "url": "http://nas:25600", "api_key": "komga-key"},
+            "notifications": {
+                "ntfy": {"topic_url": "https://ntfy.sh/topic", "token": "ntfy-token"},
+                "discord": {"webhook_url": "https://discord.com/api/webhooks/1/discord-token"},
+                "webhook": {"url": "http://n8n.local/hook", "authorization": "Bearer hook-token"},
+            },
+        }))
+        .unwrap();
+
+    let mut zip = archive(get_backup(&h.state).await).await;
+
+    let restored = tempfile::tempdir().unwrap();
+    for name in ["app.db", "accounts.key"] {
+        std::fs::write(restored.path().join(name), entry(&mut zip, name)).unwrap();
+    }
+    let copy = AppDb::open(restored.path().join("app.db")).unwrap();
+    let settings = SettingsService::load(copy).unwrap().get();
+    assert_eq!(settings.comic_server.api_key.as_deref(), Some("komga-key"));
+    let notifications = &settings.notifications;
+    assert_eq!(notifications.ntfy.token, "ntfy-token");
+    assert_eq!(
+        notifications.discord.webhook_url,
+        "https://discord.com/api/webhooks/1/discord-token"
+    );
+    assert_eq!(notifications.webhook.authorization, "Bearer hook-token");
 }
 
 #[tokio::test]
