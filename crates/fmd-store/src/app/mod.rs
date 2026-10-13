@@ -75,6 +75,12 @@ impl AppDb {
         self.db.schema_version()
     }
 
+    /// Saves a consistent copy of the database to `dest`, a file that must not exist yet, while
+    /// the server keeps running and writing.
+    pub fn back_up_to(&self, dest: impl AsRef<Path>) -> Result<()> {
+        self.db.vacuum_into(dest.as_ref())
+    }
+
     /// Download tasks with their chapters and pages.
     pub fn tasks(&self) -> TaskRepo<'_> {
         TaskRepo::new(&self.db)

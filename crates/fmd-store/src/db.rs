@@ -41,6 +41,20 @@ impl Db {
     pub(crate) fn schema_version(&self) -> Result<u32> {
         user_version(&self.lock())
     }
+
+    /// Writes a compacted copy of the database to `dest` with `VACUUM INTO`, which reads one
+    /// snapshot, so the copy is consistent while other connections write. Fails if `dest` exists
+    /// and isn't empty.
+    pub(crate) fn vacuum_into(&self, dest: &Path) -> Result<()> {
+        let dest = dest.to_str().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("{} is not valid UTF-8", dest.display()),
+            )
+        })?;
+        self.lock().execute("VACUUM INTO ?1", [dest])?;
+        Ok(())
+    }
 }
 
 fn user_version(conn: &Connection) -> Result<u32> {
