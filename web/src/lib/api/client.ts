@@ -6,11 +6,13 @@ import type {
 	AccountInfo,
 	AccountRequest,
 	BulkChange,
+	Channel,
 	FavoritePatch,
 	FavoriteView,
+	FieldProblem,
+	FolderCheck,
 	GroupPatch,
 	GroupView,
-	FolderCheck,
 	Health,
 	ImportOptions,
 	ImportReport,
@@ -18,23 +20,23 @@ import type {
 	JobState,
 	ListFacets,
 	ListJobStarted,
+	LogLine,
 	MangaBakaSearchResult,
 	MangaBakaStatus,
-	LogLine,
 	ModuleSettingsView,
 	ModuleSummary,
 	NewTask,
+	NotificationTest,
 	Problem,
-	FieldProblem,
 	RenamePreview,
 	RenamePreviewRequest,
-	SaveFolderRequest,
 	SavedSettings,
-	SettingsSave,
+	SaveFolderRequest,
 	SearchPage,
 	SeriesInfo,
 	SeriesRef,
 	Settings,
+	SettingsSave,
 	TaskDetail,
 	TaskSummary
 } from './types';
@@ -135,6 +137,8 @@ export interface Api {
 	previewRename(draft: RenamePreviewRequest): Promise<RenamePreview>;
 	/** Whether downloads can be saved in each folder now, in order. */
 	checkFolders(paths: string[]): Promise<FolderCheck[]>;
+	/** Sends a test notification with the channel's saved settings. */
+	testNotification(channel: Channel): Promise<NotificationTest>;
 	/** The folder a download of a series goes to, the manga folder included. */
 	saveFolder(request: SaveFolderRequest): Promise<string>;
 	listModules(): Promise<ModuleSummary[]>;
@@ -462,6 +466,14 @@ export function createApi({
 		},
 		async checkFolders(paths) {
 			return unwrap('checkFolders', await client.POST('/api/check-folders', { body: { paths } }));
+		},
+		async testNotification(channel) {
+			return unwrap(
+				'testNotification',
+				await client.POST('/api/notifications/{channel}/test', {
+					params: { path: { channel } }
+				})
+			);
 		},
 		async saveFolder(request) {
 			return unwrap('saveFolder', await client.POST('/api/save-folder', { body: request })).folder;

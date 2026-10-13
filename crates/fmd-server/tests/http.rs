@@ -743,6 +743,11 @@ fn set_every_secret() -> Request<Body> {
             "connections": { "proxy": { "password": "proxy-secret" } },
             "module_updater": { "github_token": "token-secret" },
             "server": { "auth_token": "server-secret" },
+            "notifications": {
+                "ntfy": { "token": "ntfy-secret" },
+                "discord": { "webhook_url": "https://discord.com/api/webhooks/1/discord-secret" },
+                "webhook": { "authorization": "Bearer webhook-secret" },
+            },
         }),
     )
 }
@@ -758,12 +763,35 @@ fn authed(mut req: Request<Body>) -> Request<Body> {
 /// Asserts that `body` holds none of the values [`set_every_secret`] stores.
 fn assert_no_secret(body: &serde_json::Value) {
     let text = body.to_string();
-    for secret in ["proxy-secret", "token-secret", "server-secret"] {
+    for secret in [
+        "proxy-secret",
+        "token-secret",
+        "server-secret",
+        "ntfy-secret",
+        "discord-secret",
+        "webhook-secret",
+    ] {
         assert!(!text.contains(secret), "{secret} leaked: {text}");
     }
     assert!(body["connections"]["proxy"].get("password").is_none());
     assert!(body["module_updater"].get("github_token").is_none());
     assert!(body["server"].get("auth_token").is_none());
+    let n = &body["notifications"];
+    assert!(n["ntfy"].get("token").is_none());
+    assert!(n["discord"].get("webhook_url").is_none());
+    assert!(n["webhook"].get("authorization").is_none());
+}
+
+/// The notification secrets' `has_<name>` flags: ntfy's token, Discord's webhook URL and the
+/// webhook's `Authorization` header.
+fn notification_flags(body: &serde_json::Value) -> [bool; 3] {
+    let n = &body["notifications"];
+    [
+        &n["ntfy"]["has_token"],
+        &n["discord"]["has_webhook_url"],
+        &n["webhook"]["has_authorization"],
+    ]
+    .map(|flag| flag.as_bool().unwrap())
 }
 
 #[tokio::test]
@@ -774,6 +802,7 @@ async fn settings_secrets_are_never_returned_only_whether_they_are_set() {
     assert_eq!(body["connections"]["proxy"]["has_password"], false);
     assert_eq!(body["module_updater"]["has_github_token"], false);
     assert_eq!(body["server"]["has_auth_token"], false);
+    assert_eq!(notification_flags(&body), [false; 3]);
 
     let res = send(&h.state, set_every_secret()).await;
     assert_eq!(res.status(), StatusCode::OK);
@@ -784,6 +813,7 @@ async fn settings_secrets_are_never_returned_only_whether_they_are_set() {
     assert_eq!(body["connections"]["proxy"]["has_password"], true);
     assert_eq!(body["module_updater"]["has_github_token"], true);
     assert_eq!(body["server"]["has_auth_token"], true);
+    assert_eq!(notification_flags(&body), [true; 3]);
 }
 
 #[tokio::test]

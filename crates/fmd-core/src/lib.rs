@@ -9,4 +9,5 @@ pub mod lists;
 pub mod metadata;
 pub mod module_updater;
 pub mod modules;
+pub mod notifications;
 pub mod settings;

@@ -1,4 +1,4 @@
-import type { OutputFormat } from '#lib/api/types.ts';
+import type { Channel, OutputFormat } from '#lib/api/types.ts';
 import type { Choice, Control, Field } from './fields.ts';
 
 /** A group of settings: one entry in the table of contents. */
@@ -103,6 +103,50 @@ export const DERIVED_PATHS = [
 	// The default destination's folder, for API clients that predate destinations.
 	'saveto.default_dir'
 ];
+
+/** A notification channel (`Channel`), as the Notifications section titles it. */
+export interface NotificationChannel {
+	id: Channel;
+	name: string;
+}
+
+export const NOTIFICATION_CHANNELS: NotificationChannel[] = [
+	{ id: 'ntfy', name: 'ntfy' },
+	{ id: 'discord', name: 'Discord' },
+	{ id: 'webhook', name: 'Webhook' }
+];
+
+/** Where a channel sends to, and its credentials. */
+function channelFields(id: Channel): Field[] {
+	switch (id) {
+		case 'ntfy':
+			return [
+				text('notifications.ntfy.topic_url', 'Topic URL', 'e.g. https://ntfy.sh/my-topic'),
+				secret('notifications.ntfy.token', 'Access token', 'Optional.')
+			];
+		case 'discord':
+			return [
+				secret(
+					'notifications.discord.webhook_url',
+					'Webhook URL',
+					'From the channel’s Integrations settings. Stored encrypted: it holds a token.'
+				)
+			];
+		case 'webhook':
+			return [
+				text(
+					'notifications.webhook.url',
+					'URL',
+					'Gets a JSON POST with kind, severity, title, body and created_at.'
+				),
+				secret(
+					'notifications.webhook.authorization',
+					'Authorization header',
+					'Optional, e.g. Bearer <token>.'
+				)
+			];
+	}
+}
 
 /**
  * Every application setting (the T18 model), one section per settings group. Ranges are the
@@ -314,6 +358,20 @@ export const SETTINGS_SECTIONS: Section[] = [
 		]
 	},
 	{
+		id: 'notifications',
+		title: 'Notifications',
+		fields: NOTIFICATION_CHANNELS.flatMap(({ id, name }) => [
+			checkbox(`notifications.${id}.enabled`, `Send to ${name}`),
+			...channelFields(id),
+			checkbox(`notifications.${id}.new_chapters`, 'New chapters', 'New and missing chapters.'),
+			checkbox(
+				`notifications.${id}.problems`,
+				'Problems',
+				'Failed downloads, a failed library check, broken modules.'
+			)
+		])
+	},
+	{
 		id: 'update_lists',
 		title: 'Manga lists',
 		fields: [
@@ -395,6 +453,11 @@ export const SETTINGS_SECTIONS: Section[] = [
 		title: 'Server',
 		fields: [
 			text('server.bind', 'Listen address', 'Takes effect after a restart.'),
+			text(
+				'server.public_url',
+				'Address of FMD2r',
+				'Where you open FMD2r, e.g. https://fmd.example.org. Notifications link to it.'
+			),
 			secret('server.auth_token', 'Password', 'Clear it to disable authentication.'),
 			checkbox(
 				'server.external_auth',

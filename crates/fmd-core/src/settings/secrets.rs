@@ -9,6 +9,10 @@ use serde_json::{Map, Value};
 const SETTINGS_SECRETS: &[(&str, &[&str])] = &[
     ("connections", &["proxy", "password"]),
     ("module_updater", &["github_token"]),
+    ("notifications", &["ntfy", "token"]),
+    // Discord's webhook URL carries the webhook's token.
+    ("notifications", &["discord", "webhook_url"]),
+    ("notifications", &["webhook", "authorization"]),
 ];
 
 pub(super) const MODULE_HTTP_SECRET: &[&str] = &["proxy", "password"];

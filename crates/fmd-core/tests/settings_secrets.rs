@@ -12,12 +12,24 @@ use fmd_lua::{ModuleHttpSettings, ProxyOverride};
 use fmd_store::{AppDb, ModuleSettings};
 use serde_json::{Value, json};
 
-const SECRETS: [&str; 4] = [
+const SECRETS: [&str; 7] = [
     "proxy-secret",
     "token-secret",
     "server-secret",
     "module-secret",
+    "ntfy-secret",
+    "discord-secret",
+    "webhook-secret",
 ];
+
+/// Sets the notification channels' secrets (issue #268).
+fn notification_secrets() -> Value {
+    json!({
+        "ntfy": { "token": "ntfy-secret" },
+        "discord": { "webhook_url": "https://discord.com/api/webhooks/1/discord-secret" },
+        "webhook": { "authorization": "Bearer webhook-secret" },
+    })
+}
 
 fn db() -> (AppDb, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
@@ -27,7 +39,7 @@ fn db() -> (AppDb, tempfile::TempDir) {
 /// Everything `app.db` stores for the settings and the module `site`, as text.
 fn stored_text(db: &AppDb) -> String {
     let mut text = String::new();
-    for key in ["connections", "module_updater", "server"] {
+    for key in ["connections", "module_updater", "server", "notifications"] {
         let group: Option<Value> = db.settings().get(key).unwrap();
         text += &group.unwrap_or_default().to_string();
     }
@@ -74,6 +86,13 @@ fn assert_secrets_readable(db: &AppDb) {
     );
     let hash = s.server.auth_token.as_deref().unwrap_or_default();
     assert!(verify_password(hash, "server-secret"));
+    let n = &s.notifications;
+    assert_eq!(n.ntfy.token, "ntfy-secret");
+    assert_eq!(
+        n.discord.webhook_url,
+        "https://discord.com/api/webhooks/1/discord-secret"
+    );
+    assert_eq!(n.webhook.authorization, "Bearer webhook-secret");
     let overrides = ModuleOverrides::load(&db.module_settings(), "site").unwrap();
     assert_eq!(overrides.http.proxy.password, "module-secret");
     assert_eq!(module_proxy(db), expected_module_proxy());
@@ -90,6 +109,7 @@ fn secrets_are_stored_encrypted_and_read_back() {
         .update(json!({
             "connections": { "proxy": { "password": "proxy-secret" } },
             "module_updater": { "github_token": "token-secret" },
+            "notifications": notification_secrets(),
         }))
         .unwrap();
     let module_http: Value = serde_json::from_str(MODULE_HTTP).unwrap();
@@ -140,6 +160,9 @@ fn plain_secrets_from_an_older_build_are_encrypted_on_start() {
         .unwrap();
     settings
         .set("server", &json!({ "auth_token": "server-secret" }))
+        .unwrap();
+    settings
+        .set("notifications", &notification_secrets())
         .unwrap();
     let mut module = ModuleSettings::new("site");
     module.enabled = true;

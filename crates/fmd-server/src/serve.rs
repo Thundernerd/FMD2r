@@ -208,6 +208,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                 }
             };
             state = start_favorites(state, &runtime, modules, queue);
+            state.start_notifications();
             if config.module_updates {
                 module_updates::start(
                     state.clone(),
