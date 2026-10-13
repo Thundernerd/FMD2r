@@ -93,7 +93,7 @@ pub fn website_info(info: &MangaInfo) -> FavoriteInfo {
 
 /// A library series' tags and format, as auto groups read them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SeriesTags {
+pub struct TagsAndFormat {
     /// The website's genres, then those of the accepted MangaBaka match; trimmed, and without
     /// duplicates ignoring case (the first spelling stays).
     pub tags: Vec<String>,
@@ -103,11 +103,11 @@ pub struct SeriesTags {
 
 /// `favorite`'s tags and format from its `website_genres` (FMD2's comma-separated list) and its
 /// accepted MangaBaka match, if `metadata` has one. Blocking.
-pub fn series_tags(
+pub fn tags_and_format(
     metadata: Option<&MetadataJobs>,
     favorite: &Favorite,
     website_genres: &str,
-) -> SeriesTags {
+) -> TagsAndFormat {
     let found = metadata.and_then(|m| m.series_match(&favorite.module_id, &favorite.link));
     let mut seen = HashSet::new();
     let tags = split_genres(website_genres)
@@ -121,7 +121,7 @@ pub fn series_tags(
         }))
         .filter(|g| seen.insert(g.to_lowercase()))
         .collect();
-    SeriesTags {
+    TagsAndFormat {
         tags,
         format: found.map(|m| format_of(&m.series.kind).to_owned()),
     }

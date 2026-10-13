@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use common::mangabaka::{FixtureSource, fixture_records};
-use fmd_core::favorites::{SeriesTags, series_tags};
+use fmd_core::favorites::{TagsAndFormat, tags_and_format};
 use fmd_core::metadata::{MangaBakaDb, MangaDexLinks, Matcher, MetadataJobs};
 use fmd_core::settings::SettingsService;
 use fmd_http::{
@@ -161,12 +161,12 @@ fn a_matched_favorites_tags_add_mangabaka_genres_without_case_duplicates() {
     let favorite = f.favorite(FIRE, "/manga/reborn-rich", &reborn_rich());
     f.jobs.catch_up();
 
-    let tags = series_tags(Some(&f.jobs), &favorite, " drama, Action ,, Revenge");
+    let tagged = tags_and_format(Some(&f.jobs), &favorite, " drama, Action ,, Revenge");
 
     // MangaBaka's Reborn Rich (189): Drama, Fantasy, Psychological, Seinen; manhwa.
     assert_eq!(
-        tags,
-        SeriesTags {
+        tagged,
+        TagsAndFormat {
             tags: vec![
                 "drama".into(),
                 "Action".into(),
@@ -195,10 +195,13 @@ fn a_series_matched_by_hand_takes_the_format_of_the_picked_series() {
     // MangaBaka's Skip and Loafer (86) is a manga.
     f.jobs.set_override(FIRE, "/manga/skip-loafer", 86).unwrap();
 
-    let tags = series_tags(Some(&f.jobs), &favorite, "");
+    let tagged = tags_and_format(Some(&f.jobs), &favorite, "");
 
-    assert_eq!(tags.format.as_deref(), Some("manga"));
-    assert!(tags.tags.contains(&"Slice of Life".to_owned()), "{tags:?}");
+    assert_eq!(tagged.format.as_deref(), Some("manga"));
+    assert!(
+        tagged.tags.contains(&"Slice of Life".to_owned()),
+        "{tagged:?}"
+    );
 }
 
 #[test]
@@ -213,18 +216,18 @@ fn without_a_match_or_a_database_a_favorite_has_only_its_websites_genres() {
         },
     );
     f.jobs.catch_up();
-    let expected = SeriesTags {
+    let expected = TagsAndFormat {
         tags: vec!["Action".into(), "Comedy".into()],
         format: None,
     };
 
     assert_eq!(
-        series_tags(Some(&f.jobs), &favorite, "Action, Comedy, action"),
+        tags_and_format(Some(&f.jobs), &favorite, "Action, Comedy, action"),
         expected,
         "no match"
     );
     assert_eq!(
-        series_tags(None, &favorite, "Action, Comedy, action"),
+        tags_and_format(None, &favorite, "Action, Comedy, action"),
         expected,
         "no database"
     );

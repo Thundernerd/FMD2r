@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use fmd_core::download::NewDownload;
 use fmd_core::favorites::{
-    CheckMode, CheckScope, SeriesTags, favorite_save_to, series_tags, website_info,
+    CheckMode, CheckScope, TagsAndFormat, favorite_save_to, tags_and_format, website_info,
 };
 use fmd_core::metadata::{Metadata, MetadataJobs};
 use fmd_core::settings::LibraryTitle;
@@ -559,13 +559,13 @@ fn tags_of(
     db: &AppDb,
     metadata: Option<&MetadataJobs>,
     favorite: &Favorite,
-) -> Result<SeriesTags, StoreError> {
+) -> Result<TagsAndFormat, StoreError> {
     let genres = db
         .favorites()
         .info(favorite.id)?
         .map(|info| info.genres)
         .unwrap_or_default();
-    Ok(series_tags(metadata, favorite, &genres))
+    Ok(tags_and_format(metadata, favorite, &genres))
 }
 
 async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
@@ -578,8 +578,8 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
             for favorite in favorites {
                 let new_chapters = db.favorites().new_chapter_count(&favorite)?;
                 let display_title = titles.of(&favorite);
-                let tags = tags_of(db, metadata.as_ref(), &favorite)?;
-                rows.push((favorite, display_title, new_chapters, tags));
+                let tagged = tags_of(db, metadata.as_ref(), &favorite)?;
+                rows.push((favorite, display_title, new_chapters, tagged));
             }
             Ok(rows)
         })
@@ -592,12 +592,12 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
         .collect();
     Ok(rows
         .into_iter()
-        .map(|(favorite, display_title, new_chapters, tags)| {
+        .map(|(favorite, display_title, new_chapters, tagged)| {
             let website = names
                 .get(&favorite.module_id)
                 .cloned()
                 .unwrap_or_else(|| favorite.module_id.clone());
-            to_view(favorite, website, display_title, new_chapters, tags)
+            to_view(favorite, website, display_title, new_chapters, tagged)
         })
         .collect())
 }
@@ -606,7 +606,7 @@ async fn view(state: &AppState, favorite: Favorite) -> Result<FavoriteView, ApiE
     let titles = DisplayTitles::new(state);
     let metadata = state.metadata.clone();
     let counted = favorite.clone();
-    let (display_title, new_chapters, tags) = state
+    let (display_title, new_chapters, tagged) = state
         .blocking(move |db| -> Result<_, ApiError> {
             Ok((
                 titles.of(&counted),
@@ -621,7 +621,7 @@ async fn view(state: &AppState, favorite: Favorite) -> Result<FavoriteView, ApiE
         website,
         display_title,
         new_chapters,
-        tags,
+        tagged,
     ))
 }
 
@@ -630,11 +630,11 @@ fn to_view(
     website: String,
     display_title: String,
     new_chapters: u32,
-    tags: SeriesTags,
+    tagged: TagsAndFormat,
 ) -> FavoriteView {
     FavoriteView {
-        tags: tags.tags,
-        format: tags.format,
+        tags: tagged.tags,
+        format: tagged.format,
         id: favorite.id.0,
         cover_url: match favorite.cover_url.as_deref().filter(|c| !c.is_empty()) {
             Some(cover) => cover_url(&favorite.module_id, cover),
