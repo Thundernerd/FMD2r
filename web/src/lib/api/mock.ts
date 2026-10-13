@@ -10,6 +10,7 @@ import type {
 	AccountInfo,
 	AccountRequest,
 	BulkChange,
+	ComicServerTestRequest,
 	FavoritePatch,
 	GroupPatch,
 	InboxItem,
@@ -19,6 +20,7 @@ import type {
 	ModuleSummary,
 	NewTask,
 	RenamePreviewRequest,
+	RuleView,
 	SaveFolderRequest,
 	SeriesInfo,
 	SeriesRef,
@@ -337,6 +339,8 @@ export interface MockBackend {
 	/** A small fake archive for a task's "Get files" link (there is no server to link to). */
 	taskFilesUrl: (id: number) => string;
 	logsDownloadUrl: () => string;
+	/** A small fake archive for the "Download backup" link (there is no server to link to). */
+	backupDownloadUrl: () => string;
 }
 
 export interface MockOptions {
@@ -901,8 +905,8 @@ export function createMockBackend({
 		}
 		if (route === 'GET /api/library/groups') return json(favorites.listGroups());
 		if (route === 'POST /api/library/groups') {
-			const body = (await req.json()) as { name?: unknown } | null;
-			const { status, body: created } = favorites.createGroup(body?.name);
+			const body = (await req.json()) as { name?: unknown; rule?: RuleView | null } | null;
+			const { status, body: created } = favorites.createGroup(body?.name, body?.rule);
 			return json(created, status);
 		}
 		if (route === 'POST /api/library/groups/reorder') {
@@ -924,10 +928,31 @@ export function createMockBackend({
 		if (route === 'PATCH /api/settings') return update(req, settings.patchSettings);
 		if (route === 'PATCH /api/settings/all')
 			return update(req, settings.patchAll, (save) => save['settings']);
+		if (route === 'POST /api/settings/comic-server/test') {
+			return json(settings.testComicServer((await req.json()) as ComicServerTestRequest));
+		}
 		if (route === 'POST /api/check-folders') {
 			const body = (await req.json()) as { paths?: unknown } | null;
 			const paths = Array.isArray(body?.paths) ? body.paths.map(String) : [];
 			return json(settings.checkFolders(paths));
+		}
+		const notificationTest = route.match(/^POST \/api\/notifications\/([^/]+)\/test$/);
+		if (notificationTest) {
+			const channel = notificationTest[1];
+			const { ntfy, discord, webhook } = settings.getSettings().notifications;
+			const urls: Record<string, boolean> = {
+				ntfy: ntfy.topic_url !== '',
+				discord: discord.has_webhook_url,
+				webhook: webhook.url !== ''
+			};
+			if (channel === undefined || !(channel in urls)) {
+				return json({ status: 400, detail: `unknown channel ${channel}` }, 400);
+			}
+			return json(
+				urls[channel]
+					? { delivered: true, error: null }
+					: { delivered: false, error: 'No URL is set.' }
+			);
 		}
 		if (route === 'POST /api/save-folder') {
 			const body = (await req.json()) as Partial<SaveFolderRequest> | null;
@@ -1208,5 +1233,8 @@ export function createMockBackend({
 		return logsUrl;
 	};
 
-	return { fetch, eventSource, taskFilesUrl, logsDownloadUrl };
+	const backupDownloadUrl = () =>
+		URL.createObjectURL(new Blob(['mock backup'], { type: 'application/zip' }));
+
+	return { fetch, eventSource, taskFilesUrl, logsDownloadUrl, backupDownloadUrl };
 }

@@ -182,6 +182,11 @@ impl Matcher {
         }
     }
 
+    /// The library whose favorites it matches.
+    pub(crate) fn app(&self) -> &AppDb {
+        &self.app
+    }
+
     /// The modules with a list, favorites, series picked by hand, or matches to prune.
     pub fn module_ids(&self) -> Result<BTreeSet<String>, MetadataError> {
         let mut ids: BTreeSet<String> = self
@@ -534,6 +539,9 @@ fn rejected(confidence: MatchConfidence) -> StoredMatch {
         year: None,
     }
 }
+
+/// Every value [`format_of`] gives.
+pub const FORMATS: [&str; 5] = ["manga", "manhwa", "manhua", "oel", "other"];
 
 /// Discover's format facet value for MangaBaka's `type`.
 pub fn format_of(kind: &str) -> &'static str {

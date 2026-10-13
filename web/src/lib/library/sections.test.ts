@@ -32,11 +32,11 @@ const groups: GroupView[] = [
 ];
 
 const library: FavoriteView[] = [
-	favorite(1, 'Sakamoto Days', { group_id: 10 }),
-	favorite(2, 'Frieren'),
-	favorite(3, 'Vinland Saga', { group_id: 20, status: 'completed' }),
-	favorite(4, 'Kagurabachi', { group_id: 10, new_chapters: 3 }),
-	favorite(5, 'Berserk', { group_id: 20 }),
+	favorite(1, 'Sakamoto Days', { group_id: 10, tags: ['Action'], format: 'manga' }),
+	favorite(2, 'Frieren', { tags: ['Fantasy'], format: 'manga' }),
+	favorite(3, 'Vinland Saga', { group_id: 20, status: 'completed', tags: ['Action'] }),
+	favorite(4, 'Kagurabachi', { group_id: 10, new_chapters: 3, tags: ['action', 'Fantasy'] }),
+	favorite(5, 'Berserk', { group_id: 20, tags: ['Fantasy'], format: 'manga' }),
 	favorite(6, 'Blue Lock', { group_id: 99 })
 ];
 
@@ -70,6 +70,22 @@ describe('library sections', () => {
 			{ name: 'Shounen', collapsed: false, titles: ['Kagurabachi'] }
 		]);
 		expect(shape({ q: 'saga' }).map((s) => s.name)).toEqual(['Seinen']);
+	});
+
+	it('applies the tag and format filters inside each section', () => {
+		expect(shape({ tags: { Action: 'include', fantasy: 'exclude' } })).toEqual([
+			{ name: 'Seinen', collapsed: true, titles: ['Vinland Saga'] },
+			{ name: 'Shounen', collapsed: false, titles: ['Sakamoto Days'] }
+		]);
+		expect(shape({ format: 'manga', tags: { Fantasy: 'include' } })).toEqual([
+			{ name: 'Seinen', collapsed: true, titles: ['Berserk'] },
+			{ name: 'Ungrouped', collapsed: false, titles: ['Frieren'] }
+		]);
+		expect(shape({ format: 'unknown' }).map((s) => s.titles)).toEqual([
+			['Vinland Saga'],
+			['Kagurabachi'],
+			['Blue Lock']
+		]);
 	});
 
 	it('keys each section by its group, and Ungrouped by null', () => {

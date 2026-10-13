@@ -64,6 +64,37 @@ pub struct LibraryGroup {
     pub sort_order: i64,
     /// Whether the library shows the section folded.
     pub collapsed: bool,
+    /// Which series in no group it collects; `None` is filled by hand only.
+    pub rule: Option<GroupRule>,
+}
+
+/// What an auto group collects.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GroupRule {
+    /// Series with this tag.
+    Tag(String),
+    /// Series whose MangaBaka match has this format.
+    Format(String),
+}
+
+impl GroupRule {
+    /// As stored in `rule_kind` and `rule_value`.
+    fn columns(&self) -> (&'static str, &str) {
+        match self {
+            GroupRule::Tag(value) => ("tag", value),
+            GroupRule::Format(value) => ("format", value),
+        }
+    }
+
+    /// `None` for no rule, or a kind this build doesn't know.
+    fn from_columns(kind: Option<String>, value: Option<String>) -> Option<Self> {
+        let value = value?;
+        match kind?.as_str() {
+            "tag" => Some(GroupRule::Tag(value)),
+            "format" => Some(GroupRule::Format(value)),
+            _ => None,
+        }
+    }
 }
 
 /// What the website says about a favorite, as MangaBaka matching reads it, plus its genres. Apart
@@ -369,6 +400,17 @@ impl<'a> FavoriteRepo<'a> {
         Ok(())
     }
 
+    /// Puts the favorite in `group` unless it is in a group already, or gone. Returns whether
+    /// it did.
+    pub fn group_if_ungrouped(&self, id: FavoriteId, group: LibraryGroupId) -> Result<bool> {
+        let conn = self.db.lock();
+        let changed = conn.execute(
+            "UPDATE favorites SET group_id = ?2 WHERE id = ?1 AND group_id IS NULL",
+            params![id.0, group.0],
+        )?;
+        Ok(changed > 0)
+    }
+
     /// Puts `ids` first; the rest keep their relative order.
     pub fn reorder(&self, ids: &[FavoriteId]) -> Result<()> {
         reorder(&mut self.db.lock(), "favorites", ids.iter().map(|id| id.0))
@@ -479,7 +521,7 @@ fn delete_row(conn: &rusqlite::Connection, id: FavoriteId) -> Result<usize> {
     Ok(conn.execute("DELETE FROM favorites WHERE id = ?1", [id.0])?)
 }
 
-const GROUP_COLUMNS: &str = "id, name, sort_order, collapsed";
+const GROUP_COLUMNS: &str = "id, name, sort_order, collapsed, rule_kind, rule_value";
 
 fn group_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryGroup> {
     Ok(LibraryGroup {
@@ -487,6 +529,7 @@ fn group_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryGroup> {
         name: row.get(1)?,
         sort_order: row.get(2)?,
         collapsed: row.get(3)?,
+        rule: GroupRule::from_columns(row.get(4)?, row.get(5)?),
     })
 }
 
@@ -546,13 +589,21 @@ impl<'a> LibraryGroupRepo<'a> {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Stores the name and fold state; fails when the name is taken, ignoring case. Leaves
+    /// Stores the name, fold state and rule; fails when the name is taken, ignoring case. Leaves
     /// `sort_order` as stored; see [`Self::reorder`].
     pub fn update(&self, group: &LibraryGroup) -> Result<()> {
         let conn = self.db.lock();
+        let (rule_kind, rule_value) = group.rule.as_ref().map(GroupRule::columns).unzip();
         conn.execute(
-            "UPDATE library_groups SET name = ?2, collapsed = ?3 WHERE id = ?1",
-            params![group.id.0, group.name, group.collapsed],
+            "UPDATE library_groups SET name = ?2, collapsed = ?3, rule_kind = ?4, rule_value = ?5
+             WHERE id = ?1",
+            params![
+                group.id.0,
+                group.name,
+                group.collapsed,
+                rule_kind,
+                rule_value
+            ],
         )?;
         Ok(())
     }

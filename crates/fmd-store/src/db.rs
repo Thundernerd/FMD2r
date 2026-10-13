@@ -1,20 +1,24 @@
 //! Connection setup and the forward-only migration runner shared by both databases.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{Result, StoreError};
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
+pub(crate) const IN_MEMORY: &str = ":memory:";
 
 /// One SQLite connection per file behind a mutex, locked per statement or transaction. SQLite
 /// allows one writer anyway; WAL lets other processes read concurrently.
 #[derive(Clone)]
 pub(crate) struct Db {
     conn: Arc<Mutex<Connection>>,
+    /// The file, or `None` for an in-memory database.
+    file: Option<PathBuf>,
 }
 
 impl Db {
@@ -27,8 +31,10 @@ impl Db {
         conn.pragma_update(None, "foreign_keys", true)?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         migrate(&mut conn, name, migrations)?;
+        let file = (path.as_os_str() != IN_MEMORY).then(|| path.to_owned());
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
+            file,
         })
     }
 
@@ -40,6 +46,30 @@ impl Db {
 
     pub(crate) fn schema_version(&self) -> Result<u32> {
         user_version(&self.lock())
+    }
+
+    /// Writes a compacted copy of the database to `dest` with `VACUUM INTO`, which reads one
+    /// snapshot, so the copy is consistent while other connections write. A file database is read
+    /// through a connection of its own, so the shared one stays free for writers meanwhile. Fails
+    /// if `dest` exists and isn't empty.
+    pub(crate) fn vacuum_into(&self, dest: &Path) -> Result<()> {
+        let dest = dest.to_str().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("{} is not valid UTF-8", dest.display()),
+            )
+        })?;
+        match &self.file {
+            Some(file) => {
+                let conn = Connection::open_with_flags(file, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+                conn.busy_timeout(BUSY_TIMEOUT)?;
+                conn.execute("VACUUM INTO ?1", [dest])?;
+            }
+            None => {
+                self.lock().execute("VACUUM INTO ?1", [dest])?;
+            }
+        }
+        Ok(())
     }
 }
 

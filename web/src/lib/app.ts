@@ -14,7 +14,8 @@ export const api = createApi({
 		? {
 				fetch: mock.fetch,
 				taskFilesUrl: mock.taskFilesUrl,
-				logsDownloadUrl: mock.logsDownloadUrl
+				logsDownloadUrl: mock.logsDownloadUrl,
+				backupDownloadUrl: mock.backupDownloadUrl
 			}
 		: {}),
 	onUnauthorized: () => session.unauthorized()

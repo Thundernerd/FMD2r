@@ -13,8 +13,10 @@
 		Settings
 	} from '#lib/api/types.ts';
 	import AccountsPanel from '#lib/components/settings/AccountsPanel.svelte';
+	import ComicServerPanel from '#lib/components/settings/ComicServerPanel.svelte';
 	import DestinationsEditor from '#lib/components/settings/DestinationsEditor.svelte';
 	import MangaBakaPanel from '#lib/components/settings/MangaBakaPanel.svelte';
+	import NotificationChannels from '#lib/components/settings/NotificationChannels.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
@@ -346,11 +348,22 @@
 						{#if section.id === 'saveto'}
 							<DestinationsEditor {draft} checkFolders={(paths) => api.checkFolders(paths)} />
 						{/if}
-						{#each section.fields as field (field.path)}
-							<SettingField {field} {draft} overridden={session.overridden(field.path)} />
-						{/each}
+						{#if section.id === 'notifications'}
+							<NotificationChannels
+								{draft}
+								fields={section.fields}
+								test={(channel) => api.testNotification(channel)}
+							/>
+						{:else}
+							{#each section.fields as field (field.path)}
+								<SettingField {field} {draft} overridden={session.overridden(field.path)} />
+							{/each}
+						{/if}
 						{#if section.id === 'metadata'}
 							<MangaBakaPanel {api} store={events} />
+						{/if}
+						{#if section.id === 'comic_server'}
+							<ComicServerPanel {api} {draft} />
 						{/if}
 						{#if section.id === 'general'}
 							<p class="setup-again">
@@ -361,6 +374,13 @@
 									{dirty
 										? 'Save or discard your changes first.'
 										: 'Goes through the setup with the current values.'}
+								</span>
+							</p>
+							<p class="backup">
+								<a class="btn" href={api.backupDownloadUrl()} download>Download backup</a>
+								<span class="small muted">
+									Includes your library, settings and saved logins. Keep it private: it holds the
+									key to your saved passwords.
 								</span>
 							</p>
 						{/if}
@@ -547,7 +567,8 @@
 			padding: 10px 14px;
 		}
 	}
-	.setup-again {
+	.setup-again,
+	.backup {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
