@@ -246,6 +246,8 @@ export interface ApiOptions {
 	taskFilesUrl?: (id: number) => string;
 	/** Overrides where the logs download from (mock mode has no server to link to). */
 	logsDownloadUrl?: () => string;
+	/** Overrides where the backup downloads from (mock mode has no server to link to). */
+	backupDownloadUrl?: () => string;
 	/** Called whenever the server answers 401 to anything but a login attempt. */
 	onUnauthorized?: () => void;
 }
@@ -255,6 +257,7 @@ export function createApi({
 	fetch = (input) => globalThis.fetch(input),
 	taskFilesUrl,
 	logsDownloadUrl,
+	backupDownloadUrl,
 	onUnauthorized
 }: ApiOptions = {}): Api {
 	/**
@@ -413,7 +416,7 @@ export function createApi({
 			return logsDownloadUrl ? logsDownloadUrl() : `${baseUrl}/api/logs/download`;
 		},
 		backupDownloadUrl() {
-			return `${baseUrl}/api/backup`;
+			return backupDownloadUrl ? backupDownloadUrl() : `${baseUrl}/api/backup`;
 		},
 		async resolveUrl(url) {
 			const res = await client.POST('/api/resolve', { body: { url } });
