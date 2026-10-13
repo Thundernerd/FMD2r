@@ -31,11 +31,11 @@ brotli = "8"
 flate2 = "1"
 fmd-core = { path = "../fmd-core" }
 fmd-smoke = { path = "../fmd-smoke" }
+http-body-util = "0.1"
 predicates.workspace = true
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde_json = "1"
 tempfile.workspace = true
-http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 

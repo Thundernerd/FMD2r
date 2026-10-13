@@ -21,6 +21,9 @@ use crate::{ApiError, AppState, ImportLimits, Problem, custom_css};
 /// The folder in the data folder holding a validated backup until the next start.
 const STAGED: &str = "restore-staged";
 
+/// Staged in place of `custom.css` when the backup has none, so the current one is set aside.
+const NO_CSS: &str = "no-custom.css";
+
 /// What the old files are kept as: `app.db` becomes `app.db.before-restore`.
 const BEFORE_RESTORE: &str = ".before-restore";
 
@@ -120,14 +123,23 @@ fn stage(zip: impl Read + Seek, data_dir: &Path, limit: u64) -> Result<(), Resto
             .then_some(())
             .ok_or(RestoreError::Missing(name))?;
     }
-    extract(
+    let has_css = extract(
         &mut archive,
         custom_css::FILE,
         scratch.path(),
         &mut left,
         limit,
     )?;
+    if !has_css {
+        File::create(scratch.path().join(NO_CSS))?;
+    }
     validate(scratch.path())?;
+    // Closing the database checkpoints its WAL into `app.db`, the only file applied.
+    if scratch.path().join(format!("{APP_DB}-wal")).exists() {
+        return Err(RestoreError::Io(io::Error::other(
+            "the backup's app.db did not close cleanly after checking it",
+        )));
+    }
     let staged = data_dir.join(STAGED);
     if staged.exists() {
         std::fs::remove_dir_all(&staged)?;
@@ -184,9 +196,9 @@ pub fn apply_staged_restore(data_dir: &Path) -> Result<bool, RestoreError> {
     if !staged.is_dir() {
         return Ok(false);
     }
-    // Each file is moved aside and replaced in turn, so a start interrupted halfway finishes the
-    // remaining files at the next one.
-    for name in [APP_DB, ACCOUNTS_KEY_FILE] {
+    // Each file is moved aside and replaced in turn, and leaves the staged folder as it is
+    // applied, so a start interrupted halfway finishes the remaining files at the next one.
+    for name in [APP_DB, ACCOUNTS_KEY_FILE, custom_css::FILE] {
         let new = staged.join(name);
         if new.exists() {
             set_aside(data_dir, name)?;
@@ -194,10 +206,10 @@ pub fn apply_staged_restore(data_dir: &Path) -> Result<bool, RestoreError> {
         }
     }
     // A backup without a stylesheet restores the default one.
-    set_aside(data_dir, custom_css::FILE)?;
-    let css = staged.join(custom_css::FILE);
-    if css.exists() {
-        std::fs::rename(css, data_dir.join(custom_css::FILE))?;
+    let no_css = staged.join(NO_CSS);
+    if no_css.exists() {
+        set_aside(data_dir, custom_css::FILE)?;
+        std::fs::remove_file(no_css)?;
     }
     std::fs::remove_dir_all(staged)?;
     Ok(true)

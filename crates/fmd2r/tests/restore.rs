@@ -353,3 +353,27 @@ fn a_backup_staged_by_the_setup_wizard_is_applied_at_the_next_start() {
     assert!(favorites.contains("Frieren"), "{favorites}");
     assert!(data.join("app.db.before-restore").is_file());
 }
+
+#[test]
+fn a_backup_without_a_stylesheet_restores_the_default_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let zip = backup_file(dir.path());
+    rezip(&zip, |name, bytes| (name != "custom.css").then_some(bytes));
+    let data = dir.path().join("data");
+    existing_install(&data);
+
+    fmd2r()
+        .arg("restore")
+        .arg(&zip)
+        .arg("--data-dir")
+        .arg(&data)
+        .assert()
+        .success();
+
+    assert!(!data.join("custom.css").exists());
+    assert_eq!(
+        std::fs::read_to_string(data.join("custom.css.before-restore")).unwrap(),
+        "body { color: red; }"
+    );
+    assert!(!data.join("restore-staged").exists());
+}
