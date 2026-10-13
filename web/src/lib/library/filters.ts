@@ -1,13 +1,20 @@
 import type { FavoriteView } from '#lib/api/types.ts';
 
-export type Chip = 'all' | 'new' | 'ongoing' | 'completed' | 'disabled';
+export type Chip = 'all' | 'new' | 'ongoing' | 'completed' | 'disabled' | 'failing';
+
+/** Failed checks in a row from which a series is failing (fmd-core's `FAILING_CHECKS`). */
+export const FAILING_CHECKS = 3;
+
+/** Whether the series' website failed {@link FAILING_CHECKS} checks or more in a row. */
+export const isFailing = (f: FavoriteView): boolean => f.check_failures >= FAILING_CHECKS;
 
 export const CHIPS: { id: Chip; label: string }[] = [
 	{ id: 'all', label: 'All' },
 	{ id: 'new', label: 'New' },
 	{ id: 'ongoing', label: 'Ongoing' },
 	{ id: 'completed', label: 'Completed' },
-	{ id: 'disabled', label: 'Paused' }
+	{ id: 'disabled', label: 'Paused' },
+	{ id: 'failing', label: 'Failing' }
 ];
 
 /** How the grid is ordered; `library` keeps the server's order. */
@@ -48,6 +55,8 @@ const matchesChip = (f: FavoriteView, chip: Chip): boolean => {
 			return f.status === 'completed';
 		case 'disabled':
 			return !f.enabled;
+		case 'failing':
+			return isFailing(f);
 	}
 };
 
@@ -82,7 +91,7 @@ export function filterFavorites(list: FavoriteView[], filters: LibraryFilters): 
 
 /** How many favorites each state chip shows. */
 export function chipCounts(list: FavoriteView[]): Record<Chip, number> {
-	const counts = { all: 0, new: 0, ongoing: 0, completed: 0, disabled: 0 };
+	const counts = { all: 0, new: 0, ongoing: 0, completed: 0, disabled: 0, failing: 0 };
 	for (const f of list) {
 		for (const { id } of CHIPS) if (matchesChip(f, id)) counts[id]++;
 	}

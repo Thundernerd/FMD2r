@@ -1405,6 +1405,12 @@ export interface components {
 		/** @description A favorite as the Library shows it. */
 		FavoriteView: {
 			/**
+			 * Format: int32
+			 * @description Consecutive checks whose fetch from the website failed; from 3 on (`FAILING_CHECKS`) the
+			 *     series is failing, and checks of all favorites look at it at most daily.
+			 */
+			check_failures: number;
+			/**
 			 * @description The cover through `/api/covers`, or through `/api/covers/series` when none is stored
 			 *     (FMD2's favorites have no cover).
 			 */
@@ -1435,6 +1441,8 @@ export interface components {
 			group_id?: number | null;
 			/** Format: int64 */
 			id: number;
+			/** @description Why the last of them failed; `null` once a check succeeds. */
+			last_check_error?: string | null;
 			/** @description RFC 3339. */
 			last_checked?: string | null;
 			/** @description RFC 3339: when a check last found new chapters. */

@@ -11,6 +11,7 @@ import type {
 	SeriesInfo
 } from './types';
 import { seriesCover } from './mock-lists';
+import { FAILING_CHECKS } from '#lib/library/filters.ts';
 
 // The library of the in-memory backend (see mock.ts), with a favorites check that works
 // through one favorite per tick.
@@ -43,6 +44,8 @@ const seedFavorites = (): FavoriteView[] => {
 		group_id: null,
 		tags: [],
 		format: null,
+		check_failures: 0,
+		last_check_error: null,
 		...patch
 	});
 	return [
@@ -79,7 +82,11 @@ const seedFavorites = (): FavoriteView[] => {
 		}),
 		favorite(6, 'The Apothecary Diaries', 'webtoons', 'Webtoons', '/en/apothecary', {
 			status: 'hiatus',
-			current_chapter: 76
+			current_chapter: 76,
+			// The website took the series down: its checks keep failing.
+			last_checked: '2026-09-30T09:12:00Z',
+			check_failures: 4,
+			last_check_error: 'HTTP 404 Not Found'
 		}),
 		favorite(7, 'Vinland Saga', 'mangadex', 'MangaDex', '/title/vs/vinland-saga', {
 			status: 'completed',
@@ -259,7 +266,9 @@ export function createMockFavorites(
 				tags: series.genres.filter(
 					(g, i) => series.genres.findIndex((h) => h.toLowerCase() === g.toLowerCase()) === i
 				),
-				format: null
+				format: null,
+				check_failures: 0,
+				last_check_error: null
 			};
 			favorites.push(favorite);
 			return { status: 201, body: view(favorite) };
@@ -357,7 +366,10 @@ export function createMockFavorites(
 		},
 		start(ids, mode) {
 			if (check) return false;
-			const queue = favorites.filter((f) => f.enabled && (ids === null || ids.includes(f.id)));
+			// A check of every favorite leaves a failing series alone, as fmd-server does for a day.
+			const queue = favorites.filter(
+				(f) => f.enabled && (ids === null ? f.check_failures < FAILING_CHECKS : ids.includes(f.id))
+			);
 			check = { mode, queue, done: 0, total: queue.length, found: [] };
 			Object.assign(job, {
 				state: 'running',
@@ -381,7 +393,12 @@ export function createMockFavorites(
 			const favorite = c.queue.shift();
 			if (favorite) {
 				c.done++;
-				favorite.last_checked = new Date().toISOString();
+				if (favorite.last_check_error) {
+					// Its website is gone: the check fails again.
+					favorite.check_failures++;
+				} else {
+					favorite.last_checked = new Date().toISOString();
+				}
 				const chapters = c.mode === 'new' ? (fresh[favorite.id] ?? 0) : 0;
 				if (chapters > 0) {
 					delete fresh[favorite.id];

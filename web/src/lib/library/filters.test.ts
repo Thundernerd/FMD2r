@@ -5,6 +5,7 @@ import {
 	chipCounts,
 	emptyFilters,
 	filterFavorites,
+	isFailing,
 	websites,
 	type LibraryFilters
 } from '#lib/library/filters.ts';
@@ -25,6 +26,7 @@ const favorite = (id: number, patch: Partial<FavoriteView> = {}): FavoriteView =
 	last_checked: null,
 	last_updated: null,
 	tags: [],
+	check_failures: 0,
 	...patch,
 	display_title: patch.display_title ?? patch.title ?? `Series ${id}`
 });
@@ -70,8 +72,23 @@ describe('library chips', () => {
 			new: 2,
 			ongoing: 2,
 			completed: 1,
-			disabled: 1
+			disabled: 1,
+			failing: 0
 		});
+	});
+
+	it('Failing shows the series whose website failed 3 checks or more in a row', () => {
+		const gone = favorite(5, { title: 'Gone', check_failures: 3, last_check_error: 'HTTP 404' });
+		const hiccup = favorite(6, { title: 'Hiccup', check_failures: 2, last_check_error: 'timeout' });
+		const list = [...library, gone, hiccup];
+
+		expect(CHIPS.find((c) => c.id === 'failing')?.label).toBe('Failing');
+		expect(
+			filterFavorites(list, { ...emptyFilters(), chip: 'failing' }).map((f) => f.title)
+		).toEqual(['Gone']);
+		expect(chipCounts(list).failing).toBe(1);
+		expect(isFailing(gone)).toBe(true);
+		expect(isFailing(hiccup)).toBe(false);
 	});
 });
 
