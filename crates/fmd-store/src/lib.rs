@@ -17,7 +17,7 @@ pub use app::accounts::{Account, AccountRepo, AccountStatus};
 pub use app::downloaded_chapters::DownloadedChaptersRepo;
 pub use app::events::{Event, EventId, EventQuery, EventRepo, EventSeverity, NewEvent};
 pub use app::favorites::{
-    Favorite, FavoriteId, FavoriteInfo, FavoriteRepo, ImportedFavorite, LibraryGroup,
+    Favorite, FavoriteId, FavoriteInfo, FavoriteRepo, GroupRule, ImportedFavorite, LibraryGroup,
     LibraryGroupId, LibraryGroupRepo, NewFavorite,
 };
 pub use app::metadata_overrides::MetadataOverrideRepo;

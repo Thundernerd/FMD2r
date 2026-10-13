@@ -1,5 +1,6 @@
 //! Favorites matched against `metadata.db` without their website's list (issue #242, "Seams
-//! under test"), over the recorded dump (tests/fixtures/mangabaka).
+//! under test"), their tags and format (#263) and the auto groups they land in (#264), over the
+//! recorded dump (tests/fixtures/mangabaka).
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
@@ -10,14 +11,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use common::mangabaka::{FixtureSource, fixture_records};
-use fmd_core::favorites::{TagsAndFormat, tags_and_format};
+use fmd_core::favorites::{TagsAndFormat, auto_group_library, tags_and_format};
 use fmd_core::metadata::{MangaBakaDb, MangaDexLinks, Matcher, MetadataJobs};
 use fmd_core::settings::SettingsService;
 use fmd_http::{
     BoxFuture, HttpClient, TerminateToken, Transport, TransportError, WireRequest, WireResponse,
 };
 use fmd_store::{
-    AppDb, Favorite, FavoriteInfo, ListsDb, MangaListing, MatchConfidence, NewFavorite,
+    AppDb, Favorite, FavoriteInfo, GroupRule, LibraryGroup, LibraryGroupId, ListsDb, MangaListing,
+    MatchConfidence, NewFavorite,
 };
 use serde_json::json;
 
@@ -367,4 +369,150 @@ fn a_download_finds_the_match_of_a_favorite_without_a_list() {
         let found = f.jobs.series_match(FIRE, link).unwrap();
         assert_eq!(found.series.id, 189, "{link}");
     }
+}
+
+impl Fixture {
+    /// A group named `name` with `rule`, after the others.
+    fn group(&self, name: &str, rule: Option<GroupRule>) -> LibraryGroup {
+        let mut group = self.app.library_groups().create(name).unwrap();
+        group.rule = rule;
+        self.app.library_groups().update(&group).unwrap();
+        group
+    }
+
+    fn group_of(&self, favorite: &Favorite) -> Option<LibraryGroupId> {
+        self.app
+            .favorites()
+            .get(favorite.id)
+            .unwrap()
+            .unwrap()
+            .group_id
+    }
+}
+
+fn tag(value: &str) -> Option<GroupRule> {
+    Some(GroupRule::Tag(value.into()))
+}
+
+fn format(value: &str) -> Option<GroupRule> {
+    Some(GroupRule::Format(value.into()))
+}
+
+#[test]
+fn ungrouped_series_go_to_the_first_group_by_order_whose_rule_matches() {
+    let f = fixture();
+    // MangaBaka's Reborn Rich (189) is a manhwa.
+    let rich = f.favorite(
+        FIRE,
+        "/manga/reborn-rich",
+        &FavoriteInfo {
+            genres: "romance".into(),
+            ..reborn_rich()
+        },
+    );
+    let unmatched = f.favorite(
+        FIRE,
+        "/manga/unknown",
+        &FavoriteInfo {
+            title: "Nothing MangaBaka Knows".into(),
+            genres: "Action, Romance".into(),
+            ..FavoriteInfo::default()
+        },
+    );
+    let kept = f.favorite(
+        FIRE,
+        "/manga/kept",
+        &FavoriteInfo {
+            title: "Another Unknown Title".into(),
+            genres: "Romance".into(),
+            ..FavoriteInfo::default()
+        },
+    );
+    f.jobs.catch_up();
+    let mine = f.group("Mine", None);
+    let romance = f.group("Romance", tag(" ROMANCE "));
+    let manhwa = f.group("Manhwa", format("manhwa"));
+    let other = f.group("Other", format("other"));
+    let rom = f.group("Rom", tag("Rom"));
+    f.app
+        .library_groups()
+        .reorder(&[other.id, rom.id, manhwa.id, romance.id, mine.id])
+        .unwrap();
+    let mut grouped = f.app.favorites().get(kept.id).unwrap().unwrap();
+    grouped.group_id = Some(mine.id);
+    f.app.favorites().update(&grouped).unwrap();
+
+    auto_group_library(&f.app, Some(&f.jobs)).unwrap();
+
+    assert_eq!(f.group_of(&rich), Some(manhwa.id), "first match by order");
+    assert_eq!(
+        f.group_of(&unmatched),
+        Some(romance.id),
+        "no format without a match; tags whole and ignoring case"
+    );
+    assert_eq!(f.group_of(&kept), Some(mine.id), "a grouped series stays");
+}
+
+impl Fixture {
+    /// Downloads the database again, which matches every favorite again.
+    fn refresh(&self) {
+        self.jobs.download().unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while self.jobs.is_running() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the refresh never ended"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
+    fn ungroup(&self, favorite: &Favorite) {
+        let mut ungrouped = self.app.favorites().get(favorite.id).unwrap().unwrap();
+        ungrouped.group_id = None;
+        self.app.favorites().update(&ungrouped).unwrap();
+    }
+}
+
+#[test]
+fn a_series_lands_in_its_format_group_when_its_match_is_found_but_not_when_it_stays() {
+    let f = fixture();
+    let manhwa = f.group("Manhwa", format("manhwa"));
+    // MangaBaka's Reborn Rich (189) is a manhwa.
+    let rich = f.favorite(FIRE, "/manga/reborn-rich", &reborn_rich());
+    assert_eq!(f.group_of(&rich), None, "no match yet");
+
+    f.jobs.catch_up();
+    assert_eq!(f.group_of(&rich), Some(manhwa.id), "matched");
+
+    f.ungroup(&rich);
+    f.refresh();
+    assert_eq!(f.group_of(&rich), None, "matched again to the same series");
+}
+
+#[test]
+fn a_series_matched_by_hand_lands_in_the_group_of_the_picked_series_format() {
+    let f = fixture();
+    let manhwa = f.group("Manhwa", format("manhwa"));
+    let manga = f.group("Manga", format("manga"));
+    let favorite = f.favorite(
+        FIRE,
+        "/manga/skip-loafer",
+        &FavoriteInfo {
+            title: "Some Other Name".into(),
+            ..FavoriteInfo::default()
+        },
+    );
+    f.jobs.catch_up();
+    assert_eq!(f.group_of(&favorite), None, "no match");
+
+    // MangaBaka's Skip and Loafer (86) is a manga, Reborn Rich (189) a manhwa.
+    f.jobs.set_override(FIRE, "/manga/skip-loafer", 86).unwrap();
+    assert_eq!(f.group_of(&favorite), Some(manga.id), "picked");
+
+    f.ungroup(&favorite);
+    f.jobs
+        .set_override(FIRE, "/manga/skip-loafer", 189)
+        .unwrap();
+    assert_eq!(f.group_of(&favorite), Some(manhwa.id), "changed");
 }

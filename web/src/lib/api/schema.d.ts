@@ -194,7 +194,7 @@ export interface paths {
 		/**
 		 * Add a series to the library (`btAddToFavoritesClick`,
 		 *     mangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only
-		 *     chapters added later are new.
+		 *     chapters added later are new. It goes in the first group whose rule matches it.
 		 */
 		post: operations['addFavorite'];
 		delete?: never;
@@ -427,7 +427,7 @@ export interface paths {
 		/** The library's groups in display order. */
 		get: operations['listGroups'];
 		put?: never;
-		/** Add a group after the others. */
+		/** Add a group after the others. With a rule, it collects the matching series in no group. */
 		post: operations['createGroup'];
 		delete?: never;
 		options?: never;
@@ -444,7 +444,7 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Reorder the groups. */
+		/** Reorder the groups; the series in no group go to the first group whose rule matches them. */
 		post: operations['reorderGroups'];
 		delete?: never;
 		options?: never;
@@ -466,7 +466,10 @@ export interface paths {
 		delete: operations['deleteGroup'];
 		options?: never;
 		head?: never;
-		/** Rename a group, or fold or unfold its section. */
+		/**
+		 * Rename a group, fold or unfold its section, or set or clear its rule. A rule set or changed
+		 *     collects the matching series in no group; the same rule again moves nothing.
+		 */
 		patch: operations['updateGroup'];
 		trace?: never;
 	};
@@ -760,6 +763,23 @@ export interface paths {
 		patch: operations['patchModuleSettings'];
 		trace?: never;
 	};
+	'/api/notifications/{channel}/test': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Send a test notification to a channel with its saved settings, whether or not it is on. */
+		post: operations['testNotification'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/preview-rename': {
 		parameters: {
 			query?: never;
@@ -908,6 +928,26 @@ export interface paths {
 		head?: never;
 		/** Update the settings and any modules' settings together in one transaction, all or nothing. */
 		patch: operations['patchAllSettings'];
+		trace?: never;
+	};
+	'/api/settings/comic-server/test': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Check a comic server's URL and API key with a request that changes nothing: Komga's library
+		 *     list, Kavita's API key expiry.
+		 */
+		post: operations['testComicServer'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
 		trace?: never;
 	};
 	'/api/tasks': {
@@ -1239,6 +1279,11 @@ export interface components {
 			 */
 			remove?: boolean;
 		};
+		/**
+		 * @description A service notifications are sent to.
+		 * @enum {string}
+		 */
+		Channel: 'ntfy' | 'discord' | 'webhook';
 		/** @description One chapter of a series. */
 		ChapterInfo: {
 			/**
@@ -1270,6 +1315,46 @@ export interface components {
 		 * @enum {string}
 		 */
 		ComicMetadataFiles: 'none' | 'comicinfo' | 'metroninfo' | 'both';
+		/**
+		 * @description The comic servers FMD2r can ask to scan.
+		 * @enum {string}
+		 */
+		ComicServerKind: 'none' | 'komga' | 'kavita';
+		/** @description A library a Komga API key can see. */
+		ComicServerLibrary: {
+			id: string;
+			name: string;
+		};
+		/** @description [`ComicServerSettings`] with the API key left out. */
+		ComicServerSettingsView: {
+			/** @description Whether an API key is set. Patch `api_key` to set it; an empty one clears it. */
+			has_api_key: boolean;
+			kind: components['schemas']['ComicServerKind'];
+			/** @description Komga only: the library to scan; `None` scans every library the key can see. */
+			library_id?: string | null;
+			/** @description The server's base URL, e.g. `http://nas:25600`. */
+			url: string;
+		};
+		/** @description What "Test connection" found. */
+		ComicServerTest: {
+			/** @description Komga: the libraries the API key can see. Empty for Kavita or on failure. */
+			libraries: components['schemas']['ComicServerLibrary'][];
+			/** @description What happened, as a sentence to show. */
+			message: string;
+			/** @description The server answered and accepted the API key. */
+			ok: boolean;
+		};
+		/** @description The comic server to test: the `comic_server` settings as the form holds them, saved or not. */
+		ComicServerTestRequest: {
+			/**
+			 * @description A key typed but not saved yet; without one, the stored key, if `kind` and `url` are the
+			 *     stored ones (so the stored key goes nowhere else).
+			 */
+			api_key?: string | null;
+			kind: components['schemas']['ComicServerKind'];
+			library_id?: string | null;
+			url: string;
+		};
 		/** @description [`ConnectionSettings`] with the proxy password left out. */
 		ConnectionSettingsView: {
 			/**
@@ -1374,6 +1459,16 @@ export interface components {
 			default?: boolean;
 			name: string;
 			path: string;
+		};
+		/** @description [`DiscordSettings`] with the webhook URL, which carries a token, left out. */
+		DiscordSettingsView: {
+			enabled: boolean;
+			/** @description Whether a webhook URL is set. Patch `webhook_url` to set it; an empty one clears it. */
+			has_webhook_url: boolean;
+			/** @description Send new and missing chapters. */
+			new_chapters: boolean;
+			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
+			problems: boolean;
 		};
 		/** @description How many matching titles carry a genre or status. */
 		FacetValue: {
@@ -1592,6 +1687,7 @@ export interface components {
 		GroupPatch: {
 			collapsed?: boolean | null;
 			name?: string | null;
+			rule?: null | components['schemas']['RuleView'];
 		};
 		/** @description A library group, as the Library's sections show it. */
 		GroupView: {
@@ -1600,6 +1696,7 @@ export interface components {
 			/** Format: int64 */
 			id: number;
 			name: string;
+			rule?: null | components['schemas']['RuleView'];
 		};
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
@@ -2167,6 +2264,7 @@ export interface components {
 		NewGroup: {
 			/** @description Unique, ignoring case. */
 			name: string;
+			rule?: null | components['schemas']['RuleView'];
 		};
 		/** @description A download to queue: chapters of one series. */
 		NewTask: {
@@ -2197,6 +2295,30 @@ export interface components {
 			 *     `chapters` when missing.
 			 */
 			number?: number | null;
+		};
+		/** @description [`NotificationSettings`] with the tokens and Discord's webhook URL left out. */
+		NotificationSettingsView: {
+			discord: components['schemas']['DiscordSettingsView'];
+			ntfy: components['schemas']['NtfySettingsView'];
+			webhook: components['schemas']['WebhookSettingsView'];
+		};
+		/** @description How a test notification went. */
+		NotificationTest: {
+			delivered: boolean;
+			/** @description Why it was not delivered. */
+			error?: string | null;
+		};
+		/** @description [`NtfySettings`] with the access token left out. */
+		NtfySettingsView: {
+			enabled: boolean;
+			/** @description Whether an access token is set. Patch `token` to set it; an empty one clears it. */
+			has_token: boolean;
+			/** @description Send new and missing chapters. */
+			new_chapters: boolean;
+			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
+			problems: boolean;
+			/** @description The topic to publish to, e.g. `https://ntfy.sh/my-topic`. */
+			topic_url: string;
 		};
 		/**
 		 * @description `rgOptionCompress` items None/ZIP/CBZ/PDF/EPUB (mangadownloader/forms/frmMain.lfm:3912-3918).
@@ -2342,6 +2464,18 @@ export interface components {
 		/** @description A manga URL to resolve. */
 		ResolveRequest: {
 			url: string;
+		};
+		/** @enum {string} */
+		RuleKind: 'tag' | 'format';
+		/**
+		 * @description What an auto group collects: series in no group with the tag (website and MangaBaka genres,
+		 *     whole and ignoring case), or whose MangaBaka match has the format. The first group in order
+		 *     that matches a series gets it.
+		 */
+		RuleView: {
+			kind: components['schemas']['RuleKind'];
+			/** @description The tag, or one of `manga`, `manhwa`, `manhua`, `oel` and `other`. */
+			value: string;
 		};
 		/** @description The folder a download is saved in. */
 		SaveFolder: {
@@ -2540,6 +2674,8 @@ export interface components {
 			external_auth: boolean;
 			/** @description Whether a password is set. Patch `auth_token` to set it; an empty one clears it. */
 			has_auth_token: boolean;
+			/** @description The address FMD2r is reached at; empty when unknown. Notifications link to it. */
+			public_url: string;
 			/**
 			 * Format: int32
 			 * @description Days a login session may go unused; every authorized request restarts the count.
@@ -2579,6 +2715,15 @@ export interface components {
 			 *     }
 			 */
 			appearance: components['schemas']['AppearanceSettings'];
+			/**
+			 * @default {
+			 *       "has_api_key": false,
+			 *       "kind": "none",
+			 *       "library_id": null,
+			 *       "url": ""
+			 *     }
+			 */
+			comic_server: components['schemas']['ComicServerSettingsView'];
 			/**
 			 * @default {
 			 *       "always_start_from_failed_chapters": true,
@@ -2677,6 +2822,31 @@ export interface components {
 			module_updater: components['schemas']['ModuleUpdaterSettingsView'];
 			/**
 			 * @default {
+			 *       "discord": {
+			 *         "enabled": false,
+			 *         "has_webhook_url": false,
+			 *         "new_chapters": true,
+			 *         "problems": true
+			 *       },
+			 *       "ntfy": {
+			 *         "enabled": false,
+			 *         "has_token": false,
+			 *         "new_chapters": true,
+			 *         "problems": true,
+			 *         "topic_url": ""
+			 *       },
+			 *       "webhook": {
+			 *         "enabled": false,
+			 *         "has_authorization": false,
+			 *         "new_chapters": true,
+			 *         "problems": true,
+			 *         "url": ""
+			 *       }
+			 *     }
+			 */
+			notifications: components['schemas']['NotificationSettingsView'];
+			/**
+			 * @default {
 			 *       "comic_metadata": "none",
 			 *       "format": "folder",
 			 *       "pdf_quality": 100
@@ -2714,6 +2884,7 @@ export interface components {
 			 *       "bind": "127.0.0.1:8080",
 			 *       "external_auth": false,
 			 *       "has_auth_token": false,
+			 *       "public_url": "",
 			 *       "session_idle_days": 7,
 			 *       "session_lifetime_days": 30
 			 *     }
@@ -3020,6 +3191,20 @@ export interface components {
 			 * @default false
 			 */
 			remove_duplicate_local_data: boolean;
+		};
+		/** @description [`WebhookSettings`] with the `Authorization` header left out. */
+		WebhookSettingsView: {
+			enabled: boolean;
+			/**
+			 * @description Whether an `Authorization` header is set. Patch `authorization` to set it; an empty one
+			 *     clears it.
+			 */
+			has_authorization: boolean;
+			/** @description Send new and missing chapters. */
+			new_chapters: boolean;
+			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
+			problems: boolean;
+			url: string;
 		};
 		/**
 		 * @description `cbWebPSaveAs` items (mangadownloader/forms/frmMain.lfm:4363-4367).
@@ -4020,7 +4205,7 @@ export interface operations {
 					'application/json': components['schemas']['GroupView'];
 				};
 			};
-			/** @description The name is empty */
+			/** @description The name or the rule's tag is empty, or the rule's format is unknown */
 			400: {
 				headers: {
 					[name: string]: unknown;
@@ -4116,7 +4301,7 @@ export interface operations {
 					'application/json': components['schemas']['GroupView'];
 				};
 			};
-			/** @description The name is empty */
+			/** @description The name or the rule's tag is empty, or the rule's format is unknown */
 			400: {
 				headers: {
 					[name: string]: unknown;
@@ -4785,6 +4970,38 @@ export interface operations {
 			};
 		};
 	};
+	testNotification: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description The channel to send to */
+				channel: components['schemas']['Channel'];
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Whether it was delivered */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['NotificationTest'];
+				};
+			};
+			/** @description No such channel */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
 	previewRename: {
 		parameters: {
 			query?: never;
@@ -5140,6 +5357,39 @@ export interface operations {
 			};
 			/** @description Values are invalid or settings unknown; `fields` names each, prefixed `settings.` or `modules.<id>.` */
 			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	testComicServer: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ComicServerTestRequest'];
+			};
+		};
+		responses: {
+			/** @description Whether the server answered */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ComicServerTest'];
+				};
+			};
+			/** @description Malformed body */
+			400: {
 				headers: {
 					[name: string]: unknown;
 				};

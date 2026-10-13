@@ -64,6 +64,29 @@ describe('the settings page', () => {
 		expect(general.title).toBe('');
 	});
 
+	it('saves the comic server section, keeping the API key out of the settings', async () => {
+		await open('#section-comic_server');
+		expect(shown()).toEqual(['Comic server']);
+		const kavita = screen.getByRole('option', { name: 'Kavita' }) as HTMLOptionElement;
+		await fireEvent.change(screen.getByRole('combobox', { name: 'Server' }), {
+			target: { value: kavita.value }
+		});
+		await fireEvent.input(screen.getByRole('textbox', { name: 'URL' }), {
+			target: { value: 'http://nas:5000' }
+		});
+		await fireEvent.input(screen.getByLabelText('API key'), { target: { value: 'secret-key' } });
+
+		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+		await within(saveBar()).findByText('Saved');
+		const saved = (await api.getSettings()).comic_server;
+		expect(saved).toEqual({
+			kind: 'kavita',
+			url: 'http://nas:5000',
+			has_api_key: true,
+			library_id: null
+		});
+	});
+
 	it('switches to the section of a field the server rejected and focuses it', async () => {
 		await open('#section-connections');
 		const parallel = screen.getByRole('spinbutton', { name: 'Parallel downloads' });
@@ -107,5 +130,48 @@ describe('the settings page', () => {
 				'Includes your library, settings and saved logins. Keep it private: it holds the key to your saved passwords.'
 			)
 		).toBeTruthy();
+	});
+
+	it('saves each notification channel, keeping its secrets write-only', async () => {
+		await open('#section-notifications');
+		const ntfy = within(screen.getByRole('group', { name: 'ntfy' }));
+		await fireEvent.click(ntfy.getByRole('checkbox', { name: 'Send to ntfy' }));
+		await fireEvent.input(ntfy.getByRole('textbox', { name: 'Topic URL' }), {
+			target: { value: 'https://ntfy.sh/my-topic' }
+		});
+		await fireEvent.input(ntfy.getByLabelText('Access token'), { target: { value: 'tk' } });
+		const discord = within(screen.getByRole('group', { name: 'Discord' }));
+		await fireEvent.click(discord.getByRole('checkbox', { name: 'Send to Discord' }));
+		await fireEvent.input(discord.getByLabelText('Webhook URL'), {
+			target: { value: 'https://discord.com/api/webhooks/1/abc' }
+		});
+		await fireEvent.click(discord.getByRole('checkbox', { name: 'Problems' }));
+		const webhook = within(screen.getByRole('group', { name: 'Webhook' }));
+		await fireEvent.click(webhook.getByRole('checkbox', { name: 'Send to Webhook' }));
+		await fireEvent.input(webhook.getByRole('textbox', { name: 'URL' }), {
+			target: { value: 'http://n8n.local/webhook/fmd' }
+		});
+		await fireEvent.click(webhook.getByRole('checkbox', { name: 'New chapters' }));
+
+		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+		await within(saveBar()).findByText('Saved');
+		const { notifications } = await api.getSettings();
+		expect(notifications).toEqual({
+			ntfy: {
+				enabled: true,
+				topic_url: 'https://ntfy.sh/my-topic',
+				has_token: true,
+				new_chapters: true,
+				problems: true
+			},
+			discord: { enabled: true, has_webhook_url: true, new_chapters: true, problems: false },
+			webhook: {
+				enabled: true,
+				url: 'http://n8n.local/webhook/fmd',
+				has_authorization: false,
+				new_chapters: false,
+				problems: true
+			}
+		});
 	});
 });
