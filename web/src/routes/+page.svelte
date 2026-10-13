@@ -7,11 +7,13 @@
 		SORTS,
 		chipCounts,
 		emptyFilters,
+		facets,
 		filterFavorites,
 		websites,
 		type LibraryFilters
 	} from '#lib/library/filters.ts';
 	import { sections, type Section } from '#lib/library/sections.ts';
+	import { FORMAT } from '#lib/discover/filters.ts';
 	import {
 		inLibrary,
 		selectShown,
@@ -20,6 +22,7 @@
 	} from '#lib/library/selection.ts';
 	import { seriesHref } from '#lib/series/href.ts';
 	import CoverThumb from '#lib/components/CoverThumb.svelte';
+	import GenreChips from '#lib/components/discover/GenreChips.svelte';
 	import ImportDialog from '#lib/components/library/ImportDialog.svelte';
 	import GroupsDialog from '#lib/components/library/GroupsDialog.svelte';
 	import BulkGroupDialog from '#lib/components/library/BulkGroupDialog.svelte';
@@ -64,6 +67,13 @@
 	const shown = $derived(filterFavorites(favorites, filters));
 	const counts = $derived(chipCounts(favorites));
 	const sites = $derived(websites(favorites));
+	const library = $derived(facets(favorites));
+	/** The formats in the library, plus a chosen one it no longer holds. */
+	const formats = $derived(
+		filters.format && !library.formats.some((f) => f.value === filters.format)
+			? [...library.formats, { value: filters.format, count: 0 }]
+			: library.formats
+	);
 	/** With no groups, the grid is not split. */
 	const shownSections = $derived(
 		groups.length > 0
@@ -413,6 +423,26 @@
 			{/each}
 		</div>
 	{/if}
+	{#if library.tags.length > 0 || formats.length > 1}
+		<div class="facets">
+			{#if formats.length > 1}
+				<label class="sort">
+					<span class="label">Format</span>
+					<select class="input" bind:value={filters.format}>
+						<option value="">Any</option>
+						{#each formats as format (format.value)}
+							<option value={format.value}
+								>{FORMAT[format.value] ?? 'Unknown'} ({format.count})</option
+							>
+						{/each}
+					</select>
+				</label>
+			{/if}
+			{#if library.tags.length > 0}
+				<GenreChips genres={library.tags} bind:states={filters.tags} label="Tags" />
+			{/if}
+		</div>
+	{/if}
 
 	{#if error}
 		<p class="bad" role="alert">{error}</p>
@@ -583,6 +613,11 @@
 	.sort {
 		display: flex;
 		align-items: center;
+		gap: var(--sp-2);
+	}
+	.facets {
+		display: flex;
+		flex-direction: column;
 		gap: var(--sp-2);
 	}
 	.chips {

@@ -4,11 +4,14 @@
 
 	let {
 		genres,
-		states = $bindable()
+		states = $bindable(),
+		label = 'Genres'
 	}: {
 		/** The genres of the titles the search matches, with their counts. */
 		genres: FacetValue[];
 		states: Record<string, Tri>;
+		/** What the chips are called: Discover's genres, the Library's tags. */
+		label?: string;
 	} = $props();
 
 	/** The facet genres, plus chosen genres the current facets no longer hold. */
@@ -35,14 +38,14 @@
 
 <div class="genres">
 	<div class="head">
-		<span class="label">Genres</span>
+		<span class="label">{label}</span>
 		<span class="small muted hint">click to include, again to exclude</span>
 		{#if active}
 			<button class="btn ghost sm" type="button" onclick={() => (states = {})}>Clear</button>
 		{/if}
 	</div>
 	{#if chips.length}
-		<div class="chips" role="group" aria-label="Genres">
+		<div class="chips" role="group" aria-label={label}>
 			{#each chips as genre (genre.value)}
 				{@const state = states[genre.value] ?? 'ignore'}
 				<button
@@ -58,7 +61,7 @@
 			{/each}
 		</div>
 	{:else}
-		<p class="small muted">No genres listed.</p>
+		<p class="small muted">No {label.toLowerCase()} listed.</p>
 	{/if}
 </div>
 
