@@ -109,10 +109,22 @@ export const defaultSettings = (): Settings => ({
 		has_auth_token: false,
 		session_idle_days: 7,
 		session_lifetime_days: 30,
-		external_auth: false
+		external_auth: false,
+		public_url: ''
 	},
 	xpath: { backend: 'native' },
-	comic_server: { kind: 'none', url: '', has_api_key: false, library_id: null }
+	comic_server: { kind: 'none', url: '', has_api_key: false, library_id: null },
+	notifications: {
+		ntfy: { enabled: false, topic_url: '', has_token: false, new_chapters: true, problems: true },
+		discord: { enabled: false, has_webhook_url: false, new_chapters: true, problems: true },
+		webhook: {
+			enabled: false,
+			url: '',
+			has_authorization: false,
+			new_chapters: true,
+			problems: true
+		}
+	}
 });
 
 /** A module as the mock knows it: what it declares. Values live in the module's overrides. */

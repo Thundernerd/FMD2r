@@ -218,7 +218,50 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
             .is_err()
             .then(|| "must be a socket address such as 0.0.0.0:8080".into()),
     );
+    check(
+        "server.public_url",
+        bad_url(&s.server.public_url, false, "https://fmd.example.org"),
+    );
+    let n = &s.notifications;
+    for (field, url, enabled, example) in [
+        (
+            "notifications.ntfy.topic_url",
+            &n.ntfy.topic_url,
+            n.ntfy.enabled,
+            "https://ntfy.sh/my-topic",
+        ),
+        (
+            "notifications.discord.webhook_url",
+            &n.discord.webhook_url,
+            n.discord.enabled,
+            "https://discord.com/api/webhooks/…",
+        ),
+        (
+            "notifications.webhook.url",
+            &n.webhook.url,
+            n.webhook.enabled,
+            "http://homeassistant:8123/api/webhook/fmd2r",
+        ),
+    ] {
+        check(field, bad_url(url, enabled, example));
+    }
     errors
+}
+
+/// Why `url` is not an `http(s)` URL with a host; empty is fine unless it is `required`. Never
+/// quotes `url`, which may carry a token.
+fn bad_url(url: &str, required: bool, example: &str) -> Option<String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return required.then(|| format!("needed while this is on, e.g. {example}"));
+    }
+    let host = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
+        .and_then(|rest| rest.split(['/', '?', '#']).next())
+        .unwrap_or_default();
+    host.is_empty()
+        .then(|| format!("must be an http(s) URL such as {example}"))
 }
 
 /// A `%` followed by letters in a rename template.

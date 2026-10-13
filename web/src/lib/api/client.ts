@@ -8,11 +8,13 @@ import type {
 	BulkChange,
 	ComicServerTest,
 	ComicServerTestRequest,
+	Channel,
 	FavoritePatch,
 	FavoriteView,
+	FieldProblem,
+	FolderCheck,
 	GroupPatch,
 	GroupView,
-	FolderCheck,
 	Health,
 	ImportOptions,
 	ImportReport,
@@ -20,23 +22,24 @@ import type {
 	JobState,
 	ListFacets,
 	ListJobStarted,
+	LogLine,
 	MangaBakaSearchResult,
 	MangaBakaStatus,
-	LogLine,
 	ModuleSettingsView,
 	ModuleSummary,
 	NewTask,
+	NotificationTest,
 	Problem,
-	FieldProblem,
 	RenamePreview,
 	RenamePreviewRequest,
-	SaveFolderRequest,
+	RuleView,
 	SavedSettings,
-	SettingsSave,
+	SaveFolderRequest,
 	SearchPage,
 	SeriesInfo,
 	SeriesRef,
 	Settings,
+	SettingsSave,
 	TaskDetail,
 	TaskSummary
 } from './types';
@@ -139,6 +142,8 @@ export interface Api {
 	checkFolders(paths: string[]): Promise<FolderCheck[]>;
 	/** Whether the comic server answers with the API key; changes nothing on it. */
 	testComicServer(request: ComicServerTestRequest): Promise<ComicServerTest>;
+	/** Sends a test notification with the channel's saved settings. */
+	testNotification(channel: Channel): Promise<NotificationTest>;
 	/** The folder a download of a series goes to, the manga folder included. */
 	saveFolder(request: SaveFolderRequest): Promise<string>;
 	listModules(): Promise<ModuleSummary[]>;
@@ -207,11 +212,15 @@ export interface Api {
 	/** The library's groups, in order. */
 	listGroups(): Promise<GroupView[]>;
 	/**
-	 * Adds a group after the others. Rejects with an {@link ApiError}: 409 when another group has
-	 * the name, ignoring case, 400 when it is empty.
+	 * Adds a group after the others; with a rule, it collects the matching series without a group.
+	 * Rejects with an {@link ApiError}: 409 when another group has the name, ignoring case, 400
+	 * when it is empty or the rule is invalid.
 	 */
-	createGroup(name: string): Promise<GroupView>;
-	/** Renames a group or folds its section; rejects like {@link createGroup}, or with 404. */
+	createGroup(name: string, rule?: RuleView | null): Promise<GroupView>;
+	/**
+	 * Renames a group, folds its section or sets its rule (`null` clears it); rejects like
+	 * {@link createGroup}, or with 404.
+	 */
 	updateGroup(id: number, patch: GroupPatch): Promise<GroupView>;
 	/** Removes a group; its series stay in the library, ungrouped. */
 	deleteGroup(id: number): Promise<void>;
@@ -473,6 +482,14 @@ export function createApi({
 				await client.POST('/api/settings/comic-server/test', { body: request })
 			);
 		},
+		async testNotification(channel) {
+			return unwrap(
+				'testNotification',
+				await client.POST('/api/notifications/{channel}/test', {
+					params: { path: { channel } }
+				})
+			);
+		},
 		async saveFolder(request) {
 			return unwrap('saveFolder', await client.POST('/api/save-folder', { body: request })).folder;
 		},
@@ -599,8 +616,11 @@ export function createApi({
 		async listGroups() {
 			return unwrap('listGroups', await client.GET('/api/library/groups'));
 		},
-		async createGroup(name) {
-			return explained('createGroup', await client.POST('/api/library/groups', { body: { name } }));
+		async createGroup(name, rule = null) {
+			return explained(
+				'createGroup',
+				await client.POST('/api/library/groups', { body: { name, rule } })
+			);
 		},
 		async updateGroup(id, patch) {
 			return explained(

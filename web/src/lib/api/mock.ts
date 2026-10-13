@@ -20,6 +20,7 @@ import type {
 	ModuleSummary,
 	NewTask,
 	RenamePreviewRequest,
+	RuleView,
 	SaveFolderRequest,
 	SeriesInfo,
 	SeriesRef,
@@ -902,8 +903,8 @@ export function createMockBackend({
 		}
 		if (route === 'GET /api/library/groups') return json(favorites.listGroups());
 		if (route === 'POST /api/library/groups') {
-			const body = (await req.json()) as { name?: unknown } | null;
-			const { status, body: created } = favorites.createGroup(body?.name);
+			const body = (await req.json()) as { name?: unknown; rule?: RuleView | null } | null;
+			const { status, body: created } = favorites.createGroup(body?.name, body?.rule);
 			return json(created, status);
 		}
 		if (route === 'POST /api/library/groups/reorder') {
@@ -932,6 +933,24 @@ export function createMockBackend({
 			const body = (await req.json()) as { paths?: unknown } | null;
 			const paths = Array.isArray(body?.paths) ? body.paths.map(String) : [];
 			return json(settings.checkFolders(paths));
+		}
+		const notificationTest = route.match(/^POST \/api\/notifications\/([^/]+)\/test$/);
+		if (notificationTest) {
+			const channel = notificationTest[1];
+			const { ntfy, discord, webhook } = settings.getSettings().notifications;
+			const urls: Record<string, boolean> = {
+				ntfy: ntfy.topic_url !== '',
+				discord: discord.has_webhook_url,
+				webhook: webhook.url !== ''
+			};
+			if (channel === undefined || !(channel in urls)) {
+				return json({ status: 400, detail: `unknown channel ${channel}` }, 400);
+			}
+			return json(
+				urls[channel]
+					? { delivered: true, error: null }
+					: { delivered: false, error: 'No URL is set.' }
+			);
 		}
 		if (route === 'POST /api/save-folder') {
 			const body = (await req.json()) as Partial<SaveFolderRequest> | null;

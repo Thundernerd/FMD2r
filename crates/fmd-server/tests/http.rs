@@ -744,6 +744,11 @@ fn set_every_secret() -> Request<Body> {
             "module_updater": { "github_token": "token-secret" },
             "server": { "auth_token": "server-secret" },
             "comic_server": { "api_key": "comic-secret" },
+            "notifications": {
+                "ntfy": { "token": "ntfy-secret" },
+                "discord": { "webhook_url": "https://discord.com/api/webhooks/1/discord-secret" },
+                "webhook": { "authorization": "Bearer webhook-secret" },
+            },
         }),
     )
 }
@@ -764,6 +769,9 @@ fn assert_no_secret(body: &serde_json::Value) {
         "token-secret",
         "server-secret",
         "comic-secret",
+        "ntfy-secret",
+        "discord-secret",
+        "webhook-secret",
     ] {
         assert!(!text.contains(secret), "{secret} leaked: {text}");
     }
@@ -771,6 +779,22 @@ fn assert_no_secret(body: &serde_json::Value) {
     assert!(body["module_updater"].get("github_token").is_none());
     assert!(body["server"].get("auth_token").is_none());
     assert!(body["comic_server"].get("api_key").is_none());
+    let n = &body["notifications"];
+    assert!(n["ntfy"].get("token").is_none());
+    assert!(n["discord"].get("webhook_url").is_none());
+    assert!(n["webhook"].get("authorization").is_none());
+}
+
+/// The notification secrets' `has_<name>` flags: ntfy's token, Discord's webhook URL and the
+/// webhook's `Authorization` header.
+fn notification_flags(body: &serde_json::Value) -> [bool; 3] {
+    let n = &body["notifications"];
+    [
+        &n["ntfy"]["has_token"],
+        &n["discord"]["has_webhook_url"],
+        &n["webhook"]["has_authorization"],
+    ]
+    .map(|flag| flag.as_bool().unwrap())
 }
 
 #[tokio::test]
@@ -782,6 +806,7 @@ async fn settings_secrets_are_never_returned_only_whether_they_are_set() {
     assert_eq!(body["module_updater"]["has_github_token"], false);
     assert_eq!(body["server"]["has_auth_token"], false);
     assert_eq!(body["comic_server"]["has_api_key"], false);
+    assert_eq!(notification_flags(&body), [false; 3]);
 
     let res = send(&h.state, set_every_secret()).await;
     assert_eq!(res.status(), StatusCode::OK);
@@ -793,6 +818,7 @@ async fn settings_secrets_are_never_returned_only_whether_they_are_set() {
     assert_eq!(body["module_updater"]["has_github_token"], true);
     assert_eq!(body["server"]["has_auth_token"], true);
     assert_eq!(body["comic_server"]["has_api_key"], true);
+    assert_eq!(notification_flags(&body), [true; 3]);
 }
 
 #[tokio::test]

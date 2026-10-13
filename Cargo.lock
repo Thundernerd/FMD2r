@@ -876,6 +876,7 @@ name = "fmd-core"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "base64 0.22.1",
  "fmd-http",
  "fmd-lua",
  "fmd-pack",

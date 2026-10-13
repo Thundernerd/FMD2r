@@ -118,4 +118,47 @@ describe('the settings page', () => {
 			.map((id) => document.getElementById(id)?.textContent ?? '');
 		expect(messages).toContain('%CHAPTER is missing its closing %');
 	});
+
+	it('saves each notification channel, keeping its secrets write-only', async () => {
+		await open('#section-notifications');
+		const ntfy = within(screen.getByRole('group', { name: 'ntfy' }));
+		await fireEvent.click(ntfy.getByRole('checkbox', { name: 'Send to ntfy' }));
+		await fireEvent.input(ntfy.getByRole('textbox', { name: 'Topic URL' }), {
+			target: { value: 'https://ntfy.sh/my-topic' }
+		});
+		await fireEvent.input(ntfy.getByLabelText('Access token'), { target: { value: 'tk' } });
+		const discord = within(screen.getByRole('group', { name: 'Discord' }));
+		await fireEvent.click(discord.getByRole('checkbox', { name: 'Send to Discord' }));
+		await fireEvent.input(discord.getByLabelText('Webhook URL'), {
+			target: { value: 'https://discord.com/api/webhooks/1/abc' }
+		});
+		await fireEvent.click(discord.getByRole('checkbox', { name: 'Problems' }));
+		const webhook = within(screen.getByRole('group', { name: 'Webhook' }));
+		await fireEvent.click(webhook.getByRole('checkbox', { name: 'Send to Webhook' }));
+		await fireEvent.input(webhook.getByRole('textbox', { name: 'URL' }), {
+			target: { value: 'http://n8n.local/webhook/fmd' }
+		});
+		await fireEvent.click(webhook.getByRole('checkbox', { name: 'New chapters' }));
+
+		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+		await within(saveBar()).findByText('Saved');
+		const { notifications } = await api.getSettings();
+		expect(notifications).toEqual({
+			ntfy: {
+				enabled: true,
+				topic_url: 'https://ntfy.sh/my-topic',
+				has_token: true,
+				new_chapters: true,
+				problems: true
+			},
+			discord: { enabled: true, has_webhook_url: true, new_chapters: true, problems: false },
+			webhook: {
+				enabled: true,
+				url: 'http://n8n.local/webhook/fmd',
+				has_authorization: false,
+				new_chapters: false,
+				problems: true
+			}
+		});
+	});
 });

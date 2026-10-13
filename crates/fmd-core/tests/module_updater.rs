@@ -15,7 +15,7 @@ use fmd_core::module_updater::{
 use fmd_core::settings::write_websitebypass_config;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{MemorySettingsStore, PoolConfig, WorkerPool};
-use fmd_store::{AppDb, EventQuery, EventSeverity};
+use fmd_store::{AppDb, Event, EventQuery, EventSeverity};
 use serde_json::json;
 
 const API: &str = "http://api.github.test/";
@@ -156,6 +156,8 @@ struct Fixture {
     github: Arc<StubGitHub>,
     modules: Arc<LiveModules>,
     updater: ModuleUpdater,
+    /// The inbox events the updater reported.
+    reported: Arc<Mutex<Vec<Event>>>,
 }
 
 impl Fixture {
@@ -185,13 +187,17 @@ impl Fixture {
             ..UpdaterConfig::new(lua_dir)
         };
         configure(&mut config);
-        let updater = ModuleUpdater::new(config, db.clone(), http, modules.clone());
+        let reported = Arc::new(Mutex::new(Vec::new()));
+        let sink = reported.clone();
+        let updater = ModuleUpdater::new(config, db.clone(), http, modules.clone())
+            .with_on_event(move |event| sink.lock().unwrap().push(event));
         Fixture {
             dir,
             db,
             github,
             modules,
             updater,
+            reported,
         }
     }
 
@@ -338,6 +344,8 @@ fn a_module_failing_init_after_an_update_is_reported_once_and_its_last_good_vers
     assert_eq!(events[0].kind, "module_update");
     assert_eq!(events[0].severity, EventSeverity::Error);
     assert_eq!(events[0].module_id.as_deref(), Some("a"));
+    // Reported as stored, for the inbox's live view and notifications (issue #268).
+    assert_eq!(*f.reported.lock().unwrap(), events);
     let after = f.modules.current();
     assert!(Arc::ptr_eq(after.get("a").unwrap(), &before));
     assert!(after.get("b").is_some());
