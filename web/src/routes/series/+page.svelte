@@ -89,7 +89,7 @@
 	<a class="btn ghost back" href="/">← Library</a>
 	<p class="visually-hidden" aria-live="polite">{!error && !series ? 'Loading series…' : ''}</p>
 	{#if module && link}
-		<FailingNotice {api} {module} {link} />
+		<FailingNotice {api} {module} {link} check={events.favorites} />
 	{/if}
 	{#if error}
 		<h1>Series</h1>

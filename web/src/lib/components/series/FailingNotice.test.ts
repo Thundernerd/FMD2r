@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import type { Api } from '#lib/api/client.ts';
 import type { FavoriteView } from '#lib/api/types.ts';
@@ -71,5 +71,36 @@ describe('FailingNotice', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(screen.queryByRole('alert')).toBeNull();
 		expect(screen.queryByRole('link', { name: 'Find on another website' })).toBeNull();
+	});
+});
+
+describe('FailingNotice after a check', () => {
+	it('loads the series again when a check finishes, and goes away once it answered', async () => {
+		let failures = 3;
+		const listFavorites = vi.fn(() =>
+			Promise.resolve([
+				favorite({ check_failures: failures, last_check_error: failures ? 'timed out' : null })
+			])
+		);
+		const api = { listFavorites, checkFavorites: () => Promise.resolve() } as Pick<
+			Api,
+			'listFavorites' | 'checkFavorites'
+		> as Api;
+		const run = { mode: 'new', done: 1, total: 2 } as const;
+		const { rerender } = render(FailingNotice, {
+			api,
+			module: 'webtoons',
+			link: '/en/apothecary',
+			check: null
+		});
+		await screen.findByRole('alert');
+		failures = 0;
+
+		await rerender({ check: { ...run, kind: 'progress', favorite_id: 7 } });
+		expect(listFavorites).toHaveBeenCalledTimes(1);
+
+		await rerender({ check: { ...run, kind: 'finished', done: 2, new_chapters: 0 } });
+		await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+		expect(listFavorites).toHaveBeenCalledTimes(2);
 	});
 });

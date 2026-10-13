@@ -745,6 +745,7 @@ impl FavoritesChecker {
         let db = self.inner.config.db.clone();
         // Not atomic: it only races with another write to this favorite, which a PATCH redoes.
         blocking(move || {
+            db.favorites().clear_check_failures(id)?;
             let Some(mut favorite) = db.favorites().get(id)? else {
                 return Ok(None);
             };
@@ -758,10 +759,6 @@ impl FavoritesChecker {
                 favorite.date_last_updated = Some(now);
             }
             db.favorites().update(&favorite)?;
-            db.favorites().clear_check_failures(id)?;
-            favorite.check_failures = 0;
-            favorite.last_check_error = None;
-            favorite.date_last_failed = None;
             let links: Vec<&str> = links.iter().map(String::as_str).collect();
             db.favorites().set_chapter_links(id, &links)?;
             let changed = db.favorites().set_info(id, &website_info)?;

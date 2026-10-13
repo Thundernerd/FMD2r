@@ -1,9 +1,33 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
-	import type { FavoriteView } from '#lib/api/types.ts';
+	import type { FavoriteView, FavoritesEvent } from '#lib/api/types.ts';
 	import { isFailing } from '#lib/library/filters.ts';
+	import { untrack } from 'svelte';
 
-	let { api, module, link }: { api: Api; module: string; link: string } = $props();
+	let {
+		api,
+		module,
+		link,
+		check = null
+	}: {
+		api: Api;
+		module: string;
+		link: string;
+		/** The latest favorites check event; the series loads again when a run ends. */
+		check?: FavoritesEvent | null;
+	} = $props();
+
+	/** Which series to load; a string, so it changes only with the series. */
+	const key = $derived(`${module}\n${link}`);
+	$effect(() => {
+		void key;
+		failing = null;
+		checkNote = null;
+	});
+	/** The last run that ended; progress leaves it as it was. */
+	const ended = $derived(
+		check && check.kind !== 'started' && check.kind !== 'progress' ? check : null
+	);
 
 	/** This series in the library, when its website keeps failing. */
 	let failing = $state<FavoriteView | null>(null);
@@ -12,11 +36,11 @@
 
 	// Loaded apart from the series, so the notice shows when the website can't be reached at all.
 	$effect(() => {
-		const [m, l] = [module, link];
-		failing = null;
-		checkNote = null;
+		const [m, l] = key.split('\n');
+		// A run that ended may have cleared or added failures.
+		void ended;
 		let current = true;
-		api
+		untrack(() => api)
 			.listFavorites()
 			.then((favorites) => {
 				const found = favorites.find((f) => f.module_id === m && f.link === l);
