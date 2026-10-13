@@ -8,6 +8,7 @@ import type {
 	InboxItem,
 	JobState,
 	LibraryTitle,
+	RuleView,
 	SeriesInfo
 } from './types';
 import { seriesCover } from './mock-lists';
@@ -134,6 +135,9 @@ export interface GroupStorage {
 	set(value: string): void;
 }
 
+/** MangaBaka's formats, as fmd-server names them. */
+const FORMATS = ['manga', 'manhwa', 'manhua', 'oel', 'other'];
+
 /** What the next check finds, by favorite id. */
 const seedFresh = (): Record<number, number> => ({ 8: 1 });
 
@@ -167,7 +171,7 @@ export interface MockFavorites {
 	/** Checks the next favorite, reporting through `emit`; returns an inbox item when a check found chapters. */
 	tick(emit: (type: string, payload: unknown) => void): InboxItem | null;
 	listGroups(): GroupView[];
-	createGroup(name: unknown): Result;
+	createGroup(name: unknown, rule?: RuleView | null): Result;
 	patchGroup(id: number, patch: GroupPatch): Result;
 	deleteGroup(id: number): Result;
 	reorderGroups(ids: number[]): Result;
@@ -216,6 +220,30 @@ export function createMockFavorites(
 		return other ? problem(409, `a group named ${other.name} exists already`) : null;
 	};
 
+	/** Like fmd-server: a tag is trimmed and required, a format one of MangaBaka's five. */
+	const ruleProblem = (rule: RuleView | null): Result | null => {
+		if (rule?.kind === 'tag' && !rule.value) return problem(400, "the rule's tag cannot be empty");
+		if (rule?.kind === 'format' && !FORMATS.includes(rule.value)) {
+			return problem(400, `${rule.value} is not a format`);
+		}
+		return null;
+	};
+	const trimmed = (rule: RuleView | null | undefined): RuleView | null =>
+		rule ? { kind: rule.kind, value: rule.value.trim() } : null;
+	const matches = (rule: RuleView, f: FavoriteView) =>
+		rule.kind === 'tag'
+			? f.tags.some((t) => t.toLowerCase() === rule.value.toLowerCase())
+			: f.format === rule.value;
+	/** Like fmd-server: each series without a group goes to the first group whose rule matches. */
+	const autoGroup = (list: FavoriteView[]) => {
+		for (const f of list) {
+			if (f.group_id != null) continue;
+			const group = grouping.groups.find((g) => g.rule && matches(g.rule, f));
+			if (group) f.group_id = group.id;
+		}
+		saveGroups();
+	};
+
 	const view = (f: FavoriteView): FavoriteView => ({
 		...f,
 		display_title: displayTitle(f, libraryTitle())
@@ -262,6 +290,7 @@ export function createMockFavorites(
 				format: null
 			};
 			favorites.push(favorite);
+			autoGroup([favorite]);
 			return { status: 201, body: view(favorite) };
 		},
 		storeCover(module, link, cover) {
@@ -319,13 +348,14 @@ export function createMockFavorites(
 			return { status: 200, body: list.map(view) };
 		},
 		listGroups: () => grouping.groups.map((g) => ({ ...g })),
-		createGroup(raw) {
+		createGroup(raw, rawRule) {
 			const name = typeof raw === 'string' ? raw.trim() : '';
-			const refused = nameProblem(name, null);
+			const rule = trimmed(rawRule);
+			const refused = nameProblem(name, null) ?? ruleProblem(rule);
 			if (refused) return refused;
-			const group: GroupView = { id: grouping.nextId++, name, collapsed: false };
+			const group: GroupView = { id: grouping.nextId++, name, collapsed: false, rule };
 			grouping.groups.push(group);
-			saveGroups();
+			autoGroup(favorites);
 			return { status: 201, body: { ...group } };
 		},
 		patchGroup(id, patch) {
@@ -337,7 +367,14 @@ export function createMockFavorites(
 				if (refused) return refused;
 				group.name = name;
 			}
+			if (patch.rule !== undefined) {
+				const rule = trimmed(patch.rule);
+				const refused = ruleProblem(rule);
+				if (refused) return refused;
+				group.rule = rule;
+			}
 			group.collapsed = patch.collapsed ?? group.collapsed;
+			if (patch.rule) autoGroup(favorites);
 			saveGroups();
 			return { status: 200, body: { ...group } };
 		},
@@ -352,7 +389,7 @@ export function createMockFavorites(
 		reorderGroups(ids) {
 			const first = ids.flatMap((id) => grouping.groups.filter((g) => g.id === id));
 			grouping.groups = [...first, ...grouping.groups.filter((g) => !first.includes(g))];
-			saveGroups();
+			autoGroup(favorites);
 			return { status: 204 };
 		},
 		start(ids, mode) {

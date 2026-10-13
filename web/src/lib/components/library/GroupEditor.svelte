@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ApiError, type Api } from '#lib/api/client.ts';
-	import type { GroupView } from '#lib/api/types.ts';
+	import type { GroupView, RuleView } from '#lib/api/types.ts';
+	import GroupRuleFields, { describeRule, ruleOf } from './GroupRuleFields.svelte';
 
 	let {
 		api,
@@ -18,9 +19,23 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let busy = $state(false);
-	let newName = $state('');
-	/** The group being renamed, and the name typed so far. */
-	let renaming = $state<{ id: number; name: string } | null>(null);
+	/** The add form, or the group being edited: its name and rule as typed so far. */
+	interface Draft {
+		name: string;
+		kind: RuleView['kind'] | '';
+		tag: string;
+		format: string;
+	}
+	const draftOf = (group: GroupView | null): Draft => ({
+		name: group?.name ?? '',
+		kind: group?.rule?.kind ?? '',
+		tag: group?.rule?.kind === 'tag' ? group.rule.value : '',
+		format: group?.rule?.kind === 'format' ? group.rule.value : 'manga'
+	});
+	const ruleOfDraft = (d: Draft) => ruleOf(d.kind, d.kind === 'tag' ? d.tag : d.format);
+	let adding = $state(draftOf(null));
+	/** The group being edited, and its draft. */
+	let editing = $state<({ id: number } & Draft) | null>(null);
 	/** The group whose deletion waits for confirmation. */
 	let deleting = $state<GroupView | null>(null);
 
@@ -52,7 +67,7 @@
 				e instanceof ApiError && e.status === 409
 					? `A group named ${name} exists already.`
 					: e instanceof ApiError && e.status === 400
-						? 'A group needs a name.'
+						? 'A group needs a name, and a tag rule a tag.'
 						: 'Could not save the groups.';
 			return false;
 		} finally {
@@ -62,17 +77,19 @@
 
 	async function add(event: SubmitEvent) {
 		event.preventDefault();
-		const name = newName.trim();
+		const name = adding.name.trim();
 		if (!name) return;
-		if (await run(() => api.createGroup(name), name)) newName = '';
+		const rule = ruleOfDraft(adding);
+		if (await run(() => api.createGroup(name, rule), name)) adding = draftOf(null);
 	}
 
-	async function rename(event: SubmitEvent) {
+	async function save(event: SubmitEvent) {
 		event.preventDefault();
-		if (!renaming) return;
-		const { id } = renaming;
-		const name = renaming.name.trim();
-		if (await run(() => api.updateGroup(id, { name }), name)) renaming = null;
+		if (!editing) return;
+		const { id } = editing;
+		const name = editing.name.trim();
+		const rule = ruleOfDraft(editing);
+		if (await run(() => api.updateGroup(id, { name, rule }), name)) editing = null;
 	}
 
 	function move(group: GroupView, by: -1 | 1) {
@@ -96,22 +113,29 @@
 		{#if groups.length === 0}
 			<p class="muted">
 				No groups yet. Add one, then put series in it from their series pages or by selecting them
-				in the Library; the Library shows each group as a section you can fold away.
+				in the Library, or let it collect the series without a group by tag or format. The Library
+				shows each group as a section you can fold away.
 			</p>
 		{/if}
 		<ul aria-label="Groups">
 			{#each groups as group, index (group.id)}
 				<li>
-					{#if renaming?.id === group.id}
-						<form class="row" onsubmit={rename}>
+					{#if editing?.id === group.id}
+						<form class="row" onsubmit={save}>
 							<input
 								class="input"
 								aria-label="Name of {group.name}"
-								bind:value={renaming.name}
+								bind:value={editing.name}
 								required
 							/>
+							<GroupRuleFields
+								bind:kind={editing.kind}
+								bind:tag={editing.tag}
+								bind:format={editing.format}
+								of={group.name}
+							/>
 							<button class="btn sm primary" type="submit" disabled={busy}>Save</button>
-							<button class="btn sm ghost" type="button" onclick={() => (renaming = null)}
+							<button class="btn sm ghost" type="button" onclick={() => (editing = null)}
 								>Cancel</button
 							>
 						</form>
@@ -130,7 +154,9 @@
 					{:else}
 						<div class="row">
 							<span class="name grow"
-								>{group.name} · <span class="num">{count(group.id)}</span></span
+								>{group.name} · <span class="num">{count(group.id)}</span>{group.rule
+									? ` · ${describeRule(group.rule)}`
+									: ''}</span
 							>
 							<button
 								class="btn sm ghost"
@@ -149,18 +175,18 @@
 							<button
 								class="btn sm ghost"
 								type="button"
-								aria-label="Rename {group.name}"
+								aria-label="Edit {group.name}"
 								onclick={() => {
 									deleting = null;
-									renaming = { id: group.id, name: group.name };
-								}}>Rename</button
+									editing = { id: group.id, ...draftOf(group) };
+								}}>Edit</button
 							>
 							<button
 								class="btn sm ghost"
 								type="button"
 								aria-label="Delete {group.name}"
 								onclick={() => {
-									renaming = null;
+									editing = null;
 									deleting = group;
 								}}>Delete</button
 							>
@@ -174,9 +200,10 @@
 				class="input grow"
 				aria-label="New group"
 				placeholder="New group"
-				bind:value={newName}
+				bind:value={adding.name}
 			/>
-			<button class="btn sm" type="submit" disabled={busy || !newName.trim()}>Add</button>
+			<GroupRuleFields bind:kind={adding.kind} bind:tag={adding.tag} bind:format={adding.format} />
+			<button class="btn sm" type="submit" disabled={busy || !adding.name.trim()}>Add</button>
 		</form>
 	{/if}
 </div>

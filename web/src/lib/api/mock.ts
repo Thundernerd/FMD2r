@@ -19,6 +19,7 @@ import type {
 	ModuleSummary,
 	NewTask,
 	RenamePreviewRequest,
+	RuleView,
 	SaveFolderRequest,
 	SeriesInfo,
 	SeriesRef,
@@ -901,8 +902,8 @@ export function createMockBackend({
 		}
 		if (route === 'GET /api/library/groups') return json(favorites.listGroups());
 		if (route === 'POST /api/library/groups') {
-			const body = (await req.json()) as { name?: unknown } | null;
-			const { status, body: created } = favorites.createGroup(body?.name);
+			const body = (await req.json()) as { name?: unknown; rule?: RuleView | null } | null;
+			const { status, body: created } = favorites.createGroup(body?.name, body?.rule);
 			return json(created, status);
 		}
 		if (route === 'POST /api/library/groups/reorder') {

@@ -64,6 +64,7 @@ export type FavoritePatch = Schemas['FavoritePatch'];
 export type BulkChange = Schemas['BulkChange'];
 export type GroupView = Schemas['GroupView'];
 export type GroupPatch = Schemas['GroupPatch'];
+export type RuleView = Schemas['RuleView'];
 export type FavoritesEvent = Schemas['FavoritesEvent'];
 export type MangaBakaStatus = Schemas['MangaBakaStatus'];
 export type MangaBakaMatch = Schemas['MangaBakaMatch'];

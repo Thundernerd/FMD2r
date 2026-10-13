@@ -10,6 +10,7 @@ import type {
 	FavoriteView,
 	GroupPatch,
 	GroupView,
+	RuleView,
 	FolderCheck,
 	Health,
 	ImportOptions,
@@ -203,11 +204,15 @@ export interface Api {
 	/** The library's groups, in order. */
 	listGroups(): Promise<GroupView[]>;
 	/**
-	 * Adds a group after the others. Rejects with an {@link ApiError}: 409 when another group has
-	 * the name, ignoring case, 400 when it is empty.
+	 * Adds a group after the others; with a rule, it collects the matching series without a group.
+	 * Rejects with an {@link ApiError}: 409 when another group has the name, ignoring case, 400
+	 * when it is empty or the rule is invalid.
 	 */
-	createGroup(name: string): Promise<GroupView>;
-	/** Renames a group or folds its section; rejects like {@link createGroup}, or with 404. */
+	createGroup(name: string, rule?: RuleView | null): Promise<GroupView>;
+	/**
+	 * Renames a group, folds its section or sets its rule (`null` clears it); rejects like
+	 * {@link createGroup}, or with 404.
+	 */
 	updateGroup(id: number, patch: GroupPatch): Promise<GroupView>;
 	/** Removes a group; its series stay in the library, ungrouped. */
 	deleteGroup(id: number): Promise<void>;
@@ -589,8 +594,11 @@ export function createApi({
 		async listGroups() {
 			return unwrap('listGroups', await client.GET('/api/library/groups'));
 		},
-		async createGroup(name) {
-			return explained('createGroup', await client.POST('/api/library/groups', { body: { name } }));
+		async createGroup(name, rule = null) {
+			return explained(
+				'createGroup',
+				await client.POST('/api/library/groups', { body: { name, rule } })
+			);
 		},
 		async updateGroup(id, patch) {
 			return explained(

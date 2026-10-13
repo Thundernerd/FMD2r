@@ -523,7 +523,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Add a series to the library (`btAddToFavoritesClick`,\nmangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only\nchapters added later are new.",
+        "summary": "Add a series to the library (`btAddToFavoritesClick`,\nmangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only\nchapters added later are new. It goes in the first group whose rule matches it.",
         "operationId": "addFavorite",
         "requestBody": {
           "content": {
@@ -1227,7 +1227,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Add a group after the others.",
+        "summary": "Add a group after the others. With a rule, it collects the matching series in no group.",
         "operationId": "createGroup",
         "requestBody": {
           "content": {
@@ -1251,7 +1251,7 @@
             }
           },
           "400": {
-            "description": "The name is empty",
+            "description": "The name or the rule's tag is empty, or the rule's format is unknown",
             "content": {
               "application/json": {
                 "schema": {
@@ -1278,7 +1278,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Reorder the groups.",
+        "summary": "Reorder the groups; the series in no group go to the first group whose rule matches them.",
         "operationId": "reorderGroups",
         "requestBody": {
           "content": {
@@ -1336,7 +1336,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Rename a group, or fold or unfold its section.",
+        "summary": "Rename a group, fold or unfold its section, or set or clear its rule. A rule set collects the\nmatching series in no group.",
         "operationId": "updateGroup",
         "parameters": [
           {
@@ -1372,7 +1372,7 @@
             }
           },
           "400": {
-            "description": "The name is empty",
+            "description": "The name or the rule's tag is empty, or the rule's format is unknown",
             "content": {
               "application/json": {
                 "schema": {
@@ -4139,6 +4139,17 @@
               "string",
               "null"
             ]
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RuleView",
+                "description": "Which series in no group it collects; `null` clears it."
+              }
+            ]
           }
         }
       },
@@ -4161,6 +4172,17 @@
           },
           "name": {
             "type": "string"
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RuleView",
+                "description": "Which series in no group it collects; `null` is filled by hand only."
+              }
+            ]
           }
         }
       },
@@ -5446,6 +5468,17 @@
           "name": {
             "type": "string",
             "description": "Unique, ignoring case."
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RuleView",
+                "description": "Which series in no group it collects; missing or `null` is filled by hand only."
+              }
+            ]
           }
         }
       },
@@ -5809,6 +5842,30 @@
         "properties": {
           "url": {
             "type": "string"
+          }
+        }
+      },
+      "RuleKind": {
+        "type": "string",
+        "enum": [
+          "tag",
+          "format"
+        ]
+      },
+      "RuleView": {
+        "type": "object",
+        "description": "What an auto group collects: series in no group with the tag (website and MangaBaka genres,\nwhole and ignoring case), or whose MangaBaka match has the format. The first group in order\nthat matches a series gets it.",
+        "required": [
+          "kind",
+          "value"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/RuleKind"
+          },
+          "value": {
+            "type": "string",
+            "description": "The tag, or one of `manga`, `manhwa`, `manhua`, `oel` and `other`."
           }
         }
       },
