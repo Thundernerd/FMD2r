@@ -11,7 +11,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fmd_lua::WorkerPool;
 use fmd_store::{
-    AppDb, Event, EventSeverity, Favorite, FavoriteId, FavoriteInfo, NewEvent, StoreError,
+    AppDb, Event, EventSeverity, Favorite, FavoriteId, FavoriteInfo, GroupRule, LibraryGroup,
+    NewEvent, StoreError,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -125,6 +126,82 @@ pub fn tags_and_format(
         tags,
         format: found.map(|m| format_of(&m.series.kind).to_owned()),
     }
+}
+
+/// `favorite`'s tags and format, from the website genres stored with it. Blocking.
+pub fn stored_tags_and_format(
+    db: &AppDb,
+    metadata: Option<&MetadataJobs>,
+    favorite: &Favorite,
+) -> Result<TagsAndFormat, StoreError> {
+    let genres = db
+        .favorites()
+        .info(favorite.id)?
+        .map(|info| info.genres)
+        .unwrap_or_default();
+    Ok(tags_and_format(metadata, favorite, &genres))
+}
+
+/// Whether a series with `tagged` belongs in a group with `rule`: a tag whole and ignoring case,
+/// a format exactly. A series without a MangaBaka match has no format.
+fn rule_matches(rule: &GroupRule, tagged: &TagsAndFormat) -> bool {
+    match rule {
+        GroupRule::Tag(tag) => {
+            let tag = tag.trim().to_lowercase();
+            tagged.tags.iter().any(|t| t.to_lowercase() == tag)
+        }
+        GroupRule::Format(format) => tagged.format.as_deref() == Some(format.as_str()),
+    }
+}
+
+/// Puts each of `ids` that is in no group in the first group, by order, whose rule matches its
+/// tags and format. A series in a group, by hand or by rule, stays. Returns how many it moved.
+/// Blocking.
+pub fn auto_group(
+    db: &AppDb,
+    metadata: Option<&MetadataJobs>,
+    ids: &[FavoriteId],
+) -> Result<usize, StoreError> {
+    let groups: Vec<LibraryGroup> = db
+        .library_groups()
+        .list()?
+        .into_iter()
+        .filter(|g| g.rule.is_some())
+        .collect();
+    if groups.is_empty() {
+        return Ok(0);
+    }
+    let mut moved = 0;
+    for id in ids {
+        let Some(favorite) = db.favorites().get(*id)?.filter(|f| f.group_id.is_none()) else {
+            continue;
+        };
+        let tagged = stored_tags_and_format(db, metadata, &favorite)?;
+        let group = groups
+            .iter()
+            .find(|g| g.rule.as_ref().is_some_and(|r| rule_matches(r, &tagged)));
+        if let Some(group) = group
+            && db.favorites().group_if_ungrouped(favorite.id, group.id)?
+        {
+            moved += 1;
+        }
+    }
+    Ok(moved)
+}
+
+/// [`auto_group`] for every series in the library. Blocking.
+pub fn auto_group_library(
+    db: &AppDb,
+    metadata: Option<&MetadataJobs>,
+) -> Result<usize, StoreError> {
+    let ids: Vec<FavoriteId> = db
+        .favorites()
+        .list()?
+        .into_iter()
+        .filter(|f| f.group_id.is_none())
+        .map(|f| f.id)
+        .collect();
+    auto_group(db, metadata, &ids)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

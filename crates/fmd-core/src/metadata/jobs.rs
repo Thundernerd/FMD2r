@@ -1,11 +1,12 @@
 //! The MangaBaka database as a background job: download, refresh, and matching lists and
 //! favorites.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Duration;
 
 use fmd_http::TerminateToken;
-use fmd_store::ListsDb;
+use fmd_store::{FavoriteId, ListsDb, StoreError};
 use serde::Serialize;
 use thiserror::Error;
 use utoipa::ToSchema;
@@ -16,6 +17,7 @@ use super::{
     BuildProgress, DbInfo, ListModule, MangaBakaDb, MatchScope, Matcher, Metadata, MetadataError,
 };
 use crate::download::SeriesMatch;
+use crate::favorites::auto_group;
 use crate::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
 use crate::settings::SettingsService;
 
@@ -219,17 +221,20 @@ impl MetadataJobs {
             .db
             .current()
             .ok_or(MetadataJobError::NoDatabase)?;
-        // Under every form of the link, so the list's, the favorite's and a download's all see it.
-        for link in self.inner.link_forms(module_id, link) {
-            if !self
-                .inner
-                .matcher
-                .set_override(&meta, module_id, &link, series_id)?
-            {
-                return Err(MetadataJobError::UnknownSeries(series_id));
+        self.inner.grouping_new_matches(module_id, || {
+            // Under every form of the link, so the list's, the favorite's and a download's all
+            // see it.
+            for link in self.inner.link_forms(module_id, link) {
+                if !self
+                    .inner
+                    .matcher
+                    .set_override(&meta, module_id, &link, series_id)?
+                {
+                    return Err(MetadataJobError::UnknownSeries(series_id));
+                }
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Forgets the MangaBaka series picked by hand for `module_id`'s series `link`, and matches
@@ -346,11 +351,12 @@ impl MetadataJobs {
             id: module_id.to_owned(),
             root_url,
         };
-        match self
-            .inner
-            .matcher
-            .match_module(&meta, &module, MatchScope::Changed, terminate)
-        {
+        let matched = self.inner.grouping_new_matches(module_id, || {
+            self.inner
+                .matcher
+                .match_module(&meta, &module, MatchScope::Changed, terminate)
+        });
+        match matched {
             Ok(report) => tracing::info!(target: "fmd_core",
                 "matched {} titles of {module_id} against MangaBaka ({} accepted)",
                 report.examined, report.accepted),
@@ -448,6 +454,61 @@ impl Inner {
         lock(&self.status)
     }
 
+    /// The MangaBaka series each of the module's favorites is accepted as.
+    fn favorite_series(
+        self: &Arc<Self>,
+        module_id: &str,
+    ) -> Result<HashMap<FavoriteId, Option<i64>>, StoreError> {
+        let jobs = MetadataJobs {
+            inner: self.clone(),
+        };
+        Ok(self
+            .matcher
+            .app()
+            .favorites()
+            .list()?
+            .into_iter()
+            .filter(|f| f.module_id == module_id)
+            .map(|f| {
+                let series = jobs.series_match(module_id, &f.link).map(|m| m.series.id);
+                (f.id, series)
+            })
+            .collect())
+    }
+
+    /// Runs `matching` of the module, then puts its favorites whose accepted match it found or
+    /// changed, including a match picked by hand, in their auto group (issue #264). A favorite
+    /// matched again to the same series stays where it is.
+    fn grouping_new_matches<T>(
+        self: &Arc<Self>,
+        module_id: &str,
+        matching: impl FnOnce() -> T,
+    ) -> T {
+        let before = self.favorite_series(module_id);
+        let result = matching();
+        let grouped = before.and_then(|before| {
+            let after = self.favorite_series(module_id)?;
+            let found: Vec<FavoriteId> = after
+                .into_iter()
+                .filter(|(id, series)| {
+                    series.is_some() && before.get(id).is_some_and(|was| was != series)
+                })
+                .map(|(id, _)| id)
+                .collect();
+            if found.is_empty() {
+                return Ok(0);
+            }
+            let jobs = MetadataJobs {
+                inner: self.clone(),
+            };
+            auto_group(self.matcher.app(), Some(&jobs), &found)
+        });
+        if let Err(e) = grouped {
+            tracing::warn!(target: "fmd_core", "auto groups of {module_id}'s new matches: {e}");
+        }
+        result
+    }
+
     fn changed(&self) {
         if let Some(registry) = self.registry.get() {
             registry.changed(MetadataJobs::ID);
@@ -486,7 +547,7 @@ impl Inner {
         (self.on_event)(event);
     }
 
-    fn run(&self, terminate: &TerminateToken) {
+    fn run(self: &Arc<Self>, terminate: &TerminateToken) {
         self.send(event(
             MetadataEventKind::Started,
             MetadataPhase::Downloading,
@@ -535,7 +596,7 @@ impl Inner {
     }
 
     /// Returns whether it was cancelled.
-    fn match_all(&self, terminate: &TerminateToken) -> Result<bool, MetadataError> {
+    fn match_all(self: &Arc<Self>, terminate: &TerminateToken) -> Result<bool, MetadataError> {
         let Some(meta) = self.db.current() else {
             return Ok(false);
         };
@@ -562,9 +623,10 @@ impl Inner {
             event.done = done as u64;
             event.total = total;
             self.report(event);
-            let report = self
-                .matcher
-                .match_module(&meta, module, MatchScope::All, terminate)?;
+            let report = self.grouping_new_matches(&module.id, || {
+                self.matcher
+                    .match_module(&meta, module, MatchScope::All, terminate)
+            })?;
             if report.cancelled {
                 return Ok(true);
             }
