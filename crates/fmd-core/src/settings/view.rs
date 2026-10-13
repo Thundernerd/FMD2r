@@ -6,10 +6,10 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 use super::model::{
-    AppearanceSettings, ConnectionSettings, CoverSettings, FavoriteSettings, GeneralSettings,
-    ImageSettings, LogSettings, MetadataSettings, ModuleUpdaterSettings, OutputSettings,
-    ProxySettings, ProxyType, SaveToSettings, ServerSettings, Settings, UpdateListSettings,
-    XPathSettings,
+    AppearanceSettings, ComicServerKind, ComicServerSettings, ConnectionSettings, CoverSettings,
+    FavoriteSettings, GeneralSettings, ImageSettings, LogSettings, MetadataSettings,
+    ModuleUpdaterSettings, OutputSettings, ProxySettings, ProxyType, SaveToSettings,
+    ServerSettings, Settings, UpdateListSettings, XPathSettings,
 };
 use super::module_overrides::{HttpOverrides, ProxyOverride, ProxyOverrideType};
 
@@ -32,6 +32,7 @@ pub struct SettingsView {
     pub covers: CoverSettings,
     pub logs: LogSettings,
     pub metadata: MetadataSettings,
+    pub comic_server: ComicServerSettingsView,
 }
 
 impl Default for SettingsView {
@@ -57,6 +58,7 @@ impl From<&Settings> for SettingsView {
             covers,
             logs,
             metadata,
+            comic_server,
         } = s.clone();
         Self {
             general,
@@ -73,6 +75,7 @@ impl From<&Settings> for SettingsView {
             covers,
             logs,
             metadata,
+            comic_server: comic_server.into(),
         }
     }
 }
@@ -239,6 +242,35 @@ impl From<ModuleUpdaterSettings> for ModuleUpdaterSettingsView {
             repo_path,
             has_github_token: is_set(github_token.as_deref()),
             keep_last_good,
+        }
+    }
+}
+
+/// [`ComicServerSettings`] with the API key left out.
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct ComicServerSettingsView {
+    pub kind: ComicServerKind,
+    /// The server's base URL, e.g. `http://nas:25600`.
+    pub url: String,
+    /// Whether an API key is set. Patch `api_key` to set it; an empty one clears it.
+    pub has_api_key: bool,
+    /// Komga only: the library to scan; `None` scans every library the key can see.
+    pub library_id: Option<String>,
+}
+
+impl From<ComicServerSettings> for ComicServerSettingsView {
+    fn from(c: ComicServerSettings) -> Self {
+        let ComicServerSettings {
+            kind,
+            url,
+            api_key,
+            library_id,
+        } = c;
+        Self {
+            kind,
+            url,
+            has_api_key: is_set(api_key.as_deref()),
+            library_id,
         }
     }
 }

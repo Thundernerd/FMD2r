@@ -9,6 +9,7 @@ use serde_json::{Map, Value};
 const SETTINGS_SECRETS: &[(&str, &[&str])] = &[
     ("connections", &["proxy", "password"]),
     ("module_updater", &["github_token"]),
+    ("comic_server", &["api_key"]),
 ];
 
 pub(super) const MODULE_HTTP_SECRET: &[&str] = &["proxy", "password"];

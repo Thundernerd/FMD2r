@@ -11,8 +11,8 @@ use super::service::FieldError;
 
 /// Resets blank values to their defaults as FMD2 does: the user agent
 /// (mangadownloader/forms/frmMain.pas:6279-6285), the download directory and the rename
-/// templates (mangadownloader/forms/frmMain.pas:5882-5917). An empty GitHub token or server
-/// password becomes `None`.
+/// templates (mangadownloader/forms/frmMain.pas:5882-5917). An empty GitHub token, server
+/// password, comic server API key or Komga library ID becomes `None`.
 pub(crate) fn normalize(s: &mut Settings) {
     fn reset_blank(value: &mut String, default: &str) {
         if value.trim().is_empty() {
@@ -22,9 +22,19 @@ pub(crate) fn normalize(s: &mut Settings) {
     let c = &mut s.connections;
     c.user_agent = c.user_agent.trim().to_string();
     reset_blank(&mut c.user_agent, DEFAULT_USER_AGENT);
-    for secret in [&mut s.module_updater.github_token, &mut s.server.auth_token] {
-        if secret.as_deref() == Some("") {
-            *secret = None;
+    let comic = &mut s.comic_server;
+    comic.url = comic.url.trim().to_string();
+    if let Some(id) = &mut comic.library_id {
+        *id = id.trim().to_string();
+    }
+    for value in [
+        &mut s.module_updater.github_token,
+        &mut s.server.auth_token,
+        &mut comic.api_key,
+        &mut comic.library_id,
+    ] {
+        if value.as_deref() == Some("") {
+            *value = None;
         }
     }
     let saveto = &mut s.saveto;

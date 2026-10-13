@@ -19,7 +19,7 @@ pub use service::{FieldError, ModulePatch, SettingsError, SettingsService};
 pub use validate::close_rename_tokens;
 pub(crate) use validate::{normalize, sync_default_dir};
 pub use view::{
-    ConnectionSettingsView, HttpOverridesView, ModuleUpdaterSettingsView, ProxyOverrideView,
-    ProxySettingsView, ServerSettingsView, SettingsView,
+    ComicServerSettingsView, ConnectionSettingsView, HttpOverridesView, ModuleUpdaterSettingsView,
+    ProxyOverrideView, ProxySettingsView, ServerSettingsView, SettingsView,
 };
 pub use websitebypass::write_websitebypass_config;

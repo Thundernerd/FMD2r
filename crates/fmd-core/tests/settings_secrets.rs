@@ -179,3 +179,29 @@ fn an_empty_token_or_server_password_unsets_it() {
     assert_eq!(s.module_updater.github_token, None);
     assert_eq!(s.server.auth_token, None);
 }
+
+/// The comic server's API key (issue #269) is a secret like the others; an empty one unsets it.
+#[test]
+fn the_comic_server_api_key_is_stored_encrypted_and_cleared_when_empty() {
+    let (db, _dir) = db();
+    let service = SettingsService::load(db.clone()).unwrap();
+    service
+        .update(json!({ "comic_server": { "kind": "komga", "api_key": "komga-secret" } }))
+        .unwrap();
+
+    let stored: Value = db.settings().get("comic_server").unwrap().unwrap();
+    assert!(
+        !stored.to_string().contains("komga-secret"),
+        "stored in plain text: {stored}"
+    );
+    let reloaded = SettingsService::load(db.clone()).unwrap();
+    assert_eq!(
+        reloaded.get().comic_server.api_key.as_deref(),
+        Some("komga-secret")
+    );
+
+    let s = reloaded
+        .update(json!({ "comic_server": { "api_key": "" } }))
+        .unwrap();
+    assert_eq!(s.comic_server.api_key, None);
+}
