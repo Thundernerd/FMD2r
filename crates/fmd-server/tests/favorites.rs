@@ -1004,3 +1004,30 @@ async fn reordering_groups_collects_series_moved_to_no_group_by_hand() {
     assert_eq!(reordered.status(), StatusCode::NO_CONTENT);
     assert_eq!(fx.listed_group().await, drama["id"]);
 }
+
+#[tokio::test]
+async fn saving_a_group_with_its_rule_unchanged_leaves_series_moved_to_no_group() {
+    let fx = Fixture::new();
+    let id = fx.add().await["id"].as_i64().unwrap();
+    let action = fx
+        .create_group(json!({ "name": "Action", "rule": { "kind": "tag", "value": "Action" } }))
+        .await;
+    fx.send(
+        "PATCH",
+        &format!("/api/favorites/{id}"),
+        Some(json!({ "group_id": null })),
+    )
+    .await;
+
+    // As the Groups dialog's Edit form saves a rename.
+    let renamed = fx
+        .send(
+            "PATCH",
+            &format!("/api/library/groups/{}", action["id"]),
+            Some(json!({ "name": "Fights", "rule": { "kind": "tag", "value": "Action" } })),
+        )
+        .await;
+
+    assert_eq!(renamed.status(), StatusCode::OK);
+    assert_eq!(fx.listed_group().await, Value::Null);
+}

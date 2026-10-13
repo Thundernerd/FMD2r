@@ -447,8 +447,8 @@ export interface paths {
 		options?: never;
 		head?: never;
 		/**
-		 * Rename a group, fold or unfold its section, or set or clear its rule. A rule set collects the
-		 *     matching series in no group.
+		 * Rename a group, fold or unfold its section, or set or clear its rule. A rule set or changed
+		 *     collects the matching series in no group; the same rule again moves nothing.
 		 */
 		patch: operations['updateGroup'];
 		trace?: never;

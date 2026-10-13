@@ -182,29 +182,7 @@ impl MetadataJobs {
     /// the one the module reported, which may be absolute where the list's is relative, or the
     /// other way round; both forms are tried.
     pub fn series_match(&self, module_id: &str, link: &str) -> Option<SeriesMatch> {
-        let found = (|| -> Result<Option<SeriesMatch>, fmd_store::StoreError> {
-            let Some(db) = self.inner.db.current() else {
-                return Ok(None);
-            };
-            for link in self.inner.link_forms(module_id, link) {
-                let Some(stored) = self.inner.lists.matches().get(module_id, &link)? else {
-                    continue;
-                };
-                let Some(id) = stored.series_id.filter(|_| stored.confidence.is_accepted()) else {
-                    return Ok(None);
-                };
-                let Some(series) = db.series(id)? else {
-                    return Ok(None);
-                };
-                let xids = db.xids_of(id)?;
-                return Ok(Some(SeriesMatch { series, xids }));
-            }
-            Ok(None)
-        })();
-        found.unwrap_or_else(|e| {
-            tracing::warn!(target: "fmd_core", "MangaBaka match of {module_id} {link}: {e}");
-            None
-        })
+        self.inner.series_match(module_id, link)
     }
 
     /// Matches `module_id`'s series `link` to MangaBaka series `series_id` by hand. The match
@@ -454,14 +432,38 @@ impl Inner {
         lock(&self.status)
     }
 
+    /// See [`MetadataJobs::series_match`].
+    fn series_match(&self, module_id: &str, link: &str) -> Option<SeriesMatch> {
+        let found = (|| -> Result<Option<SeriesMatch>, fmd_store::StoreError> {
+            let Some(db) = self.db.current() else {
+                return Ok(None);
+            };
+            for link in self.link_forms(module_id, link) {
+                let Some(stored) = self.lists.matches().get(module_id, &link)? else {
+                    continue;
+                };
+                let Some(id) = stored.series_id.filter(|_| stored.confidence.is_accepted()) else {
+                    return Ok(None);
+                };
+                let Some(series) = db.series(id)? else {
+                    return Ok(None);
+                };
+                let xids = db.xids_of(id)?;
+                return Ok(Some(SeriesMatch { series, xids }));
+            }
+            Ok(None)
+        })();
+        found.unwrap_or_else(|e| {
+            tracing::warn!(target: "fmd_core", "MangaBaka match of {module_id} {link}: {e}");
+            None
+        })
+    }
+
     /// The MangaBaka series each of the module's favorites is accepted as.
     fn favorite_series(
-        self: &Arc<Self>,
+        &self,
         module_id: &str,
     ) -> Result<HashMap<FavoriteId, Option<i64>>, StoreError> {
-        let jobs = MetadataJobs {
-            inner: self.clone(),
-        };
         Ok(self
             .matcher
             .app()
@@ -470,7 +472,7 @@ impl Inner {
             .into_iter()
             .filter(|f| f.module_id == module_id)
             .map(|f| {
-                let series = jobs.series_match(module_id, &f.link).map(|m| m.series.id);
+                let series = self.series_match(module_id, &f.link).map(|m| m.series.id);
                 (f.id, series)
             })
             .collect())
@@ -491,7 +493,8 @@ impl Inner {
             let found: Vec<FavoriteId> = after
                 .into_iter()
                 .filter(|(id, series)| {
-                    series.is_some() && before.get(id).is_some_and(|was| was != series)
+                    // A favorite added while this ran counts as unmatched before.
+                    series.is_some() && before.get(id).copied().flatten() != *series
                 })
                 .map(|(id, _)| id)
                 .collect();

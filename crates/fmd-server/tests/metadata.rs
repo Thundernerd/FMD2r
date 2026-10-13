@@ -595,3 +595,31 @@ async fn a_series_matched_by_hand_to_a_manhwa_lands_in_the_manhwa_group() {
         "in the Manhwa group"
     );
 }
+
+#[tokio::test]
+async fn creating_a_group_with_a_format_rule_collects_the_matched_series_of_that_format() {
+    let (dir, state, lists) = state();
+    let jobs = built_metadata_jobs(&dir, &state, &lists);
+    let state = state.with_metadata(jobs);
+    // Matched to Reborn Rich (189), a manhwa.
+    add_reborn_rich(&state).await;
+
+    let res = send_json(
+        &state,
+        Request::post("/api/library/groups"),
+        json!({ "name": "Manga", "rule": { "kind": "format", "value": "manga" } }),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let res = send_json(
+        &state,
+        Request::post("/api/library/groups"),
+        json!({ "name": "Manhwa", "rule": { "kind": "format", "value": "manhwa" } }),
+    )
+    .await;
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let manhwa: Value = serde_json::from_slice(&bytes).unwrap();
+
+    let favorites = get(&state, "/api/favorites").await;
+    assert_eq!(favorites[0]["group_id"], manhwa["id"]);
+}

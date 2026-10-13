@@ -1,19 +1,11 @@
 <script lang="ts" module>
 	import type { RuleView } from '#lib/api/types.ts';
-
-	/** MangaBaka's formats, as fmd-server names them, with their labels. */
-	export const FORMATS = [
-		['manga', 'Manga'],
-		['manhwa', 'Manhwa'],
-		['manhua', 'Manhua'],
-		['oel', 'OEL'],
-		['other', 'Other']
-	] as const;
+	import { FORMATS, formatLabel } from '#lib/library/formats.ts';
 
 	/** What a group's row says about its rule: `auto: tag Romance`, `auto: Manhwa`. */
 	export function describeRule(rule: RuleView): string {
 		if (rule.kind === 'tag') return `auto: tag ${rule.value}`;
-		return `auto: ${FORMATS.find(([value]) => value === rule.value)?.[1] ?? rule.value}`;
+		return `auto: ${formatLabel(rule.value)}`;
 	}
 
 	/** The rule the fields describe; `null` for "No rule", or a tag rule without a tag. */

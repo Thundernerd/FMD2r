@@ -12,6 +12,7 @@ import type {
 	SeriesInfo
 } from './types';
 import { seriesCover } from './mock-lists';
+import { FORMATS } from '#lib/library/formats.ts';
 
 // The library of the in-memory backend (see mock.ts), with a favorites check that works
 // through one favorite per tick.
@@ -135,9 +136,6 @@ export interface GroupStorage {
 	set(value: string): void;
 }
 
-/** MangaBaka's formats, as fmd-server names them. */
-const FORMATS = ['manga', 'manhwa', 'manhua', 'oel', 'other'];
-
 /** What the next check finds, by favorite id. */
 const seedFresh = (): Record<number, number> => ({ 8: 1 });
 
@@ -223,7 +221,7 @@ export function createMockFavorites(
 	/** Like fmd-server: a tag is trimmed and required, a format one of MangaBaka's five. */
 	const ruleProblem = (rule: RuleView | null): Result | null => {
 		if (rule?.kind === 'tag' && !rule.value) return problem(400, "the rule's tag cannot be empty");
-		if (rule?.kind === 'format' && !FORMATS.includes(rule.value)) {
+		if (rule?.kind === 'format' && !FORMATS.some(([value]) => value === rule.value)) {
 			return problem(400, `${rule.value} is not a format`);
 		}
 		return null;
@@ -367,14 +365,18 @@ export function createMockFavorites(
 				if (refused) return refused;
 				group.name = name;
 			}
+			// Like fmd-server: only a rule set or changed collects series.
+			let ruleSet = false;
 			if (patch.rule !== undefined) {
 				const rule = trimmed(patch.rule);
 				const refused = ruleProblem(rule);
 				if (refused) return refused;
+				ruleSet =
+					rule != null && (rule.kind !== group.rule?.kind || rule.value !== group.rule.value);
 				group.rule = rule;
 			}
 			group.collapsed = patch.collapsed ?? group.collapsed;
-			if (patch.rule) autoGroup(favorites);
+			if (ruleSet) autoGroup(favorites);
 			saveGroups();
 			return { status: 200, body: { ...group } };
 		},

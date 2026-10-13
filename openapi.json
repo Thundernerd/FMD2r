@@ -1336,7 +1336,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Rename a group, fold or unfold its section, or set or clear its rule. A rule set collects the\nmatching series in no group.",
+        "summary": "Rename a group, fold or unfold its section, or set or clear its rule. A rule set or changed\ncollects the matching series in no group; the same rule again moves nothing.",
         "operationId": "updateGroup",
         "parameters": [
           {

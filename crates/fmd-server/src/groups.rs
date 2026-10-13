@@ -136,8 +136,8 @@ pub(crate) async fn create(
     Ok((StatusCode::CREATED, Json(group.into())))
 }
 
-/// Rename a group, fold or unfold its section, or set or clear its rule. A rule set collects the
-/// matching series in no group.
+/// Rename a group, fold or unfold its section, or set or clear its rule. A rule set or changed
+/// collects the matching series in no group; the same rule again moves nothing.
 #[utoipa::path(patch, path = "/api/library/groups/{id}", tag = "library",
     operation_id = "updateGroup",
     params(("id" = i64, Path, description = "Group id")),
@@ -170,12 +170,14 @@ pub(crate) async fn patch(
             if let Some(collapsed) = req.collapsed {
                 group.collapsed = collapsed;
             }
-            let collect = rule.as_ref().is_some_and(Option::is_some);
+            let rule_set = rule
+                .as_ref()
+                .is_some_and(|rule| rule.is_some() && *rule != group.rule);
             if let Some(rule) = rule {
                 group.rule = rule;
             }
             db.library_groups().update(&group)?;
-            if collect {
+            if rule_set {
                 auto_group_library(db, metadata.as_ref())?;
             }
             Ok(group)
