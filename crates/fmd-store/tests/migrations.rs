@@ -20,11 +20,11 @@ fn fresh_app_db_runs_all_migrations_and_reopen_is_a_noop() {
     let path = dir.path().join("app.db");
 
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 8);
+    assert_eq!(db.schema_version().unwrap(), 9);
     drop(db);
 
     let db = AppDb::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 8);
+    assert_eq!(db.schema_version().unwrap(), 9);
     drop(db);
 
     let names = tables(&path);
@@ -193,6 +193,40 @@ fn upgrading_app_db_gives_favorites_empty_website_genres() {
     let info = db.favorites().info(favorite.id).unwrap().unwrap();
     assert_eq!(info.authors, "Someone");
     assert_eq!(info.genres, "");
+}
+
+#[test]
+fn upgrading_app_db_keeps_groups_filled_by_hand_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("app.db");
+    // As stored by a v8 build.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    for sql in [
+        include_str!("../src/migrations/app_v1.sql"),
+        include_str!("../src/migrations/app_v2.sql"),
+        include_str!("../src/migrations/app_v3.sql"),
+        include_str!("../src/migrations/app_v4.sql"),
+        include_str!("../src/migrations/app_v5.sql"),
+        include_str!("../src/migrations/app_v6.sql"),
+        include_str!("../src/migrations/app_v7.sql"),
+        include_str!("../src/migrations/app_v8.sql"),
+    ] {
+        conn.execute_batch(sql).unwrap();
+    }
+    conn.execute(
+        "INSERT INTO library_groups (name, sort_order) VALUES ('Shounen', 1)",
+        [],
+    )
+    .unwrap();
+    conn.pragma_update(None, "user_version", 8).unwrap();
+    drop(conn);
+
+    let db = AppDb::open(&path).unwrap();
+
+    let groups = db.library_groups().list().unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].name, "Shounen");
+    assert_eq!(groups[0].rule, None);
 }
 
 #[test]

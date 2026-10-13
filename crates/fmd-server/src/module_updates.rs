@@ -19,6 +19,8 @@ use fmd_store::{AppDb, KeyFileCipher};
 use tokio::time::Instant;
 
 use crate::AppState;
+use crate::events::ServerEvent;
+use crate::inbox::InboxItem;
 
 /// Why the Lua modules could not be set up.
 #[derive(Debug, thiserror::Error)]
@@ -131,6 +133,7 @@ pub(crate) fn start(
     let config = UpdaterConfig::from_settings(&settings, &lua_dir);
     let dir = lua_dir.clone();
     let settings_service = state.settings.clone();
+    let events = state.events().clone();
     let updater = ModuleUpdater::new(
         config,
         state.db.clone(),
@@ -138,6 +141,8 @@ pub(crate) fn start(
         runtime.modules.clone(),
     )
     .with_pool(runtime.pool.clone())
+    // Announced like any inbox item, so it reaches open inboxes and the notification channels.
+    .with_on_event(move |event| events.publish(ServerEvent::InboxNew(InboxItem::from(event))))
     .with_after_sync(move |report| {
         let flaresolverr_url =
             flaresolverr_url(flaresolverr_override.as_deref(), &settings_service.get());

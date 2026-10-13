@@ -113,7 +113,7 @@ pub(crate) async fn get(
         .into_response())
 }
 
-fn io_error(err: io::Error) -> ApiError {
+pub(crate) fn io_error(err: io::Error) -> ApiError {
     ApiError::Internal(err.to_string())
 }
 
@@ -176,7 +176,7 @@ fn add_file(zip: &mut ZipWriter<File>, path: &Path, name: &str) -> io::Result<()
 
 /// A `Content-Disposition` for downloading as `name` (RFC 6266): an ASCII `filename` with
 /// anything else replaced by `_`, and the exact name as UTF-8 in `filename*` (RFC 8187).
-fn attachment(name: &str) -> String {
+pub(crate) fn attachment(name: &str) -> String {
     let ascii: String = name
         .chars()
         .map(|c| match c {

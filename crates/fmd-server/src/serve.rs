@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use fmd_core::accounts::AccountService;
+use fmd_core::comic_server::SCAN_DELAY;
 use fmd_core::download::{DownloadManager, EngineConfig, ModuleLookup, SeriesLookup};
 use fmd_core::favorites::{CheckerConfig, FavoritesChecker, TaskQueue};
 use fmd_core::lists::{DbImporter, ListJobs, ListUpdater};
@@ -200,6 +201,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                 Ok(engine) => {
                     let engine = Arc::new(engine);
                     state = state.with_shared_engine(engine.clone());
+                    state.start_comic_server_scans(SCAN_DELAY);
                     Some(engine as Arc<dyn TaskQueue>)
                 }
                 Err(e) => {
@@ -207,6 +209,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                     None
                 }
             };
+            // Before the jobs whose failures and finds it sends start.
+            state.start_notifications();
             state = start_favorites(state, &runtime, modules, queue);
             if config.module_updates {
                 module_updates::start(
@@ -220,6 +224,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
         Err(e) => {
             tracing::error!(target: "fmd_server", "Lua modules: {e}");
             state = state.with_covers(covers, Idle);
+            state.start_notifications();
         }
     }
     if flaresolverr_override.is_none() {

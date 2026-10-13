@@ -212,6 +212,33 @@
         }
       }
     },
+    "/api/backup": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Download a backup of the library, settings and saved logins, as\n`fmd2r-backup-<YYYY-MM-DD>.zip`.",
+        "operationId": "downloadBackup",
+        "responses": {
+          "200": {
+            "description": "app.db, accounts.key, backup.json and custom.css when present",
+            "content": {
+              "application/zip": {}
+            }
+          },
+          "404": {
+            "description": "The server runs without a data folder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/check-folders": {
       "post": {
         "tags": [
@@ -523,7 +550,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Add a series to the library (`btAddToFavoritesClick`,\nmangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only\nchapters added later are new.",
+        "summary": "Add a series to the library (`btAddToFavoritesClick`,\nmangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only\nchapters added later are new. It goes in the first group whose rule matches it.",
         "operationId": "addFavorite",
         "requestBody": {
           "content": {
@@ -1227,7 +1254,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Add a group after the others.",
+        "summary": "Add a group after the others. With a rule, it collects the matching series in no group.",
         "operationId": "createGroup",
         "requestBody": {
           "content": {
@@ -1251,7 +1278,7 @@
             }
           },
           "400": {
-            "description": "The name is empty",
+            "description": "The name or the rule's tag is empty, or the rule's format is unknown",
             "content": {
               "application/json": {
                 "schema": {
@@ -1278,7 +1305,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Reorder the groups.",
+        "summary": "Reorder the groups; the series in no group go to the first group whose rule matches them.",
         "operationId": "reorderGroups",
         "requestBody": {
           "content": {
@@ -1336,7 +1363,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Rename a group, or fold or unfold its section.",
+        "summary": "Rename a group, fold or unfold its section, or set or clear its rule. A rule set or changed\ncollects the matching series in no group; the same rule again moves nothing.",
         "operationId": "updateGroup",
         "parameters": [
           {
@@ -1372,7 +1399,7 @@
             }
           },
           "400": {
-            "description": "The name is empty",
+            "description": "The name or the rule's tag is empty, or the rule's format is unknown",
             "content": {
               "application/json": {
                 "schema": {
@@ -2221,6 +2248,48 @@
         }
       }
     },
+    "/api/notifications/{channel}/test": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Send a test notification to a channel with its saved settings, whether or not it is on.",
+        "operationId": "testNotification",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "description": "The channel to send to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Channel"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether it was delivered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationTest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No such channel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/preview-rename": {
       "post": {
         "tags": [
@@ -2648,6 +2717,47 @@
           },
           "422": {
             "description": "Values are invalid or settings unknown; `fields` names each, prefixed `settings.` or `modules.<id>.`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/comic-server/test": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Check a comic server's URL and API key with a request that changes nothing: Komga's library\nlist, Kavita's API key expiry.",
+        "operationId": "testComicServer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComicServerTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the server answered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComicServerTest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body",
             "content": {
               "application/json": {
                 "schema": {
@@ -3537,6 +3647,15 @@
           }
         }
       },
+      "Channel": {
+        "type": "string",
+        "description": "A service notifications are sent to.",
+        "enum": [
+          "ntfy",
+          "discord",
+          "webhook"
+        ]
+      },
       "ChapterInfo": {
         "type": "object",
         "description": "One chapter of a series.",
@@ -3602,6 +3721,115 @@
           "metroninfo",
           "both"
         ]
+      },
+      "ComicServerKind": {
+        "type": "string",
+        "description": "The comic servers FMD2r can ask to scan.",
+        "enum": [
+          "none",
+          "komga",
+          "kavita"
+        ]
+      },
+      "ComicServerLibrary": {
+        "type": "object",
+        "description": "A library a Komga API key can see.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ComicServerSettingsView": {
+        "type": "object",
+        "description": "[`ComicServerSettings`] with the API key left out.",
+        "required": [
+          "kind",
+          "url",
+          "has_api_key"
+        ],
+        "properties": {
+          "has_api_key": {
+            "type": "boolean",
+            "description": "Whether an API key is set. Patch `api_key` to set it; an empty one clears it."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ComicServerKind"
+          },
+          "library_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Komga only: the library to scan; `None` scans every library the key can see."
+          },
+          "url": {
+            "type": "string",
+            "description": "The server's base URL, e.g. `http://nas:25600`."
+          }
+        }
+      },
+      "ComicServerTest": {
+        "type": "object",
+        "description": "What \"Test connection\" found.",
+        "required": [
+          "ok",
+          "message",
+          "libraries"
+        ],
+        "properties": {
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComicServerLibrary"
+            },
+            "description": "Komga: the libraries the API key can see. Empty for Kavita or on failure."
+          },
+          "message": {
+            "type": "string",
+            "description": "What happened, as a sentence to show."
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "The server answered and accepted the API key."
+          }
+        }
+      },
+      "ComicServerTestRequest": {
+        "type": "object",
+        "description": "The comic server to test: the `comic_server` settings as the form holds them, saved or not.",
+        "required": [
+          "kind",
+          "url"
+        ],
+        "properties": {
+          "api_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A key typed but not saved yet; without one, the stored key, if `kind` and `url` are the\nstored ones (so the stored key goes nowhere else)."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ComicServerKind"
+          },
+          "library_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        }
       },
       "ConnectionSettingsView": {
         "type": "object",
@@ -3745,6 +3973,33 @@
           },
           "path": {
             "type": "string"
+          }
+        }
+      },
+      "DiscordSettingsView": {
+        "type": "object",
+        "description": "[`DiscordSettings`] with the webhook URL, which carries a token, left out.",
+        "required": [
+          "enabled",
+          "has_webhook_url",
+          "new_chapters",
+          "problems"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "has_webhook_url": {
+            "type": "boolean",
+            "description": "Whether a webhook URL is set. Patch `webhook_url` to set it; an empty one clears it."
+          },
+          "new_chapters": {
+            "type": "boolean",
+            "description": "Send new and missing chapters."
+          },
+          "problems": {
+            "type": "boolean",
+            "description": "Send warnings and errors: failed downloads, a failed library check, module problems."
           }
         }
       },
@@ -4139,6 +4394,17 @@
               "string",
               "null"
             ]
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RuleView",
+                "description": "Which series in no group it collects; `null` clears it."
+              }
+            ]
           }
         }
       },
@@ -4161,6 +4427,17 @@
           },
           "name": {
             "type": "string"
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RuleView",
+                "description": "Which series in no group it collects; `null` is filled by hand only."
+              }
+            ]
           }
         }
       },
@@ -5446,6 +5723,17 @@
           "name": {
             "type": "string",
             "description": "Unique, ignoring case."
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RuleView",
+                "description": "Which series in no group it collects; missing or `null` is filled by hand only."
+              }
+            ]
           }
         }
       },
@@ -5513,6 +5801,77 @@
             "format": "int32",
             "description": "1-based position in the series' chapter list, for `%NUMBERING%`; the position in\n`chapters` when missing.",
             "minimum": 0
+          }
+        }
+      },
+      "NotificationSettingsView": {
+        "type": "object",
+        "description": "[`NotificationSettings`] with the tokens and Discord's webhook URL left out.",
+        "required": [
+          "ntfy",
+          "discord",
+          "webhook"
+        ],
+        "properties": {
+          "discord": {
+            "$ref": "#/components/schemas/DiscordSettingsView"
+          },
+          "ntfy": {
+            "$ref": "#/components/schemas/NtfySettingsView"
+          },
+          "webhook": {
+            "$ref": "#/components/schemas/WebhookSettingsView"
+          }
+        }
+      },
+      "NotificationTest": {
+        "type": "object",
+        "description": "How a test notification went.",
+        "required": [
+          "delivered"
+        ],
+        "properties": {
+          "delivered": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why it was not delivered."
+          }
+        }
+      },
+      "NtfySettingsView": {
+        "type": "object",
+        "description": "[`NtfySettings`] with the access token left out.",
+        "required": [
+          "enabled",
+          "topic_url",
+          "has_token",
+          "new_chapters",
+          "problems"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "has_token": {
+            "type": "boolean",
+            "description": "Whether an access token is set. Patch `token` to set it; an empty one clears it."
+          },
+          "new_chapters": {
+            "type": "boolean",
+            "description": "Send new and missing chapters."
+          },
+          "problems": {
+            "type": "boolean",
+            "description": "Send warnings and errors: failed downloads, a failed library check, module problems."
+          },
+          "topic_url": {
+            "type": "string",
+            "description": "The topic to publish to, e.g. `https://ntfy.sh/my-topic`."
           }
         }
       },
@@ -5809,6 +6168,30 @@
         "properties": {
           "url": {
             "type": "string"
+          }
+        }
+      },
+      "RuleKind": {
+        "type": "string",
+        "enum": [
+          "tag",
+          "format"
+        ]
+      },
+      "RuleView": {
+        "type": "object",
+        "description": "What an auto group collects: series in no group with the tag (website and MangaBaka genres,\nwhole and ignoring case), or whose MangaBaka match has the format. The first group in order\nthat matches a series gets it.",
+        "required": [
+          "kind",
+          "value"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/RuleKind"
+          },
+          "value": {
+            "type": "string",
+            "description": "The tag, or one of `manga`, `manhwa`, `manhua`, `oel` and `other`."
           }
         }
       },
@@ -6171,7 +6554,8 @@
           "has_auth_token",
           "session_idle_days",
           "session_lifetime_days",
-          "external_auth"
+          "external_auth",
+          "public_url"
         ],
         "properties": {
           "bind": {
@@ -6185,6 +6569,10 @@
           "has_auth_token": {
             "type": "boolean",
             "description": "Whether a password is set. Patch `auth_token` to set it; an empty one clears it."
+          },
+          "public_url": {
+            "type": "string",
+            "description": "The address FMD2r is reached at; empty when unknown. Notifications link to it."
           },
           "session_idle_days": {
             "type": "integer",
@@ -6253,6 +6641,19 @@
               "mode": "system",
               "text_size": "normal",
               "theme": "default"
+            }
+          },
+          "comic_server": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComicServerSettingsView"
+              }
+            ],
+            "default": {
+              "has_api_key": false,
+              "kind": "none",
+              "library_id": null,
+              "url": ""
             }
           },
           "connections": {
@@ -6383,6 +6784,35 @@
               "repo_ref": "master"
             }
           },
+          "notifications": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotificationSettingsView"
+              }
+            ],
+            "default": {
+              "discord": {
+                "enabled": false,
+                "has_webhook_url": false,
+                "new_chapters": true,
+                "problems": true
+              },
+              "ntfy": {
+                "enabled": false,
+                "has_token": false,
+                "new_chapters": true,
+                "problems": true,
+                "topic_url": ""
+              },
+              "webhook": {
+                "enabled": false,
+                "has_authorization": false,
+                "new_chapters": true,
+                "problems": true,
+                "url": ""
+              }
+            }
+          },
           "output": {
             "oneOf": [
               {
@@ -6435,6 +6865,7 @@
               "bind": "127.0.0.1:8080",
               "external_auth": false,
               "has_auth_token": false,
+              "public_url": "",
               "session_idle_days": 7,
               "session_lifetime_days": 30
             }
@@ -7052,6 +7483,37 @@
             "type": "boolean",
             "description": "`update/UpdateListRemoveDuplicateLocalData`, default false\n(mangadownloader/forms/frmMain.pas:5957).",
             "default": false
+          }
+        }
+      },
+      "WebhookSettingsView": {
+        "type": "object",
+        "description": "[`WebhookSettings`] with the `Authorization` header left out.",
+        "required": [
+          "enabled",
+          "url",
+          "has_authorization",
+          "new_chapters",
+          "problems"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "has_authorization": {
+            "type": "boolean",
+            "description": "Whether an `Authorization` header is set. Patch `authorization` to set it; an empty one\nclears it."
+          },
+          "new_chapters": {
+            "type": "boolean",
+            "description": "Send new and missing chapters."
+          },
+          "problems": {
+            "type": "boolean",
+            "description": "Send warnings and errors: failed downloads, a failed library check, module problems."
+          },
+          "url": {
+            "type": "string"
           }
         }
       },

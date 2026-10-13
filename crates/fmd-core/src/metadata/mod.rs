@@ -15,8 +15,8 @@ pub use db::{DUMP_URL, DbInfo, METADATA_DB, MangaBakaDb, Metadata, SEARCH_LIMIT}
 pub use jobs::{
     MetadataEvent, MetadataEventKind, MetadataJobError, MetadataJobs, MetadataPhase, ModuleRoots,
 };
+pub use matcher::{FORMATS, absolute, format_of};
 pub use matcher::{ListModule, MangaDexLinks, MatchReport, MatchScope, Matcher};
-pub use matcher::{absolute, format_of};
 pub use source::{Download, DumpSource, HttpDumpSource, USER_AGENT};
 
 /// A failed build leaves the previous database as it was.
