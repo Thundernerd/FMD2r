@@ -295,9 +295,9 @@ export function createMockFavorites(
 			const missing = change.ids.find((_, i) => !picked[i]);
 			if (missing !== undefined) return problem(400, `no favorite with id ${missing}`);
 			const list = picked.filter((f) => f !== undefined);
-			const { enabled, group_id, destination, remove } = change;
+			const { enabled, group_id, destination, mark_seen, remove } = change;
 			if (remove) {
-				if (enabled != null || group_id !== undefined || destination != null) {
+				if (enabled != null || group_id !== undefined || destination != null || mark_seen) {
 					return problem(400, 'remove cannot be combined with a change');
 				}
 				for (const f of list) favorites.splice(favorites.indexOf(f), 1);
@@ -314,6 +314,8 @@ export function createMockFavorites(
 				f.enabled = enabled ?? f.enabled;
 				if (group_id !== undefined) f.group_id = group_id;
 				if (destination != null) f.save_to = folder(f, destination.trim());
+				// Every chapter of the last check is marked seen.
+				if (mark_seen) f.new_chapters = 0;
 			}
 			saveGroups();
 			return { status: 200, body: list.map(view) };

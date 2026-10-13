@@ -20,6 +20,7 @@ import type {
 	NewTask,
 	RenamePreviewRequest,
 	SaveFolderRequest,
+	SeenChange,
 	SeriesInfo,
 	SeriesRef,
 	TaskDetail,
@@ -516,6 +517,10 @@ export function createMockBackend({
 		return module_id && link !== '/' ? { module_id, link } : null;
 	};
 
+	/** Chapters marked seen or unseen by hand (`POST /api/series/seen`), by module and link. */
+	const marks = new Map<string, boolean>();
+	const markKey = (module_id: string, chapter: string) => `${module_id}\n${chapter.toLowerCase()}`;
+
 	const series = (module_id: string, link: string): SeriesInfo | null => {
 		const known = SERIES[link];
 		if (!known || !Object.values(MODULES).includes(module_id)) return null;
@@ -524,7 +529,7 @@ export function createMockBackend({
 		const chapters = Array.from({ length: count }, (_, i) => ({
 			name: `Chapter ${i + 1}`,
 			link: `${link}/chapter/${i + 1}`,
-			downloaded: i < downloaded
+			downloaded: marks.get(markKey(module_id, `${link}/chapter/${i + 1}`)) ?? i < downloaded
 		}));
 		const host = Object.keys(MODULES).find((h) => MODULES[h] === module_id);
 		const found: SeriesInfo = {
@@ -935,6 +940,19 @@ export function createMockBackend({
 				return json({ status: 400, detail: 'expected a series' }, 400);
 			}
 			return json({ folder: settings.saveFolder(body.module_id, body.title, body.save_to ?? '') });
+		}
+		if (route === 'POST /api/series/seen') {
+			// Untrusted input: check the shape instead of trusting the generated type.
+			const body = (await req.json()) as Partial<SeenChange> | null;
+			if (
+				typeof body?.module_id !== 'string' ||
+				!Array.isArray(body.chapters) ||
+				typeof body.seen !== 'boolean'
+			) {
+				return json({ status: 400, detail: 'expected chapters to mark' }, 400);
+			}
+			for (const chapter of body.chapters) marks.set(markKey(body.module_id, chapter), body.seen);
+			return new Response(null, { status: 204 });
 		}
 		if (route === 'POST /api/preview-rename') {
 			return json(settings.previewRename((await req.json()) as RenamePreviewRequest));

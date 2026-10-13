@@ -8,6 +8,7 @@
 	import DownloadBox from '#lib/components/series/DownloadBox.svelte';
 	import SeriesHeader from '#lib/components/series/SeriesHeader.svelte';
 	import SeriesLayout from '#lib/components/series/SeriesLayout.svelte';
+	import SeenBox from '#lib/components/series/SeenBox.svelte';
 	import SeriesSkeleton from '#lib/components/series/SeriesSkeleton.svelte';
 
 	const module = $derived(page.url.searchParams.get('module') ?? '');
@@ -71,6 +72,13 @@
 			.catch(() => {});
 	});
 
+	function marked(indices: number[], seen: boolean) {
+		for (const i of indices) {
+			const chapter = series?.chapters[i];
+			if (chapter) chapter.downloaded = seen;
+		}
+	}
+
 	function describe(e: unknown): string {
 		if (!(e instanceof ApiError)) return 'Could not reach FMD2r. Try again.';
 		if (e.status === 404) return `This series was not found${e.detail ? ` (${e.detail})` : ''}.`;
@@ -110,6 +118,7 @@
 					{format}
 					onqueued={(task) => events.queue.upsert(task)}
 				/>
+				<SeenBox {api} series={info} {selected} onmarked={marked} />
 			{/snippet}
 		</SeriesLayout>
 	{/if}

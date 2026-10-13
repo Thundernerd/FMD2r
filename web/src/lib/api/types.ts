@@ -29,6 +29,7 @@ export type Health = Schemas['Health'];
 export type SeriesInfo = Schemas['SeriesInfo'];
 export type SeriesLink = Schemas['SeriesLink'];
 export type ChapterInfo = Schemas['ChapterInfo'];
+export type SeenChange = Schemas['SeenChange'];
 export type SeriesStatus = Schemas['SeriesStatus'];
 export type NewTask = Schemas['NewTask'];
 export type OutputFormat = Schemas['OutputFormat'];

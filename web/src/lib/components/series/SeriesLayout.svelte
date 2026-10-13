@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	/** The series page's two columns: the chapter list and, beside it, the download box. */
+	/** The series page's two columns: the chapter list and, beside it, the download box
+	 * and the seen marks. */
 	let { list, side }: { list: Snippet; side: Snippet } = $props();
 </script>
 
@@ -26,6 +27,9 @@
 		min-width: 0;
 	}
 	.side {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-3);
 		flex: 0 1 340px;
 		min-width: 0;
 		position: sticky;

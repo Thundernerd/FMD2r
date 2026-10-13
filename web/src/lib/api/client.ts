@@ -29,6 +29,7 @@ import type {
 	RenamePreview,
 	RenamePreviewRequest,
 	SaveFolderRequest,
+	SeenChange,
 	SavedSettings,
 	SettingsSave,
 	SearchPage,
@@ -137,6 +138,8 @@ export interface Api {
 	checkFolders(paths: string[]): Promise<FolderCheck[]>;
 	/** The folder a download of a series goes to, the manga folder included. */
 	saveFolder(request: SaveFolderRequest): Promise<string>;
+	/** Marks a series' chapters seen or clears their marks; no file is touched. */
+	markChaptersSeen(change: SeenChange): Promise<void>;
 	listModules(): Promise<ModuleSummary[]>;
 	getModuleSettings(id: string): Promise<ModuleSettingsView>;
 	/** Applies `patch`; rejects with a {@link ValidationError} naming the field when invalid. */
@@ -465,6 +468,10 @@ export function createApi({
 		},
 		async saveFolder(request) {
 			return unwrap('saveFolder', await client.POST('/api/save-folder', { body: request })).folder;
+		},
+		async markChaptersSeen(change) {
+			const { response } = await client.POST('/api/series/seen', { body: change });
+			if (!response.ok) throw new ApiError(response.status, 'markChaptersSeen');
 		},
 		async listModules() {
 			return unwrap('listModules', await client.GET('/api/modules'));
