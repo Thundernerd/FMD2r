@@ -11,7 +11,7 @@ use tokio::io::AsyncReadExt;
 use crate::{ApiError, AppState};
 
 /// The file in the data folder.
-const FILE: &str = "custom.css";
+pub(crate) const FILE: &str = "custom.css";
 
 /// The largest stylesheet served; anything bigger is a 413.
 const MAX_BYTES: u64 = 1024 * 1024;

@@ -212,6 +212,33 @@
         }
       }
     },
+    "/api/backup": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Download a backup of the library, settings and saved logins, as\n`fmd2r-backup-<YYYY-MM-DD>.zip`.",
+        "operationId": "downloadBackup",
+        "responses": {
+          "200": {
+            "description": "app.db, accounts.key, backup.json and custom.css when present",
+            "content": {
+              "application/zip": {}
+            }
+          },
+          "404": {
+            "description": "The server runs without a data folder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/check-folders": {
       "post": {
         "tags": [

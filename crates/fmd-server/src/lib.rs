@@ -3,6 +3,7 @@
 mod about;
 mod accounts;
 mod auth;
+mod backup;
 mod covers;
 mod custom_css;
 mod error;
@@ -122,6 +123,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(jobs::run))
         .routes(routes!(jobs::cancel))
         .routes(routes!(about::about))
+        .routes(routes!(backup::download))
         .routes(routes!(import::import))
         .routes(routes!(covers::get))
         .routes(routes!(covers::series::get))
