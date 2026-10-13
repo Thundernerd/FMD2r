@@ -2500,6 +2500,40 @@
         }
       }
     },
+    "/api/series/seen": {
+      "post": {
+        "tags": [
+          "series"
+        ],
+        "summary": "Mark chapters seen, as downloading them does (baseunits/DownloadedChaptersDB.pas:124-129), or\nclear their marks; FMD2 has no way to clear one. Links compare case-insensitively. The series\nneed not be in the library, and no downloaded file is touched.",
+        "operationId": "markChaptersSeen",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeenChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Marked or unmarked"
+          },
+          "400": {
+            "description": "Malformed body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/revoke-all": {
       "post": {
         "tags": [
@@ -3530,6 +3564,10 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          "mark_seen": {
+            "type": "boolean",
+            "description": "Mark every chapter listed at their last check seen, as downloading them would, which\nclears their new chapters. No file is downloaded."
           },
           "remove": {
             "type": "boolean",
@@ -6005,6 +6043,36 @@
             "format": "int64",
             "description": "Matches across all pages.",
             "minimum": 0
+          }
+        }
+      },
+      "SeenChange": {
+        "type": "object",
+        "description": "Chapters of a series to mark seen or unseen.",
+        "required": [
+          "module_id",
+          "link",
+          "chapters",
+          "seen"
+        ],
+        "properties": {
+          "chapters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Chapter links relative to the module's `RootURL`."
+          },
+          "link": {
+            "type": "string",
+            "description": "The series link relative to the module's `RootURL`."
+          },
+          "module_id": {
+            "type": "string"
+          },
+          "seen": {
+            "type": "boolean",
+            "description": "Mark them seen (`true`) or clear their marks (`false`)."
           }
         }
       },

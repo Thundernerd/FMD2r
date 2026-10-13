@@ -279,6 +279,10 @@ pub struct BulkChange {
     /// A parent folder: each favorite downloads to its own manga folder in it, as
     /// `POST /api/save-folder` makes it. Chapters already downloaded are not moved.
     pub destination: Option<String>,
+    /// Mark every chapter listed at their last check seen, as downloading them would, which
+    /// clears their new chapters. No file is downloaded.
+    #[serde(default)]
+    pub mark_seen: bool,
     /// Remove them from the library instead; their downloaded chapters stay recorded. Cannot be
     /// combined with a change.
     #[serde(default)]
@@ -309,7 +313,11 @@ pub(crate) async fn bulk(
     }
     let ids: Vec<FavoriteId> = req.ids.iter().copied().map(FavoriteId).collect();
     let favorites = if req.remove {
-        if req.enabled.is_some() || req.group_id.is_some() || req.destination.is_some() {
+        if req.enabled.is_some()
+            || req.group_id.is_some()
+            || req.destination.is_some()
+            || req.mark_seen
+        {
             return Err(ApiError::BadRequest(
                 "remove cannot be combined with a change".into(),
             ));
@@ -381,10 +389,11 @@ async fn bulk_change(
             folders.insert(favorite.id, folder);
         }
     }
-    let enabled = req.enabled;
+    let (enabled, mark_seen) = (req.enabled, req.mark_seen);
     state
         .blocking(move |db| -> Result<Vec<Favorite>, ApiError> {
-            db.favorites()
+            let favorites = db
+                .favorites()
                 .update_each(&ids, |favorite| {
                     if let Some(enabled) = enabled {
                         favorite.enabled = enabled;
@@ -398,7 +407,16 @@ async fn bulk_change(
                 })?
                 .ok_or_else(|| {
                     ApiError::BadRequest("a favorite was removed while changing it".into())
-                })
+                })?;
+            if mark_seen {
+                for favorite in &favorites {
+                    let links = db.favorites().chapter_links(favorite.id)?;
+                    let links: Vec<&str> = links.iter().map(String::as_str).collect();
+                    db.downloaded_chapters()
+                        .mark(&favorite.module_id, &favorite.link, &links)?;
+                }
+            }
+            Ok(favorites)
         })
         .await
 }

@@ -34,6 +34,23 @@ impl<'a> DownloadedChaptersRepo<'a> {
         Ok(())
     }
 
+    /// Links not recorded are ignored. FMD2 has no unmark; this clears a mark by hand.
+    pub fn unmark(&self, module_id: &str, manga_link: &str, chapter_links: &[&str]) -> Result<()> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare_cached(
+                "DELETE FROM downloaded_chapters
+                 WHERE module_id = ?1 AND manga_link = ?2 AND chapter_link = ?3",
+            )?;
+            for chapter in chapter_links {
+                stmt.execute(params![module_id, manga_link, chapter])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn contains(&self, module_id: &str, manga_link: &str, chapter_link: &str) -> Result<bool> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare_cached(

@@ -835,6 +835,27 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/series/seen': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Mark chapters seen, as downloading them does (baseunits/DownloadedChaptersDB.pas:124-129), or
+		 *     clear their marks; FMD2 has no way to clear one. Links compare case-insensitively. The series
+		 *     need not be in the library, and no downloaded file is touched.
+		 */
+		post: operations['markChaptersSeen'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/sessions/revoke-all': {
 		parameters: {
 			query?: never;
@@ -1213,6 +1234,11 @@ export interface components {
 			 */
 			group_id?: number | null;
 			ids: number[];
+			/**
+			 * @description Mark every chapter listed at their last check seen, as downloading them would, which
+			 *     clears their new chapters. No file is downloaded.
+			 */
+			mark_seen?: boolean;
 			/**
 			 * @description Remove them from the library instead; their downloaded chapters stay recorded. Cannot be
 			 *     combined with a change.
@@ -2457,6 +2483,16 @@ export interface components {
 			 * @description Matches across all pages.
 			 */
 			total: number;
+		};
+		/** @description Chapters of a series to mark seen or unseen. */
+		SeenChange: {
+			/** @description Chapter links relative to the module's `RootURL`. */
+			chapters: string[];
+			/** @description The series link relative to the module's `RootURL`. */
+			link: string;
+			module_id: string;
+			/** @description Mark them seen (`true`) or clear their marks (`false`). */
+			seen: boolean;
 		};
 		/** @description A series as FMD2's info panel shows it. */
 		SeriesInfo: {
@@ -4949,6 +4985,37 @@ export interface operations {
 			};
 			/** @description This server has no MangaBaka database job */
 			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	markChaptersSeen: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['SeenChange'];
+			};
+		};
+		responses: {
+			/** @description Marked or unmarked */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Malformed body */
+			400: {
 				headers: {
 					[name: string]: unknown;
 				};

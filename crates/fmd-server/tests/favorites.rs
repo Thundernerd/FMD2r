@@ -831,3 +831,99 @@ async fn a_bulk_removal_removes_every_listed_favorite_or_none() {
         .collect();
     assert_eq!(left, [ids[1]]);
 }
+
+impl Fixture {
+    async fn seen(&self, chapters: &[&str], seen: bool) -> StatusCode {
+        self.send(
+            "POST",
+            "/api/series/seen",
+            Some(json!({ "module_id": "t", "link": "/manga", "chapters": chapters, "seen": seen })),
+        )
+        .await
+        .status()
+    }
+}
+
+#[tokio::test]
+async fn marking_chapters_seen_or_unseen_changes_the_badge() {
+    let fx = Fixture::new();
+    // Adding the series marks its current chapters `/c1` and `/c2` seen.
+    let id = fx.add().await["id"].as_i64().unwrap();
+    fx.checked(id, &["/c1", "/c2", "/c3", "/c4"]);
+    assert_eq!(fx.new_chapters().await, 2);
+
+    assert_eq!(fx.seen(&["/c3"], true).await, StatusCode::NO_CONTENT);
+    assert_eq!(fx.new_chapters().await, 1);
+
+    assert_eq!(
+        fx.seen(&["/C1", "/c2"], false).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(fx.new_chapters().await, 3);
+}
+
+#[tokio::test]
+async fn a_series_outside_the_library_can_be_marked_seen() {
+    let fx = Fixture::new();
+
+    assert_eq!(fx.seen(&["/c1"], true).await, StatusCode::NO_CONTENT);
+
+    assert_eq!(
+        fx.db.downloaded_chapters().list_for("t", "/manga").unwrap(),
+        ["/c1"]
+    );
+}
+
+#[tokio::test]
+async fn a_bulk_mark_seen_clears_every_listed_favorites_new_chapters() {
+    let fx = Fixture::new();
+    let ids = fx.create(&["A", "B", "C"]);
+    for id in &ids {
+        fx.checked(*id, &["/c1", "/c2"]);
+    }
+
+    let response = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": [ids[0], ids[2]], "mark_seen": true })),
+        )
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated = json_body(response).await;
+    assert_eq!(updated[0]["new_chapters"], 0);
+    assert_eq!(updated[1]["new_chapters"], 0);
+    let list = json_body(fx.send("GET", "/api/favorites", None).await).await;
+    let new: Vec<(i64, i64)> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| {
+            (
+                f["id"].as_i64().unwrap(),
+                f["new_chapters"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(new, [(ids[0], 0), (ids[1], 2), (ids[2], 0)]);
+}
+
+#[tokio::test]
+async fn a_bulk_mark_seen_cannot_be_combined_with_a_removal() {
+    let fx = Fixture::new();
+    let ids = fx.create(&["A"]);
+    fx.checked(ids[0], &["/c1"]);
+
+    let response = fx
+        .send(
+            "POST",
+            "/api/favorites/bulk",
+            Some(json!({ "ids": ids, "mark_seen": true, "remove": true })),
+        )
+        .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(fx.db.favorites().list().unwrap().len(), 1);
+    assert_eq!(fx.new_chapters().await, 1);
+}

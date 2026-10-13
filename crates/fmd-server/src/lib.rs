@@ -62,8 +62,8 @@ pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use metadata::{MangaBakaSearchResult, MangaBakaStatus};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
 pub use series::{
-    ChapterInfo, MangaBakaMatch, MangaBakaSeries, MatchRequest, ResolveRequest, SeriesInfo,
-    SeriesLink, SeriesRef, SeriesStatus,
+    ChapterInfo, MangaBakaMatch, MangaBakaSeries, MatchRequest, ResolveRequest, SeenChange,
+    SeriesInfo, SeriesLink, SeriesRef, SeriesStatus,
 };
 pub use serve::{ServeConfig, ServeError, serve};
 pub use services::{
@@ -134,6 +134,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(series::resolve))
         .routes(routes!(series::get))
         .routes(routes!(series::save_folder))
+        .routes(routes!(series::mark_seen))
         .routes(routes!(
             series::matching::set_match,
             series::matching::remove_match

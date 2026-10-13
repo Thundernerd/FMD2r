@@ -22,3 +22,19 @@ fn mark_then_contains_is_idempotent_and_case_insensitive() {
         ["/ch/1", "/ch/2"]
     );
 }
+
+#[test]
+fn unmark_removes_only_the_given_links_case_insensitively() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let repo = db.downloaded_chapters();
+    repo.mark("mod", "/manga/1", &["/ch/1", "/ch/2", "/ch/3"])
+        .unwrap();
+    repo.mark("mod", "/manga/2", &["/ch/1"]).unwrap();
+
+    repo.unmark("MOD", "/Manga/1", &["/CH/1", "/ch/3", "/ch/9"])
+        .unwrap();
+
+    assert_eq!(repo.list_for("mod", "/manga/1").unwrap(), ["/ch/2"]);
+    assert_eq!(repo.list_for("mod", "/manga/2").unwrap(), ["/ch/1"]);
+}
