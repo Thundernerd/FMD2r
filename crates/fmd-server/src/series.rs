@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use axum::Json;
 use axum::extract::State;
+use axum::http::StatusCode;
 use fmd_core::info::{InfoError, InfoOptions, MangaInfo};
 use fmd_core::modules::locate_by_url;
 use fmd_store::{ListsDb, MatchConfidence, StoredMatch};
@@ -411,6 +412,45 @@ fn view(
         mangabaka: None,
         mangabaka_match: MangaBakaMatch::Unavailable,
     }
+}
+
+/// Chapters of a series to mark seen or unseen.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SeenChange {
+    pub module_id: String,
+    /// The series link relative to the module's `RootURL`.
+    pub link: String,
+    /// Chapter links relative to the module's `RootURL`.
+    pub chapters: Vec<String>,
+    /// Mark them seen (`true`) or clear their marks (`false`).
+    pub seen: bool,
+}
+
+/// Mark chapters seen, as downloading them does (baseunits/DownloadedChaptersDB.pas:124-129), or
+/// clear their marks; FMD2 has no way to clear one. Links compare case-insensitively. The series
+/// need not be in the library, and no downloaded file is touched.
+#[utoipa::path(post, path = "/api/series/seen", tag = "series", operation_id = "markChaptersSeen",
+    request_body = SeenChange,
+    responses(
+        (status = 204, description = "Marked or unmarked"),
+        (status = 400, body = Problem, description = "Malformed body"),
+    ))]
+pub(crate) async fn mark_seen(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<SeenChange>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .blocking(move |db| {
+            let chapters: Vec<&str> = req.chapters.iter().map(String::as_str).collect();
+            let repo = db.downloaded_chapters();
+            if req.seen {
+                repo.mark(&req.module_id, &req.link, &chapters)
+            } else {
+                repo.unmark(&req.module_id, &req.link, &chapters)
+            }
+        })
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// A download whose folder to show before it is queued.

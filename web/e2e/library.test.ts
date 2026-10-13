@@ -549,6 +549,20 @@ test.describe('selecting several series', () => {
 		);
 	});
 
+	test('marks them all seen, which clears their new-chapter badges', async ({ page }) => {
+		const bar = await select(page, ['Frieren', 'Kagurabachi']);
+		const badge = (title: string) =>
+			page.getByRole('checkbox', { name: title }).getByLabel(/new chapters$/);
+		await expect(badge('Frieren')).toHaveText('+4');
+		await expect(badge('Kagurabachi')).toHaveText('+2');
+
+		await bar.getByRole('button', { name: 'Mark all seen' }).click();
+
+		await expect(badge('Frieren')).toHaveCount(0);
+		await expect(badge('Kagurabachi')).toHaveCount(0);
+		await expect(badge('Omniscient Reader’s Viewpoint')).toHaveText('+3');
+	});
+
 	test('removes one after confirming', async ({ page }) => {
 		const bar = await select(page, ['Chainsaw Man']);
 

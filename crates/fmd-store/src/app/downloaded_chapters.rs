@@ -19,13 +19,38 @@ impl<'a> DownloadedChaptersRepo<'a> {
 
     /// Already recorded chapters are ignored.
     pub fn mark(&self, module_id: &str, manga_link: &str, chapter_links: &[&str]) -> Result<()> {
+        self.each_chapter(
+            "INSERT OR IGNORE INTO downloaded_chapters (module_id, manga_link, chapter_link)
+             VALUES (?1, ?2, ?3)",
+            module_id,
+            manga_link,
+            chapter_links,
+        )
+    }
+
+    /// Links not recorded are ignored. FMD2 has no unmark; this clears a mark by hand.
+    pub fn unmark(&self, module_id: &str, manga_link: &str, chapter_links: &[&str]) -> Result<()> {
+        self.each_chapter(
+            "DELETE FROM downloaded_chapters
+             WHERE module_id = ?1 AND manga_link = ?2 AND chapter_link = ?3",
+            module_id,
+            manga_link,
+            chapter_links,
+        )
+    }
+
+    /// Runs `sql` once per chapter link, in one transaction.
+    fn each_chapter(
+        &self,
+        sql: &str,
+        module_id: &str,
+        manga_link: &str,
+        chapter_links: &[&str],
+    ) -> Result<()> {
         let mut conn = self.db.lock();
         let tx = conn.transaction()?;
         {
-            let mut stmt = tx.prepare_cached(
-                "INSERT OR IGNORE INTO downloaded_chapters (module_id, manga_link, chapter_link)
-                 VALUES (?1, ?2, ?3)",
-            )?;
+            let mut stmt = tx.prepare_cached(sql)?;
             for chapter in chapter_links {
                 stmt.execute(params![module_id, manga_link, chapter])?;
             }

@@ -447,6 +447,27 @@ impl<'a> FavoriteRepo<'a> {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// Marks every chapter link stored at each favorite's last check seen, in one transaction,
+    /// so [`Self::new_chapter_count`] finds none. A favorite without stored links (not checked
+    /// since it was imported from FMD2) gets no marks.
+    pub fn mark_checked_chapters_seen(&self, ids: &[FavoriteId]) -> Result<()> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare_cached(
+                "INSERT OR IGNORE INTO downloaded_chapters (module_id, manga_link, chapter_link)
+                 SELECT f.module_id, f.link, c.link
+                 FROM favorites f JOIN favorite_chapters c ON c.favorite_id = f.id
+                 WHERE f.id = ?1",
+            )?;
+            for id in ids {
+                stmt.execute([id.0])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Stored chapter links not in `downloaded_chapters` (case-insensitive, like its key). With
     /// no stored links (e.g. imported from FMD2), the chapter count less the marks.
     pub fn new_chapter_count(&self, favorite: &Favorite) -> Result<u32> {

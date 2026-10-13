@@ -9,6 +9,7 @@
 	import FailingNotice from '#lib/components/series/FailingNotice.svelte';
 	import SeriesHeader from '#lib/components/series/SeriesHeader.svelte';
 	import SeriesLayout from '#lib/components/series/SeriesLayout.svelte';
+	import SeenBox from '#lib/components/series/SeenBox.svelte';
 	import SeriesSkeleton from '#lib/components/series/SeriesSkeleton.svelte';
 
 	const module = $derived(page.url.searchParams.get('module') ?? '');
@@ -72,6 +73,15 @@
 			.catch(() => {});
 	});
 
+	/** Shows the marks the server stored, unless another series was opened meanwhile. */
+	function marked(of: { module_id: string; link: string }, indices: number[], seen: boolean) {
+		if (series?.module_id !== of.module_id || series.link !== of.link) return;
+		for (const i of indices) {
+			const chapter = series?.chapters[i];
+			if (chapter) chapter.downloaded = seen;
+		}
+	}
+
 	function describe(e: unknown): string {
 		if (!(e instanceof ApiError)) return 'Could not reach FMD2r. Try again.';
 		if (e.status === 404) return `This series was not found${e.detail ? ` (${e.detail})` : ''}.`;
@@ -114,6 +124,7 @@
 					{format}
 					onqueued={(task) => events.queue.upsert(task)}
 				/>
+				<SeenBox {api} series={info} {selected} onmarked={marked} />
 			{/snippet}
 		</SeriesLayout>
 	{/if}

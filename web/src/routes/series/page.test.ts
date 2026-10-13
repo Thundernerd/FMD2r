@@ -15,6 +15,7 @@ const getSeries = vi.fn<(module: string, link: string) => Promise<SeriesInfo>>()
 const getSettings = vi.fn<() => Promise<Settings>>();
 const getModuleSettings = vi.fn<(id: string) => Promise<ModuleSettingsView>>();
 const saveFolder = vi.fn<Api['saveFolder']>();
+const markChaptersSeen = vi.fn<Api['markChaptersSeen']>();
 
 vi.mock('$app/state', () => ({
 	page: { url: new URL('http://localhost/series?module=mangadex&link=%2Ftitle%2Ffrieren') }
@@ -29,13 +30,15 @@ vi.mock('#lib/app.ts', () => {
 		| 'getSettings'
 		| 'getModuleSettings'
 		| 'saveFolder'
+		| 'markChaptersSeen'
 	> = {
 		getSeries: (module, link) => getSeries(module, link),
 		listModules: () => Promise.resolve([]),
 		listFavorites: () => Promise.resolve([]),
 		getSettings: () => getSettings(),
 		getModuleSettings: (id) => getModuleSettings(id),
-		saveFolder: (request) => saveFolder(request)
+		saveFolder: (request) => saveFolder(request),
+		markChaptersSeen: (change) => markChaptersSeen(change)
 	};
 	return { api, events: { queue: { upsert: () => {} } } };
 });
@@ -211,5 +214,78 @@ describe('the series page download folder', () => {
 		box.dispatchEvent(new Event('input', { bubbles: true }));
 		await shown();
 		expect(document.body.textContent).toContain('/srv/elsewhere/Frieren');
+	});
+});
+
+describe('marking chapters seen by hand', () => {
+	let component: ReturnType<typeof mount> | null = null;
+
+	const series: SeriesInfo = {
+		...frieren,
+		chapters: [
+			{ name: 'Chapter 1', link: '/c/1', downloaded: true },
+			{ name: 'Chapter 2', link: '/c/2', downloaded: true },
+			{ name: 'Chapter 3', link: '/c/3', downloaded: false }
+		]
+	};
+
+	beforeEach(async () => {
+		getSeries.mockResolvedValue(structuredClone(series));
+		getSettings.mockReturnValue(new Promise(() => {}));
+		getModuleSettings.mockReturnValue(new Promise(() => {}));
+		markChaptersSeen.mockReset().mockResolvedValue(undefined);
+		component = mount(SeriesPage, { target: document.body });
+		for (let i = 0; i < 3; i++) await settle();
+	});
+
+	afterEach(() => {
+		if (component) unmount(component);
+		component = null;
+		document.body.innerHTML = '';
+	});
+
+	const check = (name: string) =>
+		document.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)?.click();
+	const press = (label: string) =>
+		[...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label)?.click();
+	const seenMarks = () =>
+		[...document.querySelectorAll('section[aria-label="Chapters"] li')].filter((li) =>
+			li.textContent?.includes('✓ seen')
+		).length;
+
+	it('removes the marks of the selected chapters with "Mark unseen"', async () => {
+		expect(seenMarks()).toBe(2);
+		check('Chapter 1');
+		check('Chapter 2');
+		flushSync();
+
+		press('Mark unseen');
+		for (let i = 0; i < 3; i++) await settle();
+
+		expect(markChaptersSeen).toHaveBeenCalledWith({
+			module_id: 'mangadex',
+			link: '/title/frieren',
+			chapters: ['/c/1', '/c/2'],
+			seen: false
+		});
+		expect(seenMarks()).toBe(0);
+		expect(document.body.textContent).toContain('3 · 0 seen');
+	});
+
+	it('marks the selected chapters with "Mark seen"', async () => {
+		check('Chapter 3');
+		flushSync();
+
+		press('Mark seen');
+		for (let i = 0; i < 3; i++) await settle();
+
+		expect(markChaptersSeen).toHaveBeenCalledWith({
+			module_id: 'mangadex',
+			link: '/title/frieren',
+			chapters: ['/c/3'],
+			seen: true
+		});
+		expect(seenMarks()).toBe(3);
+		expect(document.body.textContent).toContain('3 · 3 seen');
 	});
 });

@@ -558,6 +558,14 @@
 						class="btn sm"
 						type="button"
 						disabled={bulkBusy}
+						title="Marks the chapters found by their last check seen, without downloading them"
+						onclick={() => bulk({ mark_seen: true }, 'Could not mark the series seen.')}
+						>Mark all seen</button
+					>
+					<button
+						class="btn sm"
+						type="button"
+						disabled={bulkBusy}
 						onclick={() => (bulkAction = 'remove')}>Remove…</button
 					>
 				</div>
