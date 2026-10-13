@@ -174,7 +174,7 @@ export interface paths {
 		/**
 		 * Add a series to the library (`btAddToFavoritesClick`,
 		 *     mangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only
-		 *     chapters added later are new.
+		 *     chapters added later are new. It goes in the first group whose rule matches it.
 		 */
 		post: operations['addFavorite'];
 		delete?: never;
@@ -407,7 +407,7 @@ export interface paths {
 		/** The library's groups in display order. */
 		get: operations['listGroups'];
 		put?: never;
-		/** Add a group after the others. */
+		/** Add a group after the others. With a rule, it collects the matching series in no group. */
 		post: operations['createGroup'];
 		delete?: never;
 		options?: never;
@@ -424,7 +424,7 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Reorder the groups. */
+		/** Reorder the groups; the series in no group go to the first group whose rule matches them. */
 		post: operations['reorderGroups'];
 		delete?: never;
 		options?: never;
@@ -446,7 +446,10 @@ export interface paths {
 		delete: operations['deleteGroup'];
 		options?: never;
 		head?: never;
-		/** Rename a group, or fold or unfold its section. */
+		/**
+		 * Rename a group, fold or unfold its section, or set or clear its rule. A rule set or changed
+		 *     collects the matching series in no group; the same rule again moves nothing.
+		 */
 		patch: operations['updateGroup'];
 		trace?: never;
 	};
@@ -1604,6 +1607,7 @@ export interface components {
 		GroupPatch: {
 			collapsed?: boolean | null;
 			name?: string | null;
+			rule?: null | components['schemas']['RuleView'];
 		};
 		/** @description A library group, as the Library's sections show it. */
 		GroupView: {
@@ -1612,6 +1616,7 @@ export interface components {
 			/** Format: int64 */
 			id: number;
 			name: string;
+			rule?: null | components['schemas']['RuleView'];
 		};
 		Health: {
 			/** @description Whether the API requires the password (as a bearer token or a login session). */
@@ -2179,6 +2184,7 @@ export interface components {
 		NewGroup: {
 			/** @description Unique, ignoring case. */
 			name: string;
+			rule?: null | components['schemas']['RuleView'];
 		};
 		/** @description A download to queue: chapters of one series. */
 		NewTask: {
@@ -2378,6 +2384,18 @@ export interface components {
 		/** @description A manga URL to resolve. */
 		ResolveRequest: {
 			url: string;
+		};
+		/** @enum {string} */
+		RuleKind: 'tag' | 'format';
+		/**
+		 * @description What an auto group collects: series in no group with the tag (website and MangaBaka genres,
+		 *     whole and ignoring case), or whose MangaBaka match has the format. The first group in order
+		 *     that matches a series gets it.
+		 */
+		RuleView: {
+			kind: components['schemas']['RuleKind'];
+			/** @description The tag, or one of `manga`, `manhwa`, `manhua`, `oel` and `other`. */
+			value: string;
 		};
 		/** @description The folder a download is saved in. */
 		SaveFolder: {
@@ -4069,7 +4087,7 @@ export interface operations {
 					'application/json': components['schemas']['GroupView'];
 				};
 			};
-			/** @description The name is empty */
+			/** @description The name or the rule's tag is empty, or the rule's format is unknown */
 			400: {
 				headers: {
 					[name: string]: unknown;
@@ -4165,7 +4183,7 @@ export interface operations {
 					'application/json': components['schemas']['GroupView'];
 				};
 			};
-			/** @description The name is empty */
+			/** @description The name or the rule's tag is empty, or the rule's format is unknown */
 			400: {
 				headers: {
 					[name: string]: unknown;

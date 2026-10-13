@@ -4,11 +4,14 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use fmd_store::{AppDb, LibraryGroup, LibraryGroupId};
+use fmd_core::favorites::auto_group_library;
+use fmd_core::metadata::FORMATS;
+use fmd_store::{AppDb, GroupRule, LibraryGroup, LibraryGroupId};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::error::ApiJson;
+use crate::favorites::null_or_value;
 use crate::{ApiError, AppState, Problem};
 
 /// A library group, as the Library's sections show it.
@@ -18,6 +21,8 @@ pub struct GroupView {
     pub name: String,
     /// Whether the Library shows the section folded.
     pub collapsed: bool,
+    /// Which series in no group it collects; `null` is filled by hand only.
+    pub rule: Option<RuleView>,
 }
 
 impl From<LibraryGroup> for GroupView {
@@ -26,6 +31,39 @@ impl From<LibraryGroup> for GroupView {
             id: group.id.0,
             name: group.name,
             collapsed: group.collapsed,
+            rule: group.rule.map(RuleView::from),
+        }
+    }
+}
+
+/// What an auto group collects: series in no group with the tag (website and MangaBaka genres,
+/// whole and ignoring case), or whose MangaBaka match has the format. The first group in order
+/// that matches a series gets it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct RuleView {
+    pub kind: RuleKind,
+    /// The tag, or one of `manga`, `manhwa`, `manhua`, `oel` and `other`.
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleKind {
+    Tag,
+    Format,
+}
+
+impl From<GroupRule> for RuleView {
+    fn from(rule: GroupRule) -> Self {
+        match rule {
+            GroupRule::Tag(value) => Self {
+                kind: RuleKind::Tag,
+                value,
+            },
+            GroupRule::Format(value) => Self {
+                kind: RuleKind::Format,
+                value,
+            },
         }
     }
 }
@@ -35,6 +73,9 @@ impl From<LibraryGroup> for GroupView {
 pub struct NewGroup {
     /// Unique, ignoring case.
     pub name: String,
+    /// Which series in no group it collects; missing or `null` is filled by hand only.
+    #[serde(default)]
+    pub rule: Option<RuleView>,
 }
 
 /// Fields of a group to change; missing ones stay.
@@ -42,6 +83,10 @@ pub struct NewGroup {
 pub struct GroupPatch {
     pub name: Option<String>,
     pub collapsed: Option<bool>,
+    /// Which series in no group it collects; `null` clears it.
+    #[serde(default, deserialize_with = "null_or_value")]
+    #[schema(value_type = Option<RuleView>, nullable)]
+    pub rule: Option<Option<RuleView>>,
 }
 
 /// The groups' new order.
@@ -61,12 +106,12 @@ pub(crate) async fn list(State(state): State<AppState>) -> Result<Json<Vec<Group
     Ok(Json(groups.into_iter().map(GroupView::from).collect()))
 }
 
-/// Add a group after the others.
+/// Add a group after the others. With a rule, it collects the matching series in no group.
 #[utoipa::path(post, path = "/api/library/groups", tag = "library", operation_id = "createGroup",
     request_body = NewGroup,
     responses(
         (status = 201, body = GroupView),
-        (status = 400, body = Problem, description = "The name is empty"),
+        (status = 400, body = Problem, description = "The name or the rule's tag is empty, or the rule's format is unknown"),
         (status = 409, body = Problem, description = "Another group has the name, ignoring case"),
     ))]
 pub(crate) async fn create(
@@ -74,23 +119,32 @@ pub(crate) async fn create(
     ApiJson(req): ApiJson<NewGroup>,
 ) -> Result<(StatusCode, Json<GroupView>), ApiError> {
     let name = group_name(&req.name)?;
+    let rule = req.rule.map(group_rule).transpose()?;
+    let metadata = state.metadata.clone();
     let group = state
         .blocking(move |db| -> Result<_, ApiError> {
             ensure_free(db, &name, None)?;
-            Ok(db.library_groups().create(&name)?)
+            let mut group = db.library_groups().create(&name)?;
+            if rule.is_some() {
+                group.rule = rule;
+                db.library_groups().update(&group)?;
+                auto_group_library(db, metadata.as_ref())?;
+            }
+            Ok(group)
         })
         .await?;
     Ok((StatusCode::CREATED, Json(group.into())))
 }
 
-/// Rename a group, or fold or unfold its section.
+/// Rename a group, fold or unfold its section, or set or clear its rule. A rule set or changed
+/// collects the matching series in no group; the same rule again moves nothing.
 #[utoipa::path(patch, path = "/api/library/groups/{id}", tag = "library",
     operation_id = "updateGroup",
     params(("id" = i64, Path, description = "Group id")),
     request_body = GroupPatch,
     responses(
         (status = 200, body = GroupView),
-        (status = 400, body = Problem, description = "The name is empty"),
+        (status = 400, body = Problem, description = "The name or the rule's tag is empty, or the rule's format is unknown"),
         (status = 404, body = Problem, description = "No such group"),
         (status = 409, body = Problem, description = "Another group has the name, ignoring case"),
     ))]
@@ -100,6 +154,11 @@ pub(crate) async fn patch(
     ApiJson(req): ApiJson<GroupPatch>,
 ) -> Result<Json<GroupView>, ApiError> {
     let name = req.name.as_deref().map(group_name).transpose()?;
+    let rule = req
+        .rule
+        .map(|r| r.map(group_rule).transpose())
+        .transpose()?;
+    let metadata = state.metadata.clone();
     let group = state
         .blocking(move |db| -> Result<_, ApiError> {
             let id = LibraryGroupId(id);
@@ -111,7 +170,16 @@ pub(crate) async fn patch(
             if let Some(collapsed) = req.collapsed {
                 group.collapsed = collapsed;
             }
+            let rule_set = rule
+                .as_ref()
+                .is_some_and(|rule| rule.is_some() && *rule != group.rule);
+            if let Some(rule) = rule {
+                group.rule = rule;
+            }
             db.library_groups().update(&group)?;
+            if rule_set {
+                auto_group_library(db, metadata.as_ref())?;
+            }
             Ok(group)
         })
         .await?;
@@ -141,7 +209,7 @@ pub(crate) async fn delete(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Reorder the groups.
+/// Reorder the groups; the series in no group go to the first group whose rule matches them.
 #[utoipa::path(post, path = "/api/library/groups/reorder", tag = "library",
     operation_id = "reorderGroups",
     request_body = GroupOrder,
@@ -150,13 +218,32 @@ pub(crate) async fn reorder(
     State(state): State<AppState>,
     ApiJson(order): ApiJson<GroupOrder>,
 ) -> Result<StatusCode, ApiError> {
+    let metadata = state.metadata.clone();
     state
         .blocking(move |db| -> Result<(), ApiError> {
             let ids: Vec<_> = order.ids.into_iter().map(LibraryGroupId).collect();
-            Ok(db.library_groups().reorder(&ids)?)
+            db.library_groups().reorder(&ids)?;
+            auto_group_library(db, metadata.as_ref())?;
+            Ok(())
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The rule with its value trimmed; an empty tag or an unknown format is a 400.
+fn group_rule(rule: RuleView) -> Result<GroupRule, ApiError> {
+    let value = rule.value.trim().to_owned();
+    match rule.kind {
+        RuleKind::Tag if value.is_empty() => Err(ApiError::BadRequest(
+            "the rule's tag cannot be empty".into(),
+        )),
+        RuleKind::Tag => Ok(GroupRule::Tag(value)),
+        RuleKind::Format if FORMATS.contains(&value.as_str()) => Ok(GroupRule::Format(value)),
+        RuleKind::Format => Err(ApiError::BadRequest(format!(
+            "{value:?} is not a format; one of {}",
+            FORMATS.join(", ")
+        ))),
+    }
 }
 
 /// The trimmed name; empty is a 400.
