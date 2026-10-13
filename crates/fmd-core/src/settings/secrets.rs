@@ -2,7 +2,7 @@
 //! accounts' threat model). FMD2 only obfuscates the global proxy credentials with
 //! `EncryptString` (mangadownloader/forms/frmMain.pas:5878-5879).
 
-use fmd_store::{Cipher, StoreError};
+use fmd_store::{AppDb, Cipher, StoreError};
 use serde_json::{Map, Value};
 
 /// Paths of the secrets inside each settings group's JSON.
@@ -91,6 +91,26 @@ pub(super) fn unseal(cipher: &dyn Cipher, json: &mut Value, path: &[&str]) -> Fo
         }
     }
     Found::NotPlain
+}
+
+/// Decrypts every encrypted settings secret stored in `db`: a [`StoreError::Crypto`] when one
+/// does not decrypt with `db`'s key (unlike loading the settings, which unsets it).
+pub fn check_settings_key(db: &AppDb) -> Result<(), StoreError> {
+    let repo = db.settings();
+    for (group, path) in SETTINGS_SECRETS {
+        let Some(mut json) = repo.get::<Value>(group)? else {
+            continue;
+        };
+        let sealed = slot(&mut json, path)
+            .and_then(|slot| slot.get(ENCRYPTED))
+            .and_then(Value::as_str);
+        if let Some(sealed) = sealed {
+            open(db.cipher(), sealed).map_err(|reason| {
+                StoreError::Crypto(format!("the stored {group}.{}: {reason}", path.join(".")))
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn open(cipher: &dyn Cipher, sealed: &str) -> Result<String, String> {

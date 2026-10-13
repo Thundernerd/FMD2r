@@ -1074,9 +1074,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "axum",
  "brotli",
  "clap",
  "flate2",
+ "fmd-core",
  "fmd-http",
  "fmd-import",
  "fmd-lua",
@@ -1084,11 +1086,15 @@ dependencies = [
  "fmd-smoke",
  "fmd-store",
  "fmd-xpath",
+ "http-body-util",
  "predicates",
+ "rusqlite",
  "serde_json",
  "tempfile",
  "tokio",
+ "tower",
  "tracing-subscriber",
+ "zip",
 ]
 
 [[package]]

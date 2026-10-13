@@ -15,6 +15,7 @@ pub use module_overrides::{
     ProxyOverrideType, StoredModuleHttpSettings, effective_limits,
 };
 pub use password::verify_password;
+pub use secrets::check_settings_key;
 pub use service::{FieldError, ModulePatch, SettingsError, SettingsService};
 pub use validate::close_rename_tokens;
 pub(crate) use validate::{normalize, sync_default_dir};

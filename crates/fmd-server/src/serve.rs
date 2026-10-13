@@ -50,6 +50,8 @@ pub enum ServeError {
         path: PathBuf,
         source: std::io::Error,
     },
+    #[error("restoring the backup staged in setup: {0}")]
+    Restore(#[from] crate::RestoreError),
     #[error("app.db or lists.db: {0}")]
     Store(#[from] fmd_store::StoreError),
     #[error("settings: {0}")]
@@ -76,8 +78,15 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
     })?;
     let db_path = config.data_dir.join("app.db");
     let lists_path = config.data_dir.join("lists.db");
+    let dir = config.data_dir.clone();
     // Opening the stores and loading the settings blocks.
     let state = tokio::task::spawn_blocking(move || -> Result<AppState, ServeError> {
+        // A backup uploaded in the setup wizard replaces the files before they open.
+        if crate::apply_staged_restore(&dir)? {
+            tracing::info!(target: "fmd_server",
+                "restored the backup uploaded in setup; the files it replaced are kept as \
+                 *.before-restore");
+        }
         let lists = ListsDb::open(lists_path)?;
         let state = AppState::new(AppDb::open(db_path)?)?;
         // Before anything else stores settings, which would make a fresh install look set up.

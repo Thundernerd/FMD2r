@@ -85,6 +85,17 @@ impl<'a> AccountRepo<'a> {
         .transpose()
     }
 
+    /// Decrypts one saved login: a [`StoreError::Crypto`] when the cipher's key is not the one
+    /// the logins were saved with. Nothing to check without any.
+    pub fn check_key(&self) -> Result<()> {
+        let sealed: Option<Vec<u8>> = {
+            let conn = self.db.lock();
+            conn.query_row("SELECT password FROM accounts LIMIT 1", [], |r| r.get(0))
+                .optional()?
+        };
+        sealed.map_or(Ok(()), |sealed| self.decrypt(&sealed).map(drop))
+    }
+
     pub fn upsert(&self, account: &Account) -> Result<()> {
         let username = self.cipher.encrypt(account.username.as_bytes())?;
         let password = self.cipher.encrypt(account.password.as_bytes())?;

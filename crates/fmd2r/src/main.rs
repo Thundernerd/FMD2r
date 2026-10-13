@@ -37,6 +37,9 @@ enum Command {
     /// Import FMD2's userdata (queue, favorites, downloaded chapters, module settings, accounts,
     /// settings). Run it while the server is stopped.
     Import(ImportArgs),
+    /// Restore a backup from "Download backup": replaces app.db, accounts.key and custom.css,
+    /// keeping the old ones as *.before-restore. Run it while the server is stopped.
+    Restore(RestoreArgs),
     /// Exercise website modules from the command line.
     #[command(subcommand)]
     Module(ModuleCommand),
@@ -96,6 +99,15 @@ struct ImportArgs {
     timezone: Option<TimeZone>,
 }
 
+#[derive(Args)]
+struct RestoreArgs {
+    /// The backup zip, `fmd2r-backup-<date>.zip`.
+    zip: PathBuf,
+    /// Directory holding the databases.
+    #[arg(long, default_value = "data")]
+    data_dir: PathBuf,
+}
+
 /// Log lines kept for `GET /api/logs`.
 const LOG_LINES: usize = 2000;
 
@@ -104,6 +116,7 @@ fn main() -> anyhow::Result<()> {
         Command::Serve(args) => serve(args),
         Command::Openapi { out } => openapi(out),
         Command::Import(args) => import(args),
+        Command::Restore(args) => restore(args),
         Command::Module(command) => module::run(command),
         Command::Xpath(command) => xpath::run(command),
     }
@@ -160,5 +173,16 @@ fn import(args: ImportArgs) -> anyhow::Result<()> {
     let report = fmd_import::import(&args.from, &db, &cipher, &opts)
         .with_context(|| format!("importing {}", args.from.display()))?;
     print!("{report}");
+    Ok(())
+}
+
+fn restore(args: RestoreArgs) -> anyhow::Result<()> {
+    fmd_server::restore_backup(&args.zip, &args.data_dir)
+        .with_context(|| format!("restoring {}", args.zip.display()))?;
+    println!(
+        "Restored {} into {}; the files it replaced are kept as *.before-restore.",
+        args.zip.display(),
+        args.data_dir.display()
+    );
     Ok(())
 }

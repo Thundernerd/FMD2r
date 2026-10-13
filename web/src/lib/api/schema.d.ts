@@ -971,6 +971,27 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/setup/restore': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Restore a backup from `GET /api/backup` during setup: the backup is validated and staged,
+		 *     and replaces this server's data at its next start. Only a server that is not set up yet takes
+		 *     one; restore over a set-up install with `fmd2r restore` while the server is stopped.
+		 */
+		post: operations['restoreBackup'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/tasks': {
 		parameters: {
 			query?: never;
@@ -5466,6 +5487,65 @@ export interface operations {
 			};
 			/** @description Malformed body */
 			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	restoreBackup: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** @description A backup from `GET /api/backup` */
+		requestBody: {
+			content: {
+				'application/zip': string;
+			};
+		};
+		responses: {
+			/** @description The backup is valid and staged: restart FMD2r to finish restoring */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description Not a backup, one from a newer FMD2r, or one whose key does not decrypt its secrets */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The server is set up already */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The zip, or what it unpacks to, is over the size limit */
+			413: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The server has no data directory */
+			503: {
 				headers: {
 					[name: string]: unknown;
 				};

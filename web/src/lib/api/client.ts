@@ -246,6 +246,13 @@ export interface Api {
 	 * runs, 413 when the zip is too large, 422 for a bad path map or time zone.
 	 */
 	importFmd2(zip: Blob, options: ImportOptions): Promise<ImportReport>;
+	/**
+	 * Uploads a backup from {@link Api.backupDownloadUrl} to a server that is not set up yet. The
+	 * server validates and stages it; it replaces the server's data at its next start. Rejects
+	 * with an {@link ApiError} carrying the server's reason: 400 for a zip that is no valid
+	 * backup, 409 once the server is set up, 413 when the zip is too large.
+	 */
+	restoreBackup(zip: Blob): Promise<void>;
 }
 
 /** What a task's action buttons do (`POST /api/tasks/{id}/<action>`). */
@@ -691,6 +698,19 @@ export function createApi({
 				throw new ApiError(res.response.status, 'importFmd2', problem?.detail ?? null);
 			}
 			return res.data;
+		},
+		async restoreBackup(zip) {
+			const res = await client.POST('/api/setup/restore', {
+				// The body is the zip itself, sent as is.
+				body: zip as unknown as string,
+				bodySerializer: (body) => body,
+				headers: { 'content-type': 'application/zip' }
+			});
+			if (!res.response.ok) {
+				// Every error here is a `Problem`.
+				const problem = res.error as Partial<Problem> | undefined;
+				throw new ApiError(res.response.status, 'restoreBackup', problem?.detail ?? null);
+			}
 		}
 	};
 	return api;

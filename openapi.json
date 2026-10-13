@@ -2803,6 +2803,72 @@
         }
       }
     },
+    "/api/setup/restore": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Restore a backup from `GET /api/backup` during setup: the backup is validated and staged,\nand replaces this server's data at its next start. Only a server that is not set up yet takes\none; restore over a set-up install with `fmd2r restore` while the server is stopped.",
+        "operationId": "restoreBackup",
+        "requestBody": {
+          "description": "A backup from `GET /api/backup`",
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The backup is valid and staged: restart FMD2r to finish restoring"
+          },
+          "400": {
+            "description": "Not a backup, one from a newer FMD2r, or one whose key does not decrypt its secrets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The server is set up already",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The zip, or what it unpacks to, is over the size limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server has no data directory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks": {
       "get": {
         "tags": [

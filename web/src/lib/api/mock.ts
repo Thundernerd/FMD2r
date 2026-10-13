@@ -762,6 +762,22 @@ export function createMockBackend({
 		return json(mockImportReport(dryRun, query.getAll('map_path'), exists));
 	};
 
+	/**
+	 * `POST /api/setup/restore`: anything starting like a zip is a valid backup, staged for a
+	 * restart the mock never has; refused once set up, as the server does.
+	 */
+	const restoreBackup = async (req: Request): Promise<Response> => {
+		if (settings.getSettings().general.setup_completed) {
+			const detail = 'FMD2r is set up already: stop it and restore with `fmd2r restore`';
+			return json({ status: 409, detail }, 409);
+		}
+		const zip = new Uint8Array(await req.arrayBuffer());
+		if (zip[0] !== 0x50 || zip[1] !== 0x4b) {
+			return json({ status: 400, detail: 'not a zip file: invalid Zip archive' }, 400);
+		}
+		return new Response(null, { status: 204 });
+	};
+
 	const fetch = async (req: Request): Promise<Response> => {
 		const { pathname, searchParams } = new URL(req.url);
 		const route = `${req.method} ${pathname}`;
@@ -928,6 +944,7 @@ export function createMockBackend({
 			return body ? json(body, status) : new Response(null, { status });
 		}
 		if (route === 'POST /api/import') return importUserdata(req, searchParams);
+		if (route === 'POST /api/setup/restore') return restoreBackup(req);
 		if (route === 'GET /api/logs') return json(logs);
 		if (route === 'GET /api/jobs') return json(jobs);
 		if (route === 'GET /api/settings') return json(settings.getSettings());
