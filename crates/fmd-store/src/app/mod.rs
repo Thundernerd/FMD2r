@@ -15,7 +15,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::crypto::{ACCOUNTS_KEY_FILE, Cipher, KeyFileCipher};
-use crate::db::Db;
+use crate::db::{Db, IN_MEMORY};
 use crate::error::Result;
 use accounts::AccountRepo;
 use downloaded_chapters::DownloadedChaptersRepo;
@@ -38,8 +38,6 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/app_v7.sql"),
     include_str!("../migrations/app_v8.sql"),
 ];
-
-const IN_MEMORY: &str = ":memory:";
 
 /// Handle to `app.db`.
 #[derive(Clone)]
