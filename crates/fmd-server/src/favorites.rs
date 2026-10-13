@@ -8,11 +8,12 @@ use std::sync::Arc;
 
 use fmd_core::download::NewDownload;
 use fmd_core::favorites::{
-    CheckMode, CheckScope, TagsAndFormat, favorite_save_to, tags_and_format, website_info,
+    CheckMode, CheckScope, TagsAndFormat, auto_group, favorite_save_to, stored_tags_and_format,
+    website_info,
 };
-use fmd_core::metadata::{Metadata, MetadataJobs};
+use fmd_core::metadata::Metadata;
 use fmd_core::settings::LibraryTitle;
-use fmd_store::{AppDb, Favorite, FavoriteId, LibraryGroupId, ListsDb, NewFavorite, StoreError};
+use fmd_store::{Favorite, FavoriteId, LibraryGroupId, ListsDb, NewFavorite, StoreError};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -136,7 +137,7 @@ pub struct AddFavorite {
 
 /// Add a series to the library (`btAddToFavoritesClick`,
 /// mangadownloader/forms/frmMain.pas:2797-2846): its current chapters count as seen, so only
-/// chapters added later are new.
+/// chapters added later are new. It goes in the first group whose rule matches it.
 #[utoipa::path(post, path = "/api/favorites", tag = "library", operation_id = "addFavorite",
     request_body = AddFavorite,
     responses(
@@ -160,6 +161,7 @@ pub(crate) async fn add(
         req.save_to.as_deref().unwrap_or_default(),
     );
     let module_id = req.module_id.clone();
+    let metadata = state.metadata.clone();
     let favorite = state
         .blocking(move |db| -> Result<Favorite, ApiError> {
             if db.favorites().find(&module_id, &info.link)?.is_some() {
@@ -182,6 +184,9 @@ pub(crate) async fn add(
             let links: Vec<&str> = info.chapters.iter().map(|c| c.link.as_str()).collect();
             db.downloaded_chapters()
                 .mark(&module_id, &info.link, &links)?;
+            if auto_group(db, metadata.as_ref(), &[favorite.id])? > 0 {
+                favorite = db.favorites().get(favorite.id)?.ok_or(ApiError::NotFound)?;
+            }
             Ok(favorite)
         })
         .await?;
@@ -206,7 +211,7 @@ pub struct FavoritePatch {
 }
 
 /// Tells a field that is `null` (`Some(None)`) from a missing one (`None`, by `default`).
-fn null_or_value<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+pub(crate) fn null_or_value<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: Deserialize<'de>,
@@ -554,20 +559,6 @@ impl DisplayTitles {
     }
 }
 
-/// `favorite`'s tags and format. Blocking.
-fn tags_of(
-    db: &AppDb,
-    metadata: Option<&MetadataJobs>,
-    favorite: &Favorite,
-) -> Result<TagsAndFormat, StoreError> {
-    let genres = db
-        .favorites()
-        .info(favorite.id)?
-        .map(|info| info.genres)
-        .unwrap_or_default();
-    Ok(tags_and_format(metadata, favorite, &genres))
-}
-
 async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
     let titles = DisplayTitles::new(state);
     let metadata = state.metadata.clone();
@@ -578,7 +569,7 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
             for favorite in favorites {
                 let new_chapters = db.favorites().new_chapter_count(&favorite)?;
                 let display_title = titles.of(&favorite);
-                let tagged = tags_of(db, metadata.as_ref(), &favorite)?;
+                let tagged = stored_tags_and_format(db, metadata.as_ref(), &favorite)?;
                 rows.push((favorite, display_title, new_chapters, tagged));
             }
             Ok(rows)
@@ -611,7 +602,7 @@ async fn view(state: &AppState, favorite: Favorite) -> Result<FavoriteView, ApiE
             Ok((
                 titles.of(&counted),
                 db.favorites().new_chapter_count(&counted)?,
-                tags_of(db, metadata.as_ref(), &counted)?,
+                stored_tags_and_format(db, metadata.as_ref(), &counted)?,
             ))
         })
         .await?;
