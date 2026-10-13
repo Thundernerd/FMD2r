@@ -23,10 +23,16 @@ vi.mock('#lib/app.ts', () => {
 	// What the page calls before anyone presses a button.
 	const api: Pick<
 		Api,
-		'getSeries' | 'listModules' | 'getSettings' | 'getModuleSettings' | 'saveFolder'
+		| 'getSeries'
+		| 'listModules'
+		| 'listFavorites'
+		| 'getSettings'
+		| 'getModuleSettings'
+		| 'saveFolder'
 	> = {
 		getSeries: (module, link) => getSeries(module, link),
 		listModules: () => Promise.resolve([]),
+		listFavorites: () => Promise.resolve([]),
 		getSettings: () => getSettings(),
 		getModuleSettings: (id) => getModuleSettings(id),
 		saveFolder: (request) => saveFolder(request)

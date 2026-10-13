@@ -9,6 +9,7 @@
 		emptyFilters,
 		facets,
 		filterFavorites,
+		isFailing,
 		websites,
 		type LibraryFilters
 	} from '#lib/library/filters.ts';
@@ -307,6 +308,11 @@
 		{#if favorite.new_chapters > 0}
 			<span class="badge num" aria-label="{favorite.new_chapters} new chapters"
 				>+{favorite.new_chapters}</span
+			>
+		{/if}
+		{#if isFailing(favorite)}
+			<span class="badge failing" title="The website hasn't answered its last checks"
+				>Not found</span
 			>
 		{/if}
 	</span>
@@ -781,6 +787,12 @@
 		background: var(--accent);
 		color: var(--accent-fg);
 		box-shadow: var(--shadow);
+	}
+	.badge.failing {
+		right: auto;
+		left: 6px;
+		background: var(--bad-soft);
+		color: var(--bad);
 	}
 	.t {
 		font-weight: 600;

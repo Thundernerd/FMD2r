@@ -157,3 +157,47 @@ fn deleting_a_group_ungroups_its_favorites() {
     let kept = db.favorites().get(favorite.id).unwrap().unwrap();
     assert_eq!(kept.group_id, None);
 }
+
+#[test]
+fn failed_checks_count_up_keeping_the_last_error_until_cleared() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let favorites = db.favorites();
+    let a = favorites.create(&new_favorite("/a")).unwrap();
+    let b = favorites.create(&new_favorite("/b")).unwrap();
+    assert_eq!(a.check_failures, 0);
+    assert_eq!(a.last_check_error, None);
+    assert_eq!(a.date_last_failed, None);
+
+    favorites
+        .record_check_failure(a.id, "404 Not Found", 1_700_000_000_000)
+        .unwrap();
+    favorites
+        .record_check_failure(a.id, "connection refused", 1_700_000_060_000)
+        .unwrap();
+
+    let failing = favorites.get(a.id).unwrap().unwrap();
+    assert_eq!(failing.check_failures, 2);
+    assert_eq!(
+        failing.last_check_error.as_deref(),
+        Some("connection refused")
+    );
+    assert_eq!(failing.date_last_failed, Some(1_700_000_060_000));
+    assert_eq!(
+        favorites.get(b.id).unwrap().unwrap().check_failures,
+        0,
+        "only that favorite"
+    );
+
+    // An edit leaves the failures as they are.
+    let mut renamed = failing.clone();
+    renamed.title = "Renamed".into();
+    favorites.update(&renamed).unwrap();
+    assert_eq!(favorites.get(a.id).unwrap().unwrap().check_failures, 2);
+
+    favorites.clear_check_failures(a.id).unwrap();
+    let cleared = favorites.get(a.id).unwrap().unwrap();
+    assert_eq!(cleared.check_failures, 0);
+    assert_eq!(cleared.last_check_error, None);
+    assert_eq!(cleared.date_last_failed, None);
+}

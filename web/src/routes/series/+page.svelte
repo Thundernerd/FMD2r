@@ -6,6 +6,7 @@
 	import { defaultDestination } from '#lib/destinations/destinations.ts';
 	import ChapterList from '#lib/components/series/ChapterList.svelte';
 	import DownloadBox from '#lib/components/series/DownloadBox.svelte';
+	import FailingNotice from '#lib/components/series/FailingNotice.svelte';
 	import SeriesHeader from '#lib/components/series/SeriesHeader.svelte';
 	import SeriesLayout from '#lib/components/series/SeriesLayout.svelte';
 	import SeriesSkeleton from '#lib/components/series/SeriesSkeleton.svelte';
@@ -87,6 +88,9 @@
 <div class="page">
 	<a class="btn ghost back" href="/">← Library</a>
 	<p class="visually-hidden" aria-live="polite">{!error && !series ? 'Loading series…' : ''}</p>
+	{#if module && link}
+		<FailingNotice {api} {module} {link} check={events.favorites} />
+	{/if}
 	{#if error}
 		<h1>Series</h1>
 		<p class="problem" role="alert">{error}</p>

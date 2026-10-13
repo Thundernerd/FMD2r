@@ -38,6 +38,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/app_v7.sql"),
     include_str!("../migrations/app_v8.sql"),
     include_str!("../migrations/app_v9.sql"),
+    include_str!("../migrations/app_v10.sql"),
 ];
 
 /// Handle to `app.db`.

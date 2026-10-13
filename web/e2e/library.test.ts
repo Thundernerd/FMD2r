@@ -142,7 +142,8 @@ test('Check now shows the check’s progress and the new chapters it found', asy
 	await page.getByRole('button', { name: 'Check now' }).click();
 
 	await expect(page.getByRole('progressbar', { name: 'Check progress' })).toBeVisible();
-	await expect(page.getByRole('status')).toContainText(/Checking \d+\/7/);
+	// Seven are enabled; the failing Apothecary Diaries waits a day between checks.
+	await expect(page.getByRole('status')).toContainText(/Checking \d+\/6/);
 	// The mock finds one new chapter of Chainsaw Man, one favorite a second.
 	await expect(page.getByRole('button', { name: 'Check now' })).toBeVisible({ timeout: 15_000 });
 	await expect(cards.filter({ hasText: 'Chainsaw Man' })).toContainText('+1');
@@ -574,4 +575,31 @@ test.describe('selecting several series', () => {
 
 		await expect(bar.getByRole('status')).toContainText('2 selected (1 hidden)');
 	});
+});
+
+test('a series whose website keeps failing is marked, and its page offers another website', async ({
+	page
+}) => {
+	await page.goto('/');
+	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
+	const gone = cards.filter({ hasText: 'The Apothecary Diaries' });
+	await expect(gone).toContainText('Not found');
+	await expect(cards.filter({ hasText: 'Frieren' })).not.toContainText('Not found');
+
+	await page
+		.getByRole('group', { name: 'Show' })
+		.getByRole('button', { name: /^Failing/ })
+		.click();
+	await expect(cards).toHaveCount(1);
+
+	await gone.click();
+	await expect(page.getByRole('alert').first()).toContainText(
+		"The website hasn't answered for this series in its last 4 checks: HTTP 404 Not Found"
+	);
+	await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible();
+	await page.getByRole('link', { name: 'Find on another website' }).click();
+	await expect(page).toHaveURL('/discover?q=The+Apothecary+Diaries');
+	await expect(page.getByRole('searchbox', { name: 'Search titles' })).toHaveValue(
+		'The Apothecary Diaries'
+	);
 });

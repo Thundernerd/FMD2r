@@ -44,6 +44,12 @@ pub struct Favorite {
     pub cover_url: Option<String>,
     /// The library group it is in; `None` is "Ungrouped".
     pub group_id: Option<LibraryGroupId>,
+    /// Consecutive checks whose info fetch failed; see [`FavoriteRepo::record_check_failure`].
+    pub check_failures: u32,
+    /// Why the last of them failed.
+    pub last_check_error: Option<String>,
+    /// Unix milliseconds of the last of them.
+    pub date_last_failed: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -118,7 +124,8 @@ pub struct ImportedFavorite {
 }
 
 const COLUMNS: &str = "id, module_id, link, title, status, current_chapter, save_to, enabled, \
-     sort_order, date_added, date_last_checked, date_last_updated, cover_url, group_id";
+     sort_order, date_added, date_last_checked, date_last_updated, cover_url, group_id, check_failures, last_check_error, \
+     date_last_failed";
 
 fn favorite_from_row(row: &Row<'_>) -> rusqlite::Result<Favorite> {
     Ok(Favorite {
@@ -136,6 +143,9 @@ fn favorite_from_row(row: &Row<'_>) -> rusqlite::Result<Favorite> {
         date_last_updated: row.get(11)?,
         cover_url: row.get(12)?,
         group_id: row.get::<_, Option<i64>>(13)?.map(LibraryGroupId),
+        check_failures: row.get(14)?,
+        last_check_error: row.get(15)?,
+        date_last_failed: row.get(16)?,
     })
 }
 
@@ -363,6 +373,31 @@ impl<'a> FavoriteRepo<'a> {
         }
         tx.commit()?;
         Ok(Some(favorites))
+    }
+
+    /// Counts a check whose info fetch failed with `error` at `at` (Unix milliseconds). Beyond
+    /// FMD2, which only logs it (`DoCheck`, baseunits/uFavoritesManager.pas:391-394).
+    pub fn record_check_failure(&self, id: FavoriteId, error: &str, at: i64) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute(
+            "UPDATE favorites SET check_failures = check_failures + 1, last_check_error = ?2,
+                date_last_failed = ?3
+             WHERE id = ?1",
+            params![id.0, error, at],
+        )?;
+        Ok(())
+    }
+
+    /// Forgets the failed checks, after one succeeded.
+    pub fn clear_check_failures(&self, id: FavoriteId) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute(
+            "UPDATE favorites SET check_failures = 0, last_check_error = NULL,
+                date_last_failed = NULL
+             WHERE id = ?1",
+            [id.0],
+        )?;
+        Ok(())
     }
 
     /// Puts the favorite in `group` unless it is in a group already, or gone. Returns whether
