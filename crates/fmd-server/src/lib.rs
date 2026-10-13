@@ -3,6 +3,8 @@
 mod about;
 mod accounts;
 mod auth;
+mod backup;
+mod comic_server;
 mod covers;
 mod custom_css;
 mod error;
@@ -20,6 +22,7 @@ mod lua_catalog;
 mod metadata;
 mod module_settings;
 mod module_updates;
+mod notifications;
 mod series;
 mod serve;
 mod services;
@@ -41,6 +44,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 pub use accounts::{AccountInfo, AccountRequest, AccountState, AccountStateChange};
+pub use comic_server::{ComicServerTest, ComicServerTestRequest};
 pub use covers::{
     CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
 };
@@ -61,6 +65,7 @@ pub use log_files::{LogRotation, LogWriter};
 pub use logs::{LogBuffer, LogFilter, LogLevel, LogLine};
 pub use metadata::{MangaBakaSearchResult, MangaBakaStatus};
 pub use module_settings::{ModuleOptionSetting, ModuleSettingsView, ModuleSummary};
+pub use notifications::NotificationTest;
 pub use series::{
     ChapterInfo, MangaBakaMatch, MangaBakaSeries, MatchRequest, ResolveRequest, SeenChange,
     SeriesInfo, SeriesLink, SeriesRef, SeriesStatus,
@@ -94,6 +99,7 @@ pub use tools::{SystemTools, ToolCheck, ToolProbe};
         ListEvent,
         fmd_core::favorites::FavoritesEvent,
         fmd_core::metadata::MetadataEvent,
+        fmd_core::notifications::Channel,
         AccountStateChange
     ))
 )]
@@ -122,6 +128,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(jobs::run))
         .routes(routes!(jobs::cancel))
         .routes(routes!(about::about))
+        .routes(routes!(backup::download))
         .routes(routes!(import::import))
         .routes(routes!(covers::get))
         .routes(routes!(covers::series::get))
@@ -129,6 +136,8 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(settings::patch_all))
         .routes(routes!(settings::preview_rename))
         .routes(routes!(settings::check_folders))
+        .routes(routes!(comic_server::test))
+        .routes(routes!(notifications::test))
         .routes(routes!(module_settings::list))
         .routes(routes!(module_settings::get, module_settings::patch))
         .routes(routes!(series::resolve))

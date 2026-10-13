@@ -11,7 +11,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fmd_lua::WorkerPool;
 use fmd_store::{
-    AppDb, Event, EventSeverity, Favorite, FavoriteId, FavoriteInfo, NewEvent, StoreError,
+    AppDb, Event, EventSeverity, Favorite, FavoriteId, FavoriteInfo, GroupRule, LibraryGroup,
+    NewEvent, StoreError,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -125,6 +126,82 @@ pub fn tags_and_format(
         tags,
         format: found.map(|m| format_of(&m.series.kind).to_owned()),
     }
+}
+
+/// `favorite`'s tags and format, from the website genres stored with it. Blocking.
+pub fn stored_tags_and_format(
+    db: &AppDb,
+    metadata: Option<&MetadataJobs>,
+    favorite: &Favorite,
+) -> Result<TagsAndFormat, StoreError> {
+    let genres = db
+        .favorites()
+        .info(favorite.id)?
+        .map(|info| info.genres)
+        .unwrap_or_default();
+    Ok(tags_and_format(metadata, favorite, &genres))
+}
+
+/// Whether a series with `tagged` belongs in a group with `rule`: a tag whole and ignoring case,
+/// a format exactly. A series without a MangaBaka match has no format.
+fn rule_matches(rule: &GroupRule, tagged: &TagsAndFormat) -> bool {
+    match rule {
+        GroupRule::Tag(tag) => {
+            let tag = tag.trim().to_lowercase();
+            tagged.tags.iter().any(|t| t.to_lowercase() == tag)
+        }
+        GroupRule::Format(format) => tagged.format.as_deref() == Some(format.as_str()),
+    }
+}
+
+/// Puts each of `ids` that is in no group in the first group, by order, whose rule matches its
+/// tags and format. A series in a group, by hand or by rule, stays. Returns how many it moved.
+/// Blocking.
+pub fn auto_group(
+    db: &AppDb,
+    metadata: Option<&MetadataJobs>,
+    ids: &[FavoriteId],
+) -> Result<usize, StoreError> {
+    let groups: Vec<LibraryGroup> = db
+        .library_groups()
+        .list()?
+        .into_iter()
+        .filter(|g| g.rule.is_some())
+        .collect();
+    if groups.is_empty() {
+        return Ok(0);
+    }
+    let mut moved = 0;
+    for id in ids {
+        let Some(favorite) = db.favorites().get(*id)?.filter(|f| f.group_id.is_none()) else {
+            continue;
+        };
+        let tagged = stored_tags_and_format(db, metadata, &favorite)?;
+        let group = groups
+            .iter()
+            .find(|g| g.rule.as_ref().is_some_and(|r| rule_matches(r, &tagged)));
+        if let Some(group) = group
+            && db.favorites().group_if_ungrouped(favorite.id, group.id)?
+        {
+            moved += 1;
+        }
+    }
+    Ok(moved)
+}
+
+/// [`auto_group`] for every series in the library. Blocking.
+pub fn auto_group_library(
+    db: &AppDb,
+    metadata: Option<&MetadataJobs>,
+) -> Result<usize, StoreError> {
+    let ids: Vec<FavoriteId> = db
+        .favorites()
+        .list()?
+        .into_iter()
+        .filter(|f| f.group_id.is_none())
+        .map(|f| f.id)
+        .collect();
+    auto_group(db, metadata, &ids)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -572,6 +649,9 @@ impl FavoritesChecker {
             Err(e) => {
                 rate_limits.pause_if_limited(&favorite.module_id, &e);
                 tracing::warn!(target: "fmd_core", "checking favorite {}: {e}", favorite.title);
+                if !matches!(e, InfoError::RateLimited { .. }) {
+                    self.record_failure(favorite.id, e.to_string()).await?;
+                }
                 return Ok(None);
             }
         };
@@ -725,8 +805,8 @@ impl FavoritesChecker {
 
     /// Stores chapter count and status (`DoCheck`, baseunits/uFavoritesManager.pas:351-353),
     /// check time, and update time when chapters were found (:373-378); beyond FMD2, also the
-    /// chapter links for the new-chapter badge and a non-empty cover link for the library.
-    /// `None` when the favorite was removed meanwhile.
+    /// chapter links for the new-chapter badge and a non-empty cover link for the library, and
+    /// forgets earlier failed checks. `None` when the favorite was removed meanwhile.
     async fn store_checked(
         &self,
         id: FavoriteId,
@@ -742,6 +822,7 @@ impl FavoritesChecker {
         let db = self.inner.config.db.clone();
         // Not atomic: it only races with another write to this favorite, which a PATCH redoes.
         blocking(move || {
+            db.favorites().clear_check_failures(id)?;
             let Some(mut favorite) = db.favorites().get(id)? else {
                 return Ok(None);
             };
@@ -763,14 +844,25 @@ impl FavoritesChecker {
         .await
     }
 
+    /// Beyond FMD2, which only logs a failed check (baseunits/uFavoritesManager.pas:391-394),
+    /// counts it so the library can flag a series whose website keeps failing.
+    async fn record_failure(&self, id: FavoriteId, error: String) -> Result<(), CheckError> {
+        let db = self.inner.config.db.clone();
+        let now = now_ms();
+        blocking(move || db.favorites().record_check_failure(id, &error, now)).await
+    }
+
+    /// Beyond FMD2, a run over all favorites skips one that has [`FAILING_CHECKS`] or more failed
+    /// checks until [`FAILING_RETRY`] after the last.
     async fn favorites(&self, scope: CheckScope) -> Result<Vec<Favorite>, CheckError> {
         let db = self.inner.config.db.clone();
         let all = blocking(move || db.favorites().list()).await?;
+        let now = now_ms();
         Ok(all
             .into_iter()
             .filter(|f| f.enabled && !f.link.trim().is_empty())
             .filter(|f| match &scope {
-                CheckScope::All => true,
+                CheckScope::All => !backing_off(f, now),
                 CheckScope::Only(ids) => ids.contains(&f.id),
             })
             .collect())
@@ -866,6 +958,22 @@ impl FavoritesChecker {
             .map(|((i, c), _)| found_chapter(i, c))
             .collect())
     }
+}
+
+/// Consecutive failed checks after which a series counts as failing: the library flags it and
+/// runs over all favorites check it at most every [`FAILING_RETRY`].
+pub const FAILING_CHECKS: u32 = 3;
+
+/// How long runs over all favorites leave a failing series alone after its last failed check.
+pub const FAILING_RETRY: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Whether `favorite` is failing and failed within [`FAILING_RETRY`] of `now` (Unix ms).
+fn backing_off(favorite: &Favorite, now: i64) -> bool {
+    let retry = i64::try_from(FAILING_RETRY.as_millis()).unwrap_or(i64::MAX);
+    favorite.check_failures >= FAILING_CHECKS
+        && favorite
+            .date_last_failed
+            .is_some_and(|at| now.saturating_sub(at) < retry)
 }
 
 fn found_chapter(index: usize, chapter: &crate::info::Chapter) -> FoundChapter {

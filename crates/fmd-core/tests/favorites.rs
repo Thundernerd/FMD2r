@@ -1005,3 +1005,154 @@ async fn a_rate_limited_website_keeps_its_favorites_and_pauses_while_others_are_
     assert_eq!(checked.current_chapter, 3);
     assert_eq!(checked.status, "0");
 }
+
+/// A favorite of `/gone`, which the site answers with a 404.
+fn gone(fx: &Fixture) -> FavoriteId {
+    fx.db
+        .favorites()
+        .create(&NewFavorite {
+            module_id: "site".into(),
+            link: "/gone".into(),
+            title: "Gone".into(),
+            save_to: String::new(),
+            cover_url: None,
+        })
+        .unwrap()
+        .id
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_fetch_counts_a_failure_and_keeps_its_error() {
+    let fx = Fixture::new(json!({}));
+    let id = gone(&fx);
+    let checker = fx.checker();
+
+    for _ in 0..2 {
+        checker
+            .check(CheckScope::Only(vec![id]), CheckMode::New)
+            .await
+            .unwrap();
+    }
+
+    let failing = fx.db.favorites().get(id).unwrap().unwrap();
+    assert_eq!(failing.check_failures, 2);
+    assert!(failing.last_check_error.is_some_and(|e| !e.is_empty()));
+    assert!(failing.date_last_failed.is_some());
+    assert_eq!(failing.date_last_checked, None);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_successful_check_clears_the_failures() {
+    let fx = Fixture::new(json!({}));
+    let id = gone(&fx);
+    let checker = fx.checker();
+    checker
+        .check(CheckScope::Only(vec![id]), CheckMode::New)
+        .await
+        .unwrap();
+    fx.site.set("/gone", "1\n/c1 Chapter 1");
+
+    checker
+        .check(CheckScope::Only(vec![id]), CheckMode::New)
+        .await
+        .unwrap();
+
+    let found = fx.db.favorites().get(id).unwrap().unwrap();
+    assert_eq!(found.check_failures, 0);
+    assert_eq!(found.last_check_error, None);
+    assert_eq!(found.date_last_failed, None);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rate_limited_or_skipped_favorite_is_not_counted_as_failing() {
+    let fx = Fixture::new(json!({ "connections": { "max_favorite_threads": 1 } }));
+    let create = |link: &str| {
+        fx.db
+            .favorites()
+            .create(&NewFavorite {
+                module_id: "site".into(),
+                link: link.into(),
+                title: link.into(),
+                save_to: String::new(),
+                cover_url: None,
+            })
+            .unwrap()
+            .id
+    };
+    let limited = create("/a");
+    let skipped = create("/b");
+    fx.site.limit("/a");
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+
+    assert_eq!(fx.site.requested("/b"), 0, "the website is paused");
+    for id in [limited, skipped] {
+        let favorite = fx.db.favorites().get(id).unwrap().unwrap();
+        assert_eq!(favorite.check_failures, 0);
+        assert_eq!(favorite.last_check_error, None);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn after_three_failures_a_full_run_skips_the_series_for_a_day_but_a_single_check_does_not() {
+    let fx = Fixture::new(json!({}));
+    let id = gone(&fx);
+    let checker = fx.checker();
+    for _ in 0..3 {
+        checker
+            .check(CheckScope::All, CheckMode::New)
+            .await
+            .unwrap();
+    }
+    assert_eq!(fx.site.requested("/gone"), 3);
+
+    let report = checker
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+    assert_eq!(fx.site.requested("/gone"), 3, "skipped within 24 h");
+    assert_eq!(report.checked, 0);
+    assert_eq!(checker.status().total, 0);
+
+    checker
+        .check(CheckScope::Only(vec![id]), CheckMode::New)
+        .await
+        .unwrap();
+    assert_eq!(
+        fx.site.requested("/gone"),
+        4,
+        "a single-series check always checks"
+    );
+    assert_eq!(
+        fx.db.favorites().get(id).unwrap().unwrap().check_failures,
+        4
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failing_series_is_checked_again_once_a_day_has_passed() {
+    let fx = Fixture::new(json!({}));
+    let id = gone(&fx);
+    let day_ago = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+        - 24 * 60 * 60 * 1000
+        - 1000;
+    for _ in 0..3 {
+        fx.db
+            .favorites()
+            .record_check_failure(id, "404", day_ago)
+            .unwrap();
+    }
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::New)
+        .await
+        .unwrap();
+
+    assert_eq!(fx.site.requested("/gone"), 1);
+}

@@ -26,6 +26,7 @@ vi.mock('#lib/app.ts', () => {
 		Api,
 		| 'getSeries'
 		| 'listModules'
+		| 'listFavorites'
 		| 'getSettings'
 		| 'getModuleSettings'
 		| 'saveFolder'
@@ -33,6 +34,7 @@ vi.mock('#lib/app.ts', () => {
 	> = {
 		getSeries: (module, link) => getSeries(module, link),
 		listModules: () => Promise.resolve([]),
+		listFavorites: () => Promise.resolve([]),
 		getSettings: () => getSettings(),
 		getModuleSettings: (id) => getModuleSettings(id),
 		saveFolder: (request) => saveFolder(request),

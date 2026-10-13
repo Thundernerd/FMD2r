@@ -31,6 +31,32 @@ test('the library shows its favorites as a cover grid that chips filter', async 
 	await expect(page).toHaveURL('/series?module=comick&link=%2Fcomic%2Fblue-lock');
 });
 
+test('the library filters by tag and format, with counts', async ({ page }) => {
+	await page.goto('/');
+	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
+	await expect(cards).toHaveCount(8);
+
+	const tags = page.getByRole('group', { name: 'Tags' });
+	const action = tags.getByRole('button', { name: 'Action: ignored' });
+	await expect(action.locator('.count')).toHaveText('2');
+	await action.click();
+	await expect(cards).toHaveCount(2);
+	await expect(cards.filter({ hasText: 'Kagurabachi' })).toHaveCount(1);
+
+	const format = page.getByRole('combobox', { name: 'Format' });
+	await expect(format.getByRole('option', { name: 'Manhwa (1)' })).toHaveCount(1);
+	await expect(format.getByRole('option', { name: 'Unknown (6)' })).toHaveCount(1);
+	await format.selectOption({ label: 'Manhwa (1)' });
+	await expect(cards).toHaveCount(1);
+	await expect(cards.first()).toContainText('Omniscient Reader');
+
+	// A second click excludes the tag.
+	await format.selectOption({ label: 'Any' });
+	await tags.getByRole('button', { name: 'Action: included' }).click();
+	await expect(cards).toHaveCount(6);
+	await expect(cards.filter({ hasText: 'Kagurabachi' })).toHaveCount(0);
+});
+
 /** A 1x1 PNG. */
 const PIXEL = Buffer.from(
 	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
@@ -116,7 +142,8 @@ test('Check now shows the check’s progress and the new chapters it found', asy
 	await page.getByRole('button', { name: 'Check now' }).click();
 
 	await expect(page.getByRole('progressbar', { name: 'Check progress' })).toBeVisible();
-	await expect(page.getByRole('status')).toContainText(/Checking \d+\/7/);
+	// Seven are enabled; the failing Apothecary Diaries waits a day between checks.
+	await expect(page.getByRole('status')).toContainText(/Checking \d+\/6/);
 	// The mock finds one new chapter of Chainsaw Man, one favorite a second.
 	await expect(page.getByRole('button', { name: 'Check now' })).toBeVisible({ timeout: 15_000 });
 	await expect(cards.filter({ hasText: 'Chainsaw Man' })).toContainText('+1');
@@ -258,6 +285,39 @@ test('series put in a group show in its section, which stays folded after a relo
 	await expect(shounen).toHaveCount(0);
 });
 
+test('groups with a format or a tag rule collect the matching series without a group', async ({
+	page
+}) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Groups…' }).click();
+	const editor = page.getByRole('dialog', { name: 'Groups' });
+	const name = editor.getByRole('textbox', { name: 'New group' });
+	const rule = editor.getByRole('combobox', { name: 'Auto-add' });
+
+	await name.fill('Webtoons');
+	await rule.selectOption({ label: 'Format' });
+	await editor.getByRole('combobox', { name: 'Format' }).selectOption({ label: 'Manhwa' });
+	await editor.getByRole('button', { name: 'Add' }).click();
+	const groups = editor.getByRole('list', { name: 'Groups' });
+	await expect(groups).toContainText('Webtoons · 1 · auto: Manhwa');
+
+	await name.fill('Fights');
+	await rule.selectOption({ label: 'Tag' });
+	await editor.getByRole('textbox', { name: 'Tag' }).fill('action');
+	await editor.getByRole('button', { name: 'Add' }).click();
+	await expect(groups).toContainText('Fights · 1 · auto: tag action');
+	await editor.getByRole('button', { name: 'Close' }).click();
+
+	// Omniscient Reader is a manhwa tagged Action: the first group in order gets it.
+	const webtoons = page.getByRole('list', { name: 'Webtoons' }).getByRole('link');
+	await expect(webtoons).toHaveCount(1);
+	await expect(webtoons).toContainText('Omniscient Reader');
+	const fights = page.getByRole('list', { name: 'Fights' }).getByRole('link');
+	await expect(fights).toHaveCount(1);
+	await expect(fights).toContainText('Kagurabachi');
+	await expect(page.getByRole('list', { name: 'Ungrouped' }).getByRole('link')).toHaveCount(6);
+});
+
 /** Fails unless `control`'s focus outline, as drawn, fits inside every ancestor that clips it. */
 async function expectWholeOutline(control: Locator) {
 	await expect(control).toBeFocused();
@@ -320,12 +380,14 @@ for (const [style, focusWidth] of [
 		await expectWholeOutline(name);
 		await name.fill('Josei');
 		await page.keyboard.press('Tab');
+		await expectWholeOutline(editor.getByRole('combobox', { name: 'Auto-add' }));
+		await page.keyboard.press('Tab');
 		await expectWholeOutline(editor.getByRole('button', { name: 'Add' }));
 
 		for (const button of [
 			'Move Seinen up',
 			'Move Shounen down',
-			'Rename Shounen',
+			'Edit Shounen',
 			'Delete Shounen'
 		]) {
 			const control = editor.getByRole('button', { name: button });
@@ -333,11 +395,13 @@ for (const [style, focusWidth] of [
 			await expectWholeOutline(control);
 		}
 
-		// The buttons of the rename and delete rows, reached from the keyboard.
-		await editor.getByRole('button', { name: 'Rename Shounen' }).press('Enter');
+		// The controls of the edit and delete rows, reached from the keyboard.
+		await editor.getByRole('button', { name: 'Edit Shounen' }).press('Enter');
 		const rename = editor.getByRole('textbox', { name: 'Name of Shounen' });
 		await rename.focus();
 		await expectWholeOutline(rename);
+		await page.keyboard.press('Tab');
+		await expectWholeOutline(editor.getByRole('combobox', { name: 'Auto-add of Shounen' }));
 		for (const button of ['Save', 'Cancel']) {
 			await page.keyboard.press('Tab');
 			await expectWholeOutline(editor.getByRole('button', { name: button, exact: true }));
@@ -371,12 +435,12 @@ test('a long group list scrolls inside the Groups dialog', async ({ page }) => {
 	);
 
 	// Focus scrolls a row into view, and its outline isn't cut off at the scrolling edge.
-	const below = editor.getByRole('button', { name: 'Rename Group 30' });
+	const below = editor.getByRole('button', { name: 'Edit Group 30' });
 	await below.focus();
 	await expectWholeOutline(below);
 	// Back to the top, so the next row scrolls in at the bottom edge.
-	await editor.getByRole('button', { name: 'Rename Group 1', exact: true }).focus();
-	const middle = editor.getByRole('button', { name: 'Rename Group 20' });
+	await editor.getByRole('button', { name: 'Edit Group 1', exact: true }).focus();
+	const middle = editor.getByRole('button', { name: 'Edit Group 20' });
 	await middle.focus();
 	await expectWholeOutline(middle);
 });
@@ -525,4 +589,31 @@ test.describe('selecting several series', () => {
 
 		await expect(bar.getByRole('status')).toContainText('2 selected (1 hidden)');
 	});
+});
+
+test('a series whose website keeps failing is marked, and its page offers another website', async ({
+	page
+}) => {
+	await page.goto('/');
+	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
+	const gone = cards.filter({ hasText: 'The Apothecary Diaries' });
+	await expect(gone).toContainText('Not found');
+	await expect(cards.filter({ hasText: 'Frieren' })).not.toContainText('Not found');
+
+	await page
+		.getByRole('group', { name: 'Show' })
+		.getByRole('button', { name: /^Failing/ })
+		.click();
+	await expect(cards).toHaveCount(1);
+
+	await gone.click();
+	await expect(page.getByRole('alert').first()).toContainText(
+		"The website hasn't answered for this series in its last 4 checks: HTTP 404 Not Found"
+	);
+	await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible();
+	await page.getByRole('link', { name: 'Find on another website' }).click();
+	await expect(page).toHaveURL('/discover?q=The+Apothecary+Diaries');
+	await expect(page.getByRole('searchbox', { name: 'Search titles' })).toHaveValue(
+		'The Apothecary Diaries'
+	);
 });

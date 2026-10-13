@@ -6,11 +6,15 @@ import type {
 	AccountInfo,
 	AccountRequest,
 	BulkChange,
+	ComicServerTest,
+	ComicServerTestRequest,
+	Channel,
 	FavoritePatch,
 	FavoriteView,
+	FieldProblem,
+	FolderCheck,
 	GroupPatch,
 	GroupView,
-	FolderCheck,
 	Health,
 	ImportOptions,
 	ImportReport,
@@ -18,24 +22,25 @@ import type {
 	JobState,
 	ListFacets,
 	ListJobStarted,
+	LogLine,
 	MangaBakaSearchResult,
 	MangaBakaStatus,
-	LogLine,
 	ModuleSettingsView,
 	ModuleSummary,
 	NewTask,
+	NotificationTest,
 	Problem,
-	FieldProblem,
 	RenamePreview,
 	RenamePreviewRequest,
-	SaveFolderRequest,
-	SeenChange,
+	RuleView,
 	SavedSettings,
-	SettingsSave,
+	SaveFolderRequest,
 	SearchPage,
+	SeenChange,
 	SeriesInfo,
 	SeriesRef,
 	Settings,
+	SettingsSave,
 	TaskDetail,
 	TaskSummary
 } from './types';
@@ -106,6 +111,8 @@ export interface Api {
 	taskFilesUrl(id: number): string;
 	/** Where the persisted log files download from, as one JSON-lines file. */
 	logsDownloadUrl(): string;
+	/** Where a backup of the library, settings and saved logins downloads from, as a zip. */
+	backupDownloadUrl(): string;
 	/** The series a manga URL points at, or `null` when no module handles the URL. */
 	resolveUrl(url: string): Promise<SeriesRef | null>;
 	/**
@@ -136,6 +143,10 @@ export interface Api {
 	previewRename(draft: RenamePreviewRequest): Promise<RenamePreview>;
 	/** Whether downloads can be saved in each folder now, in order. */
 	checkFolders(paths: string[]): Promise<FolderCheck[]>;
+	/** Whether the comic server answers with the API key; changes nothing on it. */
+	testComicServer(request: ComicServerTestRequest): Promise<ComicServerTest>;
+	/** Sends a test notification with the channel's saved settings. */
+	testNotification(channel: Channel): Promise<NotificationTest>;
 	/** The folder a download of a series goes to, the manga folder included. */
 	saveFolder(request: SaveFolderRequest): Promise<string>;
 	/** Marks a series' chapters seen or clears their marks; no file is touched. */
@@ -206,11 +217,15 @@ export interface Api {
 	/** The library's groups, in order. */
 	listGroups(): Promise<GroupView[]>;
 	/**
-	 * Adds a group after the others. Rejects with an {@link ApiError}: 409 when another group has
-	 * the name, ignoring case, 400 when it is empty.
+	 * Adds a group after the others; with a rule, it collects the matching series without a group.
+	 * Rejects with an {@link ApiError}: 409 when another group has the name, ignoring case, 400
+	 * when it is empty or the rule is invalid.
 	 */
-	createGroup(name: string): Promise<GroupView>;
-	/** Renames a group or folds its section; rejects like {@link createGroup}, or with 404. */
+	createGroup(name: string, rule?: RuleView | null): Promise<GroupView>;
+	/**
+	 * Renames a group, folds its section or sets its rule (`null` clears it); rejects like
+	 * {@link createGroup}, or with 404.
+	 */
 	updateGroup(id: number, patch: GroupPatch): Promise<GroupView>;
 	/** Removes a group; its series stay in the library, ungrouped. */
 	deleteGroup(id: number): Promise<void>;
@@ -247,6 +262,8 @@ export interface ApiOptions {
 	taskFilesUrl?: (id: number) => string;
 	/** Overrides where the logs download from (mock mode has no server to link to). */
 	logsDownloadUrl?: () => string;
+	/** Overrides where the backup downloads from (mock mode has no server to link to). */
+	backupDownloadUrl?: () => string;
 	/** Called whenever the server answers 401 to anything but a login attempt. */
 	onUnauthorized?: () => void;
 }
@@ -256,6 +273,7 @@ export function createApi({
 	fetch = (input) => globalThis.fetch(input),
 	taskFilesUrl,
 	logsDownloadUrl,
+	backupDownloadUrl,
 	onUnauthorized
 }: ApiOptions = {}): Api {
 	/**
@@ -413,6 +431,9 @@ export function createApi({
 		logsDownloadUrl() {
 			return logsDownloadUrl ? logsDownloadUrl() : `${baseUrl}/api/logs/download`;
 		},
+		backupDownloadUrl() {
+			return backupDownloadUrl ? backupDownloadUrl() : `${baseUrl}/api/backup`;
+		},
 		async resolveUrl(url) {
 			const res = await client.POST('/api/resolve', { body: { url } });
 			if (res.response.status === 404) return null;
@@ -465,6 +486,20 @@ export function createApi({
 		},
 		async checkFolders(paths) {
 			return unwrap('checkFolders', await client.POST('/api/check-folders', { body: { paths } }));
+		},
+		async testComicServer(request) {
+			return unwrap(
+				'testComicServer',
+				await client.POST('/api/settings/comic-server/test', { body: request })
+			);
+		},
+		async testNotification(channel) {
+			return unwrap(
+				'testNotification',
+				await client.POST('/api/notifications/{channel}/test', {
+					params: { path: { channel } }
+				})
+			);
 		},
 		async saveFolder(request) {
 			return unwrap('saveFolder', await client.POST('/api/save-folder', { body: request })).folder;
@@ -596,8 +631,11 @@ export function createApi({
 		async listGroups() {
 			return unwrap('listGroups', await client.GET('/api/library/groups'));
 		},
-		async createGroup(name) {
-			return explained('createGroup', await client.POST('/api/library/groups', { body: { name } }));
+		async createGroup(name, rule = null) {
+			return explained(
+				'createGroup',
+				await client.POST('/api/library/groups', { body: { name, rule } })
+			);
 		},
 		async updateGroup(id, patch) {
 			return explained(

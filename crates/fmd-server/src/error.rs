@@ -3,7 +3,7 @@
 use axum::Json;
 use axum::extract::FromRequest;
 use axum::extract::FromRequestParts;
-use axum::extract::rejection::{JsonRejection, QueryRejection};
+use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
@@ -191,6 +191,12 @@ impl From<JsonRejection> for ApiError {
     }
 }
 
+impl From<PathRejection> for ApiError {
+    fn from(rejection: PathRejection) -> Self {
+        Self::Rejected(rejection.status(), rejection.body_text())
+    }
+}
+
 impl From<QueryRejection> for ApiError {
     fn from(rejection: QueryRejection) -> Self {
         Self::Rejected(rejection.status(), rejection.body_text())
@@ -201,6 +207,11 @@ impl From<QueryRejection> for ApiError {
 #[derive(FromRequest)]
 #[from_request(via(Json), rejection(ApiError))]
 pub(crate) struct ApiJson<T>(pub T);
+
+/// `axum::extract::Path` whose rejection is a problem response.
+#[derive(FromRequestParts)]
+#[from_request(via(axum::extract::Path), rejection(ApiError))]
+pub(crate) struct ApiPath<T>(pub T);
 
 /// `axum::extract::Query` whose rejection is a problem response.
 #[derive(FromRequestParts)]

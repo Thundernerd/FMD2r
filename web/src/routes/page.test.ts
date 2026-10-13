@@ -105,3 +105,17 @@ describe('Library selection', () => {
 		bulk.mockRestore();
 	});
 });
+
+describe('Library failing series', () => {
+	it('marks a series whose website keeps failing, and lists it under Failing', async () => {
+		render(Library);
+		const grid = await screen.findByRole('list', { name: 'Favorites' });
+		const card = within(grid).getByRole('link', { name: /The Apothecary Diaries/ });
+		expect(within(card).getByText('Not found')).toBeTruthy();
+		const frieren = within(grid).getByRole('link', { name: /Frieren/ });
+		expect(within(frieren).queryByText('Not found')).toBeNull();
+
+		await fireEvent.click(screen.getByRole('button', { name: /^Failing/ }));
+		await waitFor(async () => expect(await cardTitles()).toEqual(['The Apothecary Diaries']));
+	});
+});

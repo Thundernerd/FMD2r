@@ -6,10 +6,11 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 use super::model::{
-    AppearanceSettings, ConnectionSettings, CoverSettings, FavoriteSettings, GeneralSettings,
-    ImageSettings, LogSettings, MetadataSettings, ModuleUpdaterSettings, OutputSettings,
+    AppearanceSettings, ComicServerKind, ComicServerSettings, ConnectionSettings, CoverSettings,
+    DiscordSettings, FavoriteSettings, GeneralSettings, ImageSettings, LogSettings,
+    MetadataSettings, ModuleUpdaterSettings, NotificationSettings, NtfySettings, OutputSettings,
     ProxySettings, ProxyType, SaveToSettings, ServerSettings, Settings, UpdateListSettings,
-    XPathSettings,
+    WebhookSettings, XPathSettings,
 };
 use super::module_overrides::{HttpOverrides, ProxyOverride, ProxyOverrideType};
 
@@ -32,6 +33,8 @@ pub struct SettingsView {
     pub covers: CoverSettings,
     pub logs: LogSettings,
     pub metadata: MetadataSettings,
+    pub comic_server: ComicServerSettingsView,
+    pub notifications: NotificationSettingsView,
 }
 
 impl Default for SettingsView {
@@ -57,6 +60,8 @@ impl From<&Settings> for SettingsView {
             covers,
             logs,
             metadata,
+            comic_server,
+            notifications,
         } = s.clone();
         Self {
             general,
@@ -73,6 +78,8 @@ impl From<&Settings> for SettingsView {
             covers,
             logs,
             metadata,
+            comic_server: comic_server.into(),
+            notifications: notifications.into(),
         }
     }
 }
@@ -243,6 +250,35 @@ impl From<ModuleUpdaterSettings> for ModuleUpdaterSettingsView {
     }
 }
 
+/// [`ComicServerSettings`] with the API key left out.
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct ComicServerSettingsView {
+    pub kind: ComicServerKind,
+    /// The server's base URL, e.g. `http://nas:25600`.
+    pub url: String,
+    /// Whether an API key is set. Patch `api_key` to set it; an empty one clears it.
+    pub has_api_key: bool,
+    /// Komga only: the library to scan; `None` scans every library the key can see.
+    pub library_id: Option<String>,
+}
+
+impl From<ComicServerSettings> for ComicServerSettingsView {
+    fn from(c: ComicServerSettings) -> Self {
+        let ComicServerSettings {
+            kind,
+            url,
+            api_key,
+            library_id,
+        } = c;
+        Self {
+            kind,
+            url,
+            has_api_key: is_set(api_key.as_deref()),
+            library_id,
+        }
+    }
+}
+
 /// [`ServerSettings`] with the password left out.
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
 pub struct ServerSettingsView {
@@ -258,6 +294,8 @@ pub struct ServerSettingsView {
     pub session_lifetime_days: u32,
     /// Authentication is handled in front of FMD2r, so an open server is not warned about.
     pub external_auth: bool,
+    /// The address FMD2r is reached at; empty when unknown. Notifications link to it.
+    pub public_url: String,
 }
 
 impl From<ServerSettings> for ServerSettingsView {
@@ -268,6 +306,7 @@ impl From<ServerSettings> for ServerSettingsView {
             session_idle_days,
             session_lifetime_days,
             external_auth,
+            public_url,
         } = s;
         Self {
             bind,
@@ -275,6 +314,125 @@ impl From<ServerSettings> for ServerSettingsView {
             session_idle_days,
             session_lifetime_days,
             external_auth,
+            public_url,
+        }
+    }
+}
+
+/// [`NotificationSettings`] with the tokens and Discord's webhook URL left out.
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct NotificationSettingsView {
+    pub ntfy: NtfySettingsView,
+    pub discord: DiscordSettingsView,
+    pub webhook: WebhookSettingsView,
+}
+
+impl From<NotificationSettings> for NotificationSettingsView {
+    fn from(n: NotificationSettings) -> Self {
+        let NotificationSettings {
+            ntfy,
+            discord,
+            webhook,
+        } = n;
+        Self {
+            ntfy: ntfy.into(),
+            discord: discord.into(),
+            webhook: webhook.into(),
+        }
+    }
+}
+
+/// [`NtfySettings`] with the access token left out.
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct NtfySettingsView {
+    pub enabled: bool,
+    /// The topic to publish to, e.g. `https://ntfy.sh/my-topic`.
+    pub topic_url: String,
+    /// Whether an access token is set. Patch `token` to set it; an empty one clears it.
+    pub has_token: bool,
+    /// Send new and missing chapters.
+    pub new_chapters: bool,
+    /// Send warnings and errors: failed downloads, a failed library check, module problems.
+    pub problems: bool,
+}
+
+impl From<NtfySettings> for NtfySettingsView {
+    fn from(n: NtfySettings) -> Self {
+        let NtfySettings {
+            enabled,
+            topic_url,
+            token,
+            new_chapters,
+            problems,
+        } = n;
+        Self {
+            enabled,
+            topic_url,
+            has_token: is_set(Some(&token)),
+            new_chapters,
+            problems,
+        }
+    }
+}
+
+/// [`DiscordSettings`] with the webhook URL, which carries a token, left out.
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct DiscordSettingsView {
+    pub enabled: bool,
+    /// Whether a webhook URL is set. Patch `webhook_url` to set it; an empty one clears it.
+    pub has_webhook_url: bool,
+    /// Send new and missing chapters.
+    pub new_chapters: bool,
+    /// Send warnings and errors: failed downloads, a failed library check, module problems.
+    pub problems: bool,
+}
+
+impl From<DiscordSettings> for DiscordSettingsView {
+    fn from(d: DiscordSettings) -> Self {
+        let DiscordSettings {
+            enabled,
+            webhook_url,
+            new_chapters,
+            problems,
+        } = d;
+        Self {
+            enabled,
+            has_webhook_url: is_set(Some(&webhook_url)),
+            new_chapters,
+            problems,
+        }
+    }
+}
+
+/// [`WebhookSettings`] with the `Authorization` header left out.
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct WebhookSettingsView {
+    pub enabled: bool,
+    pub url: String,
+    /// Whether an `Authorization` header is set. Patch `authorization` to set it; an empty one
+    /// clears it.
+    pub has_authorization: bool,
+    /// Send new and missing chapters.
+    pub new_chapters: bool,
+    /// Send warnings and errors: failed downloads, a failed library check, module problems.
+    pub problems: bool,
+}
+
+impl From<WebhookSettings> for WebhookSettingsView {
+    fn from(w: WebhookSettings) -> Self {
+        let WebhookSettings {
+            enabled,
+            url,
+            authorization,
+            new_chapters,
+            problems,
+        } = w;
+        Self {
+            enabled,
+            url,
+            has_authorization: is_set(Some(&authorization)),
+            new_chapters,
+            problems,
         }
     }
 }

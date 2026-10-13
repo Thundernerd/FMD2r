@@ -8,9 +8,12 @@ import type {
 	InboxItem,
 	JobState,
 	LibraryTitle,
+	RuleView,
 	SeriesInfo
 } from './types';
 import { seriesCover } from './mock-lists';
+import { FAILING_CHECKS } from '#lib/library/filters.ts';
+import { FORMATS } from '#lib/library/formats.ts';
 
 // The library of the in-memory backend (see mock.ts), with a favorites check that works
 // through one favorite per tick.
@@ -43,6 +46,8 @@ const seedFavorites = (): FavoriteView[] => {
 		group_id: null,
 		tags: [],
 		format: null,
+		check_failures: 0,
+		last_check_error: null,
 		...patch
 	});
 	return [
@@ -79,7 +84,11 @@ const seedFavorites = (): FavoriteView[] => {
 		}),
 		favorite(6, 'The Apothecary Diaries', 'webtoons', 'Webtoons', '/en/apothecary', {
 			status: 'hiatus',
-			current_chapter: 76
+			current_chapter: 76,
+			// The website took the series down: its checks keep failing.
+			last_checked: '2026-09-30T09:12:00Z',
+			check_failures: 4,
+			last_check_error: 'HTTP 404 Not Found'
 		}),
 		favorite(7, 'Vinland Saga', 'mangadex', 'MangaDex', '/title/vs/vinland-saga', {
 			status: 'completed',
@@ -167,7 +176,7 @@ export interface MockFavorites {
 	/** Checks the next favorite, reporting through `emit`; returns an inbox item when a check found chapters. */
 	tick(emit: (type: string, payload: unknown) => void): InboxItem | null;
 	listGroups(): GroupView[];
-	createGroup(name: unknown): Result;
+	createGroup(name: unknown, rule?: RuleView | null): Result;
 	patchGroup(id: number, patch: GroupPatch): Result;
 	deleteGroup(id: number): Result;
 	reorderGroups(ids: number[]): Result;
@@ -216,6 +225,30 @@ export function createMockFavorites(
 		return other ? problem(409, `a group named ${other.name} exists already`) : null;
 	};
 
+	/** Like fmd-server: a tag is trimmed and required, a format one of MangaBaka's five. */
+	const ruleProblem = (rule: RuleView | null): Result | null => {
+		if (rule?.kind === 'tag' && !rule.value) return problem(400, "the rule's tag cannot be empty");
+		if (rule?.kind === 'format' && !FORMATS.some(([value]) => value === rule.value)) {
+			return problem(400, `${rule.value} is not a format`);
+		}
+		return null;
+	};
+	const trimmed = (rule: RuleView | null | undefined): RuleView | null =>
+		rule ? { kind: rule.kind, value: rule.value.trim() } : null;
+	const matches = (rule: RuleView, f: FavoriteView) =>
+		rule.kind === 'tag'
+			? f.tags.some((t) => t.toLowerCase() === rule.value.toLowerCase())
+			: f.format === rule.value;
+	/** Like fmd-server: each series without a group goes to the first group whose rule matches. */
+	const autoGroup = (list: FavoriteView[]) => {
+		for (const f of list) {
+			if (f.group_id != null) continue;
+			const group = grouping.groups.find((g) => g.rule && matches(g.rule, f));
+			if (group) f.group_id = group.id;
+		}
+		saveGroups();
+	};
+
 	const view = (f: FavoriteView): FavoriteView => ({
 		...f,
 		display_title: displayTitle(f, libraryTitle())
@@ -259,9 +292,12 @@ export function createMockFavorites(
 				tags: series.genres.filter(
 					(g, i) => series.genres.findIndex((h) => h.toLowerCase() === g.toLowerCase()) === i
 				),
-				format: null
+				format: null,
+				check_failures: 0,
+				last_check_error: null
 			};
 			favorites.push(favorite);
+			autoGroup([favorite]);
 			return { status: 201, body: view(favorite) };
 		},
 		storeCover(module, link, cover) {
@@ -321,13 +357,14 @@ export function createMockFavorites(
 			return { status: 200, body: list.map(view) };
 		},
 		listGroups: () => grouping.groups.map((g) => ({ ...g })),
-		createGroup(raw) {
+		createGroup(raw, rawRule) {
 			const name = typeof raw === 'string' ? raw.trim() : '';
-			const refused = nameProblem(name, null);
+			const rule = trimmed(rawRule);
+			const refused = nameProblem(name, null) ?? ruleProblem(rule);
 			if (refused) return refused;
-			const group: GroupView = { id: grouping.nextId++, name, collapsed: false };
+			const group: GroupView = { id: grouping.nextId++, name, collapsed: false, rule };
 			grouping.groups.push(group);
-			saveGroups();
+			autoGroup(favorites);
 			return { status: 201, body: { ...group } };
 		},
 		patchGroup(id, patch) {
@@ -339,7 +376,18 @@ export function createMockFavorites(
 				if (refused) return refused;
 				group.name = name;
 			}
+			// Like fmd-server: only a rule set or changed collects series.
+			let ruleSet = false;
+			if (patch.rule !== undefined) {
+				const rule = trimmed(patch.rule);
+				const refused = ruleProblem(rule);
+				if (refused) return refused;
+				ruleSet =
+					rule != null && (rule.kind !== group.rule?.kind || rule.value !== group.rule.value);
+				group.rule = rule;
+			}
 			group.collapsed = patch.collapsed ?? group.collapsed;
+			if (ruleSet) autoGroup(favorites);
 			saveGroups();
 			return { status: 200, body: { ...group } };
 		},
@@ -354,12 +402,15 @@ export function createMockFavorites(
 		reorderGroups(ids) {
 			const first = ids.flatMap((id) => grouping.groups.filter((g) => g.id === id));
 			grouping.groups = [...first, ...grouping.groups.filter((g) => !first.includes(g))];
-			saveGroups();
+			autoGroup(favorites);
 			return { status: 204 };
 		},
 		start(ids, mode) {
 			if (check) return false;
-			const queue = favorites.filter((f) => f.enabled && (ids === null || ids.includes(f.id)));
+			// A check of every favorite leaves a failing series alone, as fmd-server does for a day.
+			const queue = favorites.filter(
+				(f) => f.enabled && (ids === null ? f.check_failures < FAILING_CHECKS : ids.includes(f.id))
+			);
 			check = { mode, queue, done: 0, total: queue.length, found: [] };
 			Object.assign(job, {
 				state: 'running',
@@ -383,7 +434,12 @@ export function createMockFavorites(
 			const favorite = c.queue.shift();
 			if (favorite) {
 				c.done++;
-				favorite.last_checked = new Date().toISOString();
+				if (favorite.last_check_error) {
+					// Its website is gone: the check fails again.
+					favorite.check_failures++;
+				} else {
+					favorite.last_checked = new Date().toISOString();
+				}
 				const chapters = c.mode === 'new' ? (fresh[favorite.id] ?? 0) : 0;
 				if (chapters > 0) {
 					delete fresh[favorite.id];

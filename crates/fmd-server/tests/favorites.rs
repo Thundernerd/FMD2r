@@ -522,8 +522,8 @@ async fn groups_are_created_renamed_folded_reordered_and_deleted() {
     assert_eq!(
         list,
         json!([
-            { "id": seinen["id"], "name": "Seinen", "collapsed": false },
-            { "id": id, "name": "Action", "collapsed": true },
+            { "id": seinen["id"], "name": "Seinen", "collapsed": false, "rule": null },
+            { "id": id, "name": "Action", "collapsed": true, "rule": null },
         ])
     );
 
@@ -842,6 +842,16 @@ impl Fixture {
         .await
         .status()
     }
+
+    async fn create_group(&self, body: Value) -> Value {
+        let created = self.send("POST", "/api/library/groups", Some(body)).await;
+        assert_eq!(created.status(), StatusCode::CREATED);
+        json_body(created).await
+    }
+
+    async fn listed_group(&self) -> Value {
+        json_body(self.send("GET", "/api/favorites", None).await).await[0]["group_id"].clone()
+    }
 }
 
 #[tokio::test]
@@ -926,4 +936,192 @@ async fn a_bulk_mark_seen_cannot_be_combined_with_a_removal() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert_eq!(fx.db.favorites().list().unwrap().len(), 1);
     assert_eq!(fx.new_chapters().await, 1);
+}
+
+#[tokio::test]
+async fn creating_a_group_with_a_tag_rule_collects_the_matching_ungrouped_series() {
+    let fx = Fixture::new();
+    fx.add().await;
+
+    // The series is tagged "Action" and "drama".
+    let drama = fx
+        .create_group(json!({ "name": "Drama", "rule": { "kind": "tag", "value": " DRAMA " } }))
+        .await;
+
+    assert_eq!(drama["rule"], json!({ "kind": "tag", "value": "DRAMA" }));
+    assert_eq!(fx.listed_group().await, drama["id"]);
+}
+
+#[tokio::test]
+async fn patching_a_groups_rule_collects_the_matching_ungrouped_series_and_null_clears_it() {
+    let fx = Fixture::new();
+    fx.add().await;
+    let group = fx.create_group(json!({ "name": "Later" })).await;
+    assert_eq!(group["rule"], Value::Null);
+    assert_eq!(fx.listed_group().await, Value::Null);
+    let uri = format!("/api/library/groups/{}", group["id"]);
+
+    let patched = fx
+        .send(
+            "PATCH",
+            &uri,
+            Some(json!({ "rule": { "kind": "tag", "value": "action" } })),
+        )
+        .await;
+    assert_eq!(patched.status(), StatusCode::OK);
+    assert_eq!(
+        json_body(patched).await["rule"],
+        json!({ "kind": "tag", "value": "action" })
+    );
+    assert_eq!(fx.listed_group().await, group["id"]);
+
+    let folded = fx
+        .send("PATCH", &uri, Some(json!({ "collapsed": true })))
+        .await;
+    assert_eq!(
+        json_body(folded).await["rule"],
+        json!({ "kind": "tag", "value": "action" }),
+        "a missing rule stays"
+    );
+    let cleared = fx.send("PATCH", &uri, Some(json!({ "rule": null }))).await;
+    assert_eq!(cleared.status(), StatusCode::OK);
+    assert_eq!(json_body(cleared).await["rule"], Value::Null);
+    assert_eq!(
+        fx.listed_group().await,
+        group["id"],
+        "clearing the rule moves nothing"
+    );
+}
+
+#[tokio::test]
+async fn a_rule_with_an_unknown_format_or_an_empty_tag_is_a_bad_request() {
+    let fx = Fixture::new();
+    let group = fx.create_group(json!({ "name": "Webtoons" })).await;
+
+    for rule in [
+        json!({ "kind": "format", "value": "webtoon" }),
+        json!({ "kind": "format", "value": "Manhwa" }),
+        json!({ "kind": "tag", "value": "  " }),
+    ] {
+        let created = fx
+            .send(
+                "POST",
+                "/api/library/groups",
+                Some(json!({ "name": "Other", "rule": rule })),
+            )
+            .await;
+        assert_eq!(created.status(), StatusCode::BAD_REQUEST, "{rule}");
+        let patched = fx
+            .send(
+                "PATCH",
+                &format!("/api/library/groups/{}", group["id"]),
+                Some(json!({ "rule": rule })),
+            )
+            .await;
+        assert_eq!(patched.status(), StatusCode::BAD_REQUEST, "{rule}");
+    }
+    let list = json_body(fx.send("GET", "/api/library/groups", None).await).await;
+    assert_eq!(list, json!([group]), "nothing changed");
+}
+
+#[tokio::test]
+async fn an_added_series_lands_in_the_first_group_whose_rule_matches() {
+    let fx = Fixture::new();
+    fx.create_group(json!({ "name": "Mine" })).await;
+    let action = fx
+        .create_group(json!({ "name": "Action", "rule": { "kind": "tag", "value": "Action" } }))
+        .await;
+    fx.create_group(json!({ "name": "Drama", "rule": { "kind": "tag", "value": "drama" } }))
+        .await;
+
+    let added = fx.add().await;
+
+    assert_eq!(added["group_id"], action["id"]);
+    assert_eq!(fx.listed_group().await, action["id"]);
+}
+
+#[tokio::test]
+async fn a_rule_never_moves_a_series_out_of_its_group() {
+    let fx = Fixture::new();
+    let id = fx.add().await["id"].as_i64().unwrap();
+    let mine = fx.create_group(json!({ "name": "Mine" })).await;
+    fx.send(
+        "PATCH",
+        &format!("/api/favorites/{id}"),
+        Some(json!({ "group_id": mine["id"] })),
+    )
+    .await;
+
+    let action = fx
+        .create_group(json!({ "name": "Action", "rule": { "kind": "tag", "value": "Action" } }))
+        .await;
+    fx.send(
+        "POST",
+        "/api/library/groups/reorder",
+        Some(json!({ "ids": [action["id"], mine["id"]] })),
+    )
+    .await;
+
+    assert_eq!(fx.listed_group().await, mine["id"]);
+}
+
+#[tokio::test]
+async fn reordering_groups_collects_series_moved_to_no_group_by_hand() {
+    let fx = Fixture::new();
+    let id = fx.add().await["id"].as_i64().unwrap();
+    let action = fx
+        .create_group(json!({ "name": "Action", "rule": { "kind": "tag", "value": "Action" } }))
+        .await;
+    let drama = fx
+        .create_group(json!({ "name": "Drama", "rule": { "kind": "tag", "value": "drama" } }))
+        .await;
+    fx.send(
+        "PATCH",
+        &format!("/api/favorites/{id}"),
+        Some(json!({ "group_id": null })),
+    )
+    .await;
+    assert_eq!(
+        fx.listed_group().await,
+        Value::Null,
+        "stays without a group"
+    );
+
+    let reordered = fx
+        .send(
+            "POST",
+            "/api/library/groups/reorder",
+            Some(json!({ "ids": [drama["id"], action["id"]] })),
+        )
+        .await;
+
+    assert_eq!(reordered.status(), StatusCode::NO_CONTENT);
+    assert_eq!(fx.listed_group().await, drama["id"]);
+}
+
+#[tokio::test]
+async fn saving_a_group_with_its_rule_unchanged_leaves_series_moved_to_no_group() {
+    let fx = Fixture::new();
+    let id = fx.add().await["id"].as_i64().unwrap();
+    let action = fx
+        .create_group(json!({ "name": "Action", "rule": { "kind": "tag", "value": "Action" } }))
+        .await;
+    fx.send(
+        "PATCH",
+        &format!("/api/favorites/{id}"),
+        Some(json!({ "group_id": null })),
+    )
+    .await;
+
+    // As the Groups dialog's Edit form saves a rename.
+    let renamed = fx
+        .send(
+            "PATCH",
+            &format!("/api/library/groups/{}", action["id"]),
+            Some(json!({ "name": "Fights", "rule": { "kind": "tag", "value": "Action" } })),
+        )
+        .await;
+
+    assert_eq!(renamed.status(), StatusCode::OK);
+    assert_eq!(fx.listed_group().await, Value::Null);
 }

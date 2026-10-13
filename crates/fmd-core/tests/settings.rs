@@ -709,3 +709,54 @@ fn a_stored_broken_template_loads_and_the_next_save_reports_it() {
         )]
     );
 }
+
+/// Notification channels and the server's public address take http(s) URLs, and a channel that
+/// is on needs one (issue #268).
+#[test]
+fn notification_urls_must_be_http_and_set_on_an_enabled_channel() {
+    let (_dir, db) = open_db();
+    let service = SettingsService::load(db).unwrap();
+    let fields = |patch| -> Vec<String> {
+        rejected(&service, patch)
+            .into_iter()
+            .map(|(field, _)| field)
+            .collect()
+    };
+
+    assert_eq!(
+        fields(json!({
+            "server": { "public_url": "fmd.example.org" },
+            "notifications": {
+                "ntfy": { "topic_url": "ntfy.sh/topic" },
+                "discord": { "webhook_url": "ftp://discord.com/x" },
+                "webhook": { "url": "n8n" },
+            },
+        })),
+        [
+            "server.public_url",
+            "notifications.ntfy.topic_url",
+            "notifications.discord.webhook_url",
+            "notifications.webhook.url",
+        ]
+    );
+    assert_eq!(
+        fields(json!({ "notifications": {
+            "ntfy": { "enabled": true },
+            "discord": { "enabled": true },
+            "webhook": { "enabled": true },
+        }})),
+        [
+            "notifications.ntfy.topic_url",
+            "notifications.discord.webhook_url",
+            "notifications.webhook.url",
+        ]
+    );
+
+    let s = service
+        .update(json!({
+            "server": { "public_url": "https://fmd.example.org" },
+            "notifications": { "ntfy": { "enabled": true, "topic_url": "https://ntfy.sh/t" } },
+        }))
+        .unwrap();
+    assert!(s.notifications.ntfy.enabled);
+}

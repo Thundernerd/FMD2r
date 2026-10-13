@@ -1,6 +1,7 @@
 //! Domain: modules registry, download engine, favorites checker, list updater, module updater, scheduler, inbox/events.
 
 pub mod accounts;
+pub mod comic_server;
 pub mod download;
 pub mod favorites;
 pub mod info;
@@ -9,4 +10,5 @@ pub mod lists;
 pub mod metadata;
 pub mod module_updater;
 pub mod modules;
+pub mod notifications;
 pub mod settings;
