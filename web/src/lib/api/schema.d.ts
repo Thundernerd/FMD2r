@@ -890,6 +890,26 @@ export interface paths {
 		patch: operations['patchAllSettings'];
 		trace?: never;
 	};
+	'/api/settings/comic-server/test': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Check a comic server's URL and API key with a request that changes nothing: Komga's library
+		 *     list, Kavita's API key expiry.
+		 */
+		post: operations['testComicServer'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/tasks': {
 		parameters: {
 			query?: never;
@@ -1250,6 +1270,46 @@ export interface components {
 		 * @enum {string}
 		 */
 		ComicMetadataFiles: 'none' | 'comicinfo' | 'metroninfo' | 'both';
+		/**
+		 * @description The comic servers FMD2r can ask to scan.
+		 * @enum {string}
+		 */
+		ComicServerKind: 'none' | 'komga' | 'kavita';
+		/** @description A Komga library. */
+		ComicServerLibrary: {
+			id: string;
+			name: string;
+		};
+		/** @description [`ComicServerSettings`] with the API key left out. */
+		ComicServerSettingsView: {
+			/** @description Whether an API key is set. Patch `api_key` to set it; an empty one clears it. */
+			has_api_key: boolean;
+			kind: components['schemas']['ComicServerKind'];
+			/** @description Komga only: the library to scan; `None` scans every library the key can see. */
+			library_id?: string | null;
+			/** @description The server's base URL, e.g. `http://nas:25600`. */
+			url: string;
+		};
+		/** @description What "Test connection" found. */
+		ComicServerTest: {
+			/** @description Komga: the libraries the API key can see. Empty for Kavita or on failure. */
+			libraries: components['schemas']['ComicServerLibrary'][];
+			/** @description What happened, as a sentence to show. */
+			message: string;
+			/** @description The server answered and accepted the API key. */
+			ok: boolean;
+		};
+		/** @description The comic server to test: the `comic_server` settings as the form holds them, saved or not. */
+		ComicServerTestRequest: {
+			/**
+			 * @description A key typed but not saved yet; without one, the stored key, if `kind` and `url` are the
+			 *     stored ones (so the stored key goes nowhere else).
+			 */
+			api_key?: string | null;
+			kind: components['schemas']['ComicServerKind'];
+			library_id?: string | null;
+			url: string;
+		};
 		/** @description [`ConnectionSettings`] with the proxy password left out. */
 		ConnectionSettingsView: {
 			/**
@@ -2559,6 +2619,15 @@ export interface components {
 			 *     }
 			 */
 			appearance: components['schemas']['AppearanceSettings'];
+			/**
+			 * @default {
+			 *       "has_api_key": false,
+			 *       "kind": "none",
+			 *       "library_id": null,
+			 *       "url": ""
+			 *     }
+			 */
+			comic_server: components['schemas']['ComicServerSettingsView'];
 			/**
 			 * @default {
 			 *       "always_start_from_failed_chapters": true,
@@ -5091,6 +5160,39 @@ export interface operations {
 			};
 			/** @description Values are invalid or settings unknown; `fields` names each, prefixed `settings.` or `modules.<id>.` */
 			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	testComicServer: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ComicServerTestRequest'];
+			};
+		};
+		responses: {
+			/** @description Whether the server answered */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ComicServerTest'];
+				};
+			};
+			/** @description Malformed body */
+			400: {
 				headers: {
 					[name: string]: unknown;
 				};

@@ -64,6 +64,29 @@ describe('the settings page', () => {
 		expect(general.title).toBe('');
 	});
 
+	it('saves the comic server section, keeping the API key out of the settings', async () => {
+		await open('#section-comic_server');
+		expect(shown()).toEqual(['Comic server']);
+		const kavita = screen.getByRole('option', { name: 'Kavita' }) as HTMLOptionElement;
+		await fireEvent.change(screen.getByRole('combobox', { name: 'Server' }), {
+			target: { value: kavita.value }
+		});
+		await fireEvent.input(screen.getByRole('textbox', { name: 'URL' }), {
+			target: { value: 'http://nas:5000' }
+		});
+		await fireEvent.input(screen.getByLabelText('API key'), { target: { value: 'secret-key' } });
+
+		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+		await within(saveBar()).findByText('Saved');
+		const saved = (await api.getSettings()).comic_server;
+		expect(saved).toEqual({
+			kind: 'kavita',
+			url: 'http://nas:5000',
+			has_api_key: true,
+			library_id: null
+		});
+	});
+
 	it('switches to the section of a field the server rejected and focuses it', async () => {
 		await open('#section-connections');
 		const parallel = screen.getByRole('spinbutton', { name: 'Parallel downloads' });
