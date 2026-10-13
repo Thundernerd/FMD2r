@@ -37,8 +37,9 @@ test('the library filters by tag and format, with counts', async ({ page }) => {
 	await expect(cards).toHaveCount(8);
 
 	const tags = page.getByRole('group', { name: 'Tags' });
-	await expect(tags.getByRole('button', { name: /^Action: ignored/ })).toContainText('2');
-	await tags.getByRole('button', { name: /^Action: ignored/ }).click();
+	const action = tags.getByRole('button', { name: 'Action: ignored' });
+	await expect(action.locator('.count')).toHaveText('2');
+	await action.click();
 	await expect(cards).toHaveCount(2);
 	await expect(cards.filter({ hasText: 'Kagurabachi' })).toHaveCount(1);
 
@@ -51,7 +52,7 @@ test('the library filters by tag and format, with counts', async ({ page }) => {
 
 	// A second click excludes the tag.
 	await format.selectOption({ label: 'Any' });
-	await tags.getByRole('button', { name: /^Action: included/ }).click();
+	await tags.getByRole('button', { name: 'Action: included' }).click();
 	await expect(cards).toHaveCount(6);
 	await expect(cards.filter({ hasText: 'Kagurabachi' })).toHaveCount(0);
 });

@@ -135,7 +135,8 @@ export function facets(list: FavoriteView[]): { tags: FacetValue[]; formats: Fac
 			facet.count++;
 			tags.set(tag, facet);
 		}
-		formats.set(formatOf(f), (formats.get(formatOf(f)) ?? 0) + 1);
+		const format = formatOf(f);
+		formats.set(format, (formats.get(format) ?? 0) + 1);
 	}
 	const order = [...Object.keys(FORMAT), UNKNOWN];
 	return {
