@@ -344,6 +344,25 @@ async fn a_changed_title_shows_in_the_patch_response() {
 }
 
 #[tokio::test]
+async fn a_matched_series_has_its_matchs_format_and_genres_as_tags() {
+    let library = Library::new();
+
+    let favorites = library.get("/api/favorites").await;
+
+    // The fixture's series 2092 is a manga in ten genres, the first two Drama and Horror.
+    let narutaru = &favorites[0];
+    assert_eq!(narutaru["link"], "/narutaru");
+    assert_eq!(narutaru["format"], "manga");
+    assert_eq!(narutaru["tags"].as_array().unwrap().len(), 10);
+    assert_eq!(narutaru["tags"][0], "Drama");
+    assert_eq!(narutaru["tags"][1], "Horror");
+    let unmatched = &favorites[4];
+    assert_eq!(unmatched["link"], "/unmatched");
+    assert_eq!(unmatched["format"], Value::Null);
+    assert_eq!(unmatched["tags"], json!([]));
+}
+
+#[tokio::test]
 async fn without_mangabakas_database_the_websites_title_shows() {
     let dir = tempfile::tempdir().unwrap();
     let db = AppDb::open(dir.path().join("app.db")).unwrap();

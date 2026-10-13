@@ -23,7 +23,8 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 use tower::ServiceExt;
 
-/// Module `t` ("T"), whose every series is "Manga" with chapters `/c1` and `/c2`.
+/// Module `t` ("T"), whose every series is "Manga" in genres " Action, drama, Action," with
+/// chapters `/c1` and `/c2`.
 struct Modules;
 
 impl ModuleCatalog for Modules {
@@ -55,6 +56,7 @@ impl ModuleCatalog for Modules {
                 link: link.into(),
                 cover_link: "https://example.com/cover.jpg".into(),
                 authors: "Author".into(),
+                genres: " Action, drama, Action,".into(),
                 status: "1".into(),
                 chapters: vec![
                     Chapter {
@@ -170,6 +172,19 @@ async fn an_added_favorite_is_listed() {
             .unwrap()
             .starts_with("/api/covers")
     );
+}
+
+#[tokio::test]
+async fn a_library_series_is_tagged_with_its_websites_genres_and_has_no_format_unmatched() {
+    let fx = Fixture::new();
+
+    let added = fx.add().await;
+
+    assert_eq!(added["tags"], json!(["Action", "drama"]));
+    assert_eq!(added["format"], Value::Null);
+    let list = json_body(fx.send("GET", "/api/favorites", None).await).await;
+    assert_eq!(list[0]["tags"], json!(["Action", "drama"]));
+    assert_eq!(list[0]["format"], Value::Null);
 }
 
 #[tokio::test]

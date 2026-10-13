@@ -7,10 +7,12 @@ use axum::http::StatusCode;
 use std::sync::Arc;
 
 use fmd_core::download::NewDownload;
-use fmd_core::favorites::{CheckMode, CheckScope, favorite_save_to, website_info};
-use fmd_core::metadata::Metadata;
+use fmd_core::favorites::{
+    CheckMode, CheckScope, SeriesTags, favorite_save_to, series_tags, website_info,
+};
+use fmd_core::metadata::{Metadata, MetadataJobs};
 use fmd_core::settings::LibraryTitle;
-use fmd_store::{Favorite, FavoriteId, LibraryGroupId, ListsDb, NewFavorite, StoreError};
+use fmd_store::{AppDb, Favorite, FavoriteId, LibraryGroupId, ListsDb, NewFavorite, StoreError};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -55,6 +57,12 @@ pub struct FavoriteView {
     pub last_updated: Option<String>,
     /// The library group it is in; `null` is "Ungrouped".
     pub group_id: Option<i64>,
+    /// The website's genres, then those of the series' accepted MangaBaka match, without
+    /// duplicates ignoring case.
+    pub tags: Vec<String>,
+    /// The accepted MangaBaka match's type: `manga`, `manhwa`, `manhua`, `oel` or `other`;
+    /// `null` without a match.
+    pub format: Option<String>,
 }
 
 /// Which favorites to list.
@@ -546,8 +554,23 @@ impl DisplayTitles {
     }
 }
 
+/// `favorite`'s tags and format. Blocking.
+fn tags_of(
+    db: &AppDb,
+    metadata: Option<&MetadataJobs>,
+    favorite: &Favorite,
+) -> Result<SeriesTags, StoreError> {
+    let genres = db
+        .favorites()
+        .info(favorite.id)?
+        .map(|info| info.genres)
+        .unwrap_or_default();
+    Ok(series_tags(metadata, favorite, &genres))
+}
+
 async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
     let titles = DisplayTitles::new(state);
+    let metadata = state.metadata.clone();
     let rows = state
         .blocking(move |db| -> Result<_, ApiError> {
             let favorites = db.favorites().list()?;
@@ -555,7 +578,8 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
             for favorite in favorites {
                 let new_chapters = db.favorites().new_chapter_count(&favorite)?;
                 let display_title = titles.of(&favorite);
-                rows.push((favorite, display_title, new_chapters));
+                let tags = tags_of(db, metadata.as_ref(), &favorite)?;
+                rows.push((favorite, display_title, new_chapters, tags));
             }
             Ok(rows)
         })
@@ -568,29 +592,37 @@ async fn views(state: &AppState) -> Result<Vec<FavoriteView>, ApiError> {
         .collect();
     Ok(rows
         .into_iter()
-        .map(|(favorite, display_title, new_chapters)| {
+        .map(|(favorite, display_title, new_chapters, tags)| {
             let website = names
                 .get(&favorite.module_id)
                 .cloned()
                 .unwrap_or_else(|| favorite.module_id.clone());
-            to_view(favorite, website, display_title, new_chapters)
+            to_view(favorite, website, display_title, new_chapters, tags)
         })
         .collect())
 }
 
 async fn view(state: &AppState, favorite: Favorite) -> Result<FavoriteView, ApiError> {
     let titles = DisplayTitles::new(state);
+    let metadata = state.metadata.clone();
     let counted = favorite.clone();
-    let (display_title, new_chapters) = state
+    let (display_title, new_chapters, tags) = state
         .blocking(move |db| -> Result<_, ApiError> {
             Ok((
                 titles.of(&counted),
                 db.favorites().new_chapter_count(&counted)?,
+                tags_of(db, metadata.as_ref(), &counted)?,
             ))
         })
         .await?;
     let website = website(state, &favorite.module_id);
-    Ok(to_view(favorite, website, display_title, new_chapters))
+    Ok(to_view(
+        favorite,
+        website,
+        display_title,
+        new_chapters,
+        tags,
+    ))
 }
 
 fn to_view(
@@ -598,8 +630,11 @@ fn to_view(
     website: String,
     display_title: String,
     new_chapters: u32,
+    tags: SeriesTags,
 ) -> FavoriteView {
     FavoriteView {
+        tags: tags.tags,
+        format: tags.format,
         id: favorite.id.0,
         cover_url: match favorite.cover_url.as_deref().filter(|c| !c.is_empty()) {
             Some(cover) => cover_url(&favorite.module_id, cover),

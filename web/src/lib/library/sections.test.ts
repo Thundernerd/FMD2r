@@ -20,6 +20,7 @@ const favorite = (id: number, title: string, patch: Partial<FavoriteView> = {}):
 	last_checked: null,
 	last_updated: null,
 	group_id: null,
+	tags: [],
 	...patch
 });
 

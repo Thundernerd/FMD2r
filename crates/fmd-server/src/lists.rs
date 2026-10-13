@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use fmd_core::info::split_genres;
 use fmd_core::lists::{ListJobKind, ListJobs};
 use fmd_store::{FacetCount, MasterListEntry, PageRequest, SearchFilters, UNKNOWN};
 use serde::{Deserialize, Serialize};
@@ -147,16 +148,6 @@ pub struct ListFacets {
 pub struct ListJobStarted {
     pub module_id: String,
     pub job: ListJobKind,
-}
-
-/// FMD2's comma-separated genre list as items.
-fn split_genres(genres: &str) -> Vec<String> {
-    genres
-        .split(',')
-        .map(str::trim)
-        .filter(|g| !g.is_empty())
-        .map(str::to_owned)
-        .collect()
 }
 
 /// `module` when given, else the loaded selected websites: FMD2's "all websites" search covers
