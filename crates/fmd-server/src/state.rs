@@ -7,6 +7,7 @@ use std::time::{Instant, SystemTime};
 
 use fmd_core::accounts::AccountService;
 use fmd_core::favorites::CheckerEvent;
+use fmd_core::folder_move::MovingFolders;
 use fmd_core::info::RateLimits;
 use fmd_core::jobs::JobRegistry;
 use fmd_core::lists::ListJobs;
@@ -19,6 +20,7 @@ use crate::ApiError;
 use crate::auth::{Auth, Secret};
 use crate::covers::{CoverConfig, CoverModules, Covers};
 use crate::events::{EventBus, ServerEvent};
+use crate::folder_move::MoveJob;
 use crate::import::{ImportJob, ImportLimits};
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
@@ -59,6 +61,9 @@ pub struct AppState {
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) import_limits: ImportLimits,
     pub(crate) import_job: ImportJob,
+    pub(crate) move_job: MoveJob,
+    /// The folders a move is working in; the download engine holds tasks downloading into them.
+    pub(crate) moving: MovingFolders,
     pub(crate) started: Instant,
     pub(crate) clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
@@ -89,6 +94,8 @@ impl AppState {
             data_dir: None,
             import_limits: ImportLimits::default(),
             import_job: ImportJob::default(),
+            move_job: MoveJob::default(),
+            moving: MovingFolders::default(),
             started: Instant::now(),
             clock: Arc::new(SystemTime::now),
             shutdown: Arc::new(watch::channel(false).0),

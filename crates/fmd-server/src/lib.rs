@@ -10,6 +10,7 @@ mod custom_css;
 mod error;
 mod events;
 mod favorites;
+mod folder_move;
 mod groups;
 mod health;
 mod import;

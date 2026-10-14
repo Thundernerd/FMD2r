@@ -647,6 +647,16 @@
               }
             }
           },
+          "409": {
+            "description": "With `move_files`: a move is running, and nothing changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "An empty destination",
             "content": {
@@ -796,6 +806,16 @@
           },
           "404": {
             "description": "No such favorite",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "With `move_files`: a move is running, and nothing changed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3717,7 +3737,7 @@
               "string",
               "null"
             ],
-            "description": "A parent folder: each favorite downloads to its own manga folder in it, as\n`POST /api/save-folder` makes it. Chapters already downloaded are not moved."
+            "description": "A parent folder: each favorite downloads to its own manga folder in it, as\n`POST /api/save-folder` makes it. Chapters already downloaded are not moved unless\n`move_files` is set."
           },
           "enabled": {
             "type": [
@@ -3744,6 +3764,10 @@
           "mark_seen": {
             "type": "boolean",
             "description": "Mark every chapter listed at their last check seen, as downloading them would, which\nclears their new chapters. No file is downloaded. A favorite not checked since it was\nimported from FMD2 has no chapter links to mark, so its count stays until its next check."
+          },
+          "move_files": {
+            "type": "boolean",
+            "description": "With `destination`: also move each favorite's chapters already downloaded from its old\nfolder to its new one, in the background; the inbox reports the result."
           },
           "remove": {
             "type": "boolean",
@@ -4142,6 +4166,10 @@
             ],
             "format": "int64",
             "description": "The library group to put it in; `null` ungroups it."
+          },
+          "move_files": {
+            "type": "boolean",
+            "description": "With `save_to`: also move the chapters already downloaded from the old folder to the new\none, in the background; the inbox reports the result."
           },
           "save_to": {
             "type": [
