@@ -165,6 +165,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(favorites::list, favorites::add))
         .routes(routes!(favorites::patch, favorites::delete))
         .routes(routes!(favorites::check))
+        .routes(routes!(favorites::check_library_missing))
         .routes(routes!(favorites::bulk))
         .routes(routes!(favorites::check_missing))
         .routes(routes!(groups::list, groups::create))

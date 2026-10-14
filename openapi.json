@@ -720,6 +720,56 @@
         }
       }
     },
+    "/api/favorites/check-missing": {
+      "post": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Check enabled favorites for chapters missing from their directories\n(`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:883-928), to download them again.\nBeyond FMD2, missing chapters lose their downloaded mark. The body is optional.",
+        "operationId": "checkFavoritesMissing",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CheckRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Started; progress follows as `job.favorites.*` events"
+          },
+          "409": {
+            "description": "A check is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The favorites check is not running in this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/favorites/{id}": {
       "delete": {
         "tags": [
