@@ -119,3 +119,34 @@ describe('Library failing series', () => {
 		await waitFor(async () => expect(await cardTitles()).toEqual(['The Apothecary Diaries']));
 	});
 });
+
+describe('Library chapter counts', () => {
+	it('shows each checked series’ chapter count on its cover, beside its new chapters', async () => {
+		render(Library);
+		const grid = await screen.findByRole('list', { name: 'Favorites' });
+		const card = within(grid).getByRole('link', { name: /Frieren/ });
+		const count = within(card).getByLabelText('142 chapters');
+		expect(count.textContent).toBe('142');
+		expect(count.getAttribute('title')).toBe('142 chapters');
+		expect(within(card).getByLabelText('4 new chapters').textContent).toBe('+4');
+	});
+
+	it('shows no count for a series not checked yet', async () => {
+		const list = api.listFavorites.bind(api);
+		const spy = vi
+			.spyOn(api, 'listFavorites')
+			.mockImplementation(async (...args) =>
+				(await list(...args)).map((favorite) =>
+					favorite.title === 'Sakamoto Days' ? { ...favorite, current_chapter: 0 } : favorite
+				)
+			);
+		try {
+			render(Library);
+			const grid = await screen.findByRole('list', { name: 'Favorites' });
+			const card = within(grid).getByRole('link', { name: /Sakamoto Days/ });
+			expect(within(card).queryByLabelText(/chapters$/)).toBeNull();
+		} finally {
+			spy.mockRestore();
+		}
+	});
+});
