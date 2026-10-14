@@ -3,11 +3,13 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, events, session } from '#lib/app.ts';
-	import { ValidationError } from '#lib/api/client.ts';
+	import { ApiError, ValidationError } from '#lib/api/client.ts';
 	import { adoptAppearance, previewAppearance } from '#lib/appearance.ts';
 	import type {
 		ModuleSettingsView,
 		ModuleSummary,
+		Destination,
+		RelocationCounts,
 		RenamePreview,
 		RenamePreviewRequest,
 		Settings
@@ -18,8 +20,10 @@
 	import MangaBakaPanel from '#lib/components/settings/MangaBakaPanel.svelte';
 	import NotificationChannels from '#lib/components/settings/NotificationChannels.svelte';
 	import ModuleSettings from '#lib/components/settings/ModuleSettings.svelte';
+	import RelocateDialog from '#lib/components/settings/RelocateDialog.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
+	import { changedFolders, type RelocateAnswer } from '#lib/destinations/destinations.ts';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
 	import { editable } from '#lib/settings/module.ts';
 	import { showFieldErrors } from '#lib/settings/save.ts';
@@ -179,6 +183,36 @@
 		return preview.path.endsWith(preview.page) ? preview.path : `${preview.path} › ${preview.page}`;
 	});
 
+	/** The changed destinations the repoint dialog asks about, and how to answer it. */
+	let relocating = $state<{
+		used: RelocationCounts[];
+		answer: (a: RelocateAnswer | null) => void;
+	} | null>(null);
+
+	/**
+	 * The changed destinations that library series or websites download to, and whether to point
+	 * those to the new folders; `null` when the dialog is closed without an answer.
+	 */
+	async function askRelocate(): Promise<({ used: RelocationCounts[] } & RelocateAnswer) | null> {
+		const PATH = 'saveto.destinations';
+		const relocations = changedFolders(
+			(draft?.saved(PATH) ?? []) as unknown as Destination[],
+			(draft?.get(PATH) ?? []) as unknown as Destination[]
+		);
+		if (!relocations.length) return { used: [], repoint: false, moveFiles: false };
+		const counts = await api
+			.relocateDestinations({ relocations, dry_run: true })
+			// The settings still save; only the offer to repoint is lost.
+			.catch(() => []);
+		const used = counts.filter((c) => c.series + c.websites > 0);
+		if (!used.length) return { used, repoint: false, moveFiles: false };
+		const answer = await new Promise<RelocateAnswer | null>(
+			(resolve) => (relocating = { used, answer: resolve })
+		);
+		relocating = null;
+		return answer && { used, ...answer };
+	}
+
 	/** Saves the settings and the open module's settings together: both or neither. */
 	async function save() {
 		const changes = draft?.changes();
@@ -186,6 +220,11 @@
 		const moduleId = moduleView?.id;
 		saving = true;
 		saveError = null;
+		const relocate = await askRelocate();
+		if (!relocate) {
+			saving = false;
+			return;
+		}
 		try {
 			const result = await api.patchAllSettings({
 				...(changes ? { settings: changes } : {}),
@@ -205,11 +244,35 @@
 					.catch(() => {});
 			}
 		} catch (e) {
+			saving = false;
 			await reject(e, moduleId);
 			return;
-		} finally {
-			saving = false;
 		}
+		if (relocate.repoint) {
+			try {
+				await api.relocateDestinations({
+					relocations: relocate.used.map(({ from, to }) => ({ from, to })),
+					move_files: relocate.moveFiles
+				});
+			} catch (e) {
+				saving = false;
+				const why = e instanceof ApiError && e.detail ? `: ${e.detail}` : '.';
+				saveError = `Saved the settings, but could not repoint the library${why}`;
+				return;
+			}
+			// The open website's own destination may have been repointed.
+			if (moduleId && relocate.used.some((c) => c.websites > 0)) {
+				api
+					.getModuleSettings(moduleId)
+					.then((view) => {
+						if (moduleView?.id !== moduleId || moduleDraft?.dirty) return;
+						moduleView = view;
+						moduleDraft?.commit(editable(view));
+					})
+					.catch(() => {});
+			}
+		}
+		saving = false;
 		saved = true;
 		setTimeout(() => (saved = false), 2000);
 		// The password setting decides whether the server warns that it is open.
@@ -423,6 +486,10 @@
 				</button>
 			{/if}
 		</div>
+	{/if}
+
+	{#if relocating}
+		<RelocateDialog used={relocating.used} onanswer={relocating.answer} />
 	{/if}
 </div>
 

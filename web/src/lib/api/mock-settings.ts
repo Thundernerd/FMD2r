@@ -1,3 +1,4 @@
+import { samePath } from '#lib/destinations/destinations.ts';
 import { getPath, isObject } from '#lib/settings/draft.svelte.ts';
 import { SETTINGS_SECTIONS } from '#lib/settings/sections.ts';
 import type {
@@ -667,6 +668,21 @@ export function createMockSettings(setUp = true) {
 				path,
 				problem: path.startsWith('/mnt/') ? 'the folder does not exist' : null
 			})),
+
+		/**
+		 * Points the websites whose own destination is `from` to `to`, as
+		 * `POST /api/destinations/relocate` does; only counts them with `dryRun`.
+		 */
+		relocateWebsites(from: string, to: string, dryRun: boolean): number {
+			const using = Object.values(state.modules).filter(
+				(o) => o.save_to.trim() && samePath(o.save_to, from)
+			);
+			if (!dryRun) {
+				for (const overrides of using) overrides.save_to = to;
+				save();
+			}
+			return using.length;
+		},
 
 		listModules: (): ModuleBasics[] =>
 			MODULES.map((m) => {

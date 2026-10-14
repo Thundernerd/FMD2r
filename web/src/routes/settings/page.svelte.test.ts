@@ -31,6 +31,13 @@ async function open(hash: string) {
 
 // jsdom lays nothing out, so it cannot scroll.
 Element.prototype.scrollIntoView = () => {};
+// jsdom has no modal dialogs.
+HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+	this.open = true;
+};
+HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+	this.open = false;
+};
 
 describe('the settings page', () => {
 	afterEach(() => (document.body.innerHTML = ''));
@@ -173,5 +180,36 @@ describe('the settings page', () => {
 				problems: true
 			}
 		});
+	});
+
+	it('offers to repoint the library series in a destination whose folder changed; "Leave them" only saves', async () => {
+		await open('#section-saveto');
+		const downloads = within(screen.getByRole('group', { name: 'Downloads' }));
+		const folder = downloads.getByRole('textbox', { name: 'Folder' });
+		// No series downloads to the old folder: nothing to offer.
+		await fireEvent.input(folder, { target: { value: '/data/downloads' } });
+		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+		await within(saveBar()).findByText('Saved');
+		expect(screen.queryByRole('dialog')).toBeNull();
+
+		// The mock library's 8 series download to `/data/downloads/<title>`.
+		await fireEvent.input(folder, { target: { value: '/data/library' } });
+		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+		const dialog = within(await screen.findByRole('dialog', { name: 'Repoint the library' }));
+		const offer = dialog.getByRole('listitem').textContent?.replace(/\s+/g, ' ').trim();
+		expect(offer).toBe(
+			'8 library series and 0 websites use /data/downloads. Point them to /data/library?'
+		);
+		const move = dialog.getByRole('checkbox', {
+			name: 'Also move their chapters already downloaded'
+		}) as HTMLInputElement;
+		expect(move.checked).toBe(false);
+
+		await fireEvent.click(dialog.getByRole('button', { name: 'Leave them' }));
+		await within(saveBar()).findByText('Saved');
+		const { saveto } = await api.getSettings();
+		expect(saveto.destinations.map((d) => d.path)).toEqual(['/data/library']);
+		const frieren = (await api.listFavorites()).find((f) => f.title === 'Frieren');
+		expect(frieren?.save_to).toBe('/data/downloads/Frieren');
 	});
 });
