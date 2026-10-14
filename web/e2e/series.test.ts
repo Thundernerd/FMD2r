@@ -70,3 +70,15 @@ test('a slow series shows a skeleton of the page until it loads', async ({ page 
 	await expect(skeleton).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Chapters' })).toBeVisible();
 });
+
+test('a check for missing chapters reports its result in the inbox', async ({ page }) => {
+	await page.goto('/series?module=mangadex&link=%2Ftitle%2Fabc123%2Ffrieren');
+	await page.getByRole('button', { name: 'Check missing chapters' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'arrives in the inbox' })).toBeVisible();
+
+	await page.getByRole('button', { name: /Inbox/ }).click();
+	const inbox = page.getByRole('dialog', { name: 'Inbox' });
+	await expect(
+		inbox.getByRole('listitem').filter({ hasText: 'No missing chapters' })
+	).toContainText('Checked 1 series; every chapter is on disk.');
+});
