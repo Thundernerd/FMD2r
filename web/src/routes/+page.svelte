@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { api, events } from '#lib/app.ts';
 	import { ApiError } from '#lib/api/client.ts';
-	import type { FavoriteView, GroupView, SeriesStatus } from '#lib/api/types.ts';
+	import type { FavoriteView, FavoritesEvent, GroupView, SeriesStatus } from '#lib/api/types.ts';
 	import {
 		CHIPS,
 		SORTS,
@@ -33,7 +33,7 @@
 	/** Where this browser keeps whether "Ungrouped" is folded; groups keep theirs on the server. */
 	const UNGROUPED_KEY = 'fmd2r.library.ungrouped-collapsed';
 
-	/** The background job behind "Check now" (`GET /api/jobs/favorites`). */
+	/** The background job behind "Check now" and "Check missing" (`GET /api/jobs/favorites`). */
 	const JOB = 'favorites';
 
 	const STATUS: Record<SeriesStatus, string> = {
@@ -48,7 +48,8 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let filters = $state<LibraryFilters>(emptyFilters());
-	let starting = $state(false);
+	/** The kind of check being started, until the job says it runs. */
+	let starting = $state<FavoritesEvent['mode'] | null>(null);
 	let checkError = $state<string | null>(null);
 	let importing = $state(false);
 	let groups = $state<GroupView[]>([]);
@@ -96,10 +97,12 @@
 		shownSections ? shownSections.filter((s) => !s.collapsed).flatMap((s) => s.favorites) : shown
 	);
 	const selectedLabel = $derived(selectionLabel(selected, visible));
-	/** Paused series in the selection, which "Check now" skips. */
+	/** Paused series in the selection, which "Check now" and "Check missing" skip. */
 	const selectedPaused = $derived(favorites.filter((f) => selected.has(f.id) && !f.enabled).length);
 	const job = $derived(events.jobs[JOB]);
-	const checking = $derived(starting || job?.state === 'running');
+	const checking = $derived(starting !== null || job?.state === 'running');
+	/** What the running check looks for; a new-chapter check until its first event says. */
+	const checkMode = $derived(starting ?? events.favorites?.mode ?? 'new');
 
 	/** `unknown` is the series without a MangaBaka match; a format `FORMAT` lacks shows as is. */
 	function formatLabel(format: string): string {
@@ -161,15 +164,16 @@
 				: 'Could not start the check.';
 	}
 
-	async function checkNow() {
-		starting = true;
+	/** Checks every enabled favorite for new or missing chapters. */
+	async function checkAll(mode: FavoritesEvent['mode']) {
+		starting = mode;
 		checkError = null;
 		try {
-			await api.checkFavorites();
+			await (mode === 'new' ? api.checkFavorites() : api.checkFavoritesMissing());
 		} catch (e) {
 			checkError = checkFailure(e);
 		} finally {
-			starting = false;
+			starting = null;
 		}
 	}
 
@@ -244,12 +248,14 @@
 		}
 	}
 
-	async function checkSelected() {
+	/** Checks the selection for new or missing chapters; paused series are skipped. */
+	async function checkSelected(mode: FavoritesEvent['mode']) {
 		bulkBusy = true;
 		bulkError = null;
 		bulkNote = null;
+		const ids = [...selected];
 		try {
-			await api.checkFavorites([...selected]);
+			await (mode === 'new' ? api.checkFavorites(ids) : api.checkFavoritesMissing(ids));
 			if (selectedPaused > 0) {
 				bulkNote = `Checking; the ${selectedPaused} paused series ${selectedPaused === 1 ? 'is' : 'are'} skipped.`;
 			}
@@ -349,11 +355,19 @@
 					<i style:width="{job?.total ? Math.round((job.done / job.total) * 100) : 30}%"></i>
 				</div>
 				<span class="small muted num" role="status">
-					Checking{job?.total ? ` ${job.done}/${job.total}` : '…'}
+					{checkMode === 'missing' ? 'Checking for missing chapters' : 'Checking'}{job?.total
+						? ` ${job.done}/${job.total}`
+						: '…'}
 				</span>
 				<button class="btn sm ghost" type="button" onclick={cancel}>Cancel</button>
 			{:else}
-				<button class="btn primary" type="button" onclick={checkNow}>Check now</button>
+				<button class="btn primary" type="button" onclick={() => checkAll('new')}>Check now</button>
+				<button
+					class="btn"
+					type="button"
+					title="Looks for chapters missing from each series’ folder; they lose their seen mark"
+					onclick={() => checkAll('missing')}>Check missing</button
+				>
 			{/if}
 			{#if selecting}
 				<button
@@ -531,7 +545,7 @@
 					{:else if bulkNote}
 						· {bulkNote}
 					{:else if selectedPaused > 0}
-						· <span class="muted">Check now skips the paused ones.</span>
+						· <span class="muted">A check skips the paused ones.</span>
 					{/if}
 				</span>
 				<div class="bulk-actions">
@@ -559,8 +573,18 @@
 						disabled={bulkBusy}
 						onclick={() => (bulkAction = 'folder')}>Download folder…</button
 					>
-					<button class="btn sm" type="button" disabled={bulkBusy} onclick={checkSelected}
-						>Check now</button
+					<button
+						class="btn sm"
+						type="button"
+						disabled={bulkBusy}
+						onclick={() => checkSelected('new')}>Check now</button
+					>
+					<button
+						class="btn sm"
+						type="button"
+						disabled={bulkBusy}
+						title="Looks for chapters missing from the series’ folders; they lose their seen mark"
+						onclick={() => checkSelected('missing')}>Check missing</button
 					>
 					<button
 						class="btn sm"

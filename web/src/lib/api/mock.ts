@@ -923,9 +923,10 @@ export function createMockBackend({
 			}
 			return json(body, status);
 		}
-		if (route === 'POST /api/favorites/check') {
+		if (route === 'POST /api/favorites/check' || route === 'POST /api/favorites/check-missing') {
 			const body = (await req.json().catch(() => ({}))) as { ids?: number[] } | null;
-			return favorites.start(body?.ids ?? null, 'new')
+			const mode = route.endsWith('missing') ? 'missing' : 'new';
+			return favorites.start(body?.ids ?? null, mode)
 				? new Response(null, { status: 202 })
 				: json({ status: 409, detail: 'a favorites check is already running' }, 409);
 		}

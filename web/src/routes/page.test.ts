@@ -150,3 +150,33 @@ describe('Library chapter counts', () => {
 		}
 	});
 });
+
+describe('Library missing-chapter check', () => {
+	it('checks the whole library from the header', async () => {
+		const check = vi.spyOn(api, 'checkFavoritesMissing').mockResolvedValue();
+		render(Library);
+		await screen.findByRole('list', { name: 'Favorites' });
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Check missing' }));
+
+		await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+		expect(check).toHaveBeenCalledWith();
+		check.mockRestore();
+	});
+
+	it('checks the selected series from the bulk bar', async () => {
+		const check = vi.spyOn(api, 'checkFavoritesMissing').mockResolvedValue();
+		render(Library);
+		const grid = await screen.findByRole('list', { name: 'Favorites' });
+		await fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+		await fireEvent.click(within(grid).getByRole('checkbox', { name: 'Frieren' }));
+		await fireEvent.click(within(grid).getByRole('checkbox', { name: 'Sakamoto Days' }));
+
+		const bar = screen.getByRole('status', { name: 'Selection' }).parentElement as HTMLElement;
+		await fireEvent.click(within(bar).getByRole('button', { name: 'Check missing' }));
+
+		await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+		expect(check).toHaveBeenCalledWith([1, 4]);
+		check.mockRestore();
+	});
+});

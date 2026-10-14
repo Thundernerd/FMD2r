@@ -240,6 +240,27 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/favorites/check-missing': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Check enabled favorites for chapters missing from their directories
+		 *     (`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:883-928), to download them again.
+		 *     Beyond FMD2, missing chapters lose their downloaded mark. The body is optional.
+		 */
+		post: operations['checkFavoritesMissing'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/favorites/{id}': {
 		parameters: {
 			query?: never;
@@ -3820,6 +3841,46 @@ export interface operations {
 		};
 	};
 	checkFavorites: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: {
+			content: {
+				'application/json': null | components['schemas']['CheckRequest'];
+			};
+		};
+		responses: {
+			/** @description Started; progress follows as `job.favorites.*` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description A check is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The favorites check is not running in this server */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	checkFavoritesMissing: {
 		parameters: {
 			query?: never;
 			header?: never;
