@@ -460,13 +460,13 @@
         "tags": [
           "settings"
         ],
-        "summary": "Point the library series and websites that download to a destination's old folder to its\nnew one. A series' folder `from/A/B` becomes `to/A/B`; `from` matches by whole path\ncomponents, so `/data/manga` does not match `/data/manga2`.",
-        "operationId": "relocateDestination",
+        "summary": "Point the library series and websites that download to destinations' old folders to their new\nones. A series' folder `from/A/B` becomes `to/A/B`; `from` matches by whole path components,\nso `/data/manga` does not match `/data/manga2`. A series inside several old folders follows\nthe innermost one.",
+        "operationId": "relocateDestinations",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Relocation"
+                "$ref": "#/components/schemas/RelocateRequest"
               }
             }
           },
@@ -474,11 +474,14 @@
         },
         "responses": {
           "200": {
-            "description": "What was repointed",
+            "description": "What was repointed, in the order of `relocations`",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RelocationCounts"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RelocationCounts"
+                  }
                 }
               }
             }
@@ -6273,6 +6276,29 @@
           "socks5"
         ]
       },
+      "RelocateRequest": {
+        "type": "object",
+        "description": "Destinations whose folders changed, repointed together so their files move in one run of the\nmove job.",
+        "required": [
+          "relocations"
+        ],
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "description": "Only count what would be repointed; nothing changes."
+          },
+          "move_files": {
+            "type": "boolean",
+            "description": "Also move the repointed series' chapters already downloaded to their new folders, in the\nbackground; the inbox reports the result. A series that downloads straight into an old\nfolder is repointed without moving anything, as that would move the whole destination."
+          },
+          "relocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Relocation"
+            }
+          }
+        }
+      },
       "Relocation": {
         "type": "object",
         "description": "A destination's folder that changed.",
@@ -6281,17 +6307,9 @@
           "to"
         ],
         "properties": {
-          "dry_run": {
-            "type": "boolean",
-            "description": "Only count what would be repointed; nothing changes."
-          },
           "from": {
             "type": "string",
             "description": "The destination's old folder."
-          },
-          "move_files": {
-            "type": "boolean",
-            "description": "Also move the repointed series' chapters already downloaded to their new folders, in the\nbackground; the inbox reports the result. A series that downloads straight into the old\nfolder is repointed without moving anything, as that would move the whole destination."
           },
           "to": {
             "type": "string",
@@ -6303,14 +6321,22 @@
         "type": "object",
         "description": "What a relocation repointed, or would.",
         "required": [
+          "from",
+          "to",
           "series",
           "websites"
         ],
         "properties": {
+          "from": {
+            "type": "string"
+          },
           "series": {
             "type": "integer",
             "description": "Library series whose folder is the old folder or inside it.",
             "minimum": 0
+          },
+          "to": {
+            "type": "string"
           },
           "websites": {
             "type": "integer",

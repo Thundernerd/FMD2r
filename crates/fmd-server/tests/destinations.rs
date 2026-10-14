@@ -138,13 +138,13 @@ async fn relocating_repoints_the_series_in_and_under_the_old_folder() {
     let neighbour = fx.series("Delta", "manga2/Delta");
 
     let response = fx
-        .relocate(json!({ "from": fx.path("manga"), "to": fx.path("comics") }))
+        .relocate(json!({ "relocations": [{ "from": fx.path("manga"), "to": fx.path("comics") }] }))
         .await;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         json_body(response).await,
-        json!({ "series": 3, "websites": 0 })
+        json!([{ "from": fx.text("manga"), "to": fx.text("comics"), "series": 3, "websites": 0 }])
     );
     assert_eq!(fx.save_to(inside), fx.text("comics/Alpha"));
     assert_eq!(fx.save_to(deeper), fx.text("comics/shelf/Beta"));
@@ -161,12 +161,12 @@ async fn relocating_repoints_the_websites_whose_destination_is_the_old_folder() 
     fx.website("d", "manga2");
 
     let response = fx
-        .relocate(json!({ "from": fx.path("manga"), "to": fx.path("comics") }))
+        .relocate(json!({ "relocations": [{ "from": fx.path("manga"), "to": fx.path("comics") }] }))
         .await;
 
     assert_eq!(
         json_body(response).await,
-        json!({ "series": 0, "websites": 2 })
+        json!([{ "from": fx.text("manga"), "to": fx.text("comics"), "series": 0, "websites": 2 }])
     );
     assert_eq!(fx.website_save_to("a"), fx.text("comics"));
     assert_eq!(fx.website_save_to("b"), fx.text("comics"));
@@ -182,13 +182,16 @@ async fn a_dry_run_counts_what_would_be_repointed_and_changes_nothing() {
     fx.website("a", "manga");
 
     let response = fx
-        .relocate(json!({ "from": fx.path("manga"), "to": fx.path("comics"), "dry_run": true }))
+        .relocate(json!({
+            "relocations": [{ "from": fx.path("manga"), "to": fx.path("comics") }],
+            "dry_run": true,
+        }))
         .await;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         json_body(response).await,
-        json!({ "series": 1, "websites": 1 })
+        json!([{ "from": fx.text("manga"), "to": fx.text("comics"), "series": 1, "websites": 1 }])
     );
     assert_eq!(fx.save_to(alpha), fx.text("manga/Alpha"));
     assert_eq!(fx.website_save_to("a"), fx.text("manga"));
@@ -205,8 +208,7 @@ async fn with_move_files_the_series_chapters_move_to_their_new_folders() {
 
     let response = fx
         .relocate(json!({
-            "from": fx.path("manga"),
-            "to": fx.path("comics"),
+            "relocations": [{ "from": fx.path("manga"), "to": fx.path("comics") }],
             "move_files": true,
         }))
         .await;
@@ -214,7 +216,7 @@ async fn with_move_files_the_series_chapters_move_to_their_new_folders() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         json_body(response).await,
-        json!({ "series": 2, "websites": 0 })
+        json!([{ "from": fx.text("manga"), "to": fx.text("comics"), "series": 2, "websites": 0 }])
     );
     let job = fx.finished_move().await;
     assert_eq!(job["state"], "done", "{job}");
@@ -236,11 +238,47 @@ async fn an_empty_folder_is_refused_and_changes_nothing() {
     let alpha = fx.series("Alpha", "manga/Alpha");
 
     for body in [
-        json!({ "from": "", "to": fx.path("comics") }),
-        json!({ "from": fx.path("manga"), "to": " " }),
+        json!({ "relocations": [{ "from": "", "to": fx.path("comics") }] }),
+        json!({ "relocations": [{ "from": fx.path("manga"), "to": " " }] }),
     ] {
         let response = fx.relocate(body).await;
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
     assert_eq!(fx.save_to(alpha), fx.text("manga/Alpha"));
+}
+
+#[tokio::test]
+async fn several_destinations_are_repointed_and_their_files_moved_in_one_run() {
+    let fx = Fixture::new();
+    let alpha = fx.series("Alpha", "manga/Alpha");
+    let beta = fx.series("Beta", "manhwa/Beta");
+    write(&fx.path("manga/Alpha/Chapter 1.cbz"), "alpha");
+    write(&fx.path("manhwa/Beta/Chapter 1.cbz"), "beta");
+
+    let response = fx
+        .relocate(json!({
+            "relocations": [
+                { "from": fx.path("manga"), "to": fx.path("new/manga") },
+                { "from": fx.path("manhwa"), "to": fx.path("new/manhwa") },
+            ],
+            "move_files": true,
+        }))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let counts = json_body(response).await;
+    assert_eq!(
+        (counts[0]["series"].clone(), counts[1]["series"].clone()),
+        (json!(1), json!(1)),
+        "{counts}"
+    );
+    let job = fx.finished_move().await;
+    assert_eq!(
+        (job["done"].clone(), job["total"].clone()),
+        (json!(2), json!(2))
+    );
+    assert_eq!(fx.save_to(alpha), fx.text("new/manga/Alpha"));
+    assert_eq!(fx.save_to(beta), fx.text("new/manhwa/Beta"));
+    assert_eq!(read(&fx.path("new/manga/Alpha/Chapter 1.cbz")), "alpha");
+    assert_eq!(read(&fx.path("new/manhwa/Beta/Chapter 1.cbz")), "beta");
 }

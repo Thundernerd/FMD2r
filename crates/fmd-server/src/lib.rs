@@ -52,7 +52,7 @@ pub use comic_server::{ComicServerTest, ComicServerTestRequest};
 pub use covers::{
     CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
 };
-pub use destinations::{Relocation, RelocationCounts};
+pub use destinations::{RelocateRequest, Relocation, RelocationCounts};
 pub use error::{ApiError, FieldProblem, Problem};
 pub use events::{
     EventBus, JobState, ServerEvent, TaskProgress, TaskRemoved, TaskState, TaskStatusChange,
