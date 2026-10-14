@@ -3,13 +3,14 @@
 //! mangadownloader/forms/frmMain.pas:963-964).
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use fmd_core::download::TaskStatus;
 use fmd_core::folder_move::{FolderMover, LibraryFolders, MoveReport, SharedFolder, overlap};
-use fmd_core::jobs::{Job, JobError, JobPhase, JobStatus};
+use fmd_core::jobs::{JobPhase, JobStatus};
 use fmd_store::{EventSeverity, FavoriteId, NewEvent};
 
+use crate::one_off_job::OneOffJob;
 use crate::state::off_thread;
 use crate::{ApiError, AppState};
 
@@ -29,79 +30,17 @@ pub(crate) struct SeriesMove {
 }
 
 /// The `move-downloads` job, for the System page; it only runs through a folder change.
-#[derive(Clone)]
-pub(crate) struct MoveJob(Arc<Mutex<JobStatus>>);
-
-impl Default for MoveJob {
-    fn default() -> Self {
-        Self(Arc::new(Mutex::new(status(JobPhase::Idle, None))))
-    }
+pub(crate) fn job() -> OneOffJob {
+    OneOffJob::new(
+        JOB_ID,
+        JOB_TITLE,
+        "a move starts with a series' folder change",
+        "a move cannot be cancelled",
+    )
 }
 
-impl MoveJob {
-    pub(crate) const ID: &str = "move-downloads";
-    const TITLE: &str = "Move downloads";
-
-    fn update(&self, f: impl FnOnce(&mut JobStatus)) {
-        f(&mut self.0.lock().unwrap_or_else(PoisonError::into_inner));
-    }
-
-    /// Starts a run unless one is running; returns the status it replaced.
-    fn try_begin(&self) -> Result<JobStatus, ApiError> {
-        let mut current = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if current.phase == JobPhase::Running {
-            return Err(ApiError::Conflict(format!(
-                "{} is running; try again once it is done",
-                Self::TITLE
-            )));
-        }
-        Ok(std::mem::replace(
-            &mut current,
-            status(JobPhase::Running, Some(now_ms())),
-        ))
-    }
-}
-
-fn status(phase: JobPhase, last_run: Option<i64>) -> JobStatus {
-    JobStatus {
-        phase,
-        done: 0,
-        total: 0,
-        last_run,
-        next_run: None,
-        last_error: None,
-    }
-}
-
-impl Job for MoveJob {
-    fn id(&self) -> &str {
-        Self::ID
-    }
-
-    fn title(&self) -> &str {
-        Self::TITLE
-    }
-
-    fn status(&self) -> JobStatus {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
-    }
-
-    fn run(&self) -> Result<(), JobError> {
-        Err(JobError::Unsupported(
-            "a move starts with a series' folder change".into(),
-        ))
-    }
-
-    fn cancel(&self) -> Result<(), JobError> {
-        match self.status().phase {
-            JobPhase::Running => Err(JobError::Unsupported("a move cannot be cancelled".into())),
-            _ => Err(JobError::NotRunning),
-        }
-    }
-}
+const JOB_ID: &str = "move-downloads";
+const JOB_TITLE: &str = "Move downloads";
 
 /// A move reserved before the new folders are saved, so a request that cannot move answers 409
 /// without changing anything. Dropped without [`MoveRun::start`], it gives the reservation back.
@@ -111,13 +50,11 @@ pub(crate) struct MoveRun {
 }
 
 impl MoveRun {
-    /// Registers the job on its first run; a conflict while a move runs.
+    /// A conflict, naming the job, while a move runs.
     pub(crate) fn reserve(state: &AppState) -> Result<Self, ApiError> {
-        let previous = state.move_job.try_begin()?;
-        if state.jobs.get(MoveJob::ID).is_none() {
-            state.jobs.register(state.move_job.clone());
-        }
-        state.jobs.changed(MoveJob::ID);
+        let previous = state.move_job.begin(&state.jobs).map_err(|_| {
+            ApiError::Conflict(format!("{JOB_TITLE} is running; try again once it is done"))
+        })?;
         Ok(Self {
             state: state.clone(),
             previous: Some(previous),
@@ -135,7 +72,7 @@ impl Drop for MoveRun {
     fn drop(&mut self) {
         if let Some(previous) = self.previous.take() {
             self.state.move_job.update(|s| *s = previous);
-            self.state.jobs.changed(MoveJob::ID);
+            self.state.jobs.changed(JOB_ID);
         }
     }
 }
@@ -150,7 +87,7 @@ async fn run(state: AppState, moves: Vec<SeriesMove>) {
         progress(&state, done, total);
     }
     state.move_job.update(|s| s.phase = JobPhase::Done);
-    state.jobs.changed(MoveJob::ID);
+    state.jobs.changed(JOB_ID);
     if let Err(e) = state.notify(summary.event()).await {
         tracing::warn!(target: "fmd_server", "adding the move's report to the inbox: {e}");
     }
@@ -161,33 +98,80 @@ fn progress(state: &AppState, done: u64, total: u64) {
         s.done = done;
         s.total = total;
     });
-    state.jobs.changed(MoveJob::ID);
+    state.jobs.changed(JOB_ID);
 }
 
-type Outcome = Result<Result<MoveReport, SharedFolder>, ApiError>;
+/// How one series' move went.
+enum Outcome {
+    Moved(MoveReport),
+    /// Its old folder holds more than its own downloads, so nothing moved.
+    Shared(SharedFolder),
+    Failed(ApiError),
+}
 
 /// Waits for the series' running downloads to end and keeps new ones from starting while its
-/// files move.
+/// files move; its unfinished downloads then follow it to the new folder.
 async fn move_series(state: &AppState, series: &SeriesMove, batch: &[SeriesMove]) -> Outcome {
     let (from, to) = (PathBuf::from(&series.from), PathBuf::from(&series.to));
     if from == to {
-        return Ok(Ok(MoveReport::default()));
+        return Outcome::Moved(MoveReport::default());
     }
-    let library = library_folders(state, series, batch).await?;
-    if let Some(shared) = library.sharing(&from) {
-        return Ok(Err(shared));
+    // A shared folder is refused before waiting on downloads into it.
+    match library_folders(state, series, batch).await {
+        Ok(library) => {
+            if let Some(shared) = library.sharing(&from) {
+                return Outcome::Shared(shared);
+            }
+        }
+        Err(e) => return Outcome::Failed(e),
     }
     let held = state.moving.hold(vec![from.clone(), to.clone()]);
-    let moved = async {
-        wait_for_downloads(state, &from, &to).await?;
-        off_thread(move || FolderMover::default().move_series(&from, &to, &library)).await
-    }
-    .await;
+    let moved = held_move(state, series, batch, from, to).await;
     drop(held);
     if let Err(e) = state.engine.activate_waiting().await {
         tracing::warn!(target: "fmd_server", "starting downloads held for a move: {e}");
     }
-    moved
+    match moved {
+        Ok(Ok(report)) => Outcome::Moved(report),
+        Ok(Err(shared)) => Outcome::Shared(shared),
+        Err(e) => Outcome::Failed(e),
+    }
+}
+
+/// The move while its folders are held. The library is read again once the downloads have
+/// ended, so a series given the old folder meanwhile is not moved along.
+async fn held_move(
+    state: &AppState,
+    series: &SeriesMove,
+    batch: &[SeriesMove],
+    from: PathBuf,
+    to: PathBuf,
+) -> Result<Result<MoveReport, SharedFolder>, ApiError> {
+    wait_for_downloads(state, &from, &to).await?;
+    let library = library_folders(state, series, batch).await?;
+    let report = {
+        let (from, to) = (from.clone(), to.clone());
+        off_thread(move || FolderMover::default().move_series(&from, &to, &library)).await?
+    };
+    if report.is_ok() {
+        repoint_downloads(state, from, series.to.clone()).await?;
+    }
+    Ok(report)
+}
+
+/// The queue tasks still to download into `from` download into `to` instead; finished ones keep
+/// the folder they downloaded to.
+async fn repoint_downloads(state: &AppState, from: PathBuf, to: String) -> Result<(), ApiError> {
+    state
+        .blocking(move |db| -> Result<(), ApiError> {
+            for task in db.tasks().list()? {
+                if task.status != TaskStatus::Finished && Path::new(&task.save_to) == from {
+                    db.tasks().set_save_to(task.id, &to)?;
+                }
+            }
+            Ok(())
+        })
+        .await
 }
 
 async fn wait_for_downloads(state: &AppState, from: &Path, to: &Path) -> Result<(), ApiError> {
@@ -254,6 +238,7 @@ async fn library_folders(
 /// What a run did, for its inbox item.
 #[derive(Default)]
 struct Summary {
+    /// Series with at least one file or folder moved.
     moved: usize,
     /// What was skipped or failed, one line each.
     problems: Vec<String>,
@@ -263,8 +248,10 @@ impl Summary {
     fn add(&mut self, series: &SeriesMove, outcome: Outcome) {
         let title = &series.title;
         match outcome {
-            Ok(Ok(report)) => {
-                self.moved += 1;
+            Outcome::Moved(report) => {
+                if report.moved > 0 {
+                    self.moved += 1;
+                }
                 for skipped in report.skipped {
                     self.problems.push(format!(
                         "{title}: skipped {}: the new folder has one of that name",
@@ -276,10 +263,10 @@ impl Summary {
                         .push(format!("{title}: failed {}: {error}", path.display()));
                 }
             }
-            Ok(Err(shared)) => self
+            Outcome::Shared(shared) => self
                 .problems
                 .push(format!("{title}: skipped the series: {shared}")),
-            Err(e) => self.problems.push(format!("{title}: failed: {e}")),
+            Outcome::Failed(e) => self.problems.push(format!("{title}: failed: {e}")),
         }
     }
 
@@ -297,10 +284,4 @@ impl Summary {
             body: self.problems.join("\n").into(),
         }
     }
-}
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as i64)
 }

@@ -4,13 +4,13 @@
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
 use axum::Json;
 use axum::body::Body;
 use axum::extract::{RawQuery, State};
 use axum::http::{HeaderMap, header};
-use fmd_core::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
+use fmd_core::jobs::{JobPhase, JobRegistry};
 use fmd_import::{ImportError, ImportOptions, ImportReport, TimeZone};
 use fmd_store::{ACCOUNTS_KEY_FILE, KeyFileCipher};
 use futures_util::StreamExt;
@@ -20,6 +20,7 @@ use utoipa::openapi::RefOr;
 use utoipa::openapi::schema::{KnownFormat, ObjectBuilder, Schema, SchemaFormat, Type};
 use utoipa::{IntoParams, PartialSchema, ToSchema};
 
+use crate::one_off_job::OneOffJob;
 use crate::state::off_thread;
 use crate::{ApiError, AppState, Problem};
 
@@ -357,76 +358,16 @@ fn userdata_folder(mut dir: PathBuf) -> PathBuf {
 }
 
 /// The `import` job, for the System page; it only runs through `POST /api/import`.
-#[derive(Clone)]
-pub(crate) struct ImportJob(Arc<Mutex<JobStatus>>);
-
-impl Default for ImportJob {
-    fn default() -> Self {
-        Self(Arc::new(Mutex::new(fresh_status(JobPhase::Idle, None))))
-    }
+pub(crate) fn job() -> OneOffJob {
+    OneOffJob::new(
+        JOB_ID,
+        "Import from FMD2",
+        "an import needs an upload: POST it to /api/import",
+        "an import cannot be cancelled",
+    )
 }
 
-impl ImportJob {
-    pub(crate) const ID: &str = "import";
-
-    fn update(&self, f: impl FnOnce(&mut JobStatus)) {
-        f(&mut self.0.lock().unwrap_or_else(PoisonError::into_inner));
-    }
-
-    /// Starts a run, unless one is running.
-    fn try_begin(&self) -> Result<(), JobError> {
-        let mut current = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if current.phase == JobPhase::Running {
-            return Err(JobError::AlreadyRunning);
-        }
-        *current = fresh_status(JobPhase::Running, Some(now_ms()));
-        Ok(())
-    }
-}
-
-/// A run's status before any progress.
-fn fresh_status(phase: JobPhase, last_run: Option<i64>) -> JobStatus {
-    JobStatus {
-        phase,
-        done: 0,
-        total: 0,
-        last_run,
-        next_run: None,
-        last_error: None,
-    }
-}
-
-impl Job for ImportJob {
-    fn id(&self) -> &str {
-        Self::ID
-    }
-
-    fn title(&self) -> &str {
-        "Import from FMD2"
-    }
-
-    fn status(&self) -> JobStatus {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
-    }
-
-    fn run(&self) -> Result<(), JobError> {
-        Err(JobError::Unsupported(
-            "an import needs an upload: POST it to /api/import".into(),
-        ))
-    }
-
-    fn cancel(&self) -> Result<(), JobError> {
-        match self.status().phase {
-            JobPhase::Running => Err(JobError::Unsupported(
-                "an import cannot be cancelled".into(),
-            )),
-            _ => Err(JobError::NotRunning),
-        }
-    }
-}
+const JOB_ID: &str = "import";
 
 /// The running import. Dropping it before [`ImportRun::finish`] (the client went away) ends the
 /// run as failed.
@@ -434,7 +375,7 @@ impl Job for ImportJob {
 struct ImportRun(Arc<RunInner>);
 
 struct RunInner {
-    job: ImportJob,
+    job: OneOffJob,
     registry: JobRegistry,
 }
 
@@ -442,11 +383,7 @@ impl ImportRun {
     /// Registers the job on its first run; a conflict if an import is running.
     fn start(state: &AppState) -> Result<Self, ApiError> {
         let job = state.import_job.clone();
-        job.try_begin()?;
-        if state.jobs.get(ImportJob::ID).is_none() {
-            state.jobs.register(job.clone());
-        }
-        state.jobs.changed(ImportJob::ID);
+        job.begin(&state.jobs)?;
         Ok(Self(Arc::new(RunInner {
             job,
             registry: state.jobs.clone(),
@@ -458,7 +395,7 @@ impl ImportRun {
             s.done = done;
             s.total = total;
         });
-        self.0.registry.changed(ImportJob::ID);
+        self.0.registry.changed(JOB_ID);
     }
 
     fn finish(&self, error: Option<&ApiError>) {
@@ -482,7 +419,7 @@ impl RunInner {
             }
         });
         if ended {
-            self.registry.changed(ImportJob::ID);
+            self.registry.changed(JOB_ID);
         }
     }
 }
@@ -491,10 +428,4 @@ impl Drop for RunInner {
     fn drop(&mut self) {
         self.end(Some("the upload was interrupted".into()));
     }
-}
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as i64)
 }

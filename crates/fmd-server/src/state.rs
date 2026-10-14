@@ -20,10 +20,10 @@ use crate::ApiError;
 use crate::auth::{Auth, Secret};
 use crate::covers::{CoverConfig, CoverModules, Covers};
 use crate::events::{EventBus, ServerEvent};
-use crate::folder_move::MoveJob;
-use crate::import::{ImportJob, ImportLimits};
+use crate::import::ImportLimits;
 use crate::inbox::InboxItem;
 use crate::logs::LogBuffer;
+use crate::one_off_job::OneOffJob;
 use crate::series::InfoCache;
 use crate::services::{DownloadEngine, FavoritesJobs, Idle, ModuleCatalog};
 use crate::spa::{Assets, EmbeddedAssets};
@@ -60,8 +60,8 @@ pub struct AppState {
     pub(crate) metadata: Option<MetadataJobs>,
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) import_limits: ImportLimits,
-    pub(crate) import_job: ImportJob,
-    pub(crate) move_job: MoveJob,
+    pub(crate) import_job: OneOffJob,
+    pub(crate) move_job: OneOffJob,
     /// The folders a move is working in; the download engine holds tasks downloading into them.
     pub(crate) moving: MovingFolders,
     pub(crate) started: Instant,
@@ -93,8 +93,8 @@ impl AppState {
             metadata: None,
             data_dir: None,
             import_limits: ImportLimits::default(),
-            import_job: ImportJob::default(),
-            move_job: MoveJob::default(),
+            import_job: crate::import::job(),
+            move_job: crate::folder_move::job(),
             moving: MovingFolders::default(),
             started: Instant::now(),
             clock: Arc::new(SystemTime::now),

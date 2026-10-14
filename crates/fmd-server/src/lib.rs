@@ -24,6 +24,7 @@ mod metadata;
 mod module_settings;
 mod module_updates;
 mod notifications;
+mod one_off_job;
 mod restore;
 mod series;
 mod serve;

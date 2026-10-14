@@ -31,7 +31,9 @@ pub struct LibraryFolders {
 impl LibraryFolders {
     /// Why moving all of `folder` would take files that are not its series' along.
     pub fn sharing(&self, folder: &Path) -> Option<SharedFolder> {
-        let within = |other: &Path| other.starts_with(folder);
+        let real_folder = real(folder);
+        let within =
+            |other: &Path| other.starts_with(folder) || real(other).starts_with(&real_folder);
         if let Some(d) = self.destinations.iter().find(|d| within(d)) {
             return Some(SharedFolder::Destination(d.clone()));
         }
@@ -149,6 +151,11 @@ impl FolderMover {
     }
 }
 
+/// The path with symbolic links resolved when it exists, else as given.
+fn real(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
+}
+
 /// Compares the real paths when both exist, else the paths as given.
 fn same_folder(a: &Path, b: &Path) -> bool {
     match (fs::canonicalize(a), fs::canonicalize(b)) {
@@ -157,8 +164,9 @@ fn same_folder(a: &Path, b: &Path) -> bool {
     }
 }
 
+/// Copies a file, or a folder with what is in it; a symbolic link to a folder is not followed.
 fn copy(source: &Path, target: &Path) -> io::Result<()> {
-    if fs::metadata(source)?.is_dir() {
+    if fs::symlink_metadata(source)?.is_dir() {
         fs::create_dir(target)?;
         for entry in fs::read_dir(source)? {
             let entry = entry?;

@@ -583,7 +583,7 @@
 		<BulkFolderDialog
 			{api}
 			count={selected.size}
-			onpick={(change) => applyBulk(change)}
+			onpick={applyBulk}
 			onclose={() => (bulkAction = null)}
 		/>
 	{/if}

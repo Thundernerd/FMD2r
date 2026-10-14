@@ -14,7 +14,7 @@ use axum::response::Response;
 use fmd_core::download::{EngineError, NewDownload, Task, TaskId, TaskInfo, TaskStatus};
 use fmd_core::modules::ModuleInfo;
 use fmd_server::{AppState, DownloadEngine, ModuleCatalog, ModulesReport, build_router};
-use fmd_store::{AppDb, FavoriteId, NewFavorite};
+use fmd_store::{AppDb, FavoriteId, NewFavorite, NewTask};
 use futures_util::future::BoxFuture;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -395,6 +395,11 @@ async fn skipped_files_and_series_are_reported_as_a_warning() {
     assert_eq!(read(&fx.path("shared/Gamma/Chapter 1.cbz")), "gamma");
     let inbox = fx.get("/api/inbox").await;
     let (beta_item, alpha_item) = (&inbox[0], &inbox[1]);
+    // Nothing of Alpha's moved: its only chapter was skipped.
+    assert_eq!(
+        alpha_item["title"], "Moved the downloads of 0 series",
+        "{inbox}"
+    );
     assert_eq!(alpha_item["kind"], "warn", "{inbox}");
     let body = alpha_item["body"].as_str().unwrap();
     assert!(
@@ -408,4 +413,46 @@ async fn skipped_files_and_series_are_reported_as_a_warning() {
     assert_eq!(beta_item["kind"], "warn", "{inbox}");
     let body = beta_item["body"].as_str().unwrap();
     assert!(body.contains("Beta: skipped the series"), "{body}");
+}
+
+#[tokio::test]
+async fn the_series_unfinished_downloads_follow_it_to_the_new_folder() {
+    let fx = Fixture::new();
+    let id = fx.series("Alpha", "old/Alpha");
+    write(&fx.path("old/Alpha/Chapter 1.cbz"), "chapter 1");
+    let old = fx.path("old/Alpha").to_string_lossy().into_owned();
+    let task = |status| {
+        fx.db
+            .tasks()
+            .create(&NewTask {
+                module_id: "t".into(),
+                link: "/Alpha".into(),
+                title: "Alpha".into(),
+                save_to: old.clone(),
+                status,
+                enabled: true,
+            })
+            .unwrap()
+            .id
+    };
+    let (waiting, stopped, finished) = (
+        task(TaskStatus::Waiting),
+        task(TaskStatus::Stopped),
+        task(TaskStatus::Finished),
+    );
+    let new = fx.path("new/Alpha");
+
+    fx.send(
+        "PATCH",
+        &format!("/api/favorites/{id}"),
+        json!({ "save_to": new, "move_files": true }),
+    )
+    .await;
+    fx.finished_move().await;
+
+    let save_to = |id| fx.db.tasks().get(id).unwrap().unwrap().save_to;
+    assert_eq!(save_to(waiting), new.to_string_lossy());
+    assert_eq!(save_to(stopped), new.to_string_lossy());
+    // Out of scope (#283): finished tasks keep the folder they downloaded to.
+    assert_eq!(save_to(finished), old);
 }
