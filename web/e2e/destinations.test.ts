@@ -69,3 +69,32 @@ test("a library series' download folder is changed from its series page", async 
 	await expect(dialog.getByRole('textbox', { name: 'Folder' })).toHaveValue('/data/manhwa/Frieren');
 	await expect(button).toHaveAttribute('title', '/data/manhwa/Frieren');
 });
+
+test("changing a destination's folder repoints the library series in it", async ({ page }) => {
+	await page.goto('/settings#section-saveto');
+	const section = page.getByRole('region', { name: 'Save to' });
+	const folder = section
+		.getByRole('group', { name: 'Downloads' })
+		.getByRole('textbox', { name: 'Folder' });
+	const bar = page.getByRole('region', { name: 'Save changes' });
+	// The mock library's series download to `/data/downloads/<title>`.
+	await folder.fill('/data/downloads');
+	await bar.getByRole('button', { name: 'Save' }).click();
+	await expect(bar).toContainText('Saved');
+
+	await folder.fill('/data/library');
+	await bar.getByRole('button', { name: 'Save' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Repoint the library' });
+	await expect(dialog).toContainText('use /data/downloads. Point them to /data/library?');
+	await dialog.getByRole('button', { name: 'Repoint' }).click();
+	await expect(dialog).toBeHidden();
+	await expect(bar).toContainText('Saved');
+
+	// In the app, not by reload: the mock keeps the library in memory.
+	await page.getByRole('link', { name: 'Library' }).first().click();
+	await page.getByRole('link', { name: 'Frieren' }).first().click();
+	await expect(page.getByRole('button', { name: 'Download folder…' })).toHaveAttribute(
+		'title',
+		'/data/library/Frieren'
+	);
+});

@@ -7,6 +7,7 @@ mod backup;
 mod comic_server;
 mod covers;
 mod custom_css;
+mod destinations;
 mod error;
 mod events;
 mod favorites;
@@ -51,6 +52,7 @@ pub use comic_server::{ComicServerTest, ComicServerTestRequest};
 pub use covers::{
     CoverConfig, CoverModules, CoverResolver, CoverSession, SystemResolver, cover_url,
 };
+pub use destinations::{RelocateRequest, Relocation, RelocationCounts};
 pub use error::{ApiError, FieldProblem, Problem};
 pub use events::{
     EventBus, JobState, ServerEvent, TaskProgress, TaskRemoved, TaskState, TaskStatusChange,
@@ -141,6 +143,7 @@ fn protected_api() -> OpenApiRouter<AppState> {
         .routes(routes!(settings::patch_all))
         .routes(routes!(settings::preview_rename))
         .routes(routes!(settings::check_folders))
+        .routes(routes!(destinations::relocate))
         .routes(routes!(comic_server::test))
         .routes(routes!(notifications::test))
         .routes(routes!(module_settings::list))
