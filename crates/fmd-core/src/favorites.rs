@@ -912,8 +912,10 @@ impl FavoritesChecker {
         .await
     }
 
-    /// Beyond FMD2, which keeps the mark, clears the downloaded mark of missing `chapters`, so
-    /// the new-chapter badge counts them and the next new-chapter check finds them again.
+    /// Beyond FMD2, whose `DoCheckMissing` leaves the downloaded list alone
+    /// (baseunits/uFavoritesManager.pas:397-531), clears the downloaded mark of missing
+    /// `chapters`, so the new-chapter badge counts them and the next new-chapter check finds them
+    /// again.
     async fn unmark(
         &self,
         favorite: &Favorite,

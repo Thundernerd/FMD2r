@@ -101,8 +101,16 @@
 	const selectedPaused = $derived(favorites.filter((f) => selected.has(f.id) && !f.enabled).length);
 	const job = $derived(events.jobs[JOB]);
 	const checking = $derived(starting !== null || job?.state === 'running');
-	/** What the running check looks for; a new-chapter check until its first event says. */
-	const checkMode = $derived(starting ?? events.favorites?.mode ?? 'new');
+	/**
+	 * What the running check looks for: the latest event's mode while that run goes on, else a
+	 * new-chapter check, as the schedule runs, until its first event says.
+	 */
+	const runningEvent = $derived(
+		events.favorites?.kind === 'started' || events.favorites?.kind === 'progress'
+			? events.favorites
+			: null
+	);
+	const checkMode = $derived(starting ?? runningEvent?.mode ?? 'new');
 
 	/** `unknown` is the series without a MangaBaka match; a format `FORMAT` lacks shows as is. */
 	function formatLabel(format: string): string {

@@ -725,7 +725,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Check enabled favorites for chapters missing from their directories\n(`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:883-928), to download them again.\nBeyond FMD2, missing chapters lose their downloaded mark. The body is optional.",
+        "summary": "Check enabled favorites for chapters missing from their directories\n(`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:883-928), to download them again.\nBeyond FMD2, whose `DoCheckMissing` leaves the downloaded list alone\n(baseunits/uFavoritesManager.pas:397-531), missing chapters lose their downloaded mark. The\nbody is optional.",
         "operationId": "checkFavoritesMissing",
         "requestBody": {
           "content": {
@@ -882,7 +882,7 @@
         "tags": [
           "library"
         ],
-        "summary": "Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,\nbaseunits/uFavoritesManager.pas:883-928), to download them again.",
+        "summary": "Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,\nbaseunits/uFavoritesManager.pas:883-928), to download them again. Beyond FMD2, missing\nchapters lose their downloaded mark.",
         "operationId": "checkMissingChapters",
         "parameters": [
           {

@@ -252,7 +252,9 @@ export interface paths {
 		/**
 		 * Check enabled favorites for chapters missing from their directories
 		 *     (`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:883-928), to download them again.
-		 *     Beyond FMD2, missing chapters lose their downloaded mark. The body is optional.
+		 *     Beyond FMD2, whose `DoCheckMissing` leaves the downloaded list alone
+		 *     (baseunits/uFavoritesManager.pas:397-531), missing chapters lose their downloaded mark. The
+		 *     body is optional.
 		 */
 		post: operations['checkFavoritesMissing'];
 		delete?: never;
@@ -293,7 +295,8 @@ export interface paths {
 		put?: never;
 		/**
 		 * Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,
-		 *     baseunits/uFavoritesManager.pas:883-928), to download them again.
+		 *     baseunits/uFavoritesManager.pas:883-928), to download them again. Beyond FMD2, missing
+		 *     chapters lose their downloaded mark.
 		 */
 		post: operations['checkMissingChapters'];
 		delete?: never;

@@ -217,7 +217,10 @@ export interface Api {
 	 * from their folders, which lose their seen mark; otherwise like {@link checkFavorites}.
 	 */
 	checkFavoritesMissing(ids?: number[]): Promise<void>;
-	/** Starts checking a favorite for chapters missing from its folder; otherwise like {@link checkFavorites}. */
+	/**
+	 * Starts checking a favorite for chapters missing from its folder, which lose their seen mark;
+	 * otherwise like {@link checkFavorites}.
+	 */
 	checkMissingChapters(id: number): Promise<void>;
 	/** The library's groups, in order. */
 	listGroups(): Promise<GroupView[]>;
