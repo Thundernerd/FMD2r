@@ -1,0 +1,48 @@
+{
+  "name": "FMD2r",
+  "slug": "fmd2r",
+  "categories": [11],
+  "date_created": "2026-10-14",
+  "type": "ct",
+  "updateable": true,
+  "privileged": false,
+  "interface_port": 8080,
+  "documentation": "https://github.com/Thundernerd/FMD2r#readme",
+  "website": "https://github.com/Thundernerd/FMD2r",
+  "repository": "https://github.com/Thundernerd/FMD2r",
+  "platforms": ["pve"],
+  "logo": "https://raw.githubusercontent.com/Thundernerd/FMD2r/main/web/static/favicon.svg",
+  "description": "FMD2r is a Rust port of the Free Manga Downloader 2 (FMD2) with a web UI. It runs FMD2's Lua website modules to browse, track and download manga from hundreds of sites.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "ct/fmd2r.sh",
+      "config_path": "/etc/systemd/system/fmd2r.service",
+      "resources": {
+        "cpu": 2,
+        "ram": 1024,
+        "hdd": 8,
+        "os": "Debian",
+        "version": "13"
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    {
+      "text": "The first visit opens a setup wizard. Set a password there: until one is set, the API is open to anyone who can reach port 8080.",
+      "type": "warning"
+    },
+    {
+      "text": "Data and downloads live in /opt/fmd2r_data and persist across updates. Bind-mount a host folder there, or add a Save to destination in Settings, to keep manga elsewhere.",
+      "type": "info"
+    },
+    {
+      "text": "Cloudflare-protected sites need FlareSolverr: install the FlareSolverr LXC and set its URL in Settings → Connections.",
+      "type": "info"
+    }
+  ]
+}

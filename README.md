@@ -152,6 +152,27 @@ The tag sets the version: before building, `scripts/set-version.sh` writes it in
 `Cargo.lock`, so `fmd2r --version` and `GET /api/about` report it without a version bump on main,
 and the smoke tests check that they do.
 
+## Run on Proxmox (LXC)
+
+`proxmox/` holds a [community-scripts](https://community-scripts.org) LXC script: it creates a
+Debian 13 container with the latest release tarball, `python3`, `node` and ImageMagick, and runs
+`fmd2r serve` as the `fmd2r` systemd service on port 8080. Run it in the Proxmox host's shell:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Thundernerd/FMD2r/main/proxmox/ct/fmd2r.sh)"
+```
+
+- **Data:** `/opt/fmd2r_data` holds the databases, `lua/` and `downloads/` (the service's working
+  directory, so the default save-to folder lands there). Updates replace only `/opt/fmd2r`.
+- **Lua modules:** the container has no bundled snapshot; on first start the module updater
+  syncs the tree from upstream because `lua/` is empty.
+- **Updates:** run `update` inside the container. It installs a newer GitHub release if there is one.
+- **FlareSolverr:** community-scripts has a FlareSolverr LXC; put its URL in Settings → Connections.
+
+The script follows community-scripts' conventions (`ct/`, `install/` and `json/` mirror their
+DevScripts repo) but fetches the install script from this repository through `_CS_DEFAULT_URL`.
+To submit it to them, point that line at DevScripts and open a PR there.
+
 ## CI
 
 The workflows in `.github/workflows` are set up for fast feedback on PRs: a new push to a PR
