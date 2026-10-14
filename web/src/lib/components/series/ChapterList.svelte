@@ -9,8 +9,16 @@
 		toggle
 	} from '#lib/series/selection.ts';
 
-	let { chapters, selected = $bindable() }: { chapters: ChapterInfo[]; selected: Set<number> } =
-		$props();
+	let {
+		chapters,
+		selected = $bindable(),
+		folder = ''
+	}: {
+		chapters: ChapterInfo[];
+		selected: Set<number>;
+		/** The library series' folder, which `on_disk` was looked for in. */
+		folder?: string;
+	} = $props();
 
 	/** Row height in px; rows are fixed-height so only the visible ones need rendering. */
 	const ROW = 36;
@@ -124,7 +132,11 @@
 							/>
 							<span class="mono muted n" aria-hidden="true">{number(index)}</span>
 							<span class="name">{chapter.name || chapter.link}</span>
-							{#if chapter.downloaded}
+							{#if chapter.downloaded && chapter.on_disk === false}
+								<span class="mark missing small" title="Seen, but its file isn't in {folder}">
+									missing from disk
+								</span>
+							{:else if chapter.downloaded}
 								<span class="mark small">✓ seen</span>
 							{/if}
 						</label>
@@ -241,6 +253,9 @@
 		color: var(--ok);
 		white-space: nowrap;
 	}
+	.mark.missing {
+		color: var(--warn);
+	}
 	@media (max-width: 860px) {
 		.rows {
 			height: min(calc(var(--rows) * var(--row)), 60vh);
@@ -251,6 +266,9 @@
 		.mark::before {
 			content: '✓';
 			font-size: var(--fs-sm);
+		}
+		.mark.missing::before {
+			content: '!';
 		}
 	}
 </style>

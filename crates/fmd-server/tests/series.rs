@@ -369,9 +369,9 @@ async fn series_shows_the_modules_info_and_chapters_with_their_downloaded_state(
     assert_eq!(
         body["chapters"],
         json!([
-            { "name": "Chapter 3", "link": "/manga/1/c3", "downloaded": false },
-            { "name": "Chapter 1", "link": "/manga/1/c1", "downloaded": true },
-            { "name": "Chapter 2", "link": "/manga/1/c2", "downloaded": false },
+            { "name": "Chapter 3", "link": "/manga/1/c3", "downloaded": false, "on_disk": null },
+            { "name": "Chapter 1", "link": "/manga/1/c1", "downloaded": true, "on_disk": null },
+            { "name": "Chapter 2", "link": "/manga/1/c2", "downloaded": false, "on_disk": null },
         ])
     );
 }
@@ -435,10 +435,10 @@ async fn series_info_is_cleaned_up_as_get_info_from_url_does() {
     assert_eq!(
         body["chapters"],
         json!([
-            { "name": "Two", "link": "/manga/two/c2", "downloaded": true },
-            { "name": "New & first", "link": "/manga/two/C1", "downloaded": false },
-            { "name": "", "link": "/manga/two/c3", "downloaded": false },
-            { "name": "Four", "link": "/manga/two/c4", "downloaded": false },
+            { "name": "Two", "link": "/manga/two/c2", "downloaded": true, "on_disk": null },
+            { "name": "New & first", "link": "/manga/two/C1", "downloaded": false, "on_disk": null },
+            { "name": "", "link": "/manga/two/c3", "downloaded": false, "on_disk": null },
+            { "name": "Four", "link": "/manga/two/c4", "downloaded": false, "on_disk": null },
         ])
     );
 }
@@ -537,6 +537,79 @@ fn add_favorite(db: &AppDb, link: &str, cover_url: Option<&str>) {
             cover_url: cover_url.map(str::to_owned),
         })
         .unwrap();
+}
+
+/// Adds `/manga/1` to the library, saved to `save_to`, and names chapters by their number.
+async fn library_series_in(h: &Harness, save_to: &std::path::Path) {
+    h.db.favorites()
+        .create(&fmd_store::NewFavorite {
+            module_id: "t".into(),
+            link: "/manga/1".into(),
+            title: "One Piece".into(),
+            save_to: save_to.to_string_lossy().into_owned(),
+            cover_url: None,
+        })
+        .unwrap();
+    let patch = Request::patch("/api/settings")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({ "saveto": { "chapter_rename": "%NUMBERING%" } }).to_string(),
+        ))
+        .unwrap();
+    assert_eq!(send(&h.state, patch).await.status(), StatusCode::OK);
+}
+
+fn on_disk(body: &Value) -> Vec<Value> {
+    body["chapters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["on_disk"].clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_library_series_says_which_chapters_are_on_disk() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.page("https://example.com/manga/1", SERIES_PAGE);
+    let out = tempfile::tempdir().unwrap();
+    library_series_in(&h, out.path()).await;
+    // The second chapter's file was deleted.
+    std::fs::write(out.path().join("0001.cbz"), b"").unwrap();
+    std::fs::write(out.path().join("0003.cbz"), b"").unwrap();
+
+    let body = body_json(series(&h.state, "t", "/manga/1").await).await;
+
+    // Named and looked for as the missing-chapter check does
+    // (baseunits/uFavoritesManager.pas:425-511).
+    assert_eq!(on_disk(&body), [json!(true), json!(false), json!(true)]);
+}
+
+#[tokio::test]
+async fn a_library_series_whose_folder_doesnt_exist_has_no_chapter_on_disk() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.page("https://example.com/manga/1", SERIES_PAGE);
+    let out = tempfile::tempdir().unwrap();
+    library_series_in(&h, &out.path().join("never-downloaded")).await;
+
+    let body = body_json(series(&h.state, "t", "/manga/1").await).await;
+
+    assert_eq!(on_disk(&body), [json!(false), json!(false), json!(false)]);
+}
+
+#[tokio::test]
+async fn a_library_series_whose_folder_cant_be_read_doesnt_say_whats_on_disk() {
+    let h = harness(&[("T.lua", T)]);
+    h.site.page("https://example.com/manga/1", SERIES_PAGE);
+    let out = tempfile::tempdir().unwrap();
+    // A file where the folder should be can't be listed, as an unmounted disk can't.
+    let folder = out.path().join("not-a-folder");
+    std::fs::write(&folder, b"").unwrap();
+    library_series_in(&h, &folder).await;
+
+    let body = body_json(series(&h.state, "t", "/manga/1").await).await;
+
+    assert_eq!(on_disk(&body), [Value::Null, Value::Null, Value::Null]);
 }
 
 async fn favorite_covers(state: &AppState) -> Vec<Value> {

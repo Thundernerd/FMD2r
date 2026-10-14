@@ -30,7 +30,7 @@ use crate::download::{
 use crate::info::{InfoError, InfoOptions, MangaInfo, RateLimits, get_info, split_genres};
 use crate::jobs::{Job, JobError, JobPhase, JobRegistry, JobStatus};
 use crate::metadata::{MetadataJobs, format_of};
-use crate::settings::{OutputFormat, SaveToSettings, SettingsService};
+use crate::settings::{OutputFormat, SaveToSettings, Settings, SettingsService};
 
 /// `MangaInfo_StatusCompleted` (baseunits/uBaseUnit.pas:230).
 const STATUS_COMPLETED: &str = "0";
@@ -915,40 +915,22 @@ impl FavoritesChecker {
         }
         let settings = self.inner.config.settings.get();
         let website = self.website(&favorite.module_id);
-        let options = rename_options(&settings.saveto);
-        let names: Vec<String> = info
-            .chapters
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let numbering = format!("{:04}", i + 1);
-                let ctx = RenameContext {
-                    website: &website,
-                    manga: &favorite.title,
-                    author: &info.authors,
-                    artist: &info.artists,
-                    chapter: &c.name,
-                    numbering: &numbering,
-                    filename: "",
-                };
-                custom_rename(&settings.saveto.chapter_rename, &ctx, &options)
-            })
-            .collect();
-        let dir = favorite.save_to.clone();
-        let fallback = settings.output.format;
-        let missing = match tokio::task::spawn_blocking(move || {
-            let dir = Path::new(&dir);
-            let format = detect_format(dir).unwrap_or(fallback);
-            names
-                .iter()
-                .map(|name| !chapter_exists(&dir.join(name), format))
-                .collect::<Vec<bool>>()
+        let (title, dir) = (favorite.title.clone(), favorite.save_to.clone());
+        let chapters = info.chapters.len();
+        let owned = info.clone();
+        let on_disk = match tokio::task::spawn_blocking(move || {
+            chapters_on_disk(&settings, &website, &title, &owned, Path::new(&dir))
         })
         .await
         {
-            Ok(missing) => missing,
+            Ok(on_disk) => on_disk,
             Err(e) => return Err(CheckError::Join(e.to_string())),
         };
+        // An unreadable folder finds no chapter file, so all are missing, as in FMD2 (:430-505).
+        let missing = on_disk.map_or_else(
+            |_| vec![true; chapters],
+            |on_disk| on_disk.into_iter().map(|on| !on).collect(),
+        );
         Ok(info
             .chapters
             .iter()
@@ -984,11 +966,53 @@ fn found_chapter(index: usize, chapter: &crate::info::Chapter) -> FoundChapter {
     }
 }
 
-/// The chapter format `dir` holds most of; ties go to the earlier of folder, `.cbz`, `.zip`,
-/// `.pdf`, `.epub` (`DoCheckMissing`, baseunits/uFavoritesManager.pas:430-473).
-fn detect_format(dir: &Path) -> Option<OutputFormat> {
+/// Whether each of `info.chapters` has its file or folder in `dir`, a series' `save_to`; named by
+/// the chapter rename template, with `website` and `manga` as the website's and series' names,
+/// and looked for as the format `dir` holds most of, else the output format (`DoCheckMissing`,
+/// baseunits/uFavoritesManager.pas:425-511). A `dir` that doesn't exist holds no chapter; any
+/// other error reading it is returned. Blocking.
+pub fn chapters_on_disk(
+    settings: &Settings,
+    website: &str,
+    manga: &str,
+    info: &MangaInfo,
+    dir: &Path,
+) -> std::io::Result<Vec<bool>> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(vec![false; info.chapters.len()]);
+        }
+        Err(e) => return Err(e),
+    };
+    let format = detect_format(entries).unwrap_or(settings.output.format);
+    let options = rename_options(&settings.saveto);
+    Ok(info
+        .chapters
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let numbering = format!("{:04}", i + 1);
+            let ctx = RenameContext {
+                website,
+                manga,
+                author: &info.authors,
+                artist: &info.artists,
+                chapter: &c.name,
+                numbering: &numbering,
+                filename: "",
+            };
+            let name = custom_rename(&settings.saveto.chapter_rename, &ctx, &options);
+            chapter_exists(&dir.join(name), format)
+        })
+        .collect())
+}
+
+/// The chapter format a folder with `entries` holds most of; ties go to the earlier of folder,
+/// `.cbz`, `.zip`, `.pdf`, `.epub` (`DoCheckMissing`, baseunits/uFavoritesManager.pas:430-473).
+fn detect_format(entries: std::fs::ReadDir) -> Option<OutputFormat> {
     let (mut dirs, mut cbz, mut zip, mut pdf, mut epub) = (0, 0, 0, 0, 0);
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+    for entry in entries.flatten() {
         if entry.file_type().is_ok_and(|t| t.is_dir()) {
             dirs += 1;
             continue;
