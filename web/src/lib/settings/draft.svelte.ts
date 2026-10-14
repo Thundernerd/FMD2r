@@ -57,6 +57,11 @@ export class Draft<T extends object = JsonObject> {
 		return getPath(this.#current, path);
 	}
 
+	/** The value at `path` as last saved. */
+	saved(path: string): Json | undefined {
+		return getPath(this.#saved, path);
+	}
+
 	set(path: string, value: Json) {
 		const keys = path.split('.');
 		const last = keys.pop();

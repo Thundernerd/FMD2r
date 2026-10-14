@@ -19,6 +19,7 @@ import type {
 	LogLine,
 	ModuleSummary,
 	NewTask,
+	RelocateRequest,
 	RenamePreviewRequest,
 	RuleView,
 	SaveFolderRequest,
@@ -975,6 +976,19 @@ export function createMockBackend({
 			return update(req, settings.patchAll, (save) => save['settings']);
 		if (route === 'POST /api/settings/comic-server/test') {
 			return json(settings.testComicServer((await req.json()) as ComicServerTestRequest));
+		}
+		if (route === 'POST /api/destinations/relocate') {
+			const { relocations, move_files, dry_run } = (await req.json()) as RelocateRequest;
+			const dryRun = dry_run ?? false;
+			const counts = relocations.map(({ from, to }) => ({
+				from,
+				to,
+				series: favorites.relocate(from, to, dryRun),
+				websites: settings.relocateWebsites(from, to, dryRun)
+			}));
+			const series = counts.reduce((n, c) => n + c.series, 0);
+			if (move_files && !dryRun && series > 0) reportMove(series);
+			return json(counts);
 		}
 		if (route === 'POST /api/check-folders') {
 			const body = (await req.json()) as { paths?: unknown } | null;

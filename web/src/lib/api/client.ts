@@ -30,6 +30,8 @@ import type {
 	NewTask,
 	NotificationTest,
 	Problem,
+	RelocateRequest,
+	RelocationCounts,
 	RenamePreview,
 	RenamePreviewRequest,
 	RuleView,
@@ -143,6 +145,11 @@ export interface Api {
 	previewRename(draft: RenamePreviewRequest): Promise<RenamePreview>;
 	/** Whether downloads can be saved in each folder now, in order. */
 	checkFolders(paths: string[]): Promise<FolderCheck[]>;
+	/**
+	 * Points the library series and websites that download to destinations' old folders to their
+	 * new ones (or, with `dry_run`, counts them); one count per relocation, in order.
+	 */
+	relocateDestinations(request: RelocateRequest): Promise<RelocationCounts[]>;
 	/** Whether the comic server answers with the API key; changes nothing on it. */
 	testComicServer(request: ComicServerTestRequest): Promise<ComicServerTest>;
 	/** Sends a test notification with the channel's saved settings. */
@@ -493,6 +500,12 @@ export function createApi({
 		},
 		async checkFolders(paths) {
 			return unwrap('checkFolders', await client.POST('/api/check-folders', { body: { paths } }));
+		},
+		async relocateDestinations(request) {
+			return unwrap(
+				'relocateDestinations',
+				await client.POST('/api/destinations/relocate', { body: request })
+			);
 		},
 		async testComicServer(request) {
 			return unwrap(
