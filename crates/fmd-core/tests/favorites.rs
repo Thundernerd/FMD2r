@@ -10,16 +10,16 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
 
-use fmd_core::download::{DownloadManager, EngineConfig};
+use fmd_core::download::{DownloadManager, EngineConfig, EngineError, NewDownload};
 use fmd_core::favorites::{
     CheckError, CheckMode, CheckScope, CheckerConfig, CheckerEvent, FavoritesChecker,
-    FavoritesEventKind, TaskQueue,
+    FavoritesEventKind, QueueFuture, TaskQueue,
 };
 use fmd_core::jobs::{Job, JobPhase, JobRegistry};
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
-use fmd_store::{AppDb, EventQuery, FavoriteId, FavoriteInfo, NewFavorite};
+use fmd_store::{AppDb, EventQuery, EventSeverity, FavoriteId, FavoriteInfo, NewFavorite, TaskId};
 use serde_json::{Value, json};
 
 /// Answers each URL from a table (404 with an empty body for anything else) and counts requests.
@@ -478,6 +478,8 @@ async fn without_auto_download_new_chapters_become_one_inbox_item() {
 async fn nothing_new_posts_nothing() {
     let fx = Fixture::new(json!({}));
     fx.favorite();
+    // Not even for a series it could not check: only missing-chapter checks report that.
+    gone(&fx);
     fx.db
         .downloaded_chapters()
         .mark("site", "/manga", &["/c3"])
@@ -623,6 +625,199 @@ async fn the_commonest_chapter_file_type_decides_what_a_missing_check_looks_for(
     assert_eq!(numbers, [2, 3]);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_check_with_every_chapter_on_disk_says_so_in_the_inbox() {
+    let fx = Fixture::new(json!({ "saveto": { "chapter_rename": "%NUMBERING%" } }));
+    fx.favorite();
+    let out = fx.dir.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    for chapter in ["0001", "0002", "0003"] {
+        fs::write(out.join(format!("{chapter}.cbz")), b"").unwrap();
+    }
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::Missing)
+        .await
+        .unwrap();
+
+    let events = fx.db.events().list(&EventQuery::default()).unwrap();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].kind, "missing_check");
+    assert_eq!(events[0].severity, EventSeverity::Info);
+    assert_eq!(events[0].title, "No missing chapters");
+    assert_eq!(
+        events[0].body,
+        json!("Checked 1 series; every chapter is on disk.")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn with_auto_download_a_missing_check_queues_the_chapters_and_says_so_in_the_inbox() {
+    let fx = Fixture::new(json!({
+        "favorites": { "auto_download": true },
+        "general": { "add_as_stopped": true },
+        "saveto": { "chapter_rename": "%NUMBERING%" },
+    }));
+    fx.favorite();
+    let out = fx.dir.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    fs::write(out.join("0001.cbz"), b"").unwrap();
+    fs::write(out.join("0002.cbz"), b"").unwrap();
+    let manager = fx.manager().await;
+
+    fx.checker_with(Some(manager.clone()))
+        .check(CheckScope::All, CheckMode::Missing)
+        .await
+        .unwrap();
+
+    let tasks = fx.db.tasks().list().unwrap();
+    assert_eq!(tasks.len(), 1);
+    let chapters = fx.db.tasks().chapters(tasks[0].id).unwrap();
+    let links: Vec<&str> = chapters.iter().map(|c| c.link.as_str()).collect();
+    assert_eq!(links, ["/c3"]);
+    let events = fx.db.events().list(&EventQuery::default()).unwrap();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].kind, "missing_chapters");
+    assert_eq!(events[0].severity, EventSeverity::Info);
+    assert_eq!(events[0].title, "Queued 1 missing chapter(s)");
+    assert_eq!(
+        events[0].body,
+        json!(
+            "Queued 1 missing chapter(s) from 1 manga(s):\n- Manga <Site> has 1 missing chapter(s)."
+        )
+    );
+}
+
+/// A queue that refuses `/b` and takes everything else as task 7.
+struct RefusesB;
+
+impl TaskQueue for RefusesB {
+    fn add_task(&self, download: NewDownload) -> QueueFuture<'_> {
+        Box::pin(async move {
+            if download.manga_link == "/b" {
+                Err(EngineError::NoModule("site".into()))
+            } else {
+                Ok(TaskId(7))
+            }
+        })
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn with_auto_download_a_missing_check_names_the_series_it_could_not_queue() {
+    let fx = Fixture::new(json!({ "favorites": { "auto_download": true } }));
+    fx.favorite();
+    fx.site.set("/b", "1\n/c1 Chapter 1");
+    fx.db
+        .favorites()
+        .create(&NewFavorite {
+            module_id: "site".into(),
+            link: "/b".into(),
+            title: "B".into(),
+            save_to: fx.dir.path().join("b").to_string_lossy().into_owned(),
+            cover_url: None,
+        })
+        .unwrap();
+
+    fx.checker_with(Some(Arc::new(RefusesB)))
+        .check(CheckScope::All, CheckMode::Missing)
+        .await
+        .unwrap();
+
+    let events = fx.db.events().list(&EventQuery::default()).unwrap();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].severity, EventSeverity::Warning);
+    assert_eq!(events[0].title, "Queued 3 missing chapter(s)");
+    let error = EngineError::NoModule("site".into());
+    assert_eq!(
+        events[0].body,
+        json!(format!(
+            "Queued 3 missing chapter(s) from 1 manga(s):\n- Manga <Site> has 3 missing chapter(s).\n- B <Site>: could not be queued: {error}"
+        ))
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_check_names_the_series_it_could_not_check_with_the_error() {
+    let fx = Fixture::new(json!({ "saveto": { "chapter_rename": "%NUMBERING%" } }));
+    fx.favorite();
+    let out = fx.dir.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    for chapter in ["0001", "0002", "0003"] {
+        fs::write(out.join(format!("{chapter}.cbz")), b"").unwrap();
+    }
+    let gone = gone(&fx);
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::Missing)
+        .await
+        .unwrap();
+
+    let error = fx
+        .db
+        .favorites()
+        .get(gone)
+        .unwrap()
+        .unwrap()
+        .last_check_error
+        .unwrap();
+    let events = fx.db.events().list(&EventQuery::default()).unwrap();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].kind, "missing_check");
+    assert_eq!(events[0].severity, EventSeverity::Warning);
+    assert_eq!(events[0].title, "No missing chapters");
+    assert_eq!(
+        events[0].body,
+        json!(format!(
+            "Checked 1 series; every chapter is on disk.\n- Gone <Site>: could not be checked: {error}"
+        ))
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_check_names_rate_limited_and_skipped_series_as_not_checked() {
+    let fx = Fixture::new(json!({ "connections": { "max_favorite_threads": 1 } }));
+    for link in ["/a", "/b"] {
+        fx.db
+            .favorites()
+            .create(&NewFavorite {
+                module_id: "site".into(),
+                link: link.into(),
+                title: link.into(),
+                save_to: String::new(),
+                cover_url: None,
+            })
+            .unwrap();
+    }
+    fx.site.limit("/a");
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::Missing)
+        .await
+        .unwrap();
+
+    assert_eq!(fx.site.requested("/b"), 0, "the website is paused");
+    let events = fx.db.events().list(&EventQuery::default()).unwrap();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].kind, "missing_check");
+    assert_eq!(events[0].severity, EventSeverity::Warning);
+    assert_eq!(events[0].title, "Could not check for missing chapters");
+    let body = events[0].body.as_str().unwrap();
+    let lines: Vec<&str> = body.lines().collect();
+    assert_eq!(lines.len(), 2, "{body}");
+    assert!(
+        lines[0].starts_with("- /a <Site>: could not be checked: "),
+        "{body}"
+    );
+    assert!(
+        lines[1].starts_with("- /b <Site>: could not be checked: "),
+        "{body}"
+    );
+    // The skipped series gives the reason its website is paused.
+    assert_eq!(lines[0]["- /a".len()..], lines[1]["- /b".len()..]);
+    assert!(lines[0].len() > "- /a <Site>: could not be checked: ".len());
+}
+
 /// Turns the fixture's series into a completed one with nothing new.
 fn complete(fx: &Fixture) {
     fx.site
@@ -752,34 +947,37 @@ async fn a_started_check_runs_in_the_background_and_never_overlaps() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_cancelled_check_reports_nothing() {
-    let fx = Fixture::new(json!({}));
-    fx.favorite();
-    let (tx, mut events) = tokio::sync::mpsc::unbounded_channel();
-    let checker = fx.checker_events(None, move |e| {
-        let _ = tx.send(e);
-    });
-    fx.site.close();
-    checker.start(CheckScope::All, CheckMode::New).unwrap();
-    until(&mut events, |e| {
-        job_kind(e) == Some(FavoritesEventKind::Started)
-    })
-    .await;
+    for mode in [CheckMode::New, CheckMode::Missing] {
+        let fx = Fixture::new(json!({}));
+        fx.favorite();
+        let (tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+        let checker = fx.checker_events(None, move |e| {
+            let _ = tx.send(e);
+        });
+        fx.site.close();
+        checker.start(CheckScope::All, mode).unwrap();
+        until(&mut events, |e| {
+            job_kind(e) == Some(FavoritesEventKind::Started)
+        })
+        .await;
 
-    Job::cancel(&checker).unwrap();
-    fx.site.open();
+        Job::cancel(&checker).unwrap();
+        fx.site.open();
 
-    until(&mut events, |e| {
-        job_kind(e) == Some(FavoritesEventKind::Cancelled)
-    })
-    .await;
-    // A terminated task skips `ShowResult` (baseunits/uFavoritesManager.pas:636-656).
-    assert!(
-        fx.db
-            .events()
-            .list(&EventQuery::default())
-            .unwrap()
-            .is_empty()
-    );
+        until(&mut events, |e| {
+            job_kind(e) == Some(FavoritesEventKind::Cancelled)
+        })
+        .await;
+        // A terminated task skips `ShowResult` (baseunits/uFavoritesManager.pas:636-656).
+        assert!(
+            fx.db
+                .events()
+                .list(&EventQuery::default())
+                .unwrap()
+                .is_empty(),
+            "{mode:?}"
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
