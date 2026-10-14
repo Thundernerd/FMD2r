@@ -594,6 +594,7 @@ async fn a_library_series_whose_folder_doesnt_exist_has_no_chapter_on_disk() {
 
     let body = body_json(series(&h.state, "t", "/manga/1").await).await;
 
+    // Nothing was downloaded there (issue #288).
     assert_eq!(on_disk(&body), [json!(false), json!(false), json!(false)]);
 }
 
@@ -609,6 +610,7 @@ async fn a_library_series_whose_folder_cant_be_read_doesnt_say_whats_on_disk() {
 
     let body = body_json(series(&h.state, "t", "/manga/1").await).await;
 
+    // An unreachable disk doesn't flag every chapter missing (issue #288).
     assert_eq!(on_disk(&body), [Value::Null, Value::Null, Value::Null]);
 }
 

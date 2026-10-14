@@ -697,6 +697,7 @@ fn a_folder_that_doesnt_exist_holds_no_chapter() {
     )
     .unwrap();
 
+    // Nothing was downloaded there (issue #288).
     assert_eq!(on_disk, [false, false, false]);
 }
 
@@ -708,6 +709,8 @@ fn a_folder_that_cant_be_read_is_an_error() {
 
     let on_disk = chapters_on_disk(&numbered(), "Site", "Manga", &three_chapters(), &file);
 
+    // Left to the caller: the series page shows nothing, rather than every chapter missing, for
+    // an unreachable disk (issue #288); the check counts them missing, as FMD2 does (:430-505).
     assert!(on_disk.is_err());
 }
 

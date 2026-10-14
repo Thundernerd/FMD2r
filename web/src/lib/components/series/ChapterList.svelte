@@ -8,6 +8,7 @@
 		selectNew,
 		toggle
 	} from '#lib/series/selection.ts';
+	import { missingFromDisk } from '#lib/series/disk.ts';
 
 	let {
 		chapters,
@@ -132,8 +133,11 @@
 							/>
 							<span class="mono muted n" aria-hidden="true">{number(index)}</span>
 							<span class="name">{chapter.name || chapter.link}</span>
-							{#if chapter.downloaded && chapter.on_disk === false}
-								<span class="mark missing small" title="Seen, but its file isn't in {folder}">
+							{#if missingFromDisk(chapter)}
+								<span
+									class="mark missing small"
+									title="Seen, but its file isn't in {folder || 'its folder'}"
+								>
 									missing from disk
 								</span>
 							{:else if chapter.downloaded}

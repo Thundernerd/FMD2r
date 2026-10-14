@@ -917,9 +917,9 @@ impl FavoritesChecker {
         let website = self.website(&favorite.module_id);
         let (title, dir) = (favorite.title.clone(), favorite.save_to.clone());
         let chapters = info.chapters.len();
-        let owned = info.clone();
+        let series = info.clone();
         let on_disk = match tokio::task::spawn_blocking(move || {
-            chapters_on_disk(&settings, &website, &title, &owned, Path::new(&dir))
+            chapters_on_disk(&settings, &website, &title, &series, Path::new(&dir))
         })
         .await
         {

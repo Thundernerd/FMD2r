@@ -2,6 +2,7 @@
 	import { ApiError, type Api } from '#lib/api/client.ts';
 	import type { FavoriteView, SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
 	import { FORMAT } from '#lib/discover/filters.ts';
+	import { missingFromDisk } from '#lib/series/disk.ts';
 	import { untrack } from 'svelte';
 	import FolderDialog from './FolderDialog.svelte';
 	import GroupSelect from './GroupSelect.svelte';
@@ -171,9 +172,7 @@
 	// Short summaries show in full; longer ones start clamped.
 	const long = $derived(series.summary.length > 280 || series.summary.split('\n').length > 4);
 	const seen = $derived(series.chapters.filter((c) => c.downloaded).length);
-	const missing = $derived(
-		series.chapters.filter((c) => c.downloaded && c.on_disk === false).length
-	);
+	const missing = $derived(series.chapters.filter(missingFromDisk).length);
 	const counts = $derived(
 		`${series.chapters.length} · ${seen} seen` +
 			(missing > 0 ? ` · ${missing} missing from disk` : '')
