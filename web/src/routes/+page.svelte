@@ -315,6 +315,14 @@
 				>Not found</span
 			>
 		{/if}
+		<!-- 0 until its first check: no count to show. -->
+		{#if favorite.current_chapter > 0}
+			<span
+				class="badge count num"
+				aria-label="{favorite.current_chapter} chapters"
+				title="{favorite.current_chapter} chapters">{favorite.current_chapter}</span
+			>
+		{/if}
 	</span>
 	<!-- The website's own title, when MangaBaka's shows instead. -->
 	<span class="t" title={favorite.display_title === favorite.title ? undefined : favorite.title}
@@ -801,6 +809,13 @@
 		left: 6px;
 		background: var(--bad-soft);
 		color: var(--bad);
+	}
+	/* Quieter than the accent "+N", which stays the eye-catcher. */
+	.badge.count {
+		top: auto;
+		bottom: 6px;
+		background: var(--surface-2);
+		color: var(--muted);
 	}
 	.t {
 		font-weight: 600;
