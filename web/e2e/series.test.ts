@@ -70,3 +70,25 @@ test('a slow series shows a skeleton of the page until it loads', async ({ page 
 	await expect(skeleton).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Chapters' })).toBeVisible();
 });
+
+test('moving the downloads along with a new folder reports in the inbox', async ({ page }) => {
+	// Frieren is in the library.
+	await page.goto('/series?module=mangadex&link=%2Ftitle%2Fabc123%2Ffrieren');
+	const button = page.getByRole('button', { name: 'Download folder…' });
+	await button.click();
+	const dialog = page.getByRole('dialog', { name: 'Download folder' });
+	await dialog.getByRole('textbox', { name: 'Folder' }).fill('/data/elsewhere/Frieren');
+	await dialog
+		.getByRole('checkbox', { name: 'Move chapters already downloaded to the new folder' })
+		.check();
+	await expect(dialog).toContainText('in the background');
+	await dialog.getByRole('button', { name: 'Save' }).click();
+	await expect(dialog).toBeHidden();
+	await expect(button).toHaveAttribute('title', '/data/elsewhere/Frieren');
+
+	await page.getByRole('button', { name: /Inbox/ }).click();
+	const inbox = page.getByRole('dialog', { name: 'Inbox' });
+	await expect(inbox.getByRole('listitem').first()).toContainText(
+		'Moved the downloads of 1 series'
+	);
+});

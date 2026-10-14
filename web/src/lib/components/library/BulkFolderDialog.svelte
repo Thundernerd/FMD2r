@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Api } from '#lib/api/client.ts';
-	import type { Destination } from '#lib/api/types.ts';
+	import { ApiError, type Api } from '#lib/api/client.ts';
+	import type { BulkChange, Destination } from '#lib/api/types.ts';
 	import { defaultDestination, destinationLabel } from '#lib/destinations/destinations.ts';
 
 	let {
@@ -13,8 +13,11 @@
 		api: Api;
 		/** How many series change folder. */
 		count: number;
-		/** Gives the series a folder in `destination`; rejects when that fails. */
-		onpick: (destination: string) => Promise<void>;
+		/**
+		 * Gives the series a folder in `destination`, with `move_files` also moving their chapters
+		 * already downloaded; rejects when that fails.
+		 */
+		onpick: (change: Pick<BulkChange, 'destination' | 'move_files'>) => Promise<void>;
 		onclose: () => void;
 	} = $props();
 
@@ -24,6 +27,8 @@
 	/** A destination's index, or `custom`. */
 	let picked = $state('custom');
 	let custom = $state('');
+	/** Whether the chapters already downloaded move along. */
+	let moveFiles = $state(false);
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 	let input: HTMLInputElement | undefined = $state();
@@ -54,10 +59,13 @@
 		busy = true;
 		error = null;
 		try {
-			await onpick(folder);
+			await onpick(moveFiles ? { destination: folder, move_files: true } : { destination: folder });
 			dialog?.close();
-		} catch {
-			error = 'Could not change the folder.';
+		} catch (e) {
+			error =
+				e instanceof ApiError && e.status === 409 && e.detail
+					? e.detail
+					: 'Could not change the folder.';
 		} finally {
 			busy = false;
 		}
@@ -72,8 +80,13 @@
 	<form onsubmit={save}>
 		<p class="small muted">
 			Where new chapters of the {count} selected series are downloaded. Each series gets its own folder
-			in it, named as a new download's. Chapters already downloaded stay where they are; they are not
-			moved.
+			in it, named as a new download's.
+			{#if moveFiles}
+				Chapters already downloaded move to the new folder in the background; the inbox reports the
+				result.
+			{:else}
+				Chapters already downloaded stay where they are; they are not moved.
+			{/if}
 		</p>
 		<label class="field">
 			<span class="label">Destination</span>
@@ -98,6 +111,10 @@
 		{:else}
 			<p class="small muted">In <span class="mono">{folder}</span></p>
 		{/if}
+		<label class="check">
+			<input type="checkbox" bind:checked={moveFiles} />
+			Move chapters already downloaded to the new folder
+		</label>
 		{#if error}
 			<p class="error small" role="alert">{error}</p>
 		{/if}
@@ -149,6 +166,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-1);
+	}
+	.check {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
 	}
 	.actions {
 		display: flex;
