@@ -1,6 +1,8 @@
-//! Asking the comic server (`comic_server` settings) to scan after downloads finish, and
-//! `POST /api/settings/comic-server/test` (issue #269). No FMD2 counterpart.
+//! Asking the comic server (`comic_server` settings) to scan after downloads finish (issue #269)
+//! or a folder move moved files (#289), and `POST /api/settings/comic-server/test`. No FMD2
+//! counterpart.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Json;
@@ -20,14 +22,11 @@ use crate::{ApiError, AppState, Problem};
 const EVENT_KIND: &str = "comic_server";
 
 impl AppState {
-    /// Asks the comic server to scan `window` after the last download finished, so a batch of
-    /// downloads gives one scan. Failed or stopped downloads don't count. A failed scan logs a
-    /// warning and adds a warning to the inbox; it never affects downloads. Call it after
-    /// [`AppState::with_engine`].
+    /// Asks the comic server to scan `window` after the last download finished or move ended
+    /// ([`AppState::request_comic_server_scan`]), so a batch of them gives one scan. Failed or
+    /// stopped downloads don't count. A failed scan logs a warning and adds a warning to the
+    /// inbox; it never affects downloads. Call it once, after [`AppState::with_engine`].
     pub fn start_comic_server_scans(&self, window: Duration) {
-        let Some(mut rx) = self.engine.subscribe() else {
-            return;
-        };
         let client = match ComicServerClient::new() {
             Ok(client) => client,
             Err(e) => {
@@ -35,25 +34,50 @@ impl AppState {
                 return;
             }
         };
-        let state = self.clone();
+        // Without the debounce, so it ends once every other `AppState` is dropped.
+        let state = AppState {
+            comic_server_scans: Arc::default(),
+            ..self.clone()
+        };
         let debounce = Debounce::spawn(window, move || {
             let (state, client) = (state.clone(), client.clone());
             async move { scan(&state, &client).await }
         });
+        if self.comic_server_scans.set(debounce).is_err() {
+            tracing::warn!(target: "fmd_server", "comic server scans were already started");
+            return;
+        }
+        let Some(mut rx) = self.engine.subscribe() else {
+            return;
+        };
+        let scans = self.comic_server_scans.clone();
+        let trigger = move || {
+            if let Some(debounce) = scans.get() {
+                debounce.trigger();
+            }
+        };
         tokio::spawn(async move {
             loop {
                 match rx.recv().await {
                     Ok(EngineEvent::Status {
                         status: TaskStatus::Finished,
                         ..
-                    }) => debounce.trigger(),
+                    }) => trigger(),
                     // Missed events may have held a finish; a spare scan does no harm.
-                    Err(RecvError::Lagged(_)) => debounce.trigger(),
+                    Err(RecvError::Lagged(_)) => trigger(),
                     Ok(_) => {}
                     Err(RecvError::Closed) => return,
                 }
             }
         });
+    }
+
+    /// Asks for a comic server scan once the scan delay passes without another request; nothing
+    /// without [`AppState::start_comic_server_scans`].
+    pub(crate) fn request_comic_server_scan(&self) {
+        if let Some(debounce) = self.comic_server_scans.get() {
+            debounce.trigger();
+        }
     }
 }
 

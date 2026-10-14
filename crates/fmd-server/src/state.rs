@@ -2,10 +2,11 @@
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Instant, SystemTime};
 
 use fmd_core::accounts::AccountService;
+use fmd_core::comic_server::Debounce;
 use fmd_core::favorites::CheckerEvent;
 use fmd_core::folder_move::MovingFolders;
 use fmd_core::info::RateLimits;
@@ -64,6 +65,8 @@ pub struct AppState {
     pub(crate) move_job: OneOffJob,
     /// The folders a move is working in; the download engine holds tasks downloading into them.
     pub(crate) moving: MovingFolders,
+    /// The comic server scan [`AppState::start_comic_server_scans`] set up; unset, nothing scans.
+    pub(crate) comic_server_scans: Arc<OnceLock<Debounce>>,
     pub(crate) started: Instant,
     pub(crate) clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
@@ -96,6 +99,7 @@ impl AppState {
             import_job: crate::import::job(),
             move_job: crate::folder_move::job(),
             moving: MovingFolders::default(),
+            comic_server_scans: Arc::default(),
             started: Instant::now(),
             clock: Arc::new(SystemTime::now),
             shutdown: Arc::new(watch::channel(false).0),

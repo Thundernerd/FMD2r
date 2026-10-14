@@ -88,6 +88,9 @@ async fn run(state: AppState, moves: Vec<SeriesMove>) {
     }
     state.move_job.update(|s| s.phase = JobPhase::Done);
     state.jobs.changed(JOB_ID);
+    if summary.moved > 0 {
+        state.request_comic_server_scan();
+    }
     if let Err(e) = state.notify(summary.event()).await {
         tracing::warn!(target: "fmd_server", "adding the move's report to the inbox: {e}");
     }
