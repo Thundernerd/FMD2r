@@ -161,6 +161,27 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/destinations/relocate': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Point the library series and websites that download to a destination's old folder to its
+		 *     new one. A series' folder `from/A/B` becomes `to/A/B`; `from` matches by whole path
+		 *     components, so `/data/manga` does not match `/data/manga2`.
+		 */
+		post: operations['relocateDestination'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/events': {
 		parameters: {
 			query?: never;
@@ -2469,6 +2490,28 @@ export interface components {
 		 * @enum {string}
 		 */
 		ProxyType: 'http' | 'socks4' | 'socks5';
+		/** @description A destination's folder that changed. */
+		Relocation: {
+			/** @description Only count what would be repointed; nothing changes. */
+			dry_run?: boolean;
+			/** @description The destination's old folder. */
+			from: string;
+			/**
+			 * @description Also move the repointed series' chapters already downloaded to their new folders, in the
+			 *     background; the inbox reports the result. A series that downloads straight into the old
+			 *     folder is repointed without moving anything, as that would move the whole destination.
+			 */
+			move_files?: boolean;
+			/** @description Its new folder. */
+			to: string;
+		};
+		/** @description What a relocation repointed, or would. */
+		RelocationCounts: {
+			/** @description Library series whose folder is the old folder or inside it. */
+			series: number;
+			/** @description Websites whose own destination is the old folder. */
+			websites: number;
+		};
 		/** @description The names a download of a sample chapter gets with a draft's settings. */
 		RenamePreview: {
 			/** @description The chapter folder or archive name (`chapter_rename`). */
@@ -3661,6 +3704,57 @@ export interface operations {
 			};
 			/** @description lists.db is not open, or the website is limiting requests from this server */
 			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	relocateDestination: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['Relocation'];
+			};
+		};
+		responses: {
+			/** @description What was repointed */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['RelocationCounts'];
+				};
+			};
+			/** @description Malformed body */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description With `move_files`: a move is running, and nothing changed */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description An empty folder */
+			422: {
 				headers: {
 					[name: string]: unknown;
 				};
