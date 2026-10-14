@@ -42,6 +42,7 @@ use fmd_lua::{Module, ModuleRegistry, WorkerPool};
 use fmd_store::{AppDb, MetadataSeries, StoreError};
 use tokio::sync::broadcast;
 
+use crate::folder_move::MovingFolders;
 use crate::settings::{SettingsError, SettingsService};
 use manager::Inner;
 pub(crate) use manager::rename_options;
@@ -75,6 +76,9 @@ pub struct EngineConfig {
     /// Fills the CBZ metadata files from MangaBaka; without it they hold only what the
     /// download knows.
     pub series: Option<Arc<SeriesLookup>>,
+    /// Folders a library move is working in: a waiting task downloading into one starts once
+    /// the move is done.
+    pub moving: MovingFolders,
 }
 
 impl EngineConfig {
@@ -92,6 +96,7 @@ impl EngineConfig {
             settings,
             http,
             series: None,
+            moving: MovingFolders::default(),
         }
     }
 

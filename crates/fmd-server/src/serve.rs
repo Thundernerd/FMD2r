@@ -204,6 +204,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                         Arc::new(move |module: &str, link: &str| jobs.series_match(module, link));
                     lookup
                 }),
+                moving: state.moving.clone(),
             })
             .await;
             let queue = match engine {

@@ -353,9 +353,15 @@ export function createMockFavorites(
 			const missing = change.ids.find((_, i) => !picked[i]);
 			if (missing !== undefined) return problem(400, `no favorite with id ${missing}`);
 			const list = picked.filter((f) => f !== undefined);
-			const { enabled, group_id, destination, mark_seen, remove } = change;
+			const { enabled, group_id, destination, mark_seen, move_files, remove } = change;
 			if (remove) {
-				if (enabled != null || group_id !== undefined || destination != null || mark_seen) {
+				if (
+					enabled != null ||
+					group_id !== undefined ||
+					destination != null ||
+					mark_seen ||
+					move_files
+				) {
 					return problem(400, 'remove cannot be combined with a change');
 				}
 				for (const f of list) favorites.splice(favorites.indexOf(f), 1);

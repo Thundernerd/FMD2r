@@ -343,6 +343,16 @@ impl<'a> TaskRepo<'a> {
         Ok(())
     }
 
+    /// The folder the task downloads to, e.g. after its series' downloads moved.
+    pub fn set_save_to(&self, id: TaskId, save_to: &str) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute(
+            "UPDATE tasks SET save_to = ?2 WHERE id = ?1",
+            params![id.0, save_to],
+        )?;
+        Ok(())
+    }
+
     pub fn set_enabled(&self, id: TaskId, enabled: bool) -> Result<()> {
         let conn = self.db.lock();
         conn.execute(
