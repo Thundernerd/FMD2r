@@ -140,10 +140,13 @@ describe('Library chapter counts', () => {
 					favorite.title === 'Sakamoto Days' ? { ...favorite, current_chapter: 0 } : favorite
 				)
 			);
-		render(Library);
-		const grid = await screen.findByRole('list', { name: 'Favorites' });
-		const card = within(grid).getByRole('link', { name: /Sakamoto Days/ });
-		expect(within(card).queryByLabelText(/chapters$/)).toBeNull();
-		spy.mockRestore();
+		try {
+			render(Library);
+			const grid = await screen.findByRole('list', { name: 'Favorites' });
+			const card = within(grid).getByRole('link', { name: /Sakamoto Days/ });
+			expect(within(card).queryByLabelText(/chapters$/)).toBeNull();
+		} finally {
+			spy.mockRestore();
+		}
 	});
 });

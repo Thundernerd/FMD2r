@@ -816,6 +816,7 @@
 		bottom: 6px;
 		background: var(--surface-2);
 		color: var(--muted);
+		box-shadow: none;
 	}
 	.t {
 		font-weight: 600;
