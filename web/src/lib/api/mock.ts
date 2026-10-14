@@ -980,14 +980,15 @@ export function createMockBackend({
 		if (route === 'POST /api/destinations/relocate') {
 			const { relocations, move_files, dry_run } = (await req.json()) as RelocateRequest;
 			const dryRun = dry_run ?? false;
-			const counts = relocations.map(({ from, to }) => ({
+			const series = favorites.relocate(relocations, dryRun);
+			const counts = relocations.map(({ from, to }, i) => ({
 				from,
 				to,
-				series: favorites.relocate(from, to, dryRun),
+				series: series[i] ?? 0,
 				websites: settings.relocateWebsites(from, to, dryRun)
 			}));
-			const series = counts.reduce((n, c) => n + c.series, 0);
-			if (move_files && !dryRun && series > 0) reportMove(series);
+			const moved = series.reduce((n, c) => n + c, 0);
+			if (move_files && !dryRun && moved > 0) reportMove(moved);
 			return json(counts);
 		}
 		if (route === 'POST /api/check-folders') {

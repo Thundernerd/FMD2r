@@ -23,7 +23,7 @@
 	import RelocateDialog from '#lib/components/settings/RelocateDialog.svelte';
 	import SettingField from '#lib/components/settings/SettingField.svelte';
 	import WebsiteSelection from '#lib/components/settings/WebsiteSelection.svelte';
-	import { changedFolders } from '#lib/destinations/destinations.ts';
+	import { changedFolders, type RelocateAnswer } from '#lib/destinations/destinations.ts';
 	import { Draft } from '#lib/settings/draft.svelte.ts';
 	import { editable } from '#lib/settings/module.ts';
 	import { showFieldErrors } from '#lib/settings/save.ts';
@@ -186,18 +186,14 @@
 	/** The changed destinations the repoint dialog asks about, and how to answer it. */
 	let relocating = $state<{
 		used: RelocationCounts[];
-		answer: (a: { repoint: boolean; moveFiles: boolean } | null) => void;
+		answer: (a: RelocateAnswer | null) => void;
 	} | null>(null);
 
 	/**
 	 * The changed destinations that library series or websites download to, and whether to point
 	 * those to the new folders; `null` when the dialog is closed without an answer.
 	 */
-	async function askRelocate(): Promise<{
-		used: RelocationCounts[];
-		repoint: boolean;
-		moveFiles: boolean;
-	} | null> {
+	async function askRelocate(): Promise<({ used: RelocationCounts[] } & RelocateAnswer) | null> {
 		const PATH = 'saveto.destinations';
 		const relocations = changedFolders(
 			(draft?.saved(PATH) ?? []) as unknown as Destination[],
@@ -210,7 +206,7 @@
 			.catch(() => []);
 		const used = counts.filter((c) => c.series + c.websites > 0);
 		if (!used.length) return { used, repoint: false, moveFiles: false };
-		const answer = await new Promise<{ repoint: boolean; moveFiles: boolean } | null>(
+		const answer = await new Promise<RelocateAnswer | null>(
 			(resolve) => (relocating = { used, answer: resolve })
 		);
 		relocating = null;

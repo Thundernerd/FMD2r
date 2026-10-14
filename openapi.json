@@ -460,7 +460,7 @@
         "tags": [
           "settings"
         ],
-        "summary": "Point the library series and websites that download to destinations' old folders to their new\nones. A series' folder `from/A/B` becomes `to/A/B`; `from` matches by whole path components,\nso `/data/manga` does not match `/data/manga2`. A series inside several old folders follows\nthe innermost one.",
+        "summary": "Point the library series and websites that download to destinations' old folders to their new\nones. A series' folder `from/A/B` becomes `to/A/B`; `from` matches by whole path components,\nso `/data/manga` does not match `/data/manga2`. A series inside several old folders follows\nthe innermost one; one inside another destination within the old folder stays.",
         "operationId": "relocateDestinations",
         "requestBody": {
           "content": {
@@ -487,7 +487,7 @@
             }
           },
           "400": {
-            "description": "Malformed body",
+            "description": "Malformed body, or a series was removed meanwhile; nothing changed",
             "content": {
               "application/json": {
                 "schema": {

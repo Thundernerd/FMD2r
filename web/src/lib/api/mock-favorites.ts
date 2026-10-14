@@ -8,6 +8,7 @@ import type {
 	InboxItem,
 	JobState,
 	LibraryTitle,
+	Relocation,
 	RuleView,
 	SeriesInfo
 } from './types';
@@ -189,10 +190,11 @@ export interface MockFavorites {
 	patch(id: number, patch: FavoritePatch): Result;
 	remove(id: number): Result;
 	/**
-	 * Points the favorites in or under `from` to the same place under `to`, as
-	 * `POST /api/destinations/relocate` does; only counts them with `dryRun`.
+	 * Points the favorites in or under an old folder to the same place under its new one, as
+	 * `POST /api/destinations/relocate` does; only counts them with `dryRun`. One count per
+	 * relocation, in order.
 	 */
-	relocate(from: string, to: string, dryRun: boolean): number;
+	relocate(relocations: Relocation[], dryRun: boolean): number[];
 	/**
 	 * Changes or removes every favorite in `change.ids`, all or none, as fmd-server does;
 	 * `folder` makes a series' manga folder in a destination, as `POST /api/save-folder` does.
@@ -347,15 +349,15 @@ export function createMockFavorites(
 			}
 			return { status: 200, body: view(favorite) };
 		},
-		relocate(from, to, dryRun) {
-			let count = 0;
+		relocate(relocations, dryRun) {
+			const counts = relocations.map(() => 0);
 			for (const favorite of favorites) {
-				const folder = relocatedFolder(favorite.save_to, from, to);
-				if (folder === null) continue;
-				count++;
-				if (!dryRun) favorite.save_to = folder;
+				const moved = relocatedFolder(favorite.save_to, relocations);
+				if (!moved) continue;
+				counts[moved.index] = (counts[moved.index] ?? 0) + 1;
+				if (!dryRun) favorite.save_to = moved.folder;
 			}
-			return count;
+			return counts;
 		},
 		remove(id) {
 			const index = favorites.findIndex((f) => f.id === id);

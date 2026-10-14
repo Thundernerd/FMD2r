@@ -21,16 +21,42 @@ export function changedFolders(saved: Destination[], draft: Destination[]): Relo
 	});
 }
 
-/**
- * `folder` at the same place under `to` when it is `from` or inside it, comparing whole path
- * components as fmd-server does (`/data/manga` does not hold `/data/manga2`); else `null`.
- */
-export function relocatedFolder(folder: string, from: string, to: string): string | null {
+/** How the repoint dialog was answered: whether to repoint, and to move the files along. */
+export interface RelocateAnswer {
+	repoint: boolean;
+	moveFiles: boolean;
+}
+
+/** The path below `from` when `folder` is inside it, by whole components; else `null`. */
+function below(folder: string, from: string): string | null {
 	const base = bare(from);
-	const path = folder.trim();
-	if (bare(path) === base) return to;
-	const rest = path.startsWith(`${base}/`) ? path.slice(base.length + 1) : null;
-	return rest === null ? null : `${bare(to)}/${rest}`;
+	const path = bare(folder);
+	if (path === base) return '';
+	const sep = path.charAt(base.length);
+	return path.startsWith(base) && (sep === '/' || sep === '\\')
+		? path.slice(base.length + 1)
+		: null;
+}
+
+/**
+ * `folder` at the same place under the new folder of the innermost relocation whose old folder
+ * holds it, comparing whole path components as fmd-server does (`/data/manga` does not hold
+ * `/data/manga2`), with that relocation's index; else `null`.
+ */
+export function relocatedFolder(
+	folder: string,
+	relocations: Relocation[]
+): { folder: string; index: number } | null {
+	let found: { folder: string; index: number } | null = null;
+	// Of old folders that both hold `folder`, the longer is inside the other.
+	let depth = -1;
+	for (const [index, { from, to }] of relocations.entries()) {
+		const rest = below(folder, from);
+		if (rest === null || bare(from).length <= depth) continue;
+		depth = bare(from).length;
+		found = { folder: rest ? `${bare(to)}/${rest}` : to, index };
+	}
+	return found;
 }
 
 /** The destination whose folder is `path`, if one is. */

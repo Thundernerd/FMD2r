@@ -282,3 +282,34 @@ async fn several_destinations_are_repointed_and_their_files_moved_in_one_run() {
     assert_eq!(read(&fx.path("new/manga/Alpha/Chapter 1.cbz")), "alpha");
     assert_eq!(read(&fx.path("new/manhwa/Beta/Chapter 1.cbz")), "beta");
 }
+
+#[tokio::test]
+async fn a_series_in_a_destination_inside_the_old_folder_keeps_its_folder() {
+    let fx = Fixture::new();
+    // `manga` is a destination of its own inside `library`, whose folder changes.
+    let request = Request::patch("/api/settings")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({ "saveto": { "destinations": [
+                { "name": "Library", "path": fx.path("library"), "default": true },
+                { "name": "Manga", "path": fx.path("library/manga"), "default": false },
+            ] } })
+            .to_string(),
+        ))
+        .unwrap();
+    let saved = build_router(fx.state.clone())
+        .oneshot(request)
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    let alpha = fx.series("Alpha", "library/Alpha");
+    let beta = fx.series("Beta", "library/manga/Beta");
+
+    let response = fx
+        .relocate(json!({ "relocations": [{ "from": fx.path("library"), "to": fx.path("new") }] }))
+        .await;
+
+    assert_eq!(json_body(response).await[0]["series"], 1);
+    assert_eq!(fx.save_to(alpha), fx.text("new/Alpha"));
+    assert_eq!(fx.save_to(beta), fx.text("library/manga/Beta"));
+}

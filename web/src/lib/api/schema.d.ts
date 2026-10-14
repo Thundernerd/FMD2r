@@ -174,7 +174,7 @@ export interface paths {
 		 * Point the library series and websites that download to destinations' old folders to their new
 		 *     ones. A series' folder `from/A/B` becomes `to/A/B`; `from` matches by whole path components,
 		 *     so `/data/manga` does not match `/data/manga2`. A series inside several old folders follows
-		 *     the innermost one.
+		 *     the innermost one; one inside another destination within the old folder stays.
 		 */
 		post: operations['relocateDestinations'];
 		delete?: never;
@@ -3745,7 +3745,7 @@ export interface operations {
 					'application/json': components['schemas']['RelocationCounts'][];
 				};
 			};
-			/** @description Malformed body */
+			/** @description Malformed body, or a series was removed meanwhile; nothing changed */
 			400: {
 				headers: {
 					[name: string]: unknown;

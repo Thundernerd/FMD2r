@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { RelocationCounts } from '#lib/api/types.ts';
+	import type { RelocateAnswer } from '#lib/destinations/destinations.ts';
 
 	let {
 		used,
@@ -12,7 +13,7 @@
 		 * `repoint` points them to the new folders, `moveFiles` also moving the chapters already
 		 * downloaded; `null` when closed without an answer, which saves nothing.
 		 */
-		onanswer: (answer: { repoint: boolean; moveFiles: boolean } | null) => void;
+		onanswer: (answer: RelocateAnswer | null) => void;
 	} = $props();
 
 	const uid = $props.id();
@@ -41,7 +42,7 @@
 >
 	<h2 id="{uid}-title">Repoint the library</h2>
 	<ul class="changes">
-		{#each used as change (change.from)}
+		{#each used as change, i (i)}
 			<li class="small">
 				{change.series} library series and {plural(change.websites, 'website', 'websites')} use
 				<span class="mono">{change.from}</span>. Point them to
@@ -56,6 +57,8 @@
 	{#if moveFiles}
 		<p class="small muted">
 			Each series' chapters move to its new folder in the background; the inbox reports the result.
+			A series that downloads straight into the destination's folder is repointed but not moved, as
+			that would move the whole folder.
 		</p>
 	{/if}
 	<div class="actions">

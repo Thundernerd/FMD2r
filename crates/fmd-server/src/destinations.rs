@@ -1,11 +1,12 @@
 //! `/api/destinations`: repointing what downloads to a destination when its folder changes
 //! (#284).
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use axum::Json;
 use axum::extract::State;
-use fmd_store::Favorite;
+use fmd_store::{AppDb, Favorite, FavoriteId, ModuleSettings};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -51,13 +52,13 @@ pub struct RelocationCounts {
 /// Point the library series and websites that download to destinations' old folders to their new
 /// ones. A series' folder `from/A/B` becomes `to/A/B`; `from` matches by whole path components,
 /// so `/data/manga` does not match `/data/manga2`. A series inside several old folders follows
-/// the innermost one.
+/// the innermost one; one inside another destination within the old folder stays.
 #[utoipa::path(post, path = "/api/destinations/relocate", tag = "settings",
     operation_id = "relocateDestinations",
     request_body = RelocateRequest,
     responses(
         (status = 200, body = Vec<RelocationCounts>, description = "What was repointed, in the order of `relocations`"),
-        (status = 400, body = Problem, description = "Malformed body"),
+        (status = 400, body = Problem, description = "Malformed body, or a series was removed meanwhile; nothing changed"),
         (status = 409, body = Problem, description = "With `move_files`: a move is running, and nothing changed"),
         (status = 422, body = Problem, description = "An empty folder"),
     ))]
@@ -83,6 +84,14 @@ pub(crate) async fn relocate(
             to: r.to.trim().to_owned(),
         })
         .collect();
+    let destinations: Vec<String> = state
+        .settings
+        .get()
+        .saveto
+        .destinations
+        .iter()
+        .map(|d| d.path.trim().to_owned())
+        .collect();
     let dry_run = req.dry_run;
     let run = if req.move_files && !dry_run {
         Some(MoveRun::reserve(&state)?)
@@ -101,59 +110,21 @@ pub(crate) async fn relocate(
                         websites: 0,
                     })
                     .collect();
-                let mut ids = Vec::new();
+                let mut series = HashMap::new();
                 for favorite in db.favorites().list()? {
-                    if let Some(i) = containing(&relocations, &favorite.save_to) {
+                    if let Some(i) = containing(&relocations, &destinations, &favorite.save_to) {
                         counts[i].series += 1;
-                        ids.push(favorite.id);
+                        series.insert(favorite.id, i);
                     }
                 }
-                let repo = db.module_settings();
-                let mut websites = Vec::new();
-                for module in repo.module_ids()? {
-                    let Some(stored) = repo.get(&module)? else {
-                        continue;
-                    };
-                    let folder = Path::new(stored.save_to.trim());
-                    if stored.save_to.trim().is_empty() {
-                        continue;
-                    }
-                    if let Some(i) = relocations
-                        .iter()
-                        .position(|r| folder == Path::new(&r.from))
-                    {
-                        counts[i].websites += 1;
-                        websites.push((stored, relocations[i].to.clone()));
-                    }
+                let websites = websites_in(db, &relocations)?;
+                for (_, i) in &websites {
+                    counts[*i].websites += 1;
                 }
-                let mut moves = Vec::new();
                 if dry_run {
-                    return Ok((counts, moves));
+                    return Ok((counts, Vec::new()));
                 }
-                db.favorites()
-                    .update_each(&ids, |favorite: &mut Favorite| {
-                        let Some(i) = containing(&relocations, &favorite.save_to) else {
-                            return;
-                        };
-                        let relocation = &relocations[i];
-                        let save_to = relocated(&favorite.save_to, relocation);
-                        let old = std::mem::replace(&mut favorite.save_to, save_to.clone());
-                        if Path::new(&old) != Path::new(&relocation.from) {
-                            moves.push(SeriesMove {
-                                id: favorite.id,
-                                title: favorite.title.clone(),
-                                from: old,
-                                to: save_to,
-                            });
-                        }
-                    })?
-                    .ok_or_else(|| {
-                        ApiError::Conflict("a series was removed while repointing it".into())
-                    })?;
-                for (mut stored, to) in websites {
-                    stored.save_to = to;
-                    repo.upsert(&stored)?;
-                }
+                let moves = repoint(db, &relocations, &series, websites)?;
                 Ok((counts, moves))
             },
         )
@@ -166,14 +137,83 @@ pub(crate) async fn relocate(
     Ok(Json(counts))
 }
 
-/// The relocation whose old folder is, or holds, `folder`: the innermost when several do.
-fn containing(relocations: &[Relocation], folder: &str) -> Option<usize> {
-    relocations
+/// The websites whose own destination is an old folder, with the index of its relocation.
+fn websites_in(
+    db: &AppDb,
+    relocations: &[Relocation],
+) -> Result<Vec<(ModuleSettings, usize)>, ApiError> {
+    let repo = db.module_settings();
+    let mut websites = Vec::new();
+    for module in repo.module_ids()? {
+        let Some(stored) = repo.get(&module)? else {
+            continue;
+        };
+        let folder = stored.save_to.trim();
+        if folder.is_empty() {
+            continue;
+        }
+        if let Some(i) = relocations
+            .iter()
+            .position(|r| Path::new(folder) == Path::new(&r.from))
+        {
+            websites.push((stored, i));
+        }
+    }
+    Ok(websites)
+}
+
+/// Points `series` (by the index of their relocation) and `websites` to the new folders; returns
+/// the series whose downloads move along. A series that downloads straight into an old folder
+/// does not move, as that would move the whole destination.
+fn repoint(
+    db: &AppDb,
+    relocations: &[Relocation],
+    series: &HashMap<FavoriteId, usize>,
+    websites: Vec<(ModuleSettings, usize)>,
+) -> Result<Vec<SeriesMove>, ApiError> {
+    let ids: Vec<FavoriteId> = series.keys().copied().collect();
+    let mut moves = Vec::new();
+    db.favorites()
+        .update_each(&ids, |favorite: &mut Favorite| {
+            let Some(relocation) = series.get(&favorite.id).map(|&i| &relocations[i]) else {
+                return;
+            };
+            let save_to = relocated(&favorite.save_to, relocation);
+            let old = std::mem::replace(&mut favorite.save_to, save_to.clone());
+            if Path::new(&old) != Path::new(&relocation.from) {
+                moves.push(SeriesMove {
+                    id: favorite.id,
+                    title: favorite.title.clone(),
+                    from: old,
+                    to: save_to,
+                });
+            }
+        })?
+        .ok_or_else(|| ApiError::BadRequest("a series was removed while repointing it".into()))?;
+    let repo = db.module_settings();
+    for (mut stored, i) in websites {
+        stored.save_to.clone_from(&relocations[i].to);
+        repo.upsert(&stored)?;
+    }
+    Ok(moves)
+}
+
+/// The relocation whose old folder is, or holds, `folder`: the innermost when several do. A
+/// folder inside another of `destinations` within that old folder keeps its place: that
+/// destination did not change.
+fn containing(relocations: &[Relocation], destinations: &[String], folder: &str) -> Option<usize> {
+    let folder = Path::new(folder);
+    let (i, relocation) = relocations
         .iter()
         .enumerate()
-        .filter(|(_, r)| Path::new(folder).starts_with(&r.from))
-        .max_by_key(|(_, r)| Path::new(&r.from).components().count())
-        .map(|(i, _)| i)
+        .filter(|(_, r)| folder.starts_with(&r.from))
+        .max_by_key(|(_, r)| Path::new(&r.from).components().count())?;
+    let from = Path::new(&relocation.from);
+    let kept = destinations
+        .iter()
+        .map(Path::new)
+        .any(|d| d != from && d.starts_with(from) && folder.starts_with(d));
+    (!kept).then_some(i)
 }
 
 /// `folder`, inside `relocation.from`, at the same place under `relocation.to`.
