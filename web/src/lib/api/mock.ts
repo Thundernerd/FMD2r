@@ -19,6 +19,7 @@ import type {
 	LogLine,
 	ModuleSummary,
 	NewTask,
+	RelocateRequest,
 	RenamePreviewRequest,
 	RuleView,
 	SaveFolderRequest,
@@ -923,9 +924,10 @@ export function createMockBackend({
 			}
 			return json(body, status);
 		}
-		if (route === 'POST /api/favorites/check') {
+		if (route === 'POST /api/favorites/check' || route === 'POST /api/favorites/check-missing') {
 			const body = (await req.json().catch(() => ({}))) as { ids?: number[] } | null;
-			return favorites.start(body?.ids ?? null, 'new')
+			const mode = route.endsWith('missing') ? 'missing' : 'new';
+			return favorites.start(body?.ids ?? null, mode)
 				? new Response(null, { status: 202 })
 				: json({ status: 409, detail: 'a favorites check is already running' }, 409);
 		}
@@ -975,6 +977,20 @@ export function createMockBackend({
 			return update(req, settings.patchAll, (save) => save['settings']);
 		if (route === 'POST /api/settings/comic-server/test') {
 			return json(settings.testComicServer((await req.json()) as ComicServerTestRequest));
+		}
+		if (route === 'POST /api/destinations/relocate') {
+			const { relocations, move_files, dry_run } = (await req.json()) as RelocateRequest;
+			const dryRun = dry_run ?? false;
+			const series = favorites.relocate(relocations, dryRun);
+			const counts = relocations.map(({ from, to }, i) => ({
+				from,
+				to,
+				series: series[i] ?? 0,
+				websites: settings.relocateWebsites(from, to, dryRun)
+			}));
+			const moved = series.reduce((n, c) => n + c, 0);
+			if (move_files && !dryRun && moved > 0) reportMove(moved);
+			return json(counts);
 		}
 		if (route === 'POST /api/check-folders') {
 			const body = (await req.json()) as { paths?: unknown } | null;

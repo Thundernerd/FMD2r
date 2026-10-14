@@ -512,20 +512,45 @@ pub(crate) async fn check(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
+    start(&state, check_scope(&body)?, CheckMode::New)
+}
+
+/// Check enabled favorites for chapters missing from their directories
+/// (`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:883-928), to download them again.
+/// Beyond FMD2, whose `DoCheckMissing` leaves the downloaded list alone
+/// (baseunits/uFavoritesManager.pas:397-531), missing chapters lose their downloaded mark. The
+/// body is optional.
+#[utoipa::path(post, path = "/api/favorites/check-missing", tag = "library",
+    operation_id = "checkFavoritesMissing",
+    request_body(content = Option<CheckRequest>),
+    responses(
+        (status = 202, description = "Started; progress follows as `job.favorites.*` events"),
+        (status = 409, body = Problem, description = "A check is running"),
+        (status = 503, body = Problem, description = "The favorites check is not running in this server"),
+    ))]
+pub(crate) async fn check_library_missing(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    start(&state, check_scope(&body)?, CheckMode::Missing)
+}
+
+/// The scope an optional [`CheckRequest`] body asks for.
+fn check_scope(body: &[u8]) -> Result<CheckScope, ApiError> {
     let req: CheckRequest = if body.iter().all(u8::is_ascii_whitespace) {
         CheckRequest::default()
     } else {
-        serde_json::from_slice(&body).map_err(|e| ApiError::BadRequest(e.to_string()))?
+        serde_json::from_slice(body).map_err(|e| ApiError::BadRequest(e.to_string()))?
     };
-    let scope = match req.ids {
+    Ok(match req.ids {
         Some(ids) => CheckScope::Only(ids.into_iter().map(FavoriteId).collect()),
         None => CheckScope::All,
-    };
-    start(&state, scope, CheckMode::New)
+    })
 }
 
 /// Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,
-/// baseunits/uFavoritesManager.pas:883-928), to download them again.
+/// baseunits/uFavoritesManager.pas:883-928), to download them again. Beyond FMD2, missing
+/// chapters lose their downloaded mark.
 #[utoipa::path(post, path = "/api/favorites/{id}/check-missing", tag = "library",
     operation_id = "checkMissingChapters",
     params(("id" = i64, Path, description = "Favorite id")),

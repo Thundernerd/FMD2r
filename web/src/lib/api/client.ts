@@ -30,6 +30,8 @@ import type {
 	NewTask,
 	NotificationTest,
 	Problem,
+	RelocateRequest,
+	RelocationCounts,
 	RenamePreview,
 	RenamePreviewRequest,
 	RuleView,
@@ -143,6 +145,11 @@ export interface Api {
 	previewRename(draft: RenamePreviewRequest): Promise<RenamePreview>;
 	/** Whether downloads can be saved in each folder now, in order. */
 	checkFolders(paths: string[]): Promise<FolderCheck[]>;
+	/**
+	 * Points the library series and websites that download to destinations' old folders to their
+	 * new ones (or, with `dry_run`, counts them); one count per relocation, in order.
+	 */
+	relocateDestinations(request: RelocateRequest): Promise<RelocationCounts[]>;
 	/** Whether the comic server answers with the API key; changes nothing on it. */
 	testComicServer(request: ComicServerTestRequest): Promise<ComicServerTest>;
 	/** Sends a test notification with the channel's saved settings. */
@@ -212,7 +219,15 @@ export interface Api {
 	 * progress follows as `job.favorites.*` events. Rejects with status 409 while a check runs.
 	 */
 	checkFavorites(ids?: number[]): Promise<void>;
-	/** Starts checking a favorite for chapters missing from its folder; otherwise like {@link checkFavorites}. */
+	/**
+	 * Starts checking the given favorites (every enabled one when omitted) for chapters missing
+	 * from their folders, which lose their seen mark; otherwise like {@link checkFavorites}.
+	 */
+	checkFavoritesMissing(ids?: number[]): Promise<void>;
+	/**
+	 * Starts checking a favorite for chapters missing from its folder, which lose their seen mark;
+	 * otherwise like {@link checkFavorites}.
+	 */
 	checkMissingChapters(id: number): Promise<void>;
 	/** The library's groups, in order. */
 	listGroups(): Promise<GroupView[]>;
@@ -494,6 +509,12 @@ export function createApi({
 		async checkFolders(paths) {
 			return unwrap('checkFolders', await client.POST('/api/check-folders', { body: { paths } }));
 		},
+		async relocateDestinations(request) {
+			return unwrap(
+				'relocateDestinations',
+				await client.POST('/api/destinations/relocate', { body: request })
+			);
+		},
 		async testComicServer(request) {
 			return unwrap(
 				'testComicServer',
@@ -628,6 +649,12 @@ export function createApi({
 				body: ids ? { ids } : {}
 			});
 			if (!response.ok) throw new ApiError(response.status, 'checkFavorites');
+		},
+		async checkFavoritesMissing(ids) {
+			const { response } = await client.POST('/api/favorites/check-missing', {
+				body: ids ? { ids } : {}
+			});
+			if (!response.ok) throw new ApiError(response.status, 'checkFavoritesMissing');
 		},
 		async checkMissingChapters(id) {
 			const { response } = await client.POST('/api/favorites/{id}/check-missing', {

@@ -77,14 +77,18 @@ impl ModuleCatalog for Modules {
     }
 }
 
-/// Records the checks it is asked to start.
+/// Records the checks it is asked to start; refuses them as already running while `busy`.
 #[derive(Clone, Default)]
 struct FakeJobs {
     calls: Arc<Mutex<Vec<(CheckScope, CheckMode)>>>,
+    busy: Arc<Mutex<bool>>,
 }
 
 impl FavoritesJobs for FakeJobs {
     fn check(&self, scope: CheckScope, mode: CheckMode) -> Result<(), CheckError> {
+        if *self.busy.lock().unwrap() {
+            return Err(CheckError::AlreadyRunning);
+        }
         self.calls.lock().unwrap().push((scope, mode));
         Ok(())
     }
@@ -274,6 +278,44 @@ async fn the_check_endpoint_starts_the_job() {
             (CheckScope::Only(vec![FavoriteId(4)]), CheckMode::Missing),
         ]
     );
+}
+
+#[tokio::test]
+async fn the_library_missing_check_takes_every_enabled_favorite_or_the_given_ones() {
+    let fx = Fixture::new();
+
+    let all = fx.send("POST", "/api/favorites/check-missing", None).await;
+    let some = fx
+        .send(
+            "POST",
+            "/api/favorites/check-missing",
+            Some(json!({ "ids": [4, 7] })),
+        )
+        .await;
+
+    assert_eq!(all.status(), StatusCode::ACCEPTED);
+    assert_eq!(some.status(), StatusCode::ACCEPTED);
+    assert_eq!(
+        *fx.jobs.calls.lock().unwrap(),
+        [
+            (CheckScope::All, CheckMode::Missing),
+            (
+                CheckScope::Only(vec![FavoriteId(4), FavoriteId(7)]),
+                CheckMode::Missing
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_library_missing_check_is_refused_while_a_check_runs() {
+    let fx = Fixture::new();
+    *fx.jobs.busy.lock().unwrap() = true;
+
+    let response = fx.send("POST", "/api/favorites/check-missing", None).await;
+
+    // One checker runs either kind of check.
+    assert_eq!(response.status(), StatusCode::CONFLICT);
 }
 
 #[tokio::test]

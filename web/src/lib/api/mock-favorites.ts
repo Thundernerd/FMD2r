@@ -8,12 +8,14 @@ import type {
 	InboxItem,
 	JobState,
 	LibraryTitle,
+	Relocation,
 	RuleView,
 	SeriesInfo
 } from './types';
 import { seriesCover } from './mock-lists';
 import { FAILING_CHECKS } from '#lib/library/filters.ts';
 import { FORMATS } from '#lib/library/formats.ts';
+import { relocatedFolder } from '#lib/destinations/destinations.ts';
 
 // The library of the in-memory backend (see mock.ts), with a favorites check that works
 // through one favorite per tick.
@@ -188,6 +190,12 @@ export interface MockFavorites {
 	patch(id: number, patch: FavoritePatch): Result;
 	remove(id: number): Result;
 	/**
+	 * Points the favorites in or under an old folder to the same place under its new one, as
+	 * `POST /api/destinations/relocate` does; only counts them with `dryRun`. One count per
+	 * relocation, in order.
+	 */
+	relocate(relocations: Relocation[], dryRun: boolean): number[];
+	/**
 	 * Changes or removes every favorite in `change.ids`, all or none, as fmd-server does;
 	 * `folder` makes a series' manga folder in a destination, as `POST /api/save-folder` does.
 	 */
@@ -340,6 +348,16 @@ export function createMockFavorites(
 				saveGroups();
 			}
 			return { status: 200, body: view(favorite) };
+		},
+		relocate(relocations, dryRun) {
+			const counts = relocations.map(() => 0);
+			for (const favorite of favorites) {
+				const moved = relocatedFolder(favorite.save_to, relocations);
+				if (!moved) continue;
+				counts[moved.index] = (counts[moved.index] ?? 0) + 1;
+				if (!dryRun) favorite.save_to = moved.folder;
+			}
+			return counts;
 		},
 		remove(id) {
 			const index = favorites.findIndex((f) => f.id === id);

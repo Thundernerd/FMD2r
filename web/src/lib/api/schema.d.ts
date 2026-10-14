@@ -161,6 +161,28 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/destinations/relocate': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Point the library series and websites that download to destinations' old folders to their new
+		 *     ones. A series' folder `from/A/B` becomes `to/A/B`; `from` matches by whole path components,
+		 *     so `/data/manga` does not match `/data/manga2`. A series inside several old folders follows
+		 *     the innermost one; one inside another destination within the old folder stays.
+		 */
+		post: operations['relocateDestinations'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/events': {
 		parameters: {
 			query?: never;
@@ -240,6 +262,29 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/favorites/check-missing': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Check enabled favorites for chapters missing from their directories
+		 *     (`CheckForMissingChapters`, baseunits/uFavoritesManager.pas:883-928), to download them again.
+		 *     Beyond FMD2, whose `DoCheckMissing` leaves the downloaded list alone
+		 *     (baseunits/uFavoritesManager.pas:397-531), missing chapters lose their downloaded mark. The
+		 *     body is optional.
+		 */
+		post: operations['checkFavoritesMissing'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/favorites/{id}': {
 		parameters: {
 			query?: never;
@@ -272,7 +317,8 @@ export interface paths {
 		put?: never;
 		/**
 		 * Check a favorite for chapters missing from its directory (`CheckForMissingChapters`,
-		 *     baseunits/uFavoritesManager.pas:883-928), to download them again.
+		 *     baseunits/uFavoritesManager.pas:883-928), to download them again. Beyond FMD2, missing
+		 *     chapters lose their downloaded mark.
 		 */
 		post: operations['checkMissingChapters'];
 		delete?: never;
@@ -2469,6 +2515,37 @@ export interface components {
 		 * @enum {string}
 		 */
 		ProxyType: 'http' | 'socks4' | 'socks5';
+		/**
+		 * @description Destinations whose folders changed, repointed together so their files move in one run of the
+		 *     move job.
+		 */
+		RelocateRequest: {
+			/** @description Only count what would be repointed; nothing changes. */
+			dry_run?: boolean;
+			/**
+			 * @description Also move the repointed series' chapters already downloaded to their new folders, in the
+			 *     background; the inbox reports the result. A series that downloads straight into an old
+			 *     folder is repointed without moving anything, as that would move the whole destination.
+			 */
+			move_files?: boolean;
+			relocations: components['schemas']['Relocation'][];
+		};
+		/** @description A destination's folder that changed. */
+		Relocation: {
+			/** @description The destination's old folder. */
+			from: string;
+			/** @description Its new folder. */
+			to: string;
+		};
+		/** @description What a relocation repointed, or would. */
+		RelocationCounts: {
+			from: string;
+			/** @description Library series whose folder is the old folder or inside it. */
+			series: number;
+			to: string;
+			/** @description Websites whose own destination is the old folder. */
+			websites: number;
+		};
 		/** @description The names a download of a sample chapter gets with a draft's settings. */
 		RenamePreview: {
 			/** @description The chapter folder or archive name (`chapter_rename`). */
@@ -3670,6 +3747,57 @@ export interface operations {
 			};
 		};
 	};
+	relocateDestinations: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['RelocateRequest'];
+			};
+		};
+		responses: {
+			/** @description What was repointed, in the order of `relocations` */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['RelocationCounts'][];
+				};
+			};
+			/** @description Malformed body, or a series was removed meanwhile; nothing changed */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description With `move_files`: a move is running, and nothing changed */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description An empty folder */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
 	events: {
 		parameters: {
 			query?: never;
@@ -3820,6 +3948,46 @@ export interface operations {
 		};
 	};
 	checkFavorites: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: {
+			content: {
+				'application/json': null | components['schemas']['CheckRequest'];
+			};
+		};
+		responses: {
+			/** @description Started; progress follows as `job.favorites.*` events */
+			202: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description A check is running */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description The favorites check is not running in this server */
+			503: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	checkFavoritesMissing: {
 		parameters: {
 			query?: never;
 			header?: never;
