@@ -18,7 +18,7 @@ use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
 use fmd_server::{AppState, build_router};
-use fmd_store::AppDb;
+use fmd_store::{AppDb, NewFavorite};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -132,7 +132,8 @@ async fn start_stub(stub: Stub) -> String {
 }
 
 struct Harness {
-    _dir: TempDir,
+    dir: TempDir,
+    db: AppDb,
     state: AppState,
     stub: Stub,
 }
@@ -172,13 +173,14 @@ async fn harness(stub: Stub, comic_server: Value) -> Harness {
     ))
     .await
     .unwrap();
-    let state = AppState::new(db)
+    let state = AppState::new(db.clone())
         .unwrap()
         .with_settings(settings)
         .with_engine(engine);
     state.start_comic_server_scans(WINDOW);
     Harness {
-        _dir: dir,
+        dir,
+        db,
         state,
         stub,
     }
@@ -346,6 +348,100 @@ async fn kavita_is_asked_to_scan_every_library() {
     assert_eq!(
         requests(&h),
         [seen("POST", "/api/Library/scan-all", "key-1")]
+    );
+}
+
+/// A library series downloading to `folder` (under the harness's folder) with a chapter file
+/// there unless `empty`; answers its ID.
+fn series(h: &Harness, folder: &str, empty: bool) -> i64 {
+    let save_to = h.dir.path().join(folder);
+    if !empty {
+        fs::create_dir_all(&save_to).unwrap();
+        fs::write(save_to.join("Chapter 1.cbz"), "chapter 1").unwrap();
+    }
+    h.db.favorites()
+        .create(&NewFavorite {
+            module_id: "t".into(),
+            link: format!("/{folder}"),
+            title: folder.into(),
+            save_to: save_to.to_string_lossy().into_owned(),
+            cover_url: None,
+        })
+        .unwrap()
+        .id
+        .0
+}
+
+/// Changes series `id`'s folder to `folder` with `move_files` and waits for the move to end.
+async fn move_series(h: &Harness, id: i64, folder: &str) {
+    let to = h.dir.path().join(folder);
+    let req = Request::patch(format!("/api/favorites/{id}"))
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({"save_to": to, "move_files": true}).to_string(),
+        ))
+        .unwrap();
+    assert_eq!(send(&h.state, req).await.status(), StatusCode::OK);
+    let wait = async {
+        loop {
+            let job = body_json(send(&h.state, get("/api/jobs/move-downloads")).await).await;
+            if job["state"] == "done" {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    };
+    if tokio::time::timeout(PATIENCE, wait).await.is_err() {
+        panic!("the move did not end");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_move_that_moved_files_leads_to_one_scan_after_the_window() {
+    let h = harness(Stub::default(), json!({})).await;
+    let id = series(&h, "old", false);
+    move_series(&h, id, "new").await;
+    assert_eq!(requests(&h), [], "not before the window");
+
+    after_the_window().await;
+    assert_eq!(
+        requests(&h),
+        [seen("POST", "/api/v1/libraries/L1/scan", "key-1")]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_move_that_moved_nothing_leads_to_no_scan() {
+    let h = harness(Stub::default(), json!({})).await;
+    let id = series(&h, "old", true);
+    move_series(&h, id, "new").await;
+
+    after_the_window().await;
+    assert_eq!(requests(&h), []);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_move_without_a_comic_server_set_up_asks_nothing() {
+    let h = harness(Stub::default(), json!({"kind": "none"})).await;
+    let id = series(&h, "old", false);
+    move_series(&h, id, "new").await;
+
+    after_the_window().await;
+    assert_eq!(requests(&h), []);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_download_finishing_and_a_move_ending_within_the_window_give_one_scan() {
+    let h = harness(Stub::default(), json!({})).await;
+    let id = series(&h, "old", false);
+    let task = add(&h.state, "/c/1").await;
+    wait_for(&h.state, task, "finished").await;
+    move_series(&h, id, "new").await;
+
+    after_the_window().await;
+    assert_eq!(
+        requests(&h),
+        [seen("POST", "/api/v1/libraries/L1/scan", "key-1")]
     );
 }
 
