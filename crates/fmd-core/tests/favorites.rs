@@ -10,16 +10,16 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
 
-use fmd_core::download::{DownloadManager, EngineConfig};
+use fmd_core::download::{DownloadManager, EngineConfig, EngineError, NewDownload};
 use fmd_core::favorites::{
     CheckError, CheckMode, CheckScope, CheckerConfig, CheckerEvent, FavoritesChecker,
-    FavoritesEventKind, TaskQueue,
+    FavoritesEventKind, QueueFuture, TaskQueue,
 };
 use fmd_core::jobs::{Job, JobPhase, JobRegistry};
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
-use fmd_store::{AppDb, EventQuery, EventSeverity, FavoriteId, FavoriteInfo, NewFavorite};
+use fmd_store::{AppDb, EventQuery, EventSeverity, FavoriteId, FavoriteInfo, NewFavorite, TaskId};
 use serde_json::{Value, json};
 
 /// Answers each URL from a table (404 with an empty body for anything else) and counts requests.
@@ -685,6 +685,55 @@ async fn with_auto_download_a_missing_check_queues_the_chapters_and_says_so_in_t
         json!(
             "Queued 1 missing chapter(s) from 1 manga(s):\n- Manga <Site> has 1 missing chapter(s)."
         )
+    );
+}
+
+/// A queue that refuses `/b` and takes everything else as task 7.
+struct RefusesB;
+
+impl TaskQueue for RefusesB {
+    fn add_task(&self, download: NewDownload) -> QueueFuture<'_> {
+        Box::pin(async move {
+            if download.manga_link == "/b" {
+                Err(EngineError::NoModule("site".into()))
+            } else {
+                Ok(TaskId(7))
+            }
+        })
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn with_auto_download_a_missing_check_names_the_series_it_could_not_queue() {
+    let fx = Fixture::new(json!({ "favorites": { "auto_download": true } }));
+    fx.favorite();
+    fx.site.set("/b", "1\n/c1 Chapter 1");
+    fx.db
+        .favorites()
+        .create(&NewFavorite {
+            module_id: "site".into(),
+            link: "/b".into(),
+            title: "B".into(),
+            save_to: fx.dir.path().join("b").to_string_lossy().into_owned(),
+            cover_url: None,
+        })
+        .unwrap();
+
+    fx.checker_with(Some(Arc::new(RefusesB)))
+        .check(CheckScope::All, CheckMode::Missing)
+        .await
+        .unwrap();
+
+    let events = fx.db.events().list(&EventQuery::default()).unwrap();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].severity, EventSeverity::Warning);
+    assert_eq!(events[0].title, "Queued 3 missing chapter(s)");
+    let error = EngineError::NoModule("site".into());
+    assert_eq!(
+        events[0].body,
+        json!(format!(
+            "Queued 3 missing chapter(s) from 1 manga(s):\n- Manga <Site> has 3 missing chapter(s).\n- B <Site>: could not be queued: {error}"
+        ))
     );
 }
 
