@@ -1304,7 +1304,8 @@ export interface components {
 		BulkChange: {
 			/**
 			 * @description A parent folder: each favorite downloads to its own manga folder in it, as
-			 *     `POST /api/save-folder` makes it. Chapters already downloaded are not moved.
+			 *     `POST /api/save-folder` makes it. Chapters already downloaded are not moved unless
+			 *     `move_files` is set.
 			 */
 			destination?: string | null;
 			/** @description Resume (`true`) or pause (`false`) them. */
@@ -1321,6 +1322,11 @@ export interface components {
 			 *     imported from FMD2 has no chapter links to mark, so its count stays until its next check.
 			 */
 			mark_seen?: boolean;
+			/**
+			 * @description With `destination`: also move each favorite's chapters already downloaded from its old
+			 *     folder to its new one, in the background; the inbox reports the result.
+			 */
+			move_files?: boolean;
 			/**
 			 * @description Remove them from the library instead; their downloaded chapters stay recorded. Cannot be
 			 *     combined with a change.
@@ -1532,6 +1538,11 @@ export interface components {
 			 * @description The library group to put it in; `null` ungroups it.
 			 */
 			group_id?: number | null;
+			/**
+			 * @description With `save_to`: also move the chapters already downloaded from the old folder to the new
+			 *     one, in the background; the inbox reports the result.
+			 */
+			move_files?: boolean;
 			save_to?: string | null;
 			title?: string | null;
 		};
@@ -3782,6 +3793,15 @@ export interface operations {
 					'application/json': components['schemas']['Problem'];
 				};
 			};
+			/** @description With `move_files`: a move is running, and nothing changed */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
 			/** @description An empty destination */
 			422: {
 				headers: {
@@ -3898,6 +3918,15 @@ export interface operations {
 			};
 			/** @description No such favorite */
 			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+			/** @description With `move_files`: a move is running, and nothing changed */
+			409: {
 				headers: {
 					[name: string]: unknown;
 				};

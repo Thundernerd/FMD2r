@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Api } from '#lib/api/client.ts';
+	import { ApiError, type Api } from '#lib/api/client.ts';
 	import type { Destination, FavoriteView } from '#lib/api/types.ts';
 	import { destinationLabel, samePath } from '#lib/destinations/destinations.ts';
 
@@ -27,6 +27,8 @@
 	let folder = $state(favorite.save_to);
 	/** Whether "Custom folder" is picked, so typing a destination's folder keeps it picked. */
 	let custom = $state(false);
+	/** Whether the chapters already downloaded move along. */
+	let moveFiles = $state(false);
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 	let input: HTMLInputElement | undefined = $state();
@@ -72,10 +74,19 @@
 		busy = true;
 		error = null;
 		try {
-			onsaved(await api.updateFavorite(favorite.id, { save_to: folder.trim() }));
+			const save_to = folder.trim();
+			onsaved(
+				await api.updateFavorite(
+					favorite.id,
+					moveFiles ? { save_to, move_files: true } : { save_to }
+				)
+			);
 			dialog?.close();
-		} catch {
-			error = 'Could not change the folder.';
+		} catch (e) {
+			error =
+				e instanceof ApiError && e.status === 409 && e.detail
+					? e.detail
+					: 'Could not change the folder.';
 		} finally {
 			busy = false;
 		}
@@ -88,9 +99,14 @@
 		<button class="btn ghost sm" type="button" onclick={() => dialog?.close()}>Close</button>
 	</header>
 	<p class="small muted">
-		Where new chapters of <b>{favorite.title}</b> are downloaded. Chapters already downloaded stay
-		in
-		<span class="mono">{favorite.save_to}</span>; they are not moved.
+		Where new chapters of <b>{favorite.title}</b> are downloaded.
+		{#if moveFiles}
+			Chapters already downloaded in <span class="mono">{favorite.save_to}</span> move to the new folder
+			in the background; the inbox reports the result.
+		{:else}
+			Chapters already downloaded stay in
+			<span class="mono">{favorite.save_to}</span>; they are not moved.
+		{/if}
 	</p>
 	<label class="field">
 		<span class="label">Destination</span>
@@ -110,6 +126,10 @@
 			bind:this={input}
 			bind:value={folder}
 		/>
+	</label>
+	<label class="check">
+		<input type="checkbox" bind:checked={moveFiles} />
+		Move chapters already downloaded to the new folder
 	</label>
 	{#if error}
 		<p class="error small" role="alert">{error}</p>
@@ -136,6 +156,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-3);
+	}
+	.check {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
 	}
 	.dialog::backdrop {
 		background: var(--scrim);

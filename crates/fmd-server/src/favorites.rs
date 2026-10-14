@@ -19,6 +19,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::covers::series::cover_url as series_cover_url;
 use crate::error::{ApiJson, ApiQuery};
+use crate::folder_move::{MoveRun, SeriesMove};
 use crate::series::{SeriesStatus, accepted_match, fetch_info, manga_folder};
 use crate::services::FavoritesJobs;
 use crate::time::rfc3339_from_unix_ms;
@@ -213,6 +214,10 @@ pub struct FavoritePatch {
     #[serde(default, deserialize_with = "null_or_value")]
     #[schema(value_type = Option<i64>, nullable)]
     pub group_id: Option<Option<i64>>,
+    /// With `save_to`: also move the chapters already downloaded from the old folder to the new
+    /// one, in the background; the inbox reports the result.
+    #[serde(default)]
+    pub move_files: bool,
 }
 
 /// Tells a field that is `null` (`Some(None)`) from a missing one (`None`, by `default`).
@@ -233,6 +238,7 @@ where
         (status = 200, body = FavoriteView),
         (status = 400, body = Problem, description = "No such group"),
         (status = 404, body = Problem, description = "No such favorite"),
+        (status = 409, body = Problem, description = "With `move_files`: a move is running, and nothing changed"),
     ))]
 pub(crate) async fn patch(
     State(state): State<AppState>,
@@ -245,12 +251,17 @@ pub(crate) async fn patch(
             detail: "the title cannot be empty".into(),
         });
     }
-    let favorite = state
-        .blocking(move |db| -> Result<Favorite, ApiError> {
+    let run = match req.save_to {
+        Some(_) if req.move_files => Some(MoveRun::reserve(&state)?),
+        _ => None,
+    };
+    let (favorite, old_save_to) = state
+        .blocking(move |db| -> Result<(Favorite, String), ApiError> {
             let mut favorite = db
                 .favorites()
                 .get(FavoriteId(id))?
                 .ok_or(ApiError::NotFound)?;
+            let old_save_to = favorite.save_to.clone();
             if let Some(enabled) = req.enabled {
                 favorite.enabled = enabled;
             }
@@ -270,9 +281,17 @@ pub(crate) async fn patch(
                 favorite.group_id = group_id;
             }
             db.favorites().update(&favorite)?;
-            Ok(favorite)
+            Ok((favorite, old_save_to))
         })
         .await?;
+    if let Some(run) = run {
+        run.start(vec![SeriesMove {
+            id: favorite.id,
+            title: favorite.title.clone(),
+            from: old_save_to,
+            to: favorite.save_to.clone(),
+        }]);
+    }
     Ok(Json(view(&state, favorite).await?))
 }
 
@@ -287,8 +306,13 @@ pub struct BulkChange {
     #[schema(value_type = Option<i64>, nullable)]
     pub group_id: Option<Option<i64>>,
     /// A parent folder: each favorite downloads to its own manga folder in it, as
-    /// `POST /api/save-folder` makes it. Chapters already downloaded are not moved.
+    /// `POST /api/save-folder` makes it. Chapters already downloaded are not moved unless
+    /// `move_files` is set.
     pub destination: Option<String>,
+    /// With `destination`: also move each favorite's chapters already downloaded from its old
+    /// folder to its new one, in the background; the inbox reports the result.
+    #[serde(default)]
+    pub move_files: bool,
     /// Mark every chapter listed at their last check seen, as downloading them would, which
     /// clears their new chapters. No file is downloaded. A favorite not checked since it was
     /// imported from FMD2 has no chapter links to mark, so its count stays until its next check.
@@ -306,6 +330,7 @@ pub struct BulkChange {
     responses(
         (status = 200, body = Vec<FavoriteView>, description = "The changed favorites, in the order of `ids`; none after a removal"),
         (status = 400, body = Problem, description = "No such favorite or group, and nothing changed"),
+        (status = 409, body = Problem, description = "With `move_files`: a move is running, and nothing changed"),
         (status = 422, body = Problem, description = "An empty destination"),
     ))]
 pub(crate) async fn bulk(
@@ -328,6 +353,7 @@ pub(crate) async fn bulk(
             || req.group_id.is_some()
             || req.destination.is_some()
             || req.mark_seen
+            || req.move_files
         {
             return Err(ApiError::BadRequest(
                 "remove cannot be combined with a change".into(),
@@ -400,31 +426,47 @@ async fn bulk_change(
             folders.insert(favorite.id, folder);
         }
     }
+    let run = match req.destination {
+        Some(_) if req.move_files => Some(MoveRun::reserve(state)?),
+        _ => None,
+    };
     let (enabled, mark_seen) = (req.enabled, req.mark_seen);
-    state
-        .blocking(move |db| -> Result<Vec<Favorite>, ApiError> {
-            let favorites = db
-                .favorites()
-                .update_each(&ids, |favorite| {
-                    if let Some(enabled) = enabled {
-                        favorite.enabled = enabled;
-                    }
-                    if let Some(group_id) = group_id {
-                        favorite.group_id = group_id;
-                    }
-                    if let Some(folder) = folders.remove(&favorite.id) {
-                        favorite.save_to = folder;
-                    }
-                })?
-                .ok_or_else(|| {
-                    ApiError::BadRequest("a favorite was removed while changing it".into())
-                })?;
-            if mark_seen {
-                db.favorites().mark_checked_chapters_seen(&ids)?;
-            }
-            Ok(favorites)
-        })
-        .await
+    let (favorites, moves) = state
+        .blocking(
+            move |db| -> Result<(Vec<Favorite>, Vec<SeriesMove>), ApiError> {
+                let mut moves = Vec::new();
+                let favorites = db
+                    .favorites()
+                    .update_each(&ids, |favorite| {
+                        if let Some(enabled) = enabled {
+                            favorite.enabled = enabled;
+                        }
+                        if let Some(group_id) = group_id {
+                            favorite.group_id = group_id;
+                        }
+                        if let Some(folder) = folders.remove(&favorite.id) {
+                            moves.push(SeriesMove {
+                                id: favorite.id,
+                                title: favorite.title.clone(),
+                                from: std::mem::replace(&mut favorite.save_to, folder.clone()),
+                                to: folder,
+                            });
+                        }
+                    })?
+                    .ok_or_else(|| {
+                        ApiError::BadRequest("a favorite was removed while changing it".into())
+                    })?;
+                if mark_seen {
+                    db.favorites().mark_checked_chapters_seen(&ids)?;
+                }
+                Ok((favorites, moves))
+            },
+        )
+        .await?;
+    if let Some(run) = run {
+        run.start(moves);
+    }
+    Ok(favorites)
 }
 
 /// Remove a favorite from the library; its downloaded chapters stay recorded.
