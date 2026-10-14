@@ -604,6 +604,35 @@ async fn a_missing_check_looks_for_chapter_files_not_the_downloaded_list() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_missing_check_unmarks_exactly_the_missing_chapters() {
+    let fx = Fixture::new(json!({ "saveto": { "chapter_rename": "%NUMBERING%" } }));
+    fx.favorite();
+    // Marks compare case-insensitively (baseunits/DownloadedChaptersDB.pas:70-73).
+    fx.db
+        .downloaded_chapters()
+        .mark("site", "/manga", &["/C3"])
+        .unwrap();
+    let out = fx.dir.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    fs::write(out.join("0001.cbz"), b"").unwrap();
+
+    fx.checker()
+        .check(CheckScope::All, CheckMode::Missing)
+        .await
+        .unwrap();
+
+    // Beyond FMD2, which keeps the mark: a missing chapter is no longer "seen", so the next
+    // new-chapter check finds it.
+    assert_eq!(
+        fx.db
+            .downloaded_chapters()
+            .list_for("site", "/manga")
+            .unwrap(),
+        ["/c1"]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn the_commonest_chapter_file_type_decides_what_a_missing_check_looks_for() {
     let fx = Fixture::new(json!({
         "saveto": { "chapter_rename": "%NUMBERING%" },
@@ -750,6 +779,10 @@ async fn with_auto_download_a_missing_check_queues_the_chapters_and_says_so_in_t
         "saveto": { "chapter_rename": "%NUMBERING%" },
     }));
     fx.favorite();
+    fx.db
+        .downloaded_chapters()
+        .mark("site", "/manga", &["/c3"])
+        .unwrap();
     let out = fx.dir.path().join("out");
     fs::create_dir_all(&out).unwrap();
     fs::write(out.join("0001.cbz"), b"").unwrap();
@@ -766,6 +799,13 @@ async fn with_auto_download_a_missing_check_queues_the_chapters_and_says_so_in_t
     let chapters = fx.db.tasks().chapters(tasks[0].id).unwrap();
     let links: Vec<&str> = chapters.iter().map(|c| c.link.as_str()).collect();
     assert_eq!(links, ["/c3"]);
+    // Unmarked as missing, then marked again as queued (baseunits/uFavoritesManager.pas:1122-1125).
+    assert!(
+        fx.db
+            .downloaded_chapters()
+            .contains("site", "/manga", "/c3")
+            .unwrap()
+    );
     let events = fx.db.events().list(&EventQuery::default()).unwrap();
     assert_eq!(events.len(), 1, "{events:?}");
     assert_eq!(events[0].kind, "missing_chapters");
