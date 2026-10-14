@@ -155,6 +155,28 @@ interface Check {
 	done: number;
 	total: number;
 	found: { favorite: FavoriteView; chapters: number }[];
+	/** Favorites whose website could not be fetched. */
+	failed: FavoriteView[];
+}
+
+/** A missing-chapter check's inbox item, worded as fmd-server's; the mock finds nothing missing. */
+function missingResult(c: Check): InboxItem {
+	const failed = c.failed.map(
+		(f) => `- ${f.title} <${f.website}>: could not be checked: ${f.last_check_error}`
+	);
+	const checked = c.total - c.failed.length;
+	const nothingChecked = checked === 0 && failed.length > 0;
+	return {
+		id: `missing-check-${Date.now()}`,
+		kind: failed.length > 0 ? 'warn' : 'info',
+		title: nothingChecked ? 'Could not check for missing chapters' : 'No missing chapters',
+		body: [
+			...(nothingChecked ? [] : [`Checked ${checked} series; every chapter is on disk.`]),
+			...failed
+		].join('\n'),
+		created_at: new Date().toISOString(),
+		read: false
+	};
 }
 
 export interface MockFavorites {
@@ -331,9 +353,15 @@ export function createMockFavorites(
 			const missing = change.ids.find((_, i) => !picked[i]);
 			if (missing !== undefined) return problem(400, `no favorite with id ${missing}`);
 			const list = picked.filter((f) => f !== undefined);
-			const { enabled, group_id, destination, mark_seen, remove } = change;
+			const { enabled, group_id, destination, mark_seen, move_files, remove } = change;
 			if (remove) {
-				if (enabled != null || group_id !== undefined || destination != null || mark_seen) {
+				if (
+					enabled != null ||
+					group_id !== undefined ||
+					destination != null ||
+					mark_seen ||
+					move_files
+				) {
 					return problem(400, 'remove cannot be combined with a change');
 				}
 				for (const f of list) favorites.splice(favorites.indexOf(f), 1);
@@ -411,7 +439,7 @@ export function createMockFavorites(
 			const queue = favorites.filter(
 				(f) => f.enabled && (ids === null ? f.check_failures < FAILING_CHECKS : ids.includes(f.id))
 			);
-			check = { mode, queue, done: 0, total: queue.length, found: [] };
+			check = { mode, queue, done: 0, total: queue.length, found: [], failed: [] };
 			Object.assign(job, {
 				state: 'running',
 				done: 0,
@@ -437,6 +465,7 @@ export function createMockFavorites(
 				if (favorite.last_check_error) {
 					// Its website is gone: the check fails again.
 					favorite.check_failures++;
+					c.failed.push(favorite);
 				} else {
 					favorite.last_checked = new Date().toISOString();
 				}
@@ -464,7 +493,9 @@ export function createMockFavorites(
 				cancelled ? 'job.favorites.cancelled' : 'job.favorites.finished',
 				cancelled ? event('cancelled', c) : { ...event('finished', c), new_chapters: found }
 			);
-			if (cancelled || found === 0) return null;
+			if (cancelled) return null;
+			if (c.mode === 'missing') return missingResult(c);
+			if (found === 0) return null;
 			// Worded as fmd-server's inbox item (and FMD2's new-chapter dialog).
 			const lines = c.found.map(
 				(f) => `- ${f.favorite.title} <${f.favorite.website}> has ${f.chapters} new chapter(s).`

@@ -4,6 +4,7 @@ pub mod accounts;
 pub mod comic_server;
 pub mod download;
 pub mod favorites;
+pub mod folder_move;
 pub mod info;
 pub mod jobs;
 pub mod lists;

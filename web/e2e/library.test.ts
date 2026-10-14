@@ -57,6 +57,37 @@ test('the library filters by tag and format, with counts', async ({ page }) => {
 	await expect(cards.filter({ hasText: 'Kagurabachi' })).toHaveCount(0);
 });
 
+test('a library card shows its chapter count, clear of its other badges', async ({ page }) => {
+	await page.goto('/');
+	const cards = page.getByRole('list', { name: 'Favorites' }).getByRole('link');
+	const frieren = cards.filter({ hasText: 'Frieren' });
+	const count = frieren.getByLabel('142 chapters');
+	await expect(count).toHaveText('142');
+	await expectApart(count, frieren.getByLabel('4 new chapters'));
+	const apothecary = cards.filter({ hasText: 'The Apothecary Diaries' });
+	await expectApart(apothecary.getByLabel('76 chapters'), apothecary.getByText('Not found'));
+
+	await page.getByRole('button', { name: 'Select' }).click();
+	const selectable = page
+		.getByRole('list', { name: 'Favorites' })
+		.getByRole('checkbox', { name: 'Frieren' });
+	await expectApart(selectable.getByLabel('142 chapters'), selectable.locator('.tick'));
+});
+
+/** Expects `a` and `b` both on screen, without overlapping. */
+async function expectApart(a: Locator, b: Locator) {
+	await expect(a).toBeVisible();
+	await expect(b).toBeVisible();
+	const [boxA, boxB] = await Promise.all([a.boundingBox(), b.boundingBox()]);
+	if (!boxA || !boxB) throw new Error('a badge has no box');
+	const apart =
+		boxA.x + boxA.width <= boxB.x ||
+		boxB.x + boxB.width <= boxA.x ||
+		boxA.y + boxA.height <= boxB.y ||
+		boxB.y + boxB.height <= boxA.y;
+	expect(apart).toBe(true);
+}
+
 /** A 1x1 PNG. */
 const PIXEL = Buffer.from(
 	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',

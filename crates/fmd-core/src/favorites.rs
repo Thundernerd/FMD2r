@@ -255,9 +255,21 @@ pub struct CheckReport {
     /// Completed series with nothing new; removed when `favorites.remove_completed` is on.
     pub completed: Vec<FavoriteId>,
     pub queued: Vec<TaskId>,
-    /// Set when found chapters were reported rather than queued.
+    /// Series whose website could not be fetched, or was paused after a rate-limited answer.
+    pub failed: Vec<FailedSeries>,
+    /// The run's inbox item: found chapters reported rather than queued, or a missing-chapter
+    /// check's result.
     pub inbox: Option<Event>,
     pub cancelled: bool,
+}
+
+/// A series a check could not check, and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FailedSeries {
+    pub title: String,
+    /// The module's name, FMD2's `Website`.
+    pub website: String,
+    pub reason: String,
 }
 
 /// What happened to a check run.
@@ -352,6 +364,7 @@ enum Checked {
     Found(FavoriteFound),
     Completed(CompletedSeries),
     Nothing,
+    Failed(FailedSeries),
 }
 
 impl FavoritesChecker {
@@ -551,6 +564,11 @@ impl FavoritesChecker {
         let skipped: Arc<Mutex<HashSet<String>>> = Arc::default();
         let info_changed: Arc<Mutex<BTreeSet<String>>> = Arc::default();
         let mut running = JoinSet::new();
+        // To name a series whose check failed.
+        let names: Vec<(String, String)> = favorites
+            .iter()
+            .map(|f| (f.title.clone(), self.website(&f.module_id)))
+            .collect();
         for (index, favorite) in favorites.into_iter().enumerate() {
             let permit = permits.clone().acquire_owned().await;
             let this = self.clone();
@@ -593,23 +611,33 @@ impl FavoritesChecker {
         results.sort_by_key(|(index, _)| *index);
         let mut report = CheckReport::default();
         let mut completed = Vec::new();
-        for (_, result) in results {
+        for (index, result) in results {
             let checked = match result {
                 Ok(Some(checked)) => checked,
                 Ok(None) => continue,
                 // Per-favorite `ExceptionHandle` (baseunits/uFavoritesManager.pas:391-394).
                 Err(e) => {
                     tracing::warn!(target: "fmd_core", "favorites check: {e}");
+                    if let Some((title, website)) = names.get(index) {
+                        report.failed.push(FailedSeries {
+                            title: title.clone(),
+                            website: website.clone(),
+                            reason: e.to_string(),
+                        });
+                    }
                     continue;
                 }
             };
-            report.checked += 1;
+            if !matches!(checked, Checked::Failed(_)) {
+                report.checked += 1;
+            }
             match checked {
                 Checked::Found(found) => report.found.push(found),
                 Checked::Completed(series) => {
                     report.completed.push(series.id);
                     completed.push(series);
                 }
+                Checked::Failed(failed) => report.failed.push(failed),
                 Checked::Nothing => {}
             }
         }
@@ -634,7 +662,7 @@ impl FavoritesChecker {
         info_changed: &Mutex<BTreeSet<String>>,
     ) -> Result<Option<Checked>, CheckError> {
         let rate_limits = &self.inner.config.rate_limits;
-        if rate_limits.paused(&favorite.module_id).is_some() {
+        if let Some(e) = rate_limits.paused(&favorite.module_id) {
             if lock(skipped).insert(favorite.module_id.clone()) {
                 tracing::warn!(
                     target: "fmd_core",
@@ -642,7 +670,7 @@ impl FavoritesChecker {
                     self.website(&favorite.module_id)
                 );
             }
-            return Ok(None);
+            return Ok(Some(self.failed(favorite, &e)));
         }
         let info = match self.info(favorite).await {
             Ok(info) => info,
@@ -652,7 +680,7 @@ impl FavoritesChecker {
                 if !matches!(e, InfoError::RateLimited { .. }) {
                     self.record_failure(favorite.id, e.to_string()).await?;
                 }
-                return Ok(None);
+                return Ok(Some(self.failed(favorite, &e)));
             }
         };
         let chapters = match mode {
@@ -695,6 +723,14 @@ impl FavoritesChecker {
             })));
         }
         Ok(Some(Checked::Nothing))
+    }
+
+    fn failed(&self, favorite: &Favorite, e: &InfoError) -> Checked {
+        Checked::Failed(FailedSeries {
+            title: favorite.title.clone(),
+            website: self.website(&favorite.module_id),
+            reason: e.to_string(),
+        })
     }
 
     /// The module's name, or its ID when gone.
@@ -743,31 +779,60 @@ impl FavoritesChecker {
         mode: CheckMode,
     ) -> Result<(), CheckError> {
         if report.found.is_empty() {
+            if mode == CheckMode::Missing {
+                let mut item = nothing_missing(report);
+                add_failures(&mut item, "checked", &report.failed);
+                report.inbox = Some(self.notify(item).await?);
+            }
             return Ok(());
         }
         let auto_download = self.inner.config.settings.get().favorites.auto_download;
-        match &self.inner.config.queue {
+        let mut item = match &self.inner.config.queue {
             Some(queue) if auto_download => {
+                let mut queued = Vec::new();
+                let mut not_queued = Vec::new();
                 for found in &report.found {
-                    if let Some(task) = self.queue(queue.as_ref(), found).await? {
-                        report.queued.push(task);
+                    match self.queue(queue.as_ref(), found).await? {
+                        Ok(task) => {
+                            report.queued.push(task);
+                            queued.push(found.clone());
+                        }
+                        Err(e) => not_queued.push(FailedSeries {
+                            title: found.title.clone(),
+                            website: found.website.clone(),
+                            reason: e.to_string(),
+                        }),
                     }
                 }
+                // Beyond FMD2, which queues missing chapters without a word (:1050-1051).
+                if mode == CheckMode::New {
+                    return Ok(());
+                }
+                let mut item = if queued.is_empty() {
+                    inbox_item(&report.found, mode, Reported::Found)
+                } else {
+                    inbox_item(&queued, mode, Reported::Queued)
+                };
+                add_failures(&mut item, "queued", &not_queued);
+                item
             }
-            _ => {
-                report.inbox = Some(self.notify(inbox_item(&report.found, mode)).await?);
-            }
+            _ => inbox_item(&report.found, mode, Reported::Found),
+        };
+        if mode == CheckMode::Missing {
+            add_failures(&mut item, "checked", &report.failed);
         }
+        report.inbox = Some(self.notify(item).await?);
         Ok(())
     }
 
     /// Queues `found` and marks it downloaded (`ShowResult`,
-    /// baseunits/uFavoritesManager.pas:1087-1129). A failure is logged; the chapters stay new.
+    /// baseunits/uFavoritesManager.pas:1087-1129). A failure is logged and returned; the
+    /// chapters stay new.
     async fn queue(
         &self,
         queue: &dyn TaskQueue,
         found: &FavoriteFound,
-    ) -> Result<Option<TaskId>, CheckError> {
+    ) -> Result<Result<TaskId, EngineError>, CheckError> {
         let download = NewDownload {
             module_id: found.module_id.clone(),
             manga_link: found.link.clone(),
@@ -789,7 +854,7 @@ impl FavoritesChecker {
             Ok(task) => task,
             Err(e) => {
                 tracing::warn!(target: "fmd_core", "queueing new chapters of {}: {e}", found.title);
-                return Ok(None);
+                return Ok(Err(e));
             }
         };
         let db = self.inner.config.db.clone();
@@ -800,7 +865,7 @@ impl FavoritesChecker {
             db.downloaded_chapters().mark(&module, &link, &links)
         })
         .await?;
-        Ok(Some(task))
+        Ok(Ok(task))
     }
 
     /// Stores chapter count and status (`DoCheck`, baseunits/uFavoritesManager.pas:351-353),
@@ -1061,24 +1126,41 @@ fn chapter_exists(path: &Path, format: OutputFormat) -> bool {
     Path::new(&file).is_file() && !path.is_dir()
 }
 
+/// Whether an inbox item's chapters were found, or found and queued.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reported {
+    Found,
+    /// Beyond FMD2, which queues without a word (baseunits/uFavoritesManager.pas:1050-1051).
+    Queued,
+}
+
 /// Worded as FMD2's dialog (`RS_*`, baseunits/uFavoritesManager.pas:176-181).
-fn inbox_item(found: &[FavoriteFound], mode: CheckMode) -> NewEvent {
+fn inbox_item(found: &[FavoriteFound], mode: CheckMode, reported: Reported) -> NewEvent {
     let chapters: usize = found.iter().map(|f| f.chapters.len()).sum();
-    let (kind, title, label, line) = match mode {
-        CheckMode::New => (
+    let (kind, title, label, line) = match (mode, reported) {
+        (CheckMode::New, _) => (
             "new_chapters",
-            "Found new chapter(s)",
+            "Found new chapter(s)".to_owned(),
             format!(
                 "Found {chapters} new chapter from {} manga(s):",
                 found.len()
             ),
             "new",
         ),
-        CheckMode::Missing => (
+        (CheckMode::Missing, Reported::Found) => (
             "missing_chapters",
-            "Found missing chapter(s)",
+            "Found missing chapter(s)".to_owned(),
             format!(
                 "Found {chapters} missing chapter(s) from {} manga(s):",
+                found.len()
+            ),
+            "missing",
+        ),
+        (CheckMode::Missing, Reported::Queued) => (
+            "missing_chapters",
+            format!("Queued {chapters} missing chapter(s)"),
+            format!(
+                "Queued {chapters} missing chapter(s) from {} manga(s):",
                 found.len()
             ),
             "missing",
@@ -1095,6 +1177,60 @@ fn inbox_item(found: &[FavoriteFound], mode: CheckMode) -> NewEvent {
     }
     NewEvent {
         kind: kind.into(),
+        severity: EventSeverity::Info,
+        module_id: None,
+        task_id: None,
+        title,
+        body: serde_json::Value::String(body),
+    }
+}
+
+/// Beyond FMD2, which only logs a series it could not check (`ExceptionHandle`,
+/// baseunits/uFavoritesManager.pas:391-394): a line for each in `item`, which turns into a
+/// warning. `step` is what could not be done, e.g. `checked`.
+fn add_failures(item: &mut NewEvent, step: &str, failed: &[FailedSeries]) {
+    if failed.is_empty() {
+        return;
+    }
+    let mut lines: Vec<String> = item
+        .body
+        .as_str()
+        .filter(|b| !b.is_empty())
+        .map(str::to_owned)
+        .into_iter()
+        .collect();
+    lines.extend(failed.iter().map(|f| {
+        format!(
+            "- {} <{}>: could not be {step}: {}",
+            f.title, f.website, f.reason
+        )
+    }));
+    let body = lines.join("\n");
+    item.body = serde_json::Value::String(body);
+    item.severity = EventSeverity::Warning;
+}
+
+/// The kind of a missing-chapter check's item that found nothing: not `missing_chapters`, so
+/// notifications don't announce it as found chapters.
+const NOTHING_MISSING_KIND: &str = "missing_check";
+
+/// Beyond FMD2, whose missing-chapter check stays silent when nothing is missing
+/// (baseunits/uFavoritesManager.pas:1048). When no series could be checked, the failures alone
+/// make the body.
+fn nothing_missing(report: &CheckReport) -> NewEvent {
+    let (title, body) = if report.checked == 0 && !report.failed.is_empty() {
+        ("Could not check for missing chapters", String::new())
+    } else {
+        (
+            "No missing chapters",
+            format!(
+                "Checked {} series; every chapter is on disk.",
+                report.checked
+            ),
+        )
+    };
+    NewEvent {
+        kind: NOTHING_MISSING_KIND.into(),
         severity: EventSeverity::Info,
         module_id: None,
         task_id: None,

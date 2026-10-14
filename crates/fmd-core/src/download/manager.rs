@@ -235,6 +235,9 @@ impl Inner {
             if task.status != TaskStatus::Waiting || state.running.contains_key(&task.id) {
                 continue;
             }
+            if self.config.moving.blocks(Path::new(&task.save_to)) {
+                continue;
+            }
             // A task whose module is gone was stopped at startup; one removed since waits.
             let Some(module) = self.module(&task.module_id) else {
                 continue;
