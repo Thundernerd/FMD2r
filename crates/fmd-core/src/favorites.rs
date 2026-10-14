@@ -700,6 +700,9 @@ impl FavoritesChecker {
         if changed {
             lock(info_changed).insert(favorite.module_id.clone());
         }
+        if mode == CheckMode::Missing {
+            self.unmark(&favorite, &chapters).await?;
+        }
         let website = self.website(&favorite.module_id);
         if !chapters.is_empty() {
             return Ok(Some(Checked::Found(FavoriteFound {
@@ -905,6 +908,28 @@ impl FavoritesChecker {
             db.favorites().set_chapter_links(id, &links)?;
             let changed = db.favorites().set_info(id, &website_info)?;
             Ok(Some((favorite, changed)))
+        })
+        .await
+    }
+
+    /// Beyond FMD2, whose `DoCheckMissing` leaves the downloaded list alone
+    /// (baseunits/uFavoritesManager.pas:397-531), clears the downloaded mark of missing
+    /// `chapters`, so the new-chapter badge counts them and the next new-chapter check finds them
+    /// again.
+    async fn unmark(
+        &self,
+        favorite: &Favorite,
+        chapters: &[FoundChapter],
+    ) -> Result<(), CheckError> {
+        if chapters.is_empty() {
+            return Ok(());
+        }
+        let db = self.inner.config.db.clone();
+        let (module, link) = (favorite.module_id.clone(), favorite.link.clone());
+        let chapters: Vec<String> = chapters.iter().map(|c| c.link.clone()).collect();
+        blocking(move || {
+            let links: Vec<&str> = chapters.iter().map(String::as_str).collect();
+            db.downloaded_chapters().unmark(&module, &link, &links)
         })
         .await
     }

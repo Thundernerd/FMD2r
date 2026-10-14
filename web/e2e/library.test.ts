@@ -180,6 +180,20 @@ test('Check now shows the check’s progress and the new chapters it found', asy
 	await expect(cards.filter({ hasText: 'Chainsaw Man' })).toContainText('+1');
 });
 
+test('Check missing checks the whole library on the same progress bar', async ({ page }) => {
+	await page.goto('/');
+	await expect(page.getByRole('list', { name: 'Favorites' }).getByRole('link')).toHaveCount(8);
+
+	await page.getByRole('button', { name: 'Check missing' }).click();
+
+	await expect(page.getByRole('progressbar', { name: 'Check progress' })).toBeVisible();
+	// The enabled series, less the failing one a full check leaves alone.
+	await expect(page.getByRole('status')).toContainText(/Checking for missing chapters \d+\/6/);
+	await expect(page.getByRole('button', { name: 'Check missing' })).toBeVisible({
+		timeout: 15_000
+	});
+});
+
 test('a series can be added to the library from its page', async ({ page }) => {
 	await page.goto('/series?module=mangadex&link=%2Ftitle%2Fop%2Fone-piece');
 	await page.getByRole('button', { name: 'Add to library' }).click();

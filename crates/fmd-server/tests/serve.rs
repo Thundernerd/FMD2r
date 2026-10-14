@@ -495,6 +495,30 @@ async fn with_auto_download_a_favorites_check_queues_the_new_chapter() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_library_missing_check_counts_the_missing_chapters_as_new() {
+    let server = Server::start_with(json!({ "favorites": { "check_at_startup": false } })).await;
+    server.add_saga_to_the_library().await;
+    let before = server.get_json("/api/favorites").await;
+    assert_eq!(before[0]["new_chapters"], 0, "{before}");
+
+    let res = server
+        .client
+        .post(server.url("/api/favorites/check-missing"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 202);
+    server
+        .wait_for("/api/jobs/favorites", |job| job["state"] == "done")
+        .await;
+
+    // Nothing was downloaded, so both chapters are missing from the series' folder
+    // (`DoCheckMissing`, baseunits/uFavoritesManager.pas:425-511) and no longer seen.
+    let after = server.get_json("/api/favorites").await;
+    assert_eq!(after[0]["new_chapters"], 2, "{after}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn the_jobs_are_the_module_updater_the_favorites_check_the_list_updates_and_mangabaka() {
     let server = Server::start_with(json!({ "module_updater": { "auto_update": false } })).await;
     let res = server
