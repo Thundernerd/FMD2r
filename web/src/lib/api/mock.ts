@@ -477,6 +477,22 @@ export function createMockBackend({
 		for (const emit of streams) emit(type, payload);
 	};
 	const jobs = seedJobs(Date.now());
+	/**
+	 * A folder change with `move_files`: fmd-server moves the files in the background and reports
+	 * when done; the mock has no files, so it reports at once.
+	 */
+	const reportMove = (count: number) => {
+		const item: InboxItem = {
+			id: `downloads-moved-${Date.now()}`,
+			kind: 'info',
+			title: `Moved the downloads of ${count} series`,
+			body: '',
+			created_at: new Date().toISOString(),
+			read: false
+		};
+		inbox.unshift(item);
+		broadcast('inbox.new', item);
+	};
 	const about = seedAbout();
 	const favoritesJob = jobs.find((j) => j.id === 'favorites');
 	if (!favoritesJob) throw new Error('the mock jobs lack the favorites check');
@@ -898,9 +914,13 @@ export function createMockBackend({
 			return json(added, status);
 		}
 		if (route === 'POST /api/favorites/bulk') {
-			const { status, body } = favorites.bulk((await req.json()) as BulkChange, (f, dir) =>
+			const change = (await req.json()) as BulkChange;
+			const { status, body } = favorites.bulk(change, (f, dir) =>
 				settings.saveFolder(f.module_id, f.title, dir)
 			);
+			if (status === 200 && change.move_files && change.destination != null) {
+				reportMove(change.ids.length);
+			}
 			return json(body, status);
 		}
 		if (route === 'POST /api/favorites/check') {
@@ -916,7 +936,9 @@ export function createMockBackend({
 		if (favorite) {
 			const id = Number(favorite[2] ?? favorite[3]);
 			if (favorite[1] === 'PATCH') {
-				const { status, body } = favorites.patch(id, (await req.json()) as FavoritePatch);
+				const patch = (await req.json()) as FavoritePatch;
+				const { status, body } = favorites.patch(id, patch);
+				if (status === 200 && patch.move_files && patch.save_to != null) reportMove(1);
 				return body ? json(body, status) : new Response(null, { status });
 			}
 			if (favorite[1] === 'DELETE')
