@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { api, events } from '#lib/app.ts';
 	import { ApiError } from '#lib/api/client.ts';
-	import type { Destination, OutputFormat, SeriesInfo } from '#lib/api/types.ts';
+	import type { Destination, FavoriteView, OutputFormat, SeriesInfo } from '#lib/api/types.ts';
 	import { defaultDestination } from '#lib/destinations/destinations.ts';
 	import ChapterList from '#lib/components/series/ChapterList.svelte';
 	import DownloadBox from '#lib/components/series/DownloadBox.svelte';
@@ -16,6 +16,8 @@
 	const link = $derived(page.url.searchParams.get('link') ?? '');
 
 	let series = $state<SeriesInfo | null>(null);
+	/** The series in the library, as the header loads it. */
+	let favorite = $state<FavoriteView | null>(null);
 	let error = $state<string | null>(null);
 	let website = $state('');
 	let selected = $state(new Set<number>());
@@ -26,6 +28,7 @@
 	$effect(() => {
 		const [m, l] = [module, link];
 		series = null;
+		favorite = null;
 		error = null;
 		selected = new Set();
 		if (!m || !l) {
@@ -109,10 +112,10 @@
 	{:else}
 		<!-- Snippets don't keep the narrowing to non-null. -->
 		{@const info = series}
-		<SeriesHeader {api} bind:series {website} {saveTo} />
+		<SeriesHeader {api} bind:series bind:favorite {website} {saveTo} />
 		<SeriesLayout>
 			{#snippet list()}
-				<ChapterList chapters={info.chapters} bind:selected />
+				<ChapterList chapters={info.chapters} bind:selected folder={favorite?.save_to} />
 			{/snippet}
 			{#snippet side()}
 				<DownloadBox

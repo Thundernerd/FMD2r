@@ -3803,6 +3803,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "on_disk": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "For a series in the library, whether the chapter's file or folder is in its `save_to`, as\nthe missing-chapter check finds it (baseunits/uFavoritesManager.pas:425-511); `null` for a\nseries not in the library, or when its folder can't be read."
           }
         }
       },

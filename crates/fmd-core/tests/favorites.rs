@@ -13,9 +13,11 @@ use std::sync::{Arc, Mutex};
 use fmd_core::download::{DownloadManager, EngineConfig, EngineError, NewDownload};
 use fmd_core::favorites::{
     CheckError, CheckMode, CheckScope, CheckerConfig, CheckerEvent, FavoritesChecker,
-    FavoritesEventKind, QueueFuture, TaskQueue,
+    FavoritesEventKind, QueueFuture, TaskQueue, chapters_on_disk,
 };
+use fmd_core::info::{Chapter, MangaInfo};
 use fmd_core::jobs::{Job, JobPhase, JobRegistry};
+use fmd_core::settings::Settings;
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
@@ -623,6 +625,95 @@ async fn the_commonest_chapter_file_type_decides_what_a_missing_check_looks_for(
     // (:442-472).
     let numbers: Vec<u32> = report.found[0].chapters.iter().map(|c| c.number).collect();
     assert_eq!(numbers, [2, 3]);
+}
+
+/// Settings naming chapters by their number, so `0001` is the first.
+fn numbered() -> Settings {
+    let mut settings = Settings::default();
+    settings.saveto.chapter_rename = "%NUMBERING%".into();
+    settings
+}
+
+fn three_chapters() -> MangaInfo {
+    MangaInfo {
+        chapters: (1..=3)
+            .map(|i| Chapter {
+                name: format!("Chapter {i}"),
+                link: format!("/c{i}"),
+            })
+            .collect(),
+        ..MangaInfo::default()
+    }
+}
+
+#[test]
+fn a_cbz_chapter_is_on_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("0001.cbz"), b"").unwrap();
+    fs::write(dir.path().join("0003.cbz"), b"").unwrap();
+
+    let on_disk =
+        chapters_on_disk(&numbered(), "Site", "Manga", &three_chapters(), dir.path()).unwrap();
+
+    // Looked for as `<name>.cbz`, the format the folder holds (baseunits/uFavoritesManager.pas:490-505).
+    assert_eq!(on_disk, [true, false, true]);
+}
+
+#[test]
+fn a_folder_chapter_is_on_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("0002")).unwrap();
+
+    let on_disk =
+        chapters_on_disk(&numbered(), "Site", "Manga", &three_chapters(), dir.path()).unwrap();
+
+    // A folder of folders is looked for as folders (baseunits/uFavoritesManager.pas:442-472).
+    assert_eq!(on_disk, [false, true, false]);
+}
+
+#[test]
+fn a_folder_next_to_its_archive_is_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["0001.cbz", "0002.cbz", "0003.cbz"] {
+        fs::write(dir.path().join(name), b"").unwrap();
+    }
+    fs::create_dir(dir.path().join("0002")).unwrap();
+
+    let on_disk =
+        chapters_on_disk(&numbered(), "Site", "Manga", &three_chapters(), dir.path()).unwrap();
+
+    // Packing was interrupted (baseunits/uFavoritesManager.pas:490-505).
+    assert_eq!(on_disk, [true, false, true]);
+}
+
+#[test]
+fn a_folder_that_doesnt_exist_holds_no_chapter() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let on_disk = chapters_on_disk(
+        &numbered(),
+        "Site",
+        "Manga",
+        &three_chapters(),
+        &dir.path().join("gone"),
+    )
+    .unwrap();
+
+    // Nothing was downloaded there (issue #288).
+    assert_eq!(on_disk, [false, false, false]);
+}
+
+#[test]
+fn a_folder_that_cant_be_read_is_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("not-a-folder");
+    fs::write(&file, b"").unwrap();
+
+    let on_disk = chapters_on_disk(&numbered(), "Site", "Manga", &three_chapters(), &file);
+
+    // Left to the caller: the series page shows nothing, rather than every chapter missing, for
+    // an unreachable disk (issue #288); the check counts them missing, as FMD2 does (:430-505).
+    assert!(on_disk.is_err());
 }
 
 #[tokio::test(flavor = "multi_thread")]

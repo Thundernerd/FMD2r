@@ -2,6 +2,7 @@
 	import { ApiError, type Api } from '#lib/api/client.ts';
 	import type { FavoriteView, SeriesInfo, SeriesStatus } from '#lib/api/types.ts';
 	import { FORMAT } from '#lib/discover/filters.ts';
+	import { missingFromDisk } from '#lib/series/disk.ts';
 	import { untrack } from 'svelte';
 	import FolderDialog from './FolderDialog.svelte';
 	import GroupSelect from './GroupSelect.svelte';
@@ -11,13 +12,16 @@
 		api,
 		series = $bindable(),
 		website,
-		saveTo = ''
+		saveTo = '',
+		favorite = $bindable(null)
 	}: {
 		api: Api;
 		series: SeriesInfo;
 		website: string;
 		/** The folder picked in the download box, which the series keeps in the library. */
 		saveTo?: string;
+		/** This series in the library, loaded with the page; the pause and group controls share it. */
+		favorite?: FavoriteView | null;
 	} = $props();
 
 	let adding = $state(false);
@@ -26,8 +30,6 @@
 	let checking = $state(false);
 	let checkNote = $state<string | null>(null);
 
-	/** This series in the library, loaded with the page; the pause and group controls share it. */
-	let favorite = $state<FavoriteView | null>(null);
 	let loadError = $state<string | null>(null);
 	let folderOpen = $state(false);
 	let folderError = $state<string | null>(null);
@@ -170,6 +172,11 @@
 	// Short summaries show in full; longer ones start clamped.
 	const long = $derived(series.summary.length > 280 || series.summary.split('\n').length > 4);
 	const seen = $derived(series.chapters.filter((c) => c.downloaded).length);
+	const missing = $derived(series.chapters.filter(missingFromDisk).length);
+	const counts = $derived(
+		`${series.chapters.length} · ${seen} seen` +
+			(missing > 0 ? ` · ${missing} missing from disk` : '')
+	);
 
 	/** Links shown before "Show all". */
 	const FEW_LINKS = 8;
@@ -220,7 +227,7 @@
 			{/if}
 			<div>
 				<dt class="label">Chapters</dt>
-				<dd class="num">{series.chapters.length} · {seen} seen</dd>
+				<dd class="num">{counts}</dd>
 			</div>
 			<div class="links-row">
 				<dt class="label">Links</dt>

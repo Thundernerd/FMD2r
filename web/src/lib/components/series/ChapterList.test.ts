@@ -66,4 +66,37 @@ describe('ChapterList', () => {
 
 		expect(document.querySelector('.empty')?.textContent?.trim()).toBe('Every chapter is seen.');
 	});
+
+	it('says a seen chapter whose file is gone is missing from disk', () => {
+		const chapters = [
+			{ name: 'Chapter 1', link: '/c/1', downloaded: true, on_disk: false },
+			{ name: 'Chapter 2', link: '/c/2', downloaded: true, on_disk: true }
+		];
+		component = mount(ChapterList, {
+			target: document.body,
+			props: { chapters, selected: new Set<number>(), folder: '/downloads/One Piece' }
+		});
+		flushSync();
+
+		const rows = [...document.querySelectorAll('.row')];
+		expect(rows[0]?.textContent).toMatch(/Chapter 1\s*missing from disk/);
+		expect(rows[0]?.textContent).not.toContain('✓ seen');
+		expect(rows[0]?.querySelector('.missing')?.getAttribute('title')).toBe(
+			"Seen, but its file isn't in /downloads/One Piece"
+		);
+		expect(rows[1]?.textContent).toMatch(/Chapter 2\s*✓ seen/);
+	});
+
+	it('calls a seen chapter seen when whether it is on disk is unknown', () => {
+		const chapters = [{ name: 'Chapter 1', link: '/c/1', downloaded: true, on_disk: null }];
+		component = mount(ChapterList, {
+			target: document.body,
+			props: { chapters, selected: new Set<number>() }
+		});
+		flushSync();
+
+		const row = document.querySelector('.row')?.textContent;
+		expect(row).toMatch(/Chapter 1\s*✓ seen/);
+		expect(row).not.toContain('missing');
+	});
 });

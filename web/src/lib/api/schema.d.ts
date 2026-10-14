@@ -1348,6 +1348,12 @@ export interface components {
 			/** @description Relative to the module's `RootURL`. */
 			link: string;
 			name: string;
+			/**
+			 * @description For a series in the library, whether the chapter's file or folder is in its `save_to`, as
+			 *     the missing-chapter check finds it (baseunits/uFavoritesManager.pas:425-511); `null` for a
+			 *     series not in the library, or when its folder can't be read.
+			 */
+			on_disk?: boolean | null;
 		};
 		/**
 		 * @description A chapter's status, FMD2's `ChaptersStatus` markers (baseunits/uDownloadsManager.pas:1117-1123).

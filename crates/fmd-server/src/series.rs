@@ -8,15 +8,17 @@ pub use links::SeriesLink;
 pub use matching::MatchRequest;
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
+use fmd_core::favorites::chapters_on_disk;
 use fmd_core::info::{InfoError, InfoOptions, MangaInfo};
 use fmd_core::modules::locate_by_url;
-use fmd_store::{ListsDb, MatchConfidence, StoredMatch};
+use fmd_store::{Favorite, ListsDb, MatchConfidence, StoredMatch};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -136,6 +138,10 @@ pub struct ChapterInfo {
     /// Whether the chapter was downloaded before, or marked when the series was added to the
     /// library (mangadownloader/forms/frmMain.pas:2797-2846). The UI calls it "seen".
     pub downloaded: bool,
+    /// For a series in the library, whether the chapter's file or folder is in its `save_to`, as
+    /// the missing-chapter check finds it (baseunits/uFavoritesManager.pas:425-511); `null` for a
+    /// series not in the library, or when its folder can't be read.
+    pub on_disk: Option<bool>,
 }
 
 /// `MangaInfo.Status` (`MangaInfo_Status*`, baseunits/uBaseUnit.pas:230-233).
@@ -181,11 +187,12 @@ pub(crate) async fn get(
             .await;
     // FMD2 looks up the downloaded chapters by the link the module reports
     // (mangadownloader/forms/frmMain.pas:2207).
-    let root_url = state
-        .modules
-        .module(&query.module)
-        .map(|m| m.root_url)
+    let module = state.modules.module(&query.module);
+    let root_url = module
+        .as_ref()
+        .map(|m| m.root_url.clone())
         .unwrap_or_default();
+    let website = module.map_or_else(|| query.module.clone(), |m| m.name);
     let url = fmd_core::metadata::absolute(&root_url, &info.link);
     let (mangabaka_match, mangabaka) =
         mangabaka_metadata(&state, &query.module, [&query.link, &info.link], &url).await;
@@ -194,17 +201,29 @@ pub(crate) async fn get(
         .blocking(move |db| -> Result<_, ApiError> {
             let downloaded = db.downloaded_chapters().list_for(&module, &link)?;
             let favorite = db.favorites().find(&module, &link)?;
-            let in_library = favorite.is_some();
-            if let (Some(mut favorite), Some(cover)) = (favorite, cover)
+            if let (Some(favorite), Some(cover)) = (&favorite, cover)
                 && favorite.cover_url.as_ref() != Some(&cover)
             {
+                let mut favorite = favorite.clone();
                 favorite.cover_url = Some(cover);
                 db.favorites().update(&favorite)?;
             }
-            Ok((downloaded, in_library))
+            Ok((downloaded, favorite))
         })
         .await?;
-    let mut series = view(&query.module, url, info, &downloaded, favorite);
+    let in_library = favorite.is_some();
+    let on_disk = match favorite {
+        Some(favorite) => on_disk(&state, website, favorite, &info).await,
+        None => None,
+    };
+    let mut series = view(
+        &query.module,
+        url,
+        info,
+        &downloaded,
+        in_library,
+        on_disk.as_deref(),
+    );
     series.mangabaka_match = mangabaka_match;
     if let Some(m) = mangabaka {
         if series.summary.trim().is_empty() && !m.description.trim().is_empty() {
@@ -216,6 +235,37 @@ pub(crate) async fn get(
         series.mangabaka = Some(m.series);
     }
     Ok(Json(series))
+}
+
+/// Whether each chapter of a library series is in its folder, as the missing-chapter check looks
+/// for it (`fmd_core::favorites::chapters_on_disk`); `None` when the folder can't be read, so an
+/// unreachable disk doesn't count every chapter missing.
+async fn on_disk(
+    state: &AppState,
+    website: String,
+    favorite: Favorite,
+    info: &MangaInfo,
+) -> Option<Vec<bool>> {
+    let settings = state.settings.get();
+    let info = info.clone();
+    let found = crate::state::off_thread(move || {
+        chapters_on_disk(
+            &settings,
+            &website,
+            &favorite.title,
+            &info,
+            Path::new(&favorite.save_to),
+        )
+    })
+    .await;
+    match found {
+        Ok(Ok(on_disk)) => Some(on_disk),
+        Ok(Err(e)) => {
+            tracing::warn!(target: "fmd_server", "reading a library series' folder: {e}");
+            None
+        }
+        Err(_) => None,
+    }
 }
 
 /// What MangaBaka's database says about a series.
@@ -376,6 +426,7 @@ fn view(
     info: MangaInfo,
     downloaded: &[String],
     in_library: bool,
+    on_disk: Option<&[bool]>,
 ) -> SeriesInfo {
     let downloaded: HashSet<String> = downloaded.iter().map(|l| l.to_lowercase()).collect();
     SeriesInfo {
@@ -402,8 +453,10 @@ fn view(
         chapters: info
             .chapters
             .into_iter()
-            .map(|c| ChapterInfo {
+            .enumerate()
+            .map(|(i, c)| ChapterInfo {
                 downloaded: downloaded.contains(&c.link.to_lowercase()),
+                on_disk: on_disk.and_then(|on_disk| on_disk.get(i).copied()),
                 name: c.name,
                 link: c.link,
             })
