@@ -352,13 +352,19 @@ async fn kavita_is_asked_to_scan_every_library() {
 }
 
 /// A library series downloading to `folder` (under the harness's folder) with a chapter file
-/// there unless `empty`; answers its ID.
-fn series(h: &Harness, folder: &str, empty: bool) -> i64 {
+/// there; answers its ID.
+fn series_with_a_chapter(h: &Harness, folder: &str) -> i64 {
+    let id = series(h, folder);
     let save_to = h.dir.path().join(folder);
-    if !empty {
-        fs::create_dir_all(&save_to).unwrap();
-        fs::write(save_to.join("Chapter 1.cbz"), "chapter 1").unwrap();
-    }
+    fs::create_dir_all(&save_to).unwrap();
+    fs::write(save_to.join("Chapter 1.cbz"), "chapter 1").unwrap();
+    id
+}
+
+/// A library series downloading to `folder` (under the harness's folder), with nothing there
+/// yet; answers its ID.
+fn series(h: &Harness, folder: &str) -> i64 {
+    let save_to = h.dir.path().join(folder);
     h.db.favorites()
         .create(&NewFavorite {
             module_id: "t".into(),
@@ -372,7 +378,8 @@ fn series(h: &Harness, folder: &str, empty: bool) -> i64 {
         .0
 }
 
-/// Changes series `id`'s folder to `folder` with `move_files` and waits for the move to end.
+/// Changes series `id`'s folder to `folder` with `move_files` and waits for the move to end
+/// successfully.
 async fn move_series(h: &Harness, id: i64, folder: &str) {
     let to = h.dir.path().join(folder);
     let req = Request::patch(format!("/api/favorites/{id}"))
@@ -388,6 +395,7 @@ async fn move_series(h: &Harness, id: i64, folder: &str) {
             if job["state"] == "done" {
                 return;
             }
+            assert_ne!(job["state"], "failed", "{job}");
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     };
@@ -399,7 +407,7 @@ async fn move_series(h: &Harness, id: i64, folder: &str) {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_move_that_moved_files_leads_to_one_scan_after_the_window() {
     let h = harness(Stub::default(), json!({})).await;
-    let id = series(&h, "old", false);
+    let id = series_with_a_chapter(&h, "old");
     move_series(&h, id, "new").await;
     assert_eq!(requests(&h), [], "not before the window");
 
@@ -413,7 +421,20 @@ async fn a_move_that_moved_files_leads_to_one_scan_after_the_window() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_move_that_moved_nothing_leads_to_no_scan() {
     let h = harness(Stub::default(), json!({})).await;
-    let id = series(&h, "old", true);
+    let id = series(&h, "old");
+    move_series(&h, id, "new").await;
+
+    after_the_window().await;
+    assert_eq!(requests(&h), []);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_move_that_skipped_every_chapter_leads_to_no_scan() {
+    let h = harness(Stub::default(), json!({})).await;
+    let id = series_with_a_chapter(&h, "old");
+    let taken = h.dir.path().join("new");
+    fs::create_dir_all(&taken).unwrap();
+    fs::write(taken.join("Chapter 1.cbz"), "another chapter 1").unwrap();
     move_series(&h, id, "new").await;
 
     after_the_window().await;
@@ -423,7 +444,7 @@ async fn a_move_that_moved_nothing_leads_to_no_scan() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_move_without_a_comic_server_set_up_asks_nothing() {
     let h = harness(Stub::default(), json!({"kind": "none"})).await;
-    let id = series(&h, "old", false);
+    let id = series_with_a_chapter(&h, "old");
     move_series(&h, id, "new").await;
 
     after_the_window().await;
@@ -433,7 +454,7 @@ async fn a_move_without_a_comic_server_set_up_asks_nothing() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_download_finishing_and_a_move_ending_within_the_window_give_one_scan() {
     let h = harness(Stub::default(), json!({})).await;
-    let id = series(&h, "old", false);
+    let id = series_with_a_chapter(&h, "old");
     let task = add(&h.state, "/c/1").await;
     wait_for(&h.state, task, "finished").await;
     move_series(&h, id, "new").await;

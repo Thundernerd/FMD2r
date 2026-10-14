@@ -1,6 +1,8 @@
-//! Asking the comic server (`comic_server` settings) to scan after downloads finish, and
-//! `POST /api/settings/comic-server/test` (issue #269). No FMD2 counterpart.
+//! Asking the comic server (`comic_server` settings) to scan after downloads finish (issue #269)
+//! or a folder move moved files (#289), and `POST /api/settings/comic-server/test`. No FMD2
+//! counterpart.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Json;
@@ -32,7 +34,11 @@ impl AppState {
                 return;
             }
         };
-        let state = self.clone();
+        // Without the debounce, so it ends once every other `AppState` is dropped.
+        let state = AppState {
+            comic_server_scans: Arc::default(),
+            ..self.clone()
+        };
         let debounce = Debounce::spawn(window, move || {
             let (state, client) = (state.clone(), client.clone());
             async move { scan(&state, &client).await }
@@ -44,16 +50,21 @@ impl AppState {
         let Some(mut rx) = self.engine.subscribe() else {
             return;
         };
-        let state = self.clone();
+        let scans = self.comic_server_scans.clone();
+        let trigger = move || {
+            if let Some(debounce) = scans.get() {
+                debounce.trigger();
+            }
+        };
         tokio::spawn(async move {
             loop {
                 match rx.recv().await {
                     Ok(EngineEvent::Status {
                         status: TaskStatus::Finished,
                         ..
-                    }) => state.request_comic_server_scan(),
+                    }) => trigger(),
                     // Missed events may have held a finish; a spare scan does no harm.
-                    Err(RecvError::Lagged(_)) => state.request_comic_server_scan(),
+                    Err(RecvError::Lagged(_)) => trigger(),
                     Ok(_) => {}
                     Err(RecvError::Closed) => return,
                 }
