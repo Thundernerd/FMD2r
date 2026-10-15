@@ -2,13 +2,15 @@
 	import { api, events } from '#lib/app.ts';
 	import SpeedGraph from '#lib/components/queue/SpeedGraph.svelte';
 	import TaskRow from '#lib/components/queue/TaskRow.svelte';
-	import { GROUPS } from '#lib/queue.svelte.ts';
+	import { GROUPS, type FinishedSort } from '#lib/queue.svelte.ts';
 	import { formatRate } from '#lib/queue-format.ts';
 
 	const queue = events.queue;
 
 	/** The page's graph spans five minutes of one sample a second. */
 	const SLOTS = 300;
+	/** Where this browser remembers the Finished group's order. */
+	const FINISHED_SORT_KEY = 'fmd2r.queue.finishedSort';
 
 	let error = $state<string | null>(null);
 	let busy = $state(false);
@@ -22,6 +24,25 @@
 			.then((modules) => (websites = new Map(modules.map((m) => [m.id, m.name]))))
 			.catch(() => {});
 	});
+
+	$effect(() => {
+		try {
+			const saved = localStorage.getItem(FINISHED_SORT_KEY);
+			if (saved === 'newest' || saved === 'oldest') queue.finishedSort = saved;
+		} catch {
+			// Newest first, the default.
+		}
+	});
+
+	function toggleFinishedSort() {
+		const sort: FinishedSort = queue.finishedSort === 'newest' ? 'oldest' : 'newest';
+		queue.finishedSort = sort;
+		try {
+			localStorage.setItem(FINISHED_SORT_KEY, sort);
+		} catch {
+			// Sorted this way for this visit only.
+		}
+	}
 
 	async function bulk(what: string, call: () => Promise<void>) {
 		if (busy) return;
@@ -140,9 +161,20 @@
 	{:else}
 		{#each queue.groups as group (group.key)}
 			<section class="group" aria-labelledby="group-{group.key}">
-				<h2 id="group-{group.key}">
-					{group.label} <span class="count num muted">{group.tasks.length}</span>
-				</h2>
+				<div class="group-head">
+					<h2 id="group-{group.key}">
+						{group.label} <span class="count num muted">{group.tasks.length}</span>
+					</h2>
+					{#if group.key === 'finished'}
+						<button
+							class="btn sm ghost"
+							type="button"
+							aria-label="Sort finished tasks"
+							onclick={toggleFinishedSort}
+							>{queue.finishedSort === 'newest' ? 'Newest first' : 'Oldest first'}</button
+						>
+					{/if}
+				</div>
 				{#if group.tasks.length === 0}
 					<p class="small muted">{filtering ? 'No matching tasks.' : 'None.'}</p>
 				{:else}
@@ -243,6 +275,12 @@
 	.group {
 		display: flex;
 		flex-direction: column;
+		gap: var(--sp-2);
+	}
+	.group-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		gap: var(--sp-2);
 	}
 	.group h2 {

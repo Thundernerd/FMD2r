@@ -41,6 +41,9 @@ export interface QueueFilter {
 	to: string;
 }
 
+/** How the Finished group is ordered, by when each task was last active. */
+export type FinishedSort = 'newest' | 'oldest';
+
 export interface QueueStoreOptions {
 	/** Fetches the whole queue; called when frames mention tasks the store has not seen. */
 	refresh?: () => Promise<TaskSummary[]>;
@@ -61,6 +64,7 @@ export class QueueStore {
 	/** In queue order. */
 	tasks = $state<TaskSummary[]>([]);
 	filter = $state<QueueFilter>({ text: '', status: 'all', from: '', to: '' });
+	finishedSort = $state<FinishedSort>('newest');
 	/** Total download speed samples, oldest first. */
 	history = $state<number[]>([]);
 
@@ -76,10 +80,13 @@ export class QueueStore {
 		return counts;
 	});
 	groups = $derived(
-		GROUPS.filter((g) => this.filter.status === 'all' || this.filter.status === g.key).map((g) => ({
-			...g,
-			tasks: this.matching.filter((t) => groupOf(t.status) === g.key)
-		}))
+		GROUPS.filter((g) => this.filter.status === 'all' || this.filter.status === g.key).map((g) => {
+			const tasks = this.matching.filter((t) => groupOf(t.status) === g.key);
+			if (g.key !== 'finished') return { ...g, tasks };
+			// `sort` is stable, so ties keep queue order.
+			const sign = this.finishedSort === 'newest' ? -1 : 1;
+			return { ...g, tasks: tasks.sort((a, b) => sign * (lastActive(a) - lastActive(b))) };
+		})
 	);
 
 	#refresh: QueueStoreOptions['refresh'];
