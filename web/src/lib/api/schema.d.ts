@@ -1519,6 +1519,12 @@ export interface components {
 			flaresolverr_url: string;
 			/**
 			 * Format: int32
+			 * @description Total page download speed over all tasks, in KB/s (1 KB = 1024 bytes); 0 for no limit.
+			 *     Metadata, list updates and covers aren't limited. No FMD2 setting (issue #309).
+			 */
+			max_download_kbps: number;
+			/**
+			 * Format: int32
 			 * @description Threads checking favorites (`connections/MaxFavoriteThreads`,
 			 *     baseunits/FMDOptions.pas:130). Range 1..=32 (mangadownloader/forms/frmMain.lfm:3786-3787).
 			 */
@@ -2945,6 +2951,7 @@ export interface components {
 			 *       "always_start_from_failed_chapters": true,
 			 *       "auto_retry_failed_tasks": 1,
 			 *       "flaresolverr_url": "",
+			 *       "max_download_kbps": 0,
 			 *       "max_favorite_threads": 1,
 			 *       "max_parallel_tasks": 1,
 			 *       "max_update_list_threads": 1,

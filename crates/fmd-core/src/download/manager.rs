@@ -13,7 +13,9 @@ use fmd_pack::{RenameContext, custom_rename};
 use fmd_store::{ChapterStatus, NewChapter, NewTask, TaskId, TaskStatus};
 use tokio::sync::broadcast;
 
-use super::{EngineConfig, EngineError, EngineEvent, NewDownload, Progress, TaskInfo, task};
+use super::{
+    EngineConfig, EngineError, EngineEvent, NewDownload, Progress, SpeedLimiter, TaskInfo, task,
+};
 use crate::modules::ModuleInfo;
 use crate::settings::{
     EffectiveLimits, ModuleOverrides, OutputFormat, SaveToSettings, Settings, SymbolMode,
@@ -37,6 +39,8 @@ pub(super) struct Inner {
     /// `isReadyForExit`: ending task threads leave their status alone.
     exiting: AtomicBool,
     progress: Mutex<HashMap<TaskId, ProgressClock>>,
+    /// Shared by the page threads of every task, so the limit is a total.
+    pub(super) limiter: SpeedLimiter,
     /// Whether downloads are held for a full disk; while they are, a thread measures again
     /// every [`EngineConfig::disk_recheck`].
     disk_held: AtomicBool,
@@ -73,8 +77,13 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Inner {
     pub(super) fn new(config: EngineConfig) -> Inner {
+        let settings = config.settings.clone();
+        let limiter = SpeedLimiter::new(config.clock.clone(), move || {
+            settings.get().connections.max_download_kbps
+        });
         Inner {
             config,
+            limiter,
             events: broadcast::channel(EVENTS_CAPACITY).0,
             state: Mutex::default(),
             exiting: AtomicBool::new(false),

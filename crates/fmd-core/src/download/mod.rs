@@ -32,6 +32,7 @@
 
 mod comic_metadata;
 mod files;
+mod limiter;
 mod manager;
 mod page;
 mod preview;
@@ -53,6 +54,7 @@ pub(crate) use manager::rename_options;
 pub use manager::save_to;
 
 pub use fmd_store::{ChapterStatus, Task, TaskChapter, TaskId, TaskStatus};
+pub use limiter::{Clock, SpeedLimiter, SystemClock};
 pub use preview::{PagePlacement, SampleChapter, first_page};
 
 pub type ModuleLookup = dyn Fn(&str) -> Option<Arc<Module>> + Send + Sync;
@@ -83,6 +85,8 @@ pub struct EngineConfig {
     /// Folders a library move is working in: a waiting task downloading into one starts once
     /// the move is done.
     pub moving: MovingFolders,
+    /// The engine's time; it paces page downloads under `connections.max_download_kbps`.
+    pub clock: Arc<dyn Clock>,
     /// Reads the free space on the disks tasks save to.
     pub free_space: Arc<dyn FreeSpace>,
     /// How often a disk holding downloads is measured again.
@@ -108,6 +112,7 @@ impl EngineConfig {
             http,
             series: None,
             moving: MovingFolders::default(),
+            clock: Arc::new(SystemClock),
             free_space: Arc::new(Statvfs),
             disk_recheck: DISK_RECHECK,
         }
@@ -126,6 +131,11 @@ impl EngineConfig {
 
     pub fn with_series_lookup(mut self, lookup: Arc<SeriesLookup>) -> EngineConfig {
         self.series = Some(lookup);
+        self
+    }
+
+    pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> EngineConfig {
+        self.clock = clock;
         self
     }
 }

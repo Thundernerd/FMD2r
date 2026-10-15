@@ -6,12 +6,15 @@
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
+mod common;
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use common::clock::FakeClock;
 use fmd_core::disk_space::FreeSpace;
 use fmd_core::download::{
     ChapterSpec, DownloadManager, EngineConfig, EngineEvent, NewDownload, SeriesMatch,
@@ -70,12 +73,17 @@ impl FreeSpace for FakeDisk {
 }
 
 /// Serves a PNG for every URL holding `/img/`, a 404 otherwise; can fail a URL a number of
-/// times first, or never answer the URLs holding a pattern.
+/// times first, or never answer the URLs holding a pattern. Notes each request's time on
+/// `clock`.
 #[derive(Default)]
 struct StubTransport {
     requests: Mutex<Vec<String>>,
     failures: Mutex<HashMap<String, u32>>,
     hold: Mutex<Vec<String>>,
+    clock: Arc<FakeClock>,
+    timed: Mutex<Vec<(String, Duration)>>,
+    /// Pads the PNGs to this many bytes.
+    page_size: Mutex<usize>,
 }
 
 impl StubTransport {
@@ -99,6 +107,16 @@ impl StubTransport {
     fn requests(&self) -> Vec<String> {
         self.requests.lock().unwrap().clone()
     }
+
+    /// When the requests for URLs holding `pattern` were made, on `clock`.
+    fn times(&self, pattern: &str) -> Vec<Duration> {
+        let timed = self.timed.lock().unwrap();
+        timed
+            .iter()
+            .filter(|(url, _)| url.contains(pattern))
+            .map(|(_, at)| *at)
+            .collect()
+    }
 }
 
 impl Transport for StubTransport {
@@ -107,6 +125,10 @@ impl Transport for StubTransport {
         request: WireRequest,
     ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
         self.requests.lock().unwrap().push(request.url.clone());
+        self.timed
+            .lock()
+            .unwrap()
+            .push((request.url.clone(), self.clock.elapsed()));
         if let Some(left) = self.failures.lock().unwrap().get_mut(&request.url)
             && *left > 0
         {
@@ -127,7 +149,13 @@ impl Transport for StubTransport {
             status: if image { 200 } else { 404 },
             reason: String::new(),
             headers: Vec::new(),
-            body: if image { PNG.to_vec() } else { Vec::new() },
+            body: if image {
+                let mut png = PNG.to_vec();
+                png.resize(PNG.len().max(*self.page_size.lock().unwrap()), 0);
+                png
+            } else {
+                Vec::new()
+            },
         };
         Box::pin(async move { Ok(response) })
     }
@@ -1439,4 +1467,85 @@ async fn a_disk_that_cannot_be_measured_does_not_hold_a_download() {
     use TaskStatus::*;
     let seen = statuses(&mut events, id, &[Finished, Failed]).await;
     assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+}
+
+/// The fake-clock times of the page requests of a 4-page chapter of 1 KB pages, and the time
+/// the task finished at, at a limit of `kbps` KB/s (no FMD2 behaviour: issue #309).
+async fn page_times_at(kbps: u32) -> (Vec<Duration>, Duration) {
+    let f = Fixture::new(
+        &[("T.lua", T)],
+        json!({"connections": {"max_download_kbps": kbps}}),
+    );
+    *f.transport.page_size.lock().unwrap() = 1024;
+    let manager = DownloadManager::open(f.config().with_clock(f.transport.clock.clone()))
+        .await
+        .unwrap();
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/4", "One")]))
+        .await
+        .unwrap();
+
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished));
+    (f.transport.times("/img/"), f.transport.clock.elapsed())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn under_a_speed_limit_a_tasks_pages_are_spread_over_time() {
+    let (pages, finished) = page_times_at(1).await;
+
+    let secs = Duration::from_secs;
+    // Each 1 KB page is paid for once it is in: one page a second.
+    assert_eq!(pages, [secs(0), secs(1), secs(2), secs(3)]);
+    assert_eq!(finished, secs(4));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_a_speed_limit_a_tasks_pages_are_not_held_back() {
+    let (pages, finished) = page_times_at(0).await;
+
+    assert_eq!(pages, [Duration::ZERO; 4]);
+    assert_eq!(finished, Duration::ZERO);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_speed_limit_is_shared_by_every_thread_of_every_task() {
+    let f = Fixture::new(
+        &[("T.lua", T)],
+        json!({"connections": {
+            "max_download_kbps": 1, "max_parallel_tasks": 2, "threads_per_task": 2
+        }}),
+    );
+    *f.transport.page_size.lock().unwrap() = 1024;
+    let manager = DownloadManager::open(f.config().with_clock(f.transport.clock.clone()))
+        .await
+        .unwrap();
+    let mut events = manager.subscribe();
+    let mut ids = Vec::new();
+    for title in ["One", "Two"] {
+        let mut download = f.download("t", &[("/c/4", title)]);
+        download.manga_link = format!("/{title}");
+        download.title = title.into();
+        ids.push(manager.add_task(download).await.unwrap());
+    }
+
+    // Both at once: waiting for one would drop the other's events.
+    let mut ended = HashMap::new();
+    let wait = async {
+        while ended.len() < ids.len() {
+            if let EngineEvent::Status { task, status, .. } = events.recv().await.unwrap()
+                && matches!(status, TaskStatus::Finished | TaskStatus::Failed)
+            {
+                ended.insert(task, status);
+            }
+        }
+    };
+    tokio::time::timeout(PATIENCE, wait).await.unwrap();
+    for id in ids {
+        assert_eq!(ended[&id], TaskStatus::Finished);
+    }
+    // 8 pages of 1 KB at 1 KB/s in total, however many threads fetch them.
+    assert_eq!(f.transport.clock.elapsed(), Duration::from_secs(8));
 }
