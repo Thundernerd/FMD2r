@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskProgress, TaskSummary } from '#lib/api/types.ts';
-import { QueueStore } from '#lib/queue.svelte.ts';
+import { moveWaiting, QueueStore } from '#lib/queue.svelte.ts';
 
 const task = (over: Partial<TaskSummary> & Pick<TaskSummary, 'id' | 'title'>): TaskSummary => ({
 	module_id: 'mangadex',
@@ -90,6 +90,48 @@ describe('queue store', () => {
 		expect(store.groups.flatMap((g) => titles(g.tasks))).toHaveLength(5);
 	});
 
+	it('sorts the Finished group by when each task was last active, newest first by default', () => {
+		const store = new QueueStore();
+		const finished = (id: number, title: string, added: string, downloaded: string | null) =>
+			task({
+				id,
+				title,
+				status: 'finished',
+				date_added: added,
+				date_last_downloaded: downloaded
+			});
+		store.load([
+			...queue(),
+			finished(7, 'Dorohedoro', '2026-08-01T10:00:00Z', '2026-09-15T10:00:00Z'),
+			// Never downloaded: its date added counts.
+			finished(8, 'Berserk', '2026-10-07T10:00:00Z', null),
+			finished(9, 'Monster', '2026-07-01T10:00:00Z', '2026-09-20T10:00:00Z'),
+			task({ id: 10, title: 'Pluto', status: 'waiting', date_added: '2026-10-09T10:00:00Z' })
+		]);
+		const group = (label: string) => titles(store.groups.find((g) => g.label === label)!.tasks);
+
+		expect(group('Finished')).toEqual(['Berserk', 'Blame!', 'Monster', 'Dorohedoro']);
+
+		store.finishedSort = 'oldest';
+		expect(group('Finished')).toEqual(['Dorohedoro', 'Monster', 'Blame!', 'Berserk']);
+		// The other groups keep queue order.
+		expect(group('Waiting')).toEqual(['Blue Lock', 'Pluto']);
+		expect(group('Downloading')).toEqual(['Kagurabachi', 'Omniscient Reader']);
+	});
+
+	it('keeps queue order between finished tasks last active at the same time', () => {
+		const store = new QueueStore();
+		const at = '2026-10-05T12:00:00Z';
+		store.load([
+			task({ id: 1, title: 'Akira', status: 'finished', date_last_downloaded: at }),
+			task({ id: 2, title: 'Nausicaä', status: 'finished', date_last_downloaded: at })
+		]);
+		const finished = () => titles(store.groups.find((g) => g.key === 'finished')!.tasks);
+		expect(finished()).toEqual(['Akira', 'Nausicaä']);
+		store.finishedSort = 'oldest';
+		expect(finished()).toEqual(['Akira', 'Nausicaä']);
+	});
+
 	it('applies progress frames and sums the speed of the downloading tasks', () => {
 		const store = new QueueStore();
 		store.load(queue());
@@ -104,7 +146,8 @@ describe('queue store', () => {
 		// A task leaving the downloading group stops counting towards the speed.
 		store.status({ id: 2, status: 'finished', error: null });
 		expect(store.rate).toBe(3_000_000);
-		expect(store.groups.at(-1)?.tasks.map((t) => t.id)).toEqual([2, 6]);
+		// Newest first: task 2, never downloaded, counts from when it was added.
+		expect(store.groups.at(-1)?.tasks.map((t) => t.id)).toEqual([6, 2]);
 	});
 
 	it('keeps the speed history of the last samples, one per sample() call', () => {
@@ -176,5 +219,62 @@ describe('queue store', () => {
 		answer(queue());
 		await vi.runAllTimersAsync();
 		expect(store.tasks.find((t) => t.id === 3)?.status).toBe('stopped');
+	});
+});
+
+describe('moving a waiting task', () => {
+	/** Waiting tasks 2, 4 and 6 among tasks of the other groups. */
+	const mixed = (): TaskSummary[] => [
+		task({ id: 1, title: 'Kagurabachi', status: 'downloading' }),
+		task({ id: 2, title: 'Blue Lock', status: 'waiting' }),
+		task({ id: 3, title: 'Apothecary Diaries', status: 'failed' }),
+		task({ id: 4, title: 'Vagabond', status: 'waiting' }),
+		task({ id: 5, title: 'Blame!', status: 'finished' }),
+		task({ id: 6, title: 'Dorohedoro', status: 'waiting' }),
+		task({ id: 7, title: 'Berserk', status: 'stopped' })
+	];
+
+	it('moves it to the top of the waiting tasks', () => {
+		expect(moveWaiting(mixed(), 6, 'top')).toEqual([1, 6, 3, 2, 5, 4, 7]);
+	});
+
+	it('moves it up past the waiting task before it', () => {
+		expect(moveWaiting(mixed(), 6, 'up')).toEqual([1, 2, 3, 6, 5, 4, 7]);
+	});
+
+	it('moves it down past the waiting task after it', () => {
+		expect(moveWaiting(mixed(), 2, 'down')).toEqual([1, 4, 3, 2, 5, 6, 7]);
+	});
+
+	it('moves it to the bottom of the waiting tasks', () => {
+		expect(moveWaiting(mixed(), 2, 'bottom')).toEqual([1, 4, 3, 6, 5, 2, 7]);
+	});
+
+	it('leaves the order alone when it cannot move further', () => {
+		expect(moveWaiting(mixed(), 2, 'up')).toEqual([1, 2, 3, 4, 5, 6, 7]);
+		expect(moveWaiting(mixed(), 6, 'bottom')).toEqual([1, 2, 3, 4, 5, 6, 7]);
+	});
+
+	it('keeps the finished tasks in queue order, while their group stays sorted', () => {
+		const store = new QueueStore();
+		store.load([
+			...mixed(),
+			// After Blame! in the queue, but downloaded since: newest first shows it first.
+			task({
+				id: 8,
+				title: 'Monster',
+				status: 'finished',
+				date_last_downloaded: '2026-10-10T10:00:00Z'
+			})
+		]);
+		const finished = () => titles(store.groups.find((g) => g.key === 'finished')!.tasks);
+		expect(finished()).toEqual(['Monster', 'Blame!']);
+
+		const ids = moveWaiting(store.tasks, 6, 'top');
+		// The server gets the queue order, not the order the Finished group shows.
+		expect(ids).toEqual([1, 6, 3, 2, 5, 4, 7, 8]);
+		store.arrange(ids);
+		expect(store.waitingIds).toEqual([6, 2, 4]);
+		expect(finished()).toEqual(['Monster', 'Blame!']);
 	});
 });
