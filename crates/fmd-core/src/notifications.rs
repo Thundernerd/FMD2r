@@ -26,9 +26,8 @@ pub enum Channel {
     Webhook,
 }
 
-/// A kind of event a channel can be set to send, one per inbox event kind or failure reported
-/// alongside them. Serialised as the
-/// kind, e.g. `download_failed`.
+/// A kind of event a channel can be set to send: an inbox event kind, or an event sent without
+/// one. Serialised as the kind, e.g. `download_failed`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum NotificationType {

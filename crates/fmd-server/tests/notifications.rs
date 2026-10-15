@@ -400,9 +400,7 @@ async fn a_finished_download_goes_only_to_channels_that_tick_it_and_not_to_the_i
     assert_eq!(body["kind"], "download_completed");
     assert_eq!(body["severity"], "info");
     assert_eq!(body["title"], "Download completed: Manga");
-    let text = body["body"].as_str().unwrap();
-    assert!(text.contains("Ch"), "{text}");
-    assert!(text.contains("Test Site"), "{text}");
+    assert_eq!(body["body"], "Chapters: Ch\nWebsite: Test Site");
     let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
     assert_eq!(inbox, json!([]));
 }

@@ -32,8 +32,9 @@ const TEST: &str = "test";
 
 impl AppState {
     /// Adds each download that fails to the inbox, and sends every new inbox item, finished
-    /// download and failed favorites check to the notification channels that take it. Sending never holds up the work
-    /// that caused it: each request runs on its own, and a failure is only logged.
+    /// download and failed favorites check to the notification channels that take it. Sending
+    /// never holds up the work that caused it: each request runs on its own, and a failure is
+    /// only logged.
     pub fn start_notifications(&self) {
         let sender = match Sender::new(SEND_TIMEOUT) {
             Ok(sender) => sender,
@@ -131,7 +132,12 @@ async fn report_downloads(
         };
         let info = task_info(&state, task).await;
         if status == TaskStatus::Finished {
-            push(&state, &sender, &completed_download(&state, task, info));
+            let website = info
+                .as_ref()
+                .map(|info| website_name(&state, &info.task.module_id));
+            let notification =
+                completed_download(task, info.as_ref(), website.as_deref().unwrap_or_default());
+            push(&state, &sender, &notification);
             continue;
         }
         let event = failed_download(task, info, error);
@@ -160,42 +166,47 @@ async fn task_info(state: &AppState, task: TaskId) -> Option<TaskInfo> {
     }
 }
 
+/// The name of the website of module `module_id`, or the ID when no module has it.
+fn website_name(state: &AppState, module_id: &str) -> String {
+    state
+        .modules
+        .module(module_id)
+        .map_or_else(|| module_id.to_owned(), |m| m.name)
+}
+
+/// The series title of `task`, or its ID when it could not be found.
+fn task_title(task: TaskId, info: Option<&TaskInfo>) -> String {
+    info.map_or_else(
+        || format!("task {}", task.0),
+        |info| info.task.title.clone(),
+    )
+}
+
 fn failed_download(task: TaskId, info: Option<TaskInfo>, error: Option<String>) -> NewEvent {
-    let (title, module_id) = match info {
-        Some(info) => (info.task.title, Some(info.task.module_id)),
-        None => (format!("task {}", task.0), None),
-    };
     NewEvent {
         kind: DOWNLOAD_FAILED.into(),
         severity: EventSeverity::Error,
-        module_id,
+        module_id: info.as_ref().map(|info| info.task.module_id.clone()),
         task_id: Some(task),
-        title: format!("Download failed: {title}"),
+        title: format!("Download failed: {}", task_title(task, info.as_ref())),
         // A guard: the engine gives every failure a reason.
         body: serde_json::Value::String(error.unwrap_or_else(|| "No reason was given.".into())),
     }
 }
 
-/// The task's chapters and its website's name, falling back to the module ID.
-fn completed_download(state: &AppState, task: TaskId, info: Option<TaskInfo>) -> Notification {
-    let (title, body) = match info {
+/// Lists the task's chapters and `website`, the name of its website.
+fn completed_download(task: TaskId, info: Option<&TaskInfo>, website: &str) -> Notification {
+    let body = match info {
         Some(info) => {
             let chapters: Vec<&str> = info.chapters.iter().map(|c| c.name.as_str()).collect();
-            let website = state
-                .modules
-                .module(&info.task.module_id)
-                .map_or_else(|| info.task.module_id.clone(), |m| m.name);
-            (
-                info.task.title.clone(),
-                format!("Chapters: {}\nWebsite: {website}", chapters.join(", ")),
-            )
+            format!("Chapters: {}\nWebsite: {website}", chapters.join(", "))
         }
-        None => (format!("task {}", task.0), String::new()),
+        None => String::new(),
     };
     Notification {
         kind: DOWNLOAD_COMPLETED.into(),
         severity: EventSeverity::Info,
-        title: format!("Download completed: {title}"),
+        title: format!("Download completed: {}", task_title(task, info)),
         body,
         created_at: crate::time::now_rfc3339(),
     }
