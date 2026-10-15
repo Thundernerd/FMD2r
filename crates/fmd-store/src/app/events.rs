@@ -166,6 +166,27 @@ impl<'a> EventRepo<'a> {
         Ok(())
     }
 
+    /// Deletes the given events, returning how many existed.
+    pub fn delete(&self, ids: &[EventId]) -> Result<usize> {
+        let mut conn = self.db.lock();
+        let tx = conn.transaction()?;
+        let mut deleted = 0;
+        {
+            let mut stmt = tx.prepare_cached("DELETE FROM events WHERE id = ?1")?;
+            for id in ids {
+                deleted += stmt.execute([id.0])?;
+            }
+        }
+        tx.commit()?;
+        Ok(deleted)
+    }
+
+    pub fn delete_read(&self) -> Result<()> {
+        let conn = self.db.lock();
+        conn.execute("DELETE FROM events WHERE read = 1", [])?;
+        Ok(())
+    }
+
     pub fn unread_count(&self) -> Result<u64> {
         let conn = self.db.lock();
         Ok(

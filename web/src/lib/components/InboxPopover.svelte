@@ -23,6 +23,36 @@
 		}
 	}
 
+	async function remove(item: InboxItem) {
+		error = null;
+		try {
+			await api.deleteInboxItem(item.id);
+			store.remove(item.id);
+		} catch {
+			error = 'Could not delete the item.';
+		}
+	}
+
+	async function markAllRead() {
+		error = null;
+		try {
+			await api.markAllRead();
+			store.markAllRead();
+		} catch {
+			error = 'Could not mark the inbox read.';
+		}
+	}
+
+	async function clearRead() {
+		error = null;
+		try {
+			await api.clearReadInbox();
+			store.removeRead();
+		} catch {
+			error = 'Could not clear the read items.';
+		}
+	}
+
 	function close() {
 		inboxUi.open = false;
 		inboxUi.focus = null;
@@ -63,6 +93,19 @@
 
 	{#if inboxUi.open}
 		<div class="pop" role="dialog" aria-label="Inbox" bind:this={pop}>
+			<div class="actions">
+				<button class="btn sm" type="button" disabled={store.unread === 0} onclick={markAllRead}>
+					Mark all read
+				</button>
+				<button
+					class="btn sm"
+					type="button"
+					disabled={store.unread === store.inbox.length}
+					onclick={clearRead}
+				>
+					Clear read
+				</button>
+			</div>
 			{#if store.inbox.length === 0}
 				<p class="empty muted">Nothing needs you.</p>
 			{:else}
@@ -82,13 +125,14 @@
 									<div class="line">{line}</div>
 								{/each}
 							</div>
-							{#if !item.read}
-								<div>
+							<div class="item-actions">
+								{#if !item.read}
 									<button class="btn sm" type="button" onclick={() => markRead(item)}>
 										Mark read
 									</button>
-								</div>
-							{/if}
+								{/if}
+								<button class="btn sm" type="button" onclick={() => remove(item)}>Delete</button>
+							</div>
 						</li>
 					{/each}
 				</ul>
@@ -136,6 +180,17 @@
 		box-shadow: var(--shadow);
 		z-index: 30;
 		padding: 6px;
+	}
+	.item-actions {
+		display: flex;
+		gap: var(--sp-2);
+	}
+	.actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--sp-2);
+		padding: 4px 4px 8px;
+		border-bottom: 1px solid var(--line);
 	}
 	ul {
 		list-style: none;
