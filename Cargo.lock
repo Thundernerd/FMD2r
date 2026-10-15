@@ -885,6 +885,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "serde_path_to_error",

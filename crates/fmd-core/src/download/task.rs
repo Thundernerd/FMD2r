@@ -77,24 +77,15 @@ pub(super) struct TaskRun<'a> {
     pub(super) working_dir: PathBuf,
     /// `CurrentCustomFileName`.
     custom_file_name: String,
-    /// Left between chapters because the download schedule's window closed.
-    paused: bool,
 }
 
-/// Runs the task; true when it paused for the download schedule, to carry on once the window
-/// opens.
 pub(super) fn run(
     inner: &Arc<Inner>,
     id: TaskId,
     module: &Arc<Module>,
     terminate: &TerminateToken,
-) -> bool {
-    let mut paused = false;
-    let result = TaskRun::load(inner, id, module, terminate).and_then(|mut run| {
-        run.execute()?;
-        paused = run.paused;
-        Ok(())
-    });
+) {
+    let result = TaskRun::load(inner, id, module, terminate).and_then(|mut run| run.execute());
     if let Err(e) = result {
         tracing::error!(target: "fmd_core", "task {}: failed: {e}", id.0);
         if !terminate.is_terminated()
@@ -103,7 +94,6 @@ pub(super) fn run(
             tracing::error!(target: "fmd_core", "task {}: {e}", id.0);
         }
     }
-    paused
 }
 
 impl<'a> TaskRun<'a> {
@@ -154,7 +144,6 @@ impl<'a> TaskRun<'a> {
             chapter_link: String::new(),
             working_dir: PathBuf::new(),
             custom_file_name: String::new(),
-            paused: false,
         })
     }
 
@@ -377,11 +366,23 @@ impl<'a> TaskRun<'a> {
             if self.terminated() {
                 return Ok(());
             }
-            // Outside the download schedule's window it waits for the window to open.
+            // Outside the download schedule's window, or on a nearly full disk, it goes back to
+            // the queue at this chapter, to carry on once the window opens or the disk has room.
             if let Some(schedule) = self.inner.closed_schedule() {
+                self.inner.hold_running(self.id);
+                self.set_status(TaskStatus::Waiting)?;
                 let until = schedule.start().strftime("%H:%M");
-                log_task(self.id, &self.title, format!("paused until {until}"));
-                self.paused = true;
+                log_task(
+                    self.id,
+                    &self.title,
+                    format!("waiting: paused until {until}"),
+                );
+                return Ok(());
+            }
+            if self.inner.hold_if_disk_low(&self.save_to) {
+                self.inner.hold_running(self.id);
+                self.set_status(TaskStatus::Waiting)?;
+                log_task(self.id, &self.title, "waiting: the disk is almost full");
                 return Ok(());
             }
             self.enter_chapter()?;
@@ -478,10 +479,11 @@ impl<'a> TaskRun<'a> {
                         failure => failure,
                     })
             };
+            // A failed chapter only marks itself failed: the task goes on with the next one and
+            // becomes `Failed` once, when the run ends.
             let reason = failure.map(|failure| failure.reason(&chapter_name));
             if let Some(reason) = &reason {
                 tracing::warn!(target: "fmd_core", "task {}: {reason}", self.id.0);
-                self.set_failed(reason)?;
             }
             let failed = reason.is_some();
             self.chapter_failures[self.chapter] = reason;
@@ -511,7 +513,7 @@ impl<'a> TaskRun<'a> {
             self.save_chapter_pointer()?;
             let failed = self.failed_chapters();
             let reason = match failed.as_slice() {
-                // The reason its `Failed` event already gave.
+                // One failed chapter is reported as is, without a list around it.
                 [(_, Some(reason))] => reason.clone(),
                 _ => {
                     let chapters: Vec<String> = failed

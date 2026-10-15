@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
@@ -14,7 +14,8 @@ use fmd_store::{ChapterStatus, NewChapter, NewTask, TaskId, TaskStatus};
 use tokio::sync::broadcast;
 
 use super::{
-    EngineConfig, EngineError, EngineEvent, NewDownload, Progress, Schedule, TaskInfo, task,
+    EngineConfig, EngineError, EngineEvent, NewDownload, Progress, Schedule, SpeedLimiter,
+    TaskInfo, task,
 };
 use crate::modules::ModuleInfo;
 use crate::settings::{
@@ -24,6 +25,8 @@ use crate::settings::{
 
 /// How far a slow listener may fall behind before it misses events.
 const EVENTS_CAPACITY: usize = 1024;
+
+const MB: u64 = 1024 * 1024;
 
 /// The archive extensions a chapter may have been packed under (`FMDSupportedPackedOutputExt`,
 /// baseunits/FMDOptions.pas).
@@ -37,6 +40,11 @@ pub(super) struct Inner {
     /// `isReadyForExit`: ending task threads leave their status alone.
     exiting: AtomicBool,
     progress: Mutex<HashMap<TaskId, ProgressClock>>,
+    /// Shared by the page threads of every task, so the limit is a total.
+    pub(super) limiter: SpeedLimiter,
+    /// Whether downloads are held for a full disk; while they are, a thread measures again
+    /// every [`EngineConfig::disk_recheck`].
+    disk_held: AtomicBool,
 }
 
 #[derive(Default)]
@@ -51,6 +59,9 @@ struct Running {
     thread: Option<JoinHandle<()>>,
     /// `TTaskThread.IsForDelete`.
     deleting: bool,
+    /// Went back to Waiting for free space or the download schedule: it stays Waiting when its
+    /// thread ends.
+    held: bool,
 }
 
 /// For throttling progress reports and computing speed.
@@ -71,12 +82,18 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Inner {
     pub(super) fn new(config: EngineConfig) -> Inner {
+        let settings = config.settings.clone();
+        let limiter = SpeedLimiter::new(config.clock.clone(), move || {
+            settings.get().connections.max_download_kbps
+        });
         Inner {
             config,
+            limiter,
             events: broadcast::channel(EVENTS_CAPACITY).0,
             state: Mutex::default(),
             exiting: AtomicBool::new(false),
             progress: Mutex::default(),
+            disk_held: AtomicBool::new(false),
         }
     }
 
@@ -103,7 +120,7 @@ impl Inner {
     /// The download schedule's window, when it is closed now.
     pub(super) fn closed_schedule(&self) -> Option<Schedule> {
         Schedule::of(&self.settings().connections)
-            .filter(|schedule| !schedule.is_open(self.config.clock.now()))
+            .filter(|schedule| !schedule.is_open(self.config.wall_clock.now()))
     }
 
     pub(super) fn limits(&self, module: &Module) -> EffectiveLimits {
@@ -254,6 +271,9 @@ impl Inner {
             if closed {
                 break;
             }
+            if self.hold_if_disk_low(Path::new(&task.save_to)) {
+                continue;
+            }
             // A task whose module is gone was stopped at startup; one removed since waits.
             let Some(module) = self.module(&task.module_id) else {
                 continue;
@@ -265,6 +285,71 @@ impl Inner {
             }
         }
         Ok(())
+    }
+
+    /// The free space on `dir`'s disk when it is under `saveto.min_free_space_mb`; `None` when
+    /// it isn't, the limit is 0, or the disk can't be measured.
+    fn free_if_low(&self, dir: &Path) -> Option<u64> {
+        let limit = u64::from(self.settings().saveto.min_free_space_mb) * MB;
+        if limit == 0 {
+            return None;
+        }
+        self.config
+            .free_space
+            .free_bytes(dir)
+            .filter(|free| *free < limit)
+    }
+
+    /// Whether a task saving to `dir` has to wait for free space. The first one to wait holds
+    /// downloads: [`EngineEvent::DiskSpaceLow`] is sent and the disks are measured again until
+    /// they have room.
+    pub(super) fn hold_if_disk_low(self: &Arc<Self>, dir: &Path) -> bool {
+        let Some(free_bytes) = self.free_if_low(dir) else {
+            return false;
+        };
+        if self.disk_held.swap(true, Ordering::SeqCst) {
+            return true;
+        }
+        tracing::warn!(target: "fmd_core",
+            "downloads are on hold: {} has {} MB free", dir.display(), free_bytes / MB);
+        self.emit(EngineEvent::DiskSpaceLow {
+            folder: dir.to_string_lossy().into_owned(),
+            free_bytes,
+        });
+        let inner = Arc::downgrade(self);
+        let recheck = self.config.disk_recheck;
+        let spawned = std::thread::Builder::new()
+            .name("fmd-disk-recheck".into())
+            .spawn(move || recheck_disks(&inner, recheck));
+        if let Err(e) = spawned {
+            tracing::error!(target: "fmd_core", "measuring free space again: {e}");
+        }
+        true
+    }
+
+    /// Whether a waiting task's disk is still short of space.
+    fn any_disk_low(&self) -> Result<bool, EngineError> {
+        Ok(self
+            .config
+            .db
+            .tasks()
+            .list()?
+            .iter()
+            .filter(|task| task.status == TaskStatus::Waiting)
+            .any(|task| self.free_if_low(Path::new(&task.save_to)).is_some()))
+    }
+
+    /// One measurement of [`recheck_disks`]: ends the hold once no waiting task's disk is short
+    /// of space, then starts what can start. `false` once the hold is over.
+    fn recheck_disks_once(self: &Arc<Self>) -> Result<bool, EngineError> {
+        let still_low = self.any_disk_low()?;
+        if !still_low {
+            self.disk_held.store(false, Ordering::SeqCst);
+            tracing::info!(target: "fmd_core", "downloads resumed: the disk has room again");
+            self.emit(EngineEvent::DiskSpaceRecovered);
+        }
+        self.check_and_active_task()?;
+        Ok(still_low)
     }
 
     /// `CanCreateTask` (baseunits/WebsiteModules.pas:414-420).
@@ -288,8 +373,8 @@ impl Inner {
         let thread = std::thread::Builder::new()
             .name(format!("fmd-task-{}", id.0))
             .spawn(move || {
-                let paused = task::run(&inner, id, &thread_module, &token);
-                inner.task_ended(id, paused);
+                task::run(&inner, id, &thread_module, &token);
+                inner.task_ended(id);
             });
         let thread = match thread {
             Ok(thread) => thread,
@@ -305,21 +390,31 @@ impl Inner {
                 terminate,
                 thread: Some(thread),
                 deleting: false,
+                held: false,
             },
         );
         Ok(())
     }
 
+    /// Marks running task `id` as gone back to Waiting, for free space or the download
+    /// schedule's window.
+    pub(super) fn hold_running(&self, id: TaskId) {
+        if let Some(running) = lock(&self.state).running.get_mut(&id) {
+            running.held = true;
+        }
+    }
+
     /// `TTaskThread.Destroy` (baseunits/uDownloadsManager.pas:485-528): an unfinished task
-    /// becomes Stopped (or Disabled) unless deleting or exiting. One `paused` for the download
-    /// schedule, and not stopped meanwhile, becomes Waiting instead.
-    fn task_ended(self: &Arc<Self>, id: TaskId, paused: bool) {
-        let (deleting, terminated) = {
+    /// becomes Stopped (or Disabled) unless deleting or exiting, or held (for free space or the
+    /// download schedule) and not stopped meanwhile.
+    fn task_ended(self: &Arc<Self>, id: TaskId) {
+        let (deleting, held) = {
             let mut state = lock(&self.state);
             match state.running.remove(&id) {
                 Some(running) => {
                     running.module.dec_active_task_count();
-                    (running.deleting, running.terminate.is_terminated())
+                    let held = running.held && !running.terminate.is_terminated();
+                    (running.deleting, held)
                 }
                 None => (false, false),
             }
@@ -334,18 +429,12 @@ impl Inner {
                 return Ok(());
             };
             repo.update_progress(id, task.current_chapter, Some(now_ms()))?;
-            // A stop or disable landing after the thread ended has already set the status.
-            if !matches!(
-                task.status,
-                TaskStatus::Stopped
-                    | TaskStatus::Finished
-                    | TaskStatus::Failed
-                    | TaskStatus::Disabled
-            ) {
-                if paused && !terminated && task.enabled {
-                    self.set_status(id, TaskStatus::Waiting, None)?;
-                    return self.check_and_active_task();
-                }
+            if !held
+                && !matches!(
+                    task.status,
+                    TaskStatus::Stopped | TaskStatus::Finished | TaskStatus::Failed
+                )
+            {
                 let status = if task.enabled {
                     TaskStatus::Stopped
                 } else {
@@ -386,7 +475,12 @@ impl Inner {
                         let why = format!("stopped: module {} is not installed", task.module_id);
                         log_task(task.id, &task.title, why);
                     }
-                    Some(module) if !closed && started < max && self.can_create_task(&module) => {
+                    Some(module)
+                        if !closed
+                            && started < max
+                            && self.can_create_task(&module)
+                            && !self.hold_if_disk_low(Path::new(&task.save_to)) =>
+                    {
                         let was = task.status;
                         log_task(
                             task.id,
@@ -605,12 +699,12 @@ impl Inner {
             // clock changing is noticed.
             let wait = Schedule::of(&settings.borrow_and_update().connections).map(|schedule| {
                 schedule
-                    .until_open(self.config.clock.now())
+                    .until_open(self.config.wall_clock.now())
                     .map_or(RECHECK, |wait| wait.min(RECHECK))
             });
             let opened = async {
                 match wait {
-                    Some(wait) => self.config.clock.sleep(wait).await,
+                    Some(wait) => self.config.wall_clock.sleep(wait).await,
                     None => std::future::pending().await,
                 }
             };
@@ -648,6 +742,24 @@ impl Inner {
         };
         for thread in threads {
             let _ = thread.join();
+        }
+    }
+}
+
+/// Measures the held disks every `interval` until they have room, or the engine is gone.
+fn recheck_disks(inner: &Weak<Inner>, interval: std::time::Duration) {
+    loop {
+        std::thread::sleep(interval);
+        let Some(inner) = inner.upgrade() else {
+            return;
+        };
+        if inner.is_exiting() {
+            return;
+        }
+        match inner.recheck_disks_once() {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(e) => tracing::error!(target: "fmd_core", "measuring free space again: {e}"),
         }
     }
 }

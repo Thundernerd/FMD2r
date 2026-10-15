@@ -33,6 +33,27 @@ export function groupOf(status: TaskState): TaskGroup {
 	}
 }
 
+/** Where "Move to top", "Move up", "Move down" and "Move to bottom" take a waiting task. */
+export type WaitingMove = 'top' | 'up' | 'down' | 'bottom';
+
+/**
+ * The queue's task IDs after moving waiting task `id` among the waiting tasks.
+ * The waiting tasks keep their places in the queue and swap who holds them;
+ * every other task stays where it is.
+ */
+export function moveWaiting(tasks: TaskSummary[], id: number, to: WaitingMove): number[] {
+	const waiting = tasks.filter((t) => t.status === 'waiting').map((t) => t.id);
+	const from = waiting.indexOf(id);
+	if (from >= 0) {
+		const target = { top: 0, up: from - 1, down: from + 1, bottom: waiting.length - 1 }[to];
+		waiting.splice(from, 1);
+		waiting.splice(Math.max(0, Math.min(target, waiting.length)), 0, id);
+	}
+	const reordered = waiting.values();
+	// Both lists hold the same waiting tasks, so `reordered` never runs out.
+	return tasks.map((t) => (t.status === 'waiting' ? (reordered.next().value ?? t.id) : t.id));
+}
+
 export interface QueueFilter {
 	/** Matched against the title, module and chapter, ignoring case. */
 	text: string;
@@ -41,6 +62,9 @@ export interface QueueFilter {
 	from: string;
 	to: string;
 }
+
+/** How the Finished group is ordered, by when each task was last active. */
+export type FinishedSort = 'newest' | 'oldest';
 
 export interface QueueStoreOptions {
 	/** Fetches the whole queue; called when frames mention tasks the store has not seen. */
@@ -64,11 +88,14 @@ export class QueueStore {
 	/** While the download schedule keeps downloads paused, when they resume (`HH:MM`). */
 	pausedUntil = $state<string | null>(null);
 	filter = $state<QueueFilter>({ text: '', status: 'all', from: '', to: '' });
+	finishedSort = $state<FinishedSort>('newest');
 	/** Total download speed samples, oldest first. */
 	history = $state<number[]>([]);
 
 	active = $derived(this.tasks.filter((t) => groupOf(t.status) === 'downloading'));
-	waiting = $derived(this.tasks.filter((t) => t.status === 'waiting').length);
+	/** IDs of the waiting tasks, in the order they start. */
+	waitingIds = $derived(this.tasks.filter((t) => t.status === 'waiting').map((t) => t.id));
+	waiting = $derived(this.waitingIds.length);
 	/** Bytes per second over every downloading task. */
 	rate = $derived(this.active.reduce((sum, t) => sum + t.bytes_per_sec, 0));
 	/** Tasks matching the text and date filters. */
@@ -79,10 +106,13 @@ export class QueueStore {
 		return counts;
 	});
 	groups = $derived(
-		GROUPS.filter((g) => this.filter.status === 'all' || this.filter.status === g.key).map((g) => ({
-			...g,
-			tasks: this.matching.filter((t) => groupOf(t.status) === g.key)
-		}))
+		GROUPS.filter((g) => this.filter.status === 'all' || this.filter.status === g.key).map((g) => {
+			const tasks = this.matching.filter((t) => groupOf(t.status) === g.key);
+			if (g.key !== 'finished') return { ...g, tasks };
+			// `sort` is stable, so ties keep queue order.
+			const sign = this.finishedSort === 'newest' ? -1 : 1;
+			return { ...g, tasks: tasks.sort((a, b) => sign * (lastActive(a) - lastActive(b))) };
+		})
 	);
 
 	#refresh: QueueStoreOptions['refresh'];
@@ -125,6 +155,13 @@ export class QueueStore {
 	removed(id: number): void {
 		this.tasks = this.tasks.filter((t) => t.id !== id);
 		if (this.#inFlight) this.#inFlight[id] = null;
+	}
+
+	/** Puts the tasks in the order of `ids` ahead of the server's `task.reordered` frame. */
+	arrange(ids: number[]): void {
+		const at: Record<number, number> = Object.fromEntries(ids.map((id, i) => [id, i]));
+		const rank = (t: TaskSummary) => at[t.id] ?? ids.length;
+		this.tasks = [...this.tasks].sort((a, b) => rank(a) - rank(b));
 	}
 
 	reordered(): void {

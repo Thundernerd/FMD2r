@@ -26,8 +26,8 @@ pub enum Channel {
     Webhook,
 }
 
-/// A kind of event a channel can be set to send, one per inbox event kind. Serialised as the
-/// kind, e.g. `download_failed`.
+/// A kind of event a channel can be set to send: an inbox event kind, or an event sent without
+/// one. Serialised as the kind, e.g. `download_failed`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum NotificationType {
@@ -41,6 +41,9 @@ pub enum NotificationType {
     Completed,
     /// A download failed (`fmd_server::notifications`).
     DownloadFailed,
+    /// A download finished (`fmd_server::notifications`). Sent to the channels only, never to
+    /// the inbox; off by default, as it fires for every task.
+    DownloadCompleted,
     /// A library check failed.
     FavoritesCheckFailed,
     /// Modules were updated, or updating them failed (`fmd_core::module_updater`).
@@ -49,6 +52,8 @@ pub enum NotificationType {
     DownloadsMoved,
     /// The comic server was asked to rescan (`fmd_server::comic_server`).
     ComicServer,
+    /// Downloads were held for a full disk, or resumed (`fmd_server::notifications`).
+    DiskSpaceLow,
 }
 
 impl NotificationType {
@@ -61,13 +66,14 @@ impl NotificationType {
     /// What "Problems" used to send, and new channels send: every kind that could be a warning
     /// or an error. A missing-chapter check is one when it could not check some series
     /// (`fmd_core::favorites::add_failures`).
-    pub const PROBLEMS: [NotificationType; 6] = [
+    pub const PROBLEMS: [NotificationType; 7] = [
         NotificationType::DownloadFailed,
         NotificationType::FavoritesCheckFailed,
         NotificationType::ModuleUpdate,
         NotificationType::DownloadsMoved,
         NotificationType::ComicServer,
         NotificationType::MissingCheck,
+        NotificationType::DiskSpaceLow,
     ];
 
     /// The type of the inbox event kind `kind`; `None` for a kind no channel can pick, like a
@@ -84,10 +90,12 @@ impl NotificationType {
             NotificationType::MissingCheck => "Missing-chapter check found nothing",
             NotificationType::Completed => "Completed series removed",
             NotificationType::DownloadFailed => "Download failed",
+            NotificationType::DownloadCompleted => "Download completed",
             NotificationType::FavoritesCheckFailed => "Library check failed",
             NotificationType::ModuleUpdate => "Module updates",
             NotificationType::DownloadsMoved => "Downloads moved",
             NotificationType::ComicServer => "Comic server rescan",
+            NotificationType::DiskSpaceLow => "Disk almost full",
         }
     }
 

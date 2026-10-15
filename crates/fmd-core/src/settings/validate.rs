@@ -137,6 +137,10 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
     );
     check("connections.timeout_secs", out_of(c.timeout_secs, 1..=300));
     check(
+        "connections.max_download_kbps",
+        out_of(c.max_download_kbps, 0..=1_000_000),
+    );
+    check(
         "connections.proxy.port",
         (c.proxy.port == Some(0)).then(|| "must be 1..=65535".into()),
     );

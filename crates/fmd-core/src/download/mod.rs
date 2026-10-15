@@ -24,6 +24,8 @@
 //! | running | Stopped | `stop`, `stop_all`: the thread is terminated | `TTaskThread.Destroy` (:485-528) |
 //! | running | Waiting | between chapters, outside the download schedule's window; it carries on once the window opens | FMD2r's own ([`Schedule`]) |
 //! | any | Disabled / Stopped | `disable` / `enable` | `TTaskContainer.SetEnabled` (:1384-1397) |
+//! | Waiting | stays Waiting | its disk has less than `saveto.min_free_space_mb` free (issue #308; FMD2 never checks) | |
+//! | running | Waiting | before a chapter, its disk has less than `saveto.min_free_space_mb` free | |
 //! | Downloading, Preparing, Waiting (and Converting, Compressing: a killed process) at startup | running, or Waiting; Stopped when the module is gone | [`DownloadManager::open`] | `CheckAndActiveTaskAtStartup` (:1859-1893) |
 //!
 //! A task running when the manager is dropped keeps its status, so the next
@@ -31,6 +33,7 @@
 
 mod comic_metadata;
 mod files;
+mod limiter;
 mod manager;
 mod page;
 mod preview;
@@ -38,12 +41,14 @@ mod schedule;
 mod task;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use fmd_http::HttpClient;
 use fmd_lua::{Module, ModuleRegistry, WorkerPool};
 use fmd_store::{AppDb, MetadataSeries, StoreError};
 use tokio::sync::broadcast;
 
+use crate::disk_space::{FreeSpace, Statvfs};
 use crate::folder_move::MovingFolders;
 use crate::settings::{SettingsError, SettingsService};
 use manager::Inner;
@@ -51,9 +56,10 @@ pub(crate) use manager::rename_options;
 pub use manager::save_to;
 
 pub use fmd_store::{ChapterStatus, Task, TaskChapter, TaskId, TaskStatus};
+pub use limiter::{Clock, SpeedLimiter, SystemClock};
 pub use preview::{PagePlacement, SampleChapter, first_page};
-pub use schedule::{Clock, SystemClock};
 pub(crate) use schedule::{Schedule, parse_time};
+pub use schedule::{SystemWallClock, WallClock};
 
 pub type ModuleLookup = dyn Fn(&str) -> Option<Arc<Module>> + Send + Sync;
 
@@ -83,9 +89,18 @@ pub struct EngineConfig {
     /// Folders a library move is working in: a waiting task downloading into one starts once
     /// the move is done.
     pub moving: MovingFolders,
-    /// The local time the download schedule goes by.
+    /// The engine's time; it paces page downloads under `connections.max_download_kbps`.
     pub clock: Arc<dyn Clock>,
+    /// Reads the free space on the disks tasks save to.
+    pub free_space: Arc<dyn FreeSpace>,
+    /// How often a disk holding downloads is measured again.
+    pub disk_recheck: Duration,
+    /// The local time the download schedule goes by.
+    pub wall_clock: Arc<dyn WallClock>,
 }
+
+/// How often a disk holding downloads is measured again, by default.
+pub const DISK_RECHECK: Duration = Duration::from_secs(60);
 
 impl EngineConfig {
     pub fn new(
@@ -104,7 +119,21 @@ impl EngineConfig {
             series: None,
             moving: MovingFolders::default(),
             clock: Arc::new(SystemClock),
+            free_space: Arc::new(Statvfs),
+            disk_recheck: DISK_RECHECK,
+            wall_clock: Arc::new(SystemWallClock),
         }
+    }
+
+    /// Measures free space with `reader`, again every `recheck` while downloads are held.
+    pub fn with_free_space(
+        mut self,
+        reader: Arc<dyn FreeSpace>,
+        recheck: Duration,
+    ) -> EngineConfig {
+        self.free_space = reader;
+        self.disk_recheck = recheck;
+        self
     }
 
     pub fn with_series_lookup(mut self, lookup: Arc<SeriesLookup>) -> EngineConfig {
@@ -114,6 +143,11 @@ impl EngineConfig {
 
     pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> EngineConfig {
         self.clock = clock;
+        self
+    }
+
+    pub fn with_wall_clock(mut self, clock: Arc<dyn WallClock>) -> EngineConfig {
+        self.wall_clock = clock;
         self
     }
 }
@@ -166,6 +200,14 @@ pub enum EngineEvent {
         task: TaskId,
     },
     Reordered,
+    /// Downloads are on hold: the disk `folder` is on has `free_bytes` free, under
+    /// `saveto.min_free_space_mb`. Sent once until [`EngineEvent::DiskSpaceRecovered`].
+    DiskSpaceLow {
+        folder: String,
+        free_bytes: u64,
+    },
+    /// No waiting task's disk is short of space any more; held tasks carry on.
+    DiskSpaceRecovered,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

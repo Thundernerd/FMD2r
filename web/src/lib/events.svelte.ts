@@ -136,6 +136,18 @@ export class EventStore {
 		if (item) item.read = true;
 	}
 
+	markAllRead(): void {
+		for (const item of this.inbox) item.read = true;
+	}
+
+	remove(id: string): void {
+		this.inbox = this.inbox.filter((i) => i.id !== id);
+	}
+
+	removeRead(): void {
+		this.inbox = this.inbox.filter((i) => !i.read);
+	}
+
 	#open(): void {
 		const es = this.#opts.connect(this.#opts.url);
 		this.#source = es;

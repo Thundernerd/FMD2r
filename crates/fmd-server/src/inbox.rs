@@ -1,14 +1,15 @@
-//! `GET /api/inbox` and `POST /api/inbox/{id}/read`: the `events` table as the UI's inbox.
+//! `/api/inbox`: the `events` table as the UI's inbox, which the user marks read and clears.
 
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use fmd_core::module_updater;
 use fmd_store::{Event, EventId, EventQuery, EventSeverity};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
+use crate::error::ApiQuery;
 use crate::{ApiError, AppState, Problem};
 
 const INBOX_LIMIT: u32 = 200;
@@ -87,6 +88,11 @@ fn plain_text(value: &Value) -> String {
     }
 }
 
+/// An inbox item id from the path; one that isn't a number names no item.
+fn parse_id(id: &str) -> Result<EventId, ApiError> {
+    id.parse().map(EventId).map_err(|_| ApiError::NotFound)
+}
+
 /// Inbox items, newest first.
 #[utoipa::path(get, path = "/api/inbox", tag = "inbox", operation_id = "listInbox",
     responses((status = 200, body = Vec<InboxItem>)))]
@@ -113,7 +119,7 @@ pub(crate) async fn mark_read(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let id = EventId(id.parse().map_err(|_| ApiError::NotFound)?);
+    let id = parse_id(&id)?;
     state
         .blocking(move |db| {
             if db.events().get(id)?.is_none() {
@@ -122,5 +128,60 @@ pub(crate) async fn mark_read(
             Ok(db.events().mark_read(&[id])?)
         })
         .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Mark every inbox item as read.
+#[utoipa::path(post, path = "/api/inbox/read", tag = "inbox", operation_id = "markInboxAllRead",
+    responses((status = 204, description = "Marked as read")))]
+pub(crate) async fn mark_all_read(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+    state.blocking(|db| db.events().mark_all_read()).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Delete one inbox item.
+#[utoipa::path(delete, path = "/api/inbox/{id}", tag = "inbox", operation_id = "deleteInboxItem",
+    params(("id" = String, Path, description = "Inbox item id")),
+    responses(
+        (status = 204, description = "Deleted"),
+        (status = 404, description = "No such inbox item", body = Problem),
+    ))]
+pub(crate) async fn delete(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = parse_id(&id)?;
+    let deleted = state.blocking(move |db| db.events().delete(&[id])).await?;
+    if deleted == 0 {
+        return Err(ApiError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Which inbox items `DELETE /api/inbox` deletes.
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct ClearFilter {
+    /// Must be `true`: only read items can be cleared.
+    read: Option<bool>,
+}
+
+/// Delete every read inbox item.
+#[utoipa::path(delete, path = "/api/inbox", tag = "inbox", operation_id = "clearInboxRead",
+    params(ClearFilter),
+    responses(
+        (status = 204, description = "Deleted"),
+        (status = 400, description = "`read=true` is missing", body = Problem),
+    ))]
+pub(crate) async fn clear_read(
+    State(state): State<AppState>,
+    ApiQuery(filter): ApiQuery<ClearFilter>,
+) -> Result<StatusCode, ApiError> {
+    if filter.read != Some(true) {
+        return Err(ApiError::BadRequest(
+            "only read items can be cleared: pass read=true".into(),
+        ));
+    }
+    state.blocking(|db| db.events().delete_read()).await?;
     Ok(StatusCode::NO_CONTENT)
 }

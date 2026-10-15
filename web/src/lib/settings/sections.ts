@@ -123,10 +123,12 @@ const NOTIFICATION_TYPES: { value: NotificationType; label: string }[] = [
 	{ value: 'missing_check', label: 'Missing-chapter check found nothing' },
 	{ value: 'completed', label: 'Completed series removed' },
 	{ value: 'download_failed', label: 'Download failed' },
+	{ value: 'download_completed', label: 'Download completed' },
 	{ value: 'favorites_check_failed', label: 'Library check failed' },
 	{ value: 'module_update', label: 'Module updates' },
 	{ value: 'downloads_moved', label: 'Downloads moved' },
-	{ value: 'comic_server', label: 'Comic server rescan' }
+	{ value: 'comic_server', label: 'Comic server rescan' },
+	{ value: 'disk_space_low', label: 'Disk almost full' }
 ];
 
 /** Where a channel sends to, and its credentials. */
@@ -264,6 +266,13 @@ export const SETTINGS_SECTIONS: Section[] = [
 			number('connections.max_favorite_threads', 'Favorite check threads', 1, 32),
 			number('connections.max_update_list_threads', 'List update threads', 1, 32),
 			number('connections.timeout_secs', 'Connection timeout (seconds)', 1, 300),
+			number(
+				'connections.max_download_kbps',
+				'Download speed limit (KB/s)',
+				0,
+				1000000,
+				'0 for no limit'
+			),
 			text('connections.user_agent', 'User agent', 'Leave empty for the default.'),
 			text(
 				'connections.flaresolverr_url',
@@ -320,6 +329,13 @@ export const SETTINGS_SECTIONS: Section[] = [
 					{ value: 'windows', label: 'Windows (strip \\ / : * ? " < > | ;)' }
 				],
 				'Which characters are removed from file names.'
+			),
+			number(
+				'saveto.min_free_space_mb',
+				'Keep this much space free (MB)',
+				0,
+				U32_MAX,
+				'Downloads wait while a download folder’s disk has less free, and carry on once it has room. 0 turns this off.'
 			)
 		]
 	},

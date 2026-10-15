@@ -124,6 +124,10 @@ pub struct ConnectionSettingsView {
     /// (mangadownloader/forms/frmMain.lfm:3387-3388).
     #[schema(minimum = 1, maximum = 300)]
     pub timeout_secs: u32,
+    /// Total page download speed over all tasks, in KB/s (1 KB = 1024 bytes); 0 for no limit.
+    /// Metadata, list updates and covers aren't limited. No FMD2 setting (issue #309).
+    #[schema(minimum = 0, maximum = 1000000)]
+    pub max_download_kbps: u32,
     /// Default user agent; an empty value resets to
     /// [`DEFAULT_USER_AGENT`](super::DEFAULT_USER_AGENT) (`connections/DefaultUserAgent`,
     /// mangadownloader/forms/frmMain.pas:5867-5871).
@@ -158,6 +162,7 @@ impl From<ConnectionSettings> for ConnectionSettingsView {
             max_favorite_threads,
             max_update_list_threads,
             timeout_secs,
+            max_download_kbps,
             user_agent,
             proxy,
             flaresolverr_url,
@@ -174,6 +179,7 @@ impl From<ConnectionSettings> for ConnectionSettingsView {
             max_favorite_threads,
             max_update_list_threads,
             timeout_secs,
+            max_download_kbps,
             user_agent,
             proxy: proxy.into(),
             flaresolverr_url,

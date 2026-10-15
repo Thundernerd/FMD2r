@@ -210,7 +210,12 @@ impl<'r, 'a> PageThread<'r, 'a> {
             ok
         };
         if ok && let Some(session) = &self.http {
-            run.container().bytes += session.document().len() as u64;
+            let bytes = session.document().len() as u64;
+            // Paid for before the bytes count, so the speed shown is the limited one.
+            if !run.inner.limiter.take(bytes, &|| run.terminated()) {
+                return false;
+            }
+            run.container().bytes += bytes;
         }
 
         let base = dir.join(&file_name);

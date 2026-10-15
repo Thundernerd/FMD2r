@@ -6,14 +6,18 @@
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
+mod common;
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use common::clock::FakeClock;
+use fmd_core::disk_space::FreeSpace;
 use fmd_core::download::{
-    ChapterSpec, Clock, DownloadManager, EngineConfig, EngineEvent, NewDownload, SeriesMatch,
+    ChapterSpec, DownloadManager, EngineConfig, EngineEvent, NewDownload, SeriesMatch, WallClock,
 };
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
@@ -34,8 +38,43 @@ const PNG: &[u8] = &[
 /// How long a test waits for the engine before failing.
 const PATIENCE: Duration = Duration::from_secs(20);
 
+/// How often the engine looks at a full disk again; a minute outside tests.
+const DISK_RECHECK: Duration = Duration::from_millis(50);
+
+const MB: u64 = 1024 * 1024;
+
+/// Free bytes on the disk holding a folder.
+type FreeOn = Box<dyn Fn(&Path) -> Option<u64> + Send>;
+
+/// The free space the engine sees: plenty, until a test says otherwise.
+struct FakeDisk(Mutex<FreeOn>);
+
+impl Default for FakeDisk {
+    fn default() -> Self {
+        FakeDisk(Mutex::new(Box::new(|_| Some(1024 * 1024 * MB))))
+    }
+}
+
+impl FakeDisk {
+    /// `mb` free on every disk.
+    fn set_free_mb(&self, mb: u64) {
+        self.set(move |_| Some(mb * MB));
+    }
+
+    fn set(&self, free: impl Fn(&Path) -> Option<u64> + Send + 'static) {
+        *self.0.lock().unwrap() = Box::new(free);
+    }
+}
+
+impl FreeSpace for FakeDisk {
+    fn free_bytes(&self, dir: &Path) -> Option<u64> {
+        (self.0.lock().unwrap())(dir)
+    }
+}
+
 /// Serves a PNG for every URL holding `/img/`, a 404 otherwise; can fail a URL a number of
-/// times first, or hold the URLs holding a pattern until released.
+/// times first, or hold the URLs holding a pattern until released. Notes each request's time
+/// on `clock`.
 #[derive(Default)]
 struct StubTransport {
     requests: Mutex<Vec<String>>,
@@ -43,6 +82,10 @@ struct StubTransport {
     hold: Mutex<Vec<String>>,
     /// Bumped by each release of the held URLs.
     releases: tokio::sync::watch::Sender<u64>,
+    clock: Arc<FakeClock>,
+    timed: Mutex<Vec<(String, Duration)>>,
+    /// Pads the PNGs to this many bytes.
+    page_size: Mutex<usize>,
 }
 
 impl StubTransport {
@@ -70,6 +113,16 @@ impl StubTransport {
     fn requests(&self) -> Vec<String> {
         self.requests.lock().unwrap().clone()
     }
+
+    /// When the requests for URLs holding `pattern` were made, on `clock`.
+    fn times(&self, pattern: &str) -> Vec<Duration> {
+        let timed = self.timed.lock().unwrap();
+        timed
+            .iter()
+            .filter(|(url, _)| url.contains(pattern))
+            .map(|(_, at)| *at)
+            .collect()
+    }
 }
 
 impl Transport for StubTransport {
@@ -78,6 +131,10 @@ impl Transport for StubTransport {
         request: WireRequest,
     ) -> BoxFuture<'static, Result<WireResponse, TransportError>> {
         self.requests.lock().unwrap().push(request.url.clone());
+        self.timed
+            .lock()
+            .unwrap()
+            .push((request.url.clone(), self.clock.elapsed()));
         if let Some(left) = self.failures.lock().unwrap().get_mut(&request.url)
             && *left > 0
         {
@@ -95,7 +152,13 @@ impl Transport for StubTransport {
             status: if image { 200 } else { 404 },
             reason: String::new(),
             headers: Vec::new(),
-            body: if image { PNG.to_vec() } else { Vec::new() },
+            body: if image {
+                let mut png = PNG.to_vec();
+                png.resize(PNG.len().max(*self.page_size.lock().unwrap()), 0);
+                png
+            } else {
+                Vec::new()
+            },
         };
         let mut releases = self.releases.subscribe();
         let held_at = *releases.borrow_and_update();
@@ -130,6 +193,7 @@ struct Fixture {
     http: HttpClient,
     settings: Arc<SettingsService>,
     transport: Arc<StubTransport>,
+    disk: Arc<FakeDisk>,
 }
 
 impl Fixture {
@@ -158,6 +222,7 @@ impl Fixture {
             http,
             settings: Arc::new(service),
             transport,
+            disk: Arc::default(),
             dir,
         }
     }
@@ -174,6 +239,7 @@ impl Fixture {
             self.settings.clone(),
             self.http.clone(),
         )
+        .with_free_space(self.disk.clone(), DISK_RECHECK)
     }
 
     async fn manager(&self) -> DownloadManager {
@@ -395,11 +461,11 @@ async fn with_page_3_failing_twice(retries: u32) -> (Fixture, TaskId, Vec<TaskSt
 #[tokio::test(flavor = "multi_thread")]
 async fn a_failed_chapter_is_retried_until_its_pages_come_through() {
     // The task finishes once the chapter's last retry gets page 3
-    // (baseunits/uDownloadsManager.pas:1326-1338).
+    // (baseunits/uDownloadsManager.pas:1326-1338). Its failed tries report no failure: a run
+    // reports one, when it ends with failed chapters (issue #307).
     let (f, id, seen) = with_page_3_failing_twice(2).await;
     use TaskStatus::*;
-    let failures = seen.iter().filter(|s| **s == Failed).count();
-    assert_eq!(failures, 2, "{seen:?}");
+    assert!(!seen.contains(&Failed), "{seen:?}");
     assert_eq!(seen.last(), Some(&Finished));
     assert_eq!(
         entries(&f.out().join("Manga/One.cbz")),
@@ -1145,6 +1211,11 @@ async fn failing_chapters(
     let error = tokio::time::timeout(PATIENCE, failed)
         .await
         .unwrap_or_else(|_| panic!("task {id:?} did not fail"));
+    (error, ended(&manager, id).await)
+}
+
+/// Task `id` once its run has ended.
+async fn ended(manager: &DownloadManager, id: TaskId) -> fmd_store::Task {
     let ended = async {
         loop {
             let tasks = manager.list().await.unwrap();
@@ -1155,10 +1226,9 @@ async fn failing_chapters(
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     };
-    let task = tokio::time::timeout(PATIENCE, ended)
+    tokio::time::timeout(PATIENCE, ended)
         .await
-        .unwrap_or_else(|_| panic!("task {id:?} kept running"));
-    (error, task)
+        .unwrap_or_else(|_| panic!("task {id:?} kept running"))
 }
 
 /// [`failing_chapters`] for a one-chapter task.
@@ -1226,15 +1296,282 @@ async fn a_chapter_that_cannot_be_packed_fails_the_task_saying_why() {
     assert_eq!(task.error, Some(event));
 }
 
+/// The reasons of every `Failed` status event a run of module `t`'s `chapters` emits.
+async fn failed_events(f: &Fixture, chapters: &[(&str, &str)]) -> Vec<Option<String>> {
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager.add_task(f.download("t", chapters)).await.unwrap();
+    ended(&manager, id).await;
+    let mut failed = Vec::new();
+    loop {
+        match events.try_recv() {
+            Ok(EngineEvent::Status {
+                task,
+                status: TaskStatus::Failed,
+                error,
+                ..
+            }) if task == id => failed.push(error),
+            Ok(_) => {}
+            Err(broadcast::error::TryRecvError::Empty) => return failed,
+            Err(e) => panic!("events of task {id:?} were lost: {e}"),
+        }
+    }
+}
+
+const FIVE_CHAPTERS: &[(&str, &str)] = &[
+    ("/c/1", "One"),
+    ("/c/2", "Two"),
+    ("/c/3", "Three"),
+    ("/c/4", "Four"),
+    ("/c/5", "Five"),
+];
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_failing_two_of_five_chapters_reports_failed_once_naming_both() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/1/1", 100);
+    f.transport.fail("https://t/img/c/3/1", 100);
+    let failed = failed_events(&f, FIVE_CHAPTERS).await;
+    assert_eq!(
+        failed,
+        [Some(
+            "Chapters failed: Chapter \"One\": 1 of 1 pages did not download; \
+             Chapter \"Three\": 1 of 3 pages did not download"
+                .to_owned()
+        )]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_failing_only_its_last_chapter_reports_failed_once_with_its_reason() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/5/2", 100);
+    let failed = failed_events(&f, FIVE_CHAPTERS).await;
+    assert_eq!(
+        failed,
+        [Some(
+            "Chapter \"Five\": 1 of 5 pages did not download".to_owned()
+        )]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_retrying_failed_chapters_still_reports_failed_once() {
+    let settings = json!({
+        "output": {"format": "cbz"},
+        "connections": {"auto_retry_failed_tasks": 2},
+    });
+    let f = Fixture::new(&[("T.lua", T)], settings);
+    f.transport.fail("https://t/img/c/1/1", 100);
+    f.transport.fail("https://t/img/c/3/1", 100);
+    let failed = failed_events(&f, FIVE_CHAPTERS).await;
+    // The failed chapters were retried.
+    assert!(f.transport.count("https://t/img/c/3/1") > 1);
+    assert_eq!(
+        failed,
+        [Some(
+            "Chapters failed: Chapter \"One\": 1 of 1 pages did not download; \
+             Chapter \"Three\": 1 of 3 pages did not download"
+                .to_owned()
+        )]
+    );
+}
+
+/// Downloads hold while a disk has less than `saveto.min_free_space_mb` free (issue #308).
+fn min_free_mb(mb: u64) -> Value {
+    json!({"output": {"format": "cbz"}, "saveto": {"min_free_space_mb": mb}})
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_waiting_task_does_not_start_while_its_disk_is_low_and_starts_once_it_is_not() {
+    let f = Fixture::new(&[("T.lua", T)], min_free_mb(100));
+    f.disk.set_free_mb(99);
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One")]))
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let task = f.db.tasks().get(id).unwrap().unwrap();
+    assert_eq!(task.status, TaskStatus::Waiting);
+    assert!(f.transport.requests().is_empty());
+
+    f.disk.set_free_mb(100);
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_running_task_goes_back_to_waiting_before_its_next_chapter_when_its_disk_goes_low() {
+    let f = Fixture::new(&[("T.lua", T)], min_free_mb(100));
+    // The disk fills up as the first chapter is packed.
+    let first = f.out().join("Manga/One.cbz");
+    f.disk
+        .set(move |_| Some(if first.exists() { 99 } else { 100 } * MB));
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One"), ("/c/3", "Two")]))
+        .await
+        .unwrap();
+
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Waiting, Finished, Failed]).await;
+    assert_eq!(seen, [Waiting]);
+    let seen = statuses(&mut events, id, &[Waiting, Finished, Failed]).await;
+    assert_eq!(
+        seen,
+        [Preparing, Downloading, Converting, Compressing, Waiting]
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let task = f.db.tasks().get(id).unwrap().unwrap();
+    assert_eq!(task.status, Waiting);
+    let chapters = f.db.tasks().chapters(id).unwrap();
+    assert_eq!(chapters[0].status, fmd_store::ChapterStatus::Downloaded);
+    assert_eq!(chapters[1].status, fmd_store::ChapterStatus::Pending);
+    assert_eq!(f.transport.count("https://t/chapter/c/3"), 0);
+
+    // It carries on with the second chapter once there is room.
+    f.disk.set_free_mb(100);
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+    assert_eq!(f.transport.count("https://t/chapter/c/2"), 1);
+    assert_eq!(
+        entries(&f.out().join("Manga/Two.cbz")),
+        ["001.png", "002.png", "003.png"]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_limit_of_0_never_holds_a_download() {
+    let f = Fixture::new(&[("T.lua", T)], min_free_mb(0));
+    f.disk.set_free_mb(0);
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One"), ("/c/3", "Two")]))
+        .await
+        .unwrap();
+
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+    assert_eq!(
+        seen.iter().filter(|s| **s == Waiting).count(),
+        1,
+        "{seen:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_disk_that_cannot_be_measured_does_not_hold_a_download() {
+    let f = Fixture::new(&[("T.lua", T)], min_free_mb(100));
+    f.disk.set(|_| None);
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One")]))
+        .await
+        .unwrap();
+
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+}
+
+/// The fake-clock times of the page requests of a 4-page chapter of 1 KB pages, and the time
+/// the task finished at, at a limit of `kbps` KB/s (no FMD2 behaviour: issue #309).
+async fn page_times_at(kbps: u32) -> (Vec<Duration>, Duration) {
+    let f = Fixture::new(
+        &[("T.lua", T)],
+        json!({"connections": {"max_download_kbps": kbps}}),
+    );
+    *f.transport.page_size.lock().unwrap() = 1024;
+    let manager = DownloadManager::open(f.config().with_clock(f.transport.clock.clone()))
+        .await
+        .unwrap();
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/4", "One")]))
+        .await
+        .unwrap();
+
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished));
+    (f.transport.times("/img/"), f.transport.clock.elapsed())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn under_a_speed_limit_a_tasks_pages_are_spread_over_time() {
+    let (pages, finished) = page_times_at(1).await;
+
+    let secs = Duration::from_secs;
+    // Each 1 KB page is paid for once it is in: one page a second.
+    assert_eq!(pages, [secs(0), secs(1), secs(2), secs(3)]);
+    assert_eq!(finished, secs(4));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_a_speed_limit_a_tasks_pages_are_not_held_back() {
+    let (pages, finished) = page_times_at(0).await;
+
+    assert_eq!(pages, [Duration::ZERO; 4]);
+    assert_eq!(finished, Duration::ZERO);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_speed_limit_is_shared_by_every_thread_of_every_task() {
+    let f = Fixture::new(
+        &[("T.lua", T)],
+        json!({"connections": {
+            "max_download_kbps": 1, "max_parallel_tasks": 2, "threads_per_task": 2
+        }}),
+    );
+    *f.transport.page_size.lock().unwrap() = 1024;
+    let manager = DownloadManager::open(f.config().with_clock(f.transport.clock.clone()))
+        .await
+        .unwrap();
+    let mut events = manager.subscribe();
+    let mut ids = Vec::new();
+    for title in ["One", "Two"] {
+        let mut download = f.download("t", &[("/c/4", title)]);
+        download.manga_link = format!("/{title}");
+        download.title = title.into();
+        ids.push(manager.add_task(download).await.unwrap());
+    }
+
+    // Both at once: waiting for one would drop the other's events.
+    let mut ended = HashMap::new();
+    let wait = async {
+        while ended.len() < ids.len() {
+            if let EngineEvent::Status { task, status, .. } = events.recv().await.unwrap()
+                && matches!(status, TaskStatus::Finished | TaskStatus::Failed)
+            {
+                ended.insert(task, status);
+            }
+        }
+    };
+    tokio::time::timeout(PATIENCE, wait).await.unwrap();
+    for id in ids {
+        assert_eq!(ended[&id], TaskStatus::Finished);
+    }
+    // 8 pages of 1 KB at 1 KB/s in total, however many threads fetch them.
+    assert_eq!(f.transport.clock.elapsed(), Duration::from_secs(8));
+}
+
 /// A local clock that moves only when told; its sleeps end once it has moved far enough.
-struct FakeClock {
+struct FakeWallClock {
     /// Seconds since midnight of the first day.
     secs: tokio::sync::watch::Sender<u64>,
 }
 
-impl FakeClock {
-    fn at(hour: u64, minute: u64) -> Arc<FakeClock> {
-        Arc::new(FakeClock {
+impl FakeWallClock {
+    fn at(hour: u64, minute: u64) -> Arc<FakeWallClock> {
+        Arc::new(FakeWallClock {
             secs: tokio::sync::watch::channel(hour * 3600 + minute * 60).0,
         })
     }
@@ -1255,7 +1592,7 @@ impl FakeClock {
 
 const DAY_SECS: u64 = 24 * 3600;
 
-impl Clock for FakeClock {
+impl WallClock for FakeWallClock {
     fn now(&self) -> jiff::civil::Time {
         let secs = *self.secs.borrow() % DAY_SECS;
         jiff::civil::time(
@@ -1281,9 +1618,9 @@ fn night_only() -> Value {
 }
 
 impl Fixture {
-    async fn manager_at(&self, clock: &Arc<FakeClock>) -> DownloadManager {
-        let clock: Arc<dyn Clock> = clock.clone();
-        DownloadManager::open(self.config().with_clock(clock))
+    async fn manager_at(&self, clock: &Arc<FakeWallClock>) -> DownloadManager {
+        let clock: Arc<dyn WallClock> = clock.clone();
+        DownloadManager::open(self.config().with_wall_clock(clock))
             .await
             .unwrap()
     }
@@ -1296,7 +1633,7 @@ impl Fixture {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_waiting_task_outside_the_window_starts_when_the_window_opens() {
     let f = Fixture::new(&[("T.lua", T)], night_only());
-    let clock = FakeClock::at(12, 0);
+    let clock = FakeWallClock::at(12, 0);
     let manager = f.manager_at(&clock).await;
     let mut events = manager.subscribe();
     let id = manager
@@ -1317,7 +1654,7 @@ async fn a_waiting_task_outside_the_window_starts_when_the_window_opens() {
 async fn a_running_task_waits_after_its_chapter_when_the_window_closes() {
     let f = Fixture::new(&[("T.lua", T)], night_only());
     f.transport.hold("/img/c/1/");
-    let clock = FakeClock::at(6, 50);
+    let clock = FakeWallClock::at(6, 50);
     let manager = f.manager_at(&clock).await;
     let mut events = manager.subscribe();
     let id = manager
@@ -1354,7 +1691,7 @@ async fn a_running_task_waits_after_its_chapter_when_the_window_closes() {
 async fn with_the_schedule_off_tasks_download_at_any_hour() {
     let settings = json!({"connections": {"schedule_enabled": false, "schedule_start": "23:00", "schedule_end": "07:00"}});
     let f = Fixture::new(&[("T.lua", T)], settings);
-    let clock = FakeClock::at(6, 59);
+    let clock = FakeWallClock::at(6, 59);
     let manager = f.manager_at(&clock).await;
     let mut events = manager.subscribe();
     let id = manager

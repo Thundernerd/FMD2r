@@ -65,3 +65,16 @@ test('add by URL reports a URL no module handles', async ({ page }) => {
 	await expect(page.getByRole('alert')).toContainText('No module');
 	await expect(page).toHaveURL('/');
 });
+
+test('inbox can be marked read and cleared', async ({ page }) => {
+	await page.goto('/');
+	const bell = page.getByRole('button', { name: /Inbox/ });
+	await bell.click();
+	const popover = page.getByRole('dialog', { name: 'Inbox' });
+
+	await popover.getByRole('button', { name: 'Mark all read' }).click();
+	await expect(bell.locator('.badge')).toHaveCount(0);
+	await popover.getByRole('button', { name: 'Clear read' }).click();
+
+	await expect(popover).toContainText('Nothing needs you.');
+});

@@ -9,8 +9,8 @@ use jiff::civil::Time;
 
 use crate::settings::ConnectionSettings;
 
-/// The server's local time, for the download schedule.
-pub trait Clock: Send + Sync + 'static {
+/// The server's local wall-clock time, for the download schedule.
+pub trait WallClock: Send + Sync + 'static {
     /// The local time of day.
     fn now(&self) -> Time;
 
@@ -19,9 +19,9 @@ pub trait Clock: Send + Sync + 'static {
 }
 
 /// The system's clock and time zone.
-pub struct SystemClock;
+pub struct SystemWallClock;
 
-impl Clock for SystemClock {
+impl WallClock for SystemWallClock {
     fn now(&self) -> Time {
         jiff::Zoned::now().time()
     }
