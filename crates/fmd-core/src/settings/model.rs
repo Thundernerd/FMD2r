@@ -9,6 +9,8 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+use crate::notifications::NotificationType;
+
 /// Every application setting. Stored one group per key in `app.db`'s `settings` table.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(default)]
@@ -803,10 +805,8 @@ pub struct NtfySettings {
     /// Access token sent as `Authorization: Bearer <token>`; empty for none. Stored encrypted;
     /// the API only shows whether it is set.
     pub token: String,
-    /// Send new and missing chapters.
-    pub new_chapters: bool,
-    /// Send warnings and errors: failed downloads, a failed library check, module problems.
-    pub problems: bool,
+    /// The kinds of event to send.
+    pub types: Vec<NotificationType>,
 }
 
 impl Default for NtfySettings {
@@ -815,8 +815,7 @@ impl Default for NtfySettings {
             enabled: false,
             topic_url: String::new(),
             token: String::new(),
-            new_chapters: true,
-            problems: true,
+            types: NotificationType::defaults(),
         }
     }
 }
@@ -829,10 +828,8 @@ pub struct DiscordSettings {
     /// `https://discord.com/api/webhooks/<id>/<token>`. It carries its own token, so it is stored
     /// encrypted and the API only shows whether it is set.
     pub webhook_url: String,
-    /// Send new and missing chapters.
-    pub new_chapters: bool,
-    /// Send warnings and errors: failed downloads, a failed library check, module problems.
-    pub problems: bool,
+    /// The kinds of event to send.
+    pub types: Vec<NotificationType>,
 }
 
 impl Default for DiscordSettings {
@@ -840,8 +837,7 @@ impl Default for DiscordSettings {
         Self {
             enabled: false,
             webhook_url: String::new(),
-            new_chapters: true,
-            problems: true,
+            types: NotificationType::defaults(),
         }
     }
 }
@@ -855,10 +851,8 @@ pub struct WebhookSettings {
     /// The `Authorization` header's value, e.g. `Bearer <token>`; empty for none. Stored
     /// encrypted; the API only shows whether it is set.
     pub authorization: String,
-    /// Send new and missing chapters.
-    pub new_chapters: bool,
-    /// Send warnings and errors: failed downloads, a failed library check, module problems.
-    pub problems: bool,
+    /// The kinds of event to send.
+    pub types: Vec<NotificationType>,
 }
 
 impl Default for WebhookSettings {
@@ -867,8 +861,7 @@ impl Default for WebhookSettings {
             enabled: false,
             url: String::new(),
             authorization: String::new(),
-            new_chapters: true,
-            problems: true,
+            types: NotificationType::defaults(),
         }
     }
 }

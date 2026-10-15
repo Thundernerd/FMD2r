@@ -1,4 +1,5 @@
-//! Each notification channel's request for an inbox event (issue #268, "Seams under test").
+//! Each notification channel's request for an inbox event (issues #268 and #299, "Seams under
+//! test").
 //!
 //! Expected values: ntfy's publishing API (https://docs.ntfy.sh/publish/: `POST` to the topic,
 //! `Title`/`Priority`/`Click` headers, `Authorization: Bearer <token>`, RFC 2047 for non-ASCII
@@ -8,7 +9,9 @@
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 
-use fmd_core::notifications::{Channel, Notification, Request, request, requests};
+use fmd_core::notifications::{
+    Channel, Notification, NotificationType, Request, request, requests,
+};
 use fmd_core::settings::Settings;
 use fmd_store::EventSeverity;
 use serde_json::{Value, json};
@@ -188,11 +191,11 @@ fn channels(settings: &Settings, notification: &Notification) -> Vec<Channel> {
 }
 
 #[test]
-fn only_channels_that_are_on_and_take_the_event_are_sent_to() {
+fn only_channels_that_are_on_and_tick_the_events_type_are_sent_to() {
     let settings = settings(json!({"notifications": {
         "ntfy": {"enabled": true, "topic_url": "https://ntfy.sh/t"},
         "discord": {"enabled": true, "webhook_url": "https://discord.com/api/webhooks/1/abc",
-                    "problems": false},
+                    "types": ["new_chapters", "missing_chapters"]},
         "webhook": {"enabled": false, "url": "http://n8n.local/webhook/fmd"},
     }}));
     assert_eq!(
@@ -203,19 +206,86 @@ fn only_channels_that_are_on_and_take_the_event_are_sent_to() {
 }
 
 #[test]
+fn a_channel_that_is_off_is_not_sent_to_whatever_it_ticks() {
+    let settings = settings(json!({"notifications": {"webhook": {
+        "enabled": false, "url": "http://n8n.local/webhook/fmd",
+        "types": ["new_chapters", "download_failed"],
+    }}}));
+    assert_eq!(channels(&settings, &new_chapters()), []);
+    assert_eq!(channels(&settings, &download_failed()), []);
+}
+
+#[test]
 fn a_channel_on_without_a_url_is_not_sent_to() {
     let settings = settings(json!({"notifications": {"ntfy": {"enabled": true}}}));
     assert_eq!(channels(&settings, &new_chapters()), []);
 }
 
-/// "New chapters" takes new and missing chapters only, "Problems" warnings and errors: other
-/// news, like a completed series removed from the library, goes to neither.
+fn module_update() -> Notification {
+    Notification {
+        kind: "module_update".into(),
+        severity: EventSeverity::Warning,
+        title: "Module update failed".into(),
+        body: "MangaDex: checksum mismatch".into(),
+        created_at: "2026-10-13T10:00:00Z".into(),
+    }
+}
+
+/// "Problems" used to send every warning; now a channel picks the problems it wants.
 #[test]
-fn other_library_news_goes_to_no_channel() {
+fn unticking_module_updates_stops_a_module_warning() {
+    let mut settings = ntfy();
+    assert_eq!(channels(&settings, &module_update()), [Channel::Ntfy]);
+    settings
+        .notifications
+        .ntfy
+        .types
+        .retain(|t| *t != NotificationType::ModuleUpdate);
+    assert_eq!(channels(&settings, &module_update()), []);
+    assert_eq!(channels(&settings, &download_failed()), [Channel::Ntfy]);
+}
+
+/// Info events are sent when their type is ticked, e.g. a finished folder move; a kind with no
+/// type, like a test notification, goes to no channel.
+#[test]
+fn any_ticked_type_is_sent_whatever_its_severity() {
+    let settings = settings(json!({"notifications": {"ntfy": {
+        "enabled": true, "topic_url": "https://ntfy.sh/t",
+        "types": ["downloads_moved", "completed"],
+    }}}));
+    let mut moved = new_chapters();
+    moved.kind = "downloads_moved".into();
+    assert_eq!(channels(&settings, &moved), [Channel::Ntfy]);
+    let mut completed = new_chapters();
+    completed.kind = "completed".into();
+    assert_eq!(channels(&settings, &completed), [Channel::Ntfy]);
+    assert_eq!(channels(&settings, &new_chapters()), []);
+    let mut test = new_chapters();
+    test.kind = "test".into();
+    assert_eq!(channels(&Settings::default(), &test), []);
+}
+
+/// New channels take what "New chapters" and "Problems" took before: new and missing chapters
+/// and every kind that can be a problem (a missing-chapter check that could not check some
+/// series is a warning), but no other news.
+#[test]
+fn a_new_channel_takes_chapters_and_problems() {
     let settings = ntfy();
     let mut missing = new_chapters();
     missing.kind = "missing_chapters".into();
     assert_eq!(channels(&settings, &missing), [Channel::Ntfy]);
+    for kind in [
+        "download_failed",
+        "favorites_check_failed",
+        "module_update",
+        "downloads_moved",
+        "comic_server",
+        "missing_check",
+    ] {
+        let mut problem = download_failed();
+        problem.kind = kind.into();
+        assert_eq!(channels(&settings, &problem), [Channel::Ntfy], "{kind}");
+    }
     let mut completed = new_chapters();
     completed.kind = "completed".into();
     assert_eq!(channels(&settings, &completed), []);

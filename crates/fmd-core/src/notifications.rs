@@ -17,9 +17,6 @@ use crate::settings::Settings;
 /// (https://docs.discord.com/developers/resources/webhook, Execute Webhook).
 const DISCORD_CONTENT_LIMIT: usize = 2000;
 
-/// The inbox event kinds of a library check's finds (`fmd_core::favorites`).
-const NEW_CHAPTER_KINDS: [&str; 2] = ["new_chapters", "missing_chapters"];
-
 /// A service notifications are sent to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
@@ -27,6 +24,77 @@ pub enum Channel {
     Ntfy,
     Discord,
     Webhook,
+}
+
+/// A kind of event a channel can be set to send, one per inbox event kind. Serialised as the
+/// kind, e.g. `download_failed`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationType {
+    /// A library check found new chapters (`fmd_core::favorites`).
+    NewChapters,
+    /// A library check found chapters missing from the download folder.
+    MissingChapters,
+    /// A missing-chapter check that found nothing missing.
+    MissingCheck,
+    /// A completed series was removed from the library.
+    Completed,
+    /// A download failed (`fmd_server::notifications`).
+    DownloadFailed,
+    /// A library check failed.
+    FavoritesCheckFailed,
+    /// Modules were updated, or updating them failed (`fmd_core::module_updater`).
+    ModuleUpdate,
+    /// Downloads were moved to another folder (`fmd_server::folder_move`).
+    DownloadsMoved,
+    /// The comic server was asked to rescan (`fmd_server::comic_server`).
+    ComicServer,
+}
+
+impl NotificationType {
+    /// What "New chapters" used to send, and new channels send.
+    pub const CHAPTERS: [NotificationType; 2] = [
+        NotificationType::NewChapters,
+        NotificationType::MissingChapters,
+    ];
+
+    /// What "Problems" used to send, and new channels send: every kind that could be a warning
+    /// or an error. A missing-chapter check is one when it could not check some series
+    /// (`fmd_core::favorites::add_failures`).
+    pub const PROBLEMS: [NotificationType; 6] = [
+        NotificationType::DownloadFailed,
+        NotificationType::FavoritesCheckFailed,
+        NotificationType::ModuleUpdate,
+        NotificationType::DownloadsMoved,
+        NotificationType::ComicServer,
+        NotificationType::MissingCheck,
+    ];
+
+    /// The type of the inbox event kind `kind`; `None` for a kind no channel can pick, like a
+    /// test notification.
+    pub fn of_kind(kind: &str) -> Option<NotificationType> {
+        serde_json::from_value(serde_json::Value::from(kind)).ok()
+    }
+
+    /// The name the settings show.
+    pub fn label(self) -> &'static str {
+        match self {
+            NotificationType::NewChapters => "New chapters",
+            NotificationType::MissingChapters => "Missing chapters",
+            NotificationType::MissingCheck => "Missing-chapter check found nothing",
+            NotificationType::Completed => "Completed series removed",
+            NotificationType::DownloadFailed => "Download failed",
+            NotificationType::FavoritesCheckFailed => "Library check failed",
+            NotificationType::ModuleUpdate => "Module updates",
+            NotificationType::DownloadsMoved => "Downloads moved",
+            NotificationType::ComicServer => "Comic server rescan",
+        }
+    }
+
+    /// The types a channel sends by default: [`Self::CHAPTERS`] and [`Self::PROBLEMS`].
+    pub fn defaults() -> Vec<NotificationType> {
+        [Self::CHAPTERS.as_slice(), Self::PROBLEMS.as_slice()].concat()
+    }
 }
 
 /// What is sent: an inbox event, or a failure reported alongside it.
@@ -43,15 +111,9 @@ pub struct Notification {
 }
 
 impl Notification {
-    /// A warning or an error, sent to the channels that take "Problems".
+    /// A warning or an error, which ntfy sends at high priority.
     pub fn is_problem(&self) -> bool {
         self.severity != EventSeverity::Info
-    }
-
-    /// New or missing chapters found by a library check, sent to the channels that take "New
-    /// chapters".
-    pub fn is_new_chapters(&self) -> bool {
-        !self.is_problem() && NEW_CHAPTER_KINDS.contains(&self.kind.as_str())
     }
 }
 
@@ -75,29 +137,19 @@ impl Channel {
         }
     }
 
-    /// Whether the channel is on and takes `notification`'s kind of event.
+    /// Whether the channel is on and ticks `notification`'s type.
     fn takes(self, settings: &Settings, notification: &Notification) -> bool {
         let n = &settings.notifications;
-        let (enabled, new_chapters, problems) = match self {
-            Channel::Ntfy => (n.ntfy.enabled, n.ntfy.new_chapters, n.ntfy.problems),
-            Channel::Discord => (
-                n.discord.enabled,
-                n.discord.new_chapters,
-                n.discord.problems,
-            ),
-            Channel::Webhook => (
-                n.webhook.enabled,
-                n.webhook.new_chapters,
-                n.webhook.problems,
-            ),
+        let (enabled, types) = match self {
+            Channel::Ntfy => (n.ntfy.enabled, &n.ntfy.types),
+            Channel::Discord => (n.discord.enabled, &n.discord.types),
+            Channel::Webhook => (n.webhook.enabled, &n.webhook.types),
         };
-        enabled
-            && ((problems && notification.is_problem())
-                || (new_chapters && notification.is_new_chapters()))
+        enabled && NotificationType::of_kind(&notification.kind).is_some_and(|t| types.contains(&t))
     }
 }
 
-/// The request of every channel that is on, has a URL and takes `notification`'s kind of event.
+/// The request of every channel that is on, has a URL and ticks `notification`'s type.
 pub fn requests(settings: &Settings, notification: &Notification) -> Vec<(Channel, Request)> {
     Channel::ALL
         .into_iter()

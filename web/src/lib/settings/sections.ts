@@ -1,4 +1,4 @@
-import type { Channel, OutputFormat } from '#lib/api/types.ts';
+import type { Channel, NotificationType, OutputFormat } from '#lib/api/types.ts';
 import type { Choice, Control, Field } from './fields.ts';
 
 /** A group of settings: one entry in the table of contents. */
@@ -114,6 +114,19 @@ export const NOTIFICATION_CHANNELS: NotificationChannel[] = [
 	{ id: 'ntfy', name: 'ntfy' },
 	{ id: 'discord', name: 'Discord' },
 	{ id: 'webhook', name: 'Webhook' }
+];
+
+/** The kinds of event a channel can send (`fmd_core::notifications::NotificationType::label`). */
+const NOTIFICATION_TYPES: { value: NotificationType; label: string }[] = [
+	{ value: 'new_chapters', label: 'New chapters' },
+	{ value: 'missing_chapters', label: 'Missing chapters' },
+	{ value: 'missing_check', label: 'Missing-chapter check found nothing' },
+	{ value: 'completed', label: 'Completed series removed' },
+	{ value: 'download_failed', label: 'Download failed' },
+	{ value: 'favorites_check_failed', label: 'Library check failed' },
+	{ value: 'module_update', label: 'Module updates' },
+	{ value: 'downloads_moved', label: 'Downloads moved' },
+	{ value: 'comic_server', label: 'Comic server rescan' }
 ];
 
 /** Where a channel sends to, and its credentials. */
@@ -389,12 +402,11 @@ export const SETTINGS_SECTIONS: Section[] = [
 		fields: NOTIFICATION_CHANNELS.flatMap(({ id, name }) => [
 			checkbox(`notifications.${id}.enabled`, `Send to ${name}`),
 			...channelFields(id),
-			checkbox(`notifications.${id}.new_chapters`, 'New chapters', 'New and missing chapters.'),
-			checkbox(
-				`notifications.${id}.problems`,
-				'Problems',
-				'Failed downloads, a failed library check, broken modules.'
-			)
+			{
+				path: `notifications.${id}.types`,
+				label: 'Send these',
+				control: { kind: 'checklist', choices: NOTIFICATION_TYPES }
+			}
 		])
 	},
 	{

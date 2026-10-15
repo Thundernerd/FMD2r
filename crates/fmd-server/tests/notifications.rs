@@ -208,7 +208,7 @@ async fn harness(logs: LogBuffer) -> Harness {
                 "ntfy": {"enabled": true, "topic_url": format!("{}/ntfy", stub.url),
                          "token": "tk"},
                 "discord": {"enabled": true, "webhook_url": format!("{}/discord", stub.url),
-                            "problems": false},
+                            "types": ["new_chapters", "missing_chapters"]},
                 "webhook": {"enabled": false, "url": format!("{}/webhook", stub.url)},
             },
         }))
@@ -312,7 +312,7 @@ fn header<'a>(received: &'a Received, name: &str) -> Option<&'a str> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn new_chapters_go_to_every_enabled_channel_that_takes_them() {
+async fn new_chapters_go_to_every_enabled_channel_that_ticks_them() {
     let h = harness(logs()).await;
 
     let report = h
@@ -340,7 +340,7 @@ async fn new_chapters_go_to_every_enabled_channel_that_takes_them() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_failed_download_shows_in_the_inbox_and_goes_to_the_channels_that_take_problems() {
+async fn a_failed_download_shows_in_the_inbox_and_goes_to_the_channels_that_tick_it() {
     let h = harness(logs()).await;
 
     let id = add(&h.state, "/c/0").await;

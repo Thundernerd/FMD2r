@@ -89,6 +89,17 @@
 		row?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus();
 	}
 
+	/** Ticks or unticks `choice`, keeping the ticked values in the choices' order. */
+	function onTick(choice: Json, ticked: boolean) {
+		const picked = Array.isArray(value) ? value : [];
+		draft.set(
+			field.path,
+			choicesOf(field.control)
+				.map((c) => c.value as Json)
+				.filter((v) => (v === choice ? ticked : picked.includes(v)))
+		);
+	}
+
 	function onSelect(index: number) {
 		const control = field.control;
 		if (control.kind !== 'select') return;
@@ -110,6 +121,21 @@
 			/>
 			<span>{field.label}</span>
 		</label>
+	{:else if field.control.kind === 'checklist'}
+		<fieldset {id} class="checklist" aria-describedby={describedBy}>
+			<legend class="caption">{field.label}</legend>
+			{#each field.control.choices as choice, i (choice.value)}
+				<label class="check" for="{id}-{i}">
+					<input
+						id="{id}-{i}"
+						type="checkbox"
+						checked={Array.isArray(value) && value.includes(choice.value)}
+						onchange={(e) => onTick(choice.value, e.currentTarget.checked)}
+					/>
+					<span>{choice.label}</span>
+				</label>
+			{/each}
+		</fieldset>
 	{:else if field.control.kind === 'swatches' || field.control.kind === 'themes'}
 		{@const kind = field.control.kind}
 		{@const checked = field.control.choices.findIndex((c) => c.value === value)}
@@ -263,6 +289,22 @@
 	}
 	.input {
 		max-width: 480px;
+	}
+	.checklist {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-1);
+		border: 0;
+		margin: 0;
+		padding: 0;
+		min-width: 0;
+	}
+	.checklist legend {
+		padding: 0;
+		margin-bottom: var(--sp-1);
+	}
+	.checklist .check {
+		font-weight: 400;
 	}
 	.secret {
 		display: flex;
