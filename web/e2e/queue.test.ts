@@ -93,3 +93,33 @@ test('the Finished group sorts newest first, and remembers oldest first across a
 	await expect(sort).toHaveText('Oldest first');
 	await expect(finished).toHaveText([/Dandadan/, /Frieren/]);
 });
+
+test('Move to top puts a waiting task first', async ({ page }) => {
+	await page.goto('/queue');
+	const stopped = group(page, 'Stopped / failed');
+	await stopped
+		.getByRole('listitem', { name: 'The Apothecary Diaries' })
+		.getByRole('button', { name: 'Retry' })
+		.click();
+	await stopped
+		.getByRole('listitem', { name: 'Sakamoto Days' })
+		.getByRole('button', { name: 'Start' })
+		.click();
+	const waiting = group(page, 'Waiting').getByRole('listitem');
+	await expect(waiting).toHaveCount(3);
+	const order = () => waiting.evaluateAll((rows) => rows.map((r) => r.getAttribute('aria-label')));
+	expect(await order()).toEqual(['Blue Lock', 'The Apothecary Diaries', 'Sakamoto Days']);
+
+	await waiting.nth(2).getByRole('button', { name: 'Move to top' }).click();
+	await expect.poll(order).toEqual(['Sakamoto Days', 'Blue Lock', 'The Apothecary Diaries']);
+});
+
+test('the move buttons are hidden while a filter is on', async ({ page }) => {
+	await page.goto('/queue');
+	const row = group(page, 'Waiting').getByRole('listitem', { name: 'Blue Lock' });
+	await expect(row.getByRole('button', { name: 'Move up' })).toBeVisible();
+
+	await page.getByRole('searchbox', { name: 'Filter text' }).fill('blue');
+	await expect(row.getByRole('button', { name: 'Move up' })).toHaveCount(0);
+	await expect(group(page, 'Waiting')).toContainText('Clear the filter to reorder.');
+});

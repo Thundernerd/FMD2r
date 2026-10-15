@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskProgress, TaskSummary } from '#lib/api/types.ts';
-import { QueueStore } from '#lib/queue.svelte.ts';
+import { moveWaiting, QueueStore } from '#lib/queue.svelte.ts';
 
 const task = (over: Partial<TaskSummary> & Pick<TaskSummary, 'id' | 'title'>): TaskSummary => ({
 	module_id: 'mangadex',
@@ -219,5 +219,39 @@ describe('queue store', () => {
 		answer(queue());
 		await vi.runAllTimersAsync();
 		expect(store.tasks.find((t) => t.id === 3)?.status).toBe('stopped');
+	});
+});
+
+describe('moving a waiting task', () => {
+	/** Waiting tasks 2, 4 and 6 among tasks of the other groups. */
+	const mixed = (): TaskSummary[] => [
+		task({ id: 1, title: 'Kagurabachi', status: 'downloading' }),
+		task({ id: 2, title: 'Blue Lock', status: 'waiting' }),
+		task({ id: 3, title: 'Apothecary Diaries', status: 'failed' }),
+		task({ id: 4, title: 'Vagabond', status: 'waiting' }),
+		task({ id: 5, title: 'Blame!', status: 'finished' }),
+		task({ id: 6, title: 'Dorohedoro', status: 'waiting' }),
+		task({ id: 7, title: 'Berserk', status: 'stopped' })
+	];
+
+	it('moves it to the top of the waiting tasks', () => {
+		expect(moveWaiting(mixed(), 6, 'top')).toEqual([1, 6, 3, 2, 5, 4, 7]);
+	});
+
+	it('moves it up past the waiting task before it', () => {
+		expect(moveWaiting(mixed(), 6, 'up')).toEqual([1, 2, 3, 6, 5, 4, 7]);
+	});
+
+	it('moves it down past the waiting task after it', () => {
+		expect(moveWaiting(mixed(), 2, 'down')).toEqual([1, 4, 3, 2, 5, 6, 7]);
+	});
+
+	it('moves it to the bottom of the waiting tasks', () => {
+		expect(moveWaiting(mixed(), 2, 'bottom')).toEqual([1, 4, 3, 6, 5, 2, 7]);
+	});
+
+	it('leaves the order alone when it cannot move further', () => {
+		expect(moveWaiting(mixed(), 2, 'up')).toEqual([1, 2, 3, 4, 5, 6, 7]);
+		expect(moveWaiting(mixed(), 6, 'bottom')).toEqual([1, 2, 3, 4, 5, 6, 7]);
 	});
 });
