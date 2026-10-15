@@ -26,7 +26,8 @@ pub enum Channel {
     Webhook,
 }
 
-/// A kind of event a channel can be set to send, one per inbox event kind. Serialised as the
+/// A kind of event a channel can be set to send, one per inbox event kind or failure reported
+/// alongside them. Serialised as the
 /// kind, e.g. `download_failed`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -41,6 +42,9 @@ pub enum NotificationType {
     Completed,
     /// A download failed (`fmd_server::notifications`).
     DownloadFailed,
+    /// A download finished (`fmd_server::notifications`). Sent to the channels only, never to
+    /// the inbox; off by default, as it fires for every task.
+    DownloadCompleted,
     /// A library check failed.
     FavoritesCheckFailed,
     /// Modules were updated, or updating them failed (`fmd_core::module_updater`).
@@ -84,6 +88,7 @@ impl NotificationType {
             NotificationType::MissingCheck => "Missing-chapter check found nothing",
             NotificationType::Completed => "Completed series removed",
             NotificationType::DownloadFailed => "Download failed",
+            NotificationType::DownloadCompleted => "Download completed",
             NotificationType::FavoritesCheckFailed => "Library check failed",
             NotificationType::ModuleUpdate => "Module updates",
             NotificationType::DownloadsMoved => "Downloads moved",
