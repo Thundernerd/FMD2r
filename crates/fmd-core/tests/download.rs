@@ -1095,3 +1095,120 @@ async fn a_zip_gets_no_metadata_files() {
         ["001.png", "002.png"]
     );
 }
+
+/// A module whose chapters list no pages.
+const EMPTY: &str = r#"
+function Init() local m = NewWebsiteModule(); m.ID='e'; m.Name='E'; m.RootURL='https://e'; m.OnGetPageNumber='GPN' end
+function GPN() return true end
+"#;
+
+/// Runs a task of `module`'s `chapters` until it fails; returns the reason the first `Failed`
+/// status event carried, and the task once its run has ended.
+async fn failing_chapters(
+    f: &Fixture,
+    module: &str,
+    chapters: &[(&str, &str)],
+) -> (Option<String>, fmd_store::Task) {
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download(module, chapters))
+        .await
+        .unwrap();
+    let failed = async {
+        loop {
+            if let EngineEvent::Status {
+                task,
+                status: TaskStatus::Failed,
+                error,
+                ..
+            } = events.recv().await.unwrap()
+                && task == id
+            {
+                return error;
+            }
+        }
+    };
+    let error = tokio::time::timeout(PATIENCE, failed)
+        .await
+        .unwrap_or_else(|_| panic!("task {id:?} did not fail"));
+    let ended = async {
+        loop {
+            let tasks = manager.list().await.unwrap();
+            let info = tasks.into_iter().find(|t| t.task.id == id).unwrap();
+            if !info.running {
+                return info.task;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    };
+    let task = tokio::time::timeout(PATIENCE, ended)
+        .await
+        .unwrap_or_else(|_| panic!("task {id:?} kept running"));
+    (error, task)
+}
+
+/// [`failing_chapters`] for a one-chapter task.
+async fn failing(f: &Fixture, module: &str, chapter: &str) -> (Option<String>, fmd_store::Task) {
+    failing_chapters(f, module, &[(chapter, "One")]).await
+}
+
+fn no_retries() -> Value {
+    json!({"output": {"format": "cbz"}, "connections": {"auto_retry_failed_tasks": 0}})
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chapter_without_pages_fails_the_task_saying_so() {
+    let f = Fixture::new(&[("E.lua", EMPTY)], no_retries());
+    let (event, task) = failing(&f, "e", "/c").await;
+    assert_eq!(event.as_deref(), Some("Chapter \"One\" has no pages"));
+    assert_eq!(task.error, event);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chapter_missing_a_page_fails_the_task_saying_how_many() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/3/3", 2);
+    let (event, task) = failing(&f, "t", "/c/3").await;
+    assert_eq!(
+        event.as_deref(),
+        Some("Chapter \"One\": 1 of 3 pages did not download")
+    );
+    assert_eq!(task.error, event);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_task_failing_several_chapters_says_why_each_failed() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/3/3", 2);
+    f.transport.fail("https://t/img/c/2/1", 2);
+    let (_, task) = failing_chapters(&f, "t", &[("/c/3", "One"), ("/c/2", "Two")]).await;
+    assert_eq!(
+        task.error.as_deref(),
+        Some(
+            "Chapters failed: Chapter \"One\": 1 of 3 pages did not download; \
+             Chapter \"Two\": 1 of 2 pages did not download"
+        )
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chapter_that_cannot_be_packed_fails_the_task_saying_why() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    // The pages can go in the chapter's folder, but the archive cannot go next to it.
+    let manga = f.out().join("Manga");
+    fs::create_dir_all(manga.join("One")).unwrap();
+    fs::set_permissions(&manga, fs::Permissions::from_mode(0o555)).unwrap();
+
+    let (event, task) = failing(&f, "t", "/c/2").await;
+    fs::set_permissions(&manga, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let event = event.unwrap();
+    let cause = event
+        .strip_prefix("Chapter \"One\": packing the chapter failed: ")
+        .unwrap_or_else(|| panic!("{event}"));
+    assert!(!cause.is_empty(), "{event}");
+    assert_eq!(task.error, Some(event));
+}

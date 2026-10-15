@@ -155,6 +155,7 @@ async fn failed_download(state: &AppState, task: TaskId, error: Option<String>) 
         module_id,
         task_id: Some(task),
         title: format!("Download failed: {title}"),
+        // A guard: the engine gives every failure a reason.
         body: serde_json::Value::String(error.unwrap_or_else(|| "No reason was given.".into())),
     }
 }

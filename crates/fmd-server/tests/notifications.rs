@@ -356,6 +356,22 @@ async fn a_failed_download_shows_in_the_inbox_and_goes_to_the_channels_that_tick
     assert_eq!(item["title"], "Download failed: Manga");
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_downloads_inbox_item_and_notification_say_why_it_failed() {
+    let h = harness(logs()).await;
+
+    let id = add(&h.state, "/c/0").await;
+    wait_for(&h.state, id, "failed").await;
+
+    // The engine's reason for the chapter, not the "No reason was given." fallback.
+    let reason = "Chapter \"Ch\" has no pages";
+    let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
+    assert_eq!(inbox[0]["body"], reason, "{inbox}");
+    assert_eq!(h.stub.paths_after(1).await, ["/ntfy"]);
+    let ntfy = &h.stub.received()[0];
+    assert!(ntfy.body.contains(reason), "{}", ntfy.body);
+}
+
 /// A channel answering 500 and one that never answers delay neither the check nor a download,
 /// and each failure is logged as a warning naming the channel.
 #[tokio::test]

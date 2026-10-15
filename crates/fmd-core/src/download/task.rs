@@ -63,6 +63,8 @@ pub(super) struct TaskRun<'a> {
     /// As queued; a module changing `TASK.ChapterLinks`/`ChapterNames` does not affect these.
     chapter_links: Vec<String>,
     chapter_names: Vec<String>,
+    /// Why each chapter failed in this run.
+    chapter_failures: Vec<Option<String>>,
     /// For `downloaded_chapters`.
     manga_link: String,
     pub(super) container: Mutex<Container>,
@@ -125,6 +127,7 @@ impl<'a> TaskRun<'a> {
             save_to: PathBuf::from(stored.save_to),
             chapter_links: chapters.iter().map(|c| c.link.clone()).collect(),
             chapter_names: chapters.iter().map(|c| c.name.clone()).collect(),
+            chapter_failures: vec![None; chapters.len()],
             manga_link: stored.link,
             container: Mutex::new(Container {
                 task,
@@ -152,8 +155,14 @@ impl<'a> TaskRun<'a> {
         self.terminate.is_terminated()
     }
 
+    /// Not for `Failed`: see [`Self::set_failed`].
     fn set_status(&self, status: TaskStatus) -> Result<(), EngineError> {
         self.inner.set_status(self.id, status, None)
+    }
+
+    fn set_failed(&self, reason: &str) -> Result<(), EngineError> {
+        self.inner
+            .set_status(self.id, TaskStatus::Failed, Some(reason))
     }
 
     pub(super) fn caller(&self, affinity: Affinity, http: Option<HttpSession>) -> Caller<'_> {
@@ -364,8 +373,7 @@ impl<'a> TaskRun<'a> {
             if let Err(e) = std::fs::create_dir_all(&self.working_dir) {
                 // `StatusFailedToCreateDir` (baseunits/uDownloadsManager.pas:717-725).
                 let error = format!("failed to create {}: {e}", self.working_dir.display());
-                self.inner
-                    .set_status(self.id, TaskStatus::Failed, Some(&error))?;
+                self.set_failed(&error)?;
                 self.log_failed(&error);
                 return Ok(());
             }
@@ -398,13 +406,17 @@ impl<'a> TaskRun<'a> {
             self.recover_interrupted_writes();
             self.check_for_exists(dynamic_page_link);
 
-            {
+            // A module listing no pages still gets one try at a page link
+            // (baseunits/uDownloadsManager.pas:1237-1240).
+            let listed_no_pages = {
                 let mut c = self.container();
-                if c.task.page_links.is_empty() {
+                let empty = c.task.page_links.is_empty();
+                if empty {
                     c.task.page_links.push(WAITING.to_owned());
                 }
                 c.task.page_number = page_count(&c.task.page_links);
-            }
+                empty
+            };
             if !dynamic_page_link && self.check_for_prepare() {
                 self.reset_phase();
                 self.set_status(TaskStatus::Preparing)?;
@@ -425,14 +437,13 @@ impl<'a> TaskRun<'a> {
                 return Ok(());
             }
 
-            let failed = {
+            let no_pages = {
                 let mut c = self.container();
                 c.task.page_number = page_count(&c.task.page_links);
                 c.task.page_links.is_empty()
             };
-            let failed = if failed {
-                tracing::warn!(target: "fmd_core", "task {}: chapter {} has no pages", self.id.0, self.chapter_link);
-                true
+            let failure = if no_pages {
+                Some(ChapterFailure::NoPages)
             } else {
                 self.reset_phase();
                 self.set_status(TaskStatus::Downloading)?;
@@ -440,21 +451,22 @@ impl<'a> TaskRun<'a> {
                 if self.terminated() {
                     return Ok(());
                 }
-                if self.check_for_finish(dynamic_page_link) {
-                    self.set_status(TaskStatus::Converting)?;
-                    if self.convert() {
-                        self.set_status(TaskStatus::Compressing)?;
-                        !self.compress()
-                    } else {
-                        true
-                    }
-                } else {
-                    true
-                }
+                self.finish_chapter(dynamic_page_link)?
+                    .err()
+                    .map(|failure| match failure {
+                        ChapterFailure::MissingPages { .. } if listed_no_pages => {
+                            ChapterFailure::NoPages
+                        }
+                        failure => failure,
+                    })
             };
-            if failed {
-                self.set_status(TaskStatus::Failed)?;
+            let reason = failure.map(|failure| failure.reason(&chapter_name));
+            if let Some(reason) = &reason {
+                tracing::warn!(target: "fmd_core", "task {}: {reason}", self.id.0);
+                self.set_failed(reason)?;
             }
+            let failed = reason.is_some();
+            self.chapter_failures[self.chapter] = reason;
             self.leave_chapter(failed)?;
 
             self.chapter += 1;
@@ -479,9 +491,20 @@ impl<'a> TaskRun<'a> {
         if self.first_failed_chapter().is_some() {
             self.chapter = 0;
             self.save_chapter_pointer()?;
-            self.set_status(TaskStatus::Failed)?;
-            let failed = self.failed_chapter_names().join(", ");
-            self.log_failed(&format!("chapters failed: {failed}"));
+            let failed = self.failed_chapters();
+            let reason = match failed.as_slice() {
+                // The reason its `Failed` event already gave.
+                [(_, Some(reason))] => reason.clone(),
+                _ => {
+                    let chapters: Vec<String> = failed
+                        .into_iter()
+                        .map(|(name, reason)| reason.unwrap_or_else(|| format!("{name:?}")))
+                        .collect();
+                    format!("Chapters failed: {}", chapters.join("; "))
+                }
+            };
+            self.set_failed(&reason)?;
+            self.log_failed(&reason);
             Ok(())
         } else {
             self.set_status(TaskStatus::Finished)?;
@@ -494,14 +517,33 @@ impl<'a> TaskRun<'a> {
         log_task(self.id, &self.title, format!("failed: {reason}"));
     }
 
-    fn failed_chapter_names(&self) -> Vec<String> {
+    /// The failed chapters' names, with why they failed when it was in this run.
+    fn failed_chapters(&self) -> Vec<(String, Option<String>)> {
         self.container()
             .chapters_status
             .iter()
             .zip(&self.chapter_names)
-            .filter(|(status, _)| **status == ChapterStatus::Failed)
-            .map(|(_, name)| format!("{name:?}"))
+            .zip(&self.chapter_failures)
+            .filter(|((status, _), _)| **status == ChapterStatus::Failed)
+            .map(|((_, name), reason)| (name.clone(), reason.clone()))
             .collect()
+    }
+
+    /// Checks every page came through, then converts and packs the chapter
+    /// (baseunits/uDownloadsManager.pas:1305-1328).
+    fn finish_chapter(
+        &self,
+        dynamic_page_link: bool,
+    ) -> Result<Result<(), ChapterFailure>, EngineError> {
+        if let Err(failure) = self.check_for_finish(dynamic_page_link) {
+            return Ok(Err(failure));
+        }
+        self.set_status(TaskStatus::Converting)?;
+        if let Err(cause) = self.convert() {
+            return Ok(Err(ChapterFailure::Other(cause)));
+        }
+        self.set_status(TaskStatus::Compressing)?;
+        Ok(self.compress().map_err(ChapterFailure::Other))
     }
 
     fn enter_chapter(&mut self) -> Result<(), EngineError> {
@@ -692,16 +734,18 @@ impl<'a> TaskRun<'a> {
     }
 
     /// `CheckForFinish` (baseunits/uDownloadsManager.pas:1066-1103).
-    fn check_for_finish(&self, dynamic_page_link: bool) -> bool {
+    fn check_for_finish(&self, dynamic_page_link: bool) -> Result<(), ChapterFailure> {
         let pages = self.container().task.page_links.len();
         if pages == 0 {
-            return false;
+            return Err(ChapterFailure::NoPages);
         }
         let missing = pages - self.check_for_exists(dynamic_page_link);
+        self.save_pages()
+            .map_err(|e| ChapterFailure::Other(format!("saving its pages failed: {e}")))?;
         if missing > 0 {
-            tracing::warn!(target: "fmd_core", "task {}: {missing} of {pages} pages of {} missing", self.id.0, self.chapter_link);
+            return Err(ChapterFailure::MissingPages { missing, pages });
         }
-        self.save_pages().is_ok() && missing == 0
+        Ok(())
     }
 
     fn page_files(&self, ext: &str) -> Vec<PathBuf> {
@@ -713,10 +757,10 @@ impl<'a> TaskRun<'a> {
 
     /// `TTaskThread.Convert` (baseunits/uDownloadsManager.pas:613-711): ImageMagick only; the
     /// built-in conversions happen as pages are saved.
-    fn convert(&self) -> bool {
+    fn convert(&self) -> Result<(), String> {
         let magick = &self.settings.images.imagemagick;
         if !magick.enabled {
-            return true;
+            return Ok(());
         }
         let options = MagickOptions {
             save_as: magick.save_as.to_ascii_lowercase(),
@@ -725,13 +769,9 @@ impl<'a> TaskRun<'a> {
                 .then(|| magick.compression.clone()),
             ..MagickOptions::default()
         };
-        match fmd_pack::magick_convert(&self.working_dir, &self.page_files(""), &options) {
-            Ok(_) => true,
-            Err(e) => {
-                tracing::warn!(target: "fmd_core", "task {}: ImageMagick: {e}", self.id.0);
-                false
-            }
-        }
+        fmd_pack::magick_convert(&self.working_dir, &self.page_files(""), &options)
+            .map(|_| ())
+            .map_err(|e| format!("converting the images failed: {e}"))
     }
 
     /// The metadata files the settings ask for, for the current chapter.
@@ -755,9 +795,9 @@ impl<'a> TaskRun<'a> {
     /// `TTaskThread.Compress` (baseunits/uDownloadsManager.pas:553-611, :579-590). The pages
     /// are moved into a folder named after the chapter first (the PDF/EPUB title,
     /// baseunits/uPacker.pas:186, :225), so other files stay out of the archive.
-    fn compress(&self) -> bool {
+    fn compress(&self) -> Result<(), String> {
         let Some(format) = pack_format(self.settings.output.format) else {
-            return true;
+            return Ok(());
         };
         let magick = &self.settings.images.imagemagick;
         let ext = if magick.enabled {
@@ -788,12 +828,28 @@ impl<'a> TaskRun<'a> {
             .and_then(|()| fmd_pack::pack(&staging, format, &self.pack_target(), &options));
         // Nothing to pack leaves the folder behind (the archive was already there).
         let _ = std::fs::remove_dir(&staging);
-        match packed {
-            Ok(_) => true,
-            Err(e) => {
-                tracing::warn!(target: "fmd_core", "task {}: failed to compress: {e}", self.id.0);
-                false
+        packed
+            .map(|_| ())
+            .map_err(|e| format!("packing the chapter failed: {e}"))
+    }
+}
+
+/// Why a chapter failed.
+enum ChapterFailure {
+    NoPages,
+    MissingPages { missing: usize, pages: usize },
+    Other(String),
+}
+
+impl ChapterFailure {
+    /// For the task's error, naming the chapter.
+    fn reason(&self, chapter_name: &str) -> String {
+        match self {
+            ChapterFailure::NoPages => format!("Chapter {chapter_name:?} has no pages"),
+            ChapterFailure::MissingPages { missing, pages } => {
+                format!("Chapter {chapter_name:?}: {missing} of {pages} pages did not download")
             }
+            ChapterFailure::Other(cause) => format!("Chapter {chapter_name:?}: {cause}"),
         }
     }
 }
