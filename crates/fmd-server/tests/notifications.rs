@@ -58,7 +58,8 @@ impl Transport for Site {
 }
 
 /// A module whose series `/manga` has chapters `/c/1` and `/c/2`, and whose chapter `/c/<n>` has
-/// `n` pages at `https://t/img/c/<n>/<page>`; chapter `/c/0` has no pages, so it fails.
+/// `n` pages at `https://t/img/c/<n>/<page>`; chapter `/c/0` (or any link ending in `/0`, such
+/// as `/d/0`) has no pages, so it fails.
 const T: &str = r#"
 function Init()
   local m = NewWebsiteModule(); m.ID='t'; m.Name='T'; m.RootURL='https://t'

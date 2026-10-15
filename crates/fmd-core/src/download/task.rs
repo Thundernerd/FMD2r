@@ -494,6 +494,7 @@ impl<'a> TaskRun<'a> {
             self.save_chapter_pointer()?;
             let failed = self.failed_chapters();
             let reason = match failed.as_slice() {
+                // One failed chapter is reported as is, without a list around it.
                 [(_, Some(reason))] => reason.clone(),
                 _ => {
                     let chapters: Vec<String> = failed
