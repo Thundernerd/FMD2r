@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Api, TaskAction } from '#lib/api/client.ts';
 	import type { TaskState, TaskSummary } from '#lib/api/types.ts';
-	import { groupOf, type QueueStore } from '#lib/queue.svelte.ts';
+	import { groupOf, moveWaiting, type QueueStore, type WaitingMove } from '#lib/queue.svelte.ts';
 	import { formatRate, percent } from '#lib/queue-format.ts';
 	import { seriesHref } from '#lib/series/href.ts';
 
@@ -10,6 +10,7 @@
 		api,
 		queue,
 		websites,
+		reorderable = false,
 		onerror
 	}: {
 		task: TaskSummary;
@@ -17,6 +18,8 @@
 		queue: QueueStore;
 		/** Website names by module ID; a task whose module isn't here shows no website. */
 		websites: ReadonlyMap<string, string>;
+		/** Shows a waiting task's move buttons; off while a filter hides part of the queue. */
+		reorderable?: boolean;
 		/** An action failed; `message` says which. */
 		onerror: (message: string) => void;
 	} = $props();
@@ -46,6 +49,15 @@
 	const canRedownload = $derived(task.enabled && !task.running && task.status !== 'waiting');
 	const hasFiles = $derived(task.chapters_done > 0);
 	const website = $derived(websites.get(task.module_id));
+	const waitingIds = $derived(queue.tasks.filter((t) => t.status === 'waiting').map((t) => t.id));
+	const first = $derived(waitingIds[0] === task.id);
+	const last = $derived(waitingIds[waitingIds.length - 1] === task.id);
+	const MOVES: { to: WaitingMove; label: string; icon: string }[] = [
+		{ to: 'top', label: 'Move to top', icon: '⤒' },
+		{ to: 'up', label: 'Move up', icon: '↑' },
+		{ to: 'down', label: 'Move down', icon: '↓' },
+		{ to: 'bottom', label: 'Move to bottom', icon: '⤓' }
+	];
 
 	async function run(action: TaskAction) {
 		if (busy) return;
@@ -54,6 +66,19 @@
 			queue.upsert(await api.taskAction(task.id, action));
 		} catch {
 			onerror(`Could not ${action} “${task.title}”.`);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function move(to: WaitingMove) {
+		if (busy) return;
+		busy = true;
+		try {
+			// The `task.reordered` frame refreshes every open tab, this one included.
+			await api.reorderTasks(moveWaiting(queue.tasks, task.id, to));
+		} catch {
+			onerror('Could not reorder the queue.');
 		} finally {
 			busy = false;
 		}
@@ -109,6 +134,20 @@
 		<p class="error small">{task.error}</p>
 	{/if}
 	<div class="actions">
+		{#if reorderable && task.status === 'waiting'}
+			<span class="moves" role="group" aria-label="Move {task.title}">
+				{#each MOVES as { to, label, icon } (to)}
+					<button
+						class="btn sm ghost"
+						type="button"
+						aria-label={label}
+						title={label}
+						disabled={busy || (to === 'top' || to === 'up' ? first : last)}
+						onclick={() => move(to)}>{icon}</button
+					>
+				{/each}
+			</span>
+		{/if}
 		{#if canStart}
 			<button class="btn sm" type="button" disabled={busy} onclick={() => run('start')}>
 				{task.status === 'failed' ? 'Retry' : 'Start'}
@@ -231,6 +270,7 @@
 		flex-wrap: wrap;
 		gap: var(--sp-1);
 	}
+	.moves,
 	.confirm {
 		display: flex;
 		flex-wrap: wrap;

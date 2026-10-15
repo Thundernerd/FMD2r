@@ -32,6 +32,26 @@ export function groupOf(status: TaskState): TaskGroup {
 	}
 }
 
+/** Where "Move to top", "Move up", "Move down" and "Move to bottom" take a waiting task. */
+export type WaitingMove = 'top' | 'up' | 'down' | 'bottom';
+
+/**
+ * The queue's task IDs after moving waiting task `id` among the waiting tasks.
+ * The waiting tasks keep their places in the queue and swap who holds them;
+ * every other task stays where it is.
+ */
+export function moveWaiting(tasks: TaskSummary[], id: number, to: WaitingMove): number[] {
+	const waiting = tasks.filter((t) => t.status === 'waiting').map((t) => t.id);
+	const from = waiting.indexOf(id);
+	if (from >= 0) {
+		const target = { top: 0, up: from - 1, down: from + 1, bottom: waiting.length - 1 }[to];
+		waiting.splice(from, 1);
+		waiting.splice(Math.max(0, Math.min(target, waiting.length)), 0, id);
+	}
+	const next = waiting.values();
+	return tasks.map((t) => (t.status === 'waiting' ? (next.next().value ?? t.id) : t.id));
+}
+
 export interface QueueFilter {
 	/** Matched against the title, module and chapter, ignoring case. */
 	text: string;
