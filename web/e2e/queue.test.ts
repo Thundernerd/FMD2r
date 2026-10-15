@@ -76,6 +76,24 @@ test('a task shows the name of the website it downloads from, not its module ID'
 	await expect(page.getByRole('main')).not.toContainText('comick');
 });
 
+test('the Finished group sorts newest first, and remembers oldest first across a reload', async ({
+	page
+}) => {
+	await page.goto('/queue');
+	const finished = group(page, 'Finished').getByRole('listitem');
+	const sort = group(page, 'Finished').getByRole('button', { name: 'Sort finished tasks' });
+	await expect(sort).toHaveText('Newest first');
+	await expect(finished).toHaveText([/Frieren/, /Dandadan/]);
+
+	await sort.click();
+	await expect(sort).toHaveText('Oldest first');
+	await expect(finished).toHaveText([/Dandadan/, /Frieren/]);
+
+	await page.reload();
+	await expect(sort).toHaveText('Oldest first');
+	await expect(finished).toHaveText([/Dandadan/, /Frieren/]);
+});
+
 test('Move to top puts a waiting task first', async ({ page }) => {
 	await page.goto('/queue');
 	const stopped = group(page, 'Stopped / failed');
