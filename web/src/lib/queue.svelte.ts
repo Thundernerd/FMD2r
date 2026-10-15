@@ -48,8 +48,9 @@ export function moveWaiting(tasks: TaskSummary[], id: number, to: WaitingMove): 
 		waiting.splice(from, 1);
 		waiting.splice(Math.max(0, Math.min(target, waiting.length)), 0, id);
 	}
-	const next = waiting.values();
-	return tasks.map((t) => (t.status === 'waiting' ? (next.next().value ?? t.id) : t.id));
+	const reordered = waiting.values();
+	// Both lists hold the same waiting tasks, so `reordered` never runs out.
+	return tasks.map((t) => (t.status === 'waiting' ? (reordered.next().value ?? t.id) : t.id));
 }
 
 export interface QueueFilter {
@@ -85,7 +86,9 @@ export class QueueStore {
 	history = $state<number[]>([]);
 
 	active = $derived(this.tasks.filter((t) => groupOf(t.status) === 'downloading'));
-	waiting = $derived(this.tasks.filter((t) => t.status === 'waiting').length);
+	/** IDs of the waiting tasks, in the order they start. */
+	waitingIds = $derived(this.tasks.filter((t) => t.status === 'waiting').map((t) => t.id));
+	waiting = $derived(this.waitingIds.length);
 	/** Bytes per second over every downloading task. */
 	rate = $derived(this.active.reduce((sum, t) => sum + t.bytes_per_sec, 0));
 	/** Tasks matching the text and date filters. */
@@ -142,6 +145,13 @@ export class QueueStore {
 	removed(id: number): void {
 		this.tasks = this.tasks.filter((t) => t.id !== id);
 		if (this.#inFlight) this.#inFlight[id] = null;
+	}
+
+	/** Puts the tasks in the order of `ids` ahead of the server's `task.reordered` frame. */
+	arrange(ids: number[]): void {
+		const at: Record<number, number> = Object.fromEntries(ids.map((id, i) => [id, i]));
+		const rank = (t: TaskSummary) => at[t.id] ?? ids.length;
+		this.tasks = [...this.tasks].sort((a, b) => rank(a) - rank(b));
 	}
 
 	reordered(): void {

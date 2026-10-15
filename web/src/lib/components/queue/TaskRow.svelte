@@ -49,14 +49,16 @@
 	const canRedownload = $derived(task.enabled && !task.running && task.status !== 'waiting');
 	const hasFiles = $derived(task.chapters_done > 0);
 	const website = $derived(websites.get(task.module_id));
-	const waitingIds = $derived(queue.tasks.filter((t) => t.status === 'waiting').map((t) => t.id));
-	const first = $derived(waitingIds[0] === task.id);
-	const last = $derived(waitingIds[waitingIds.length - 1] === task.id);
-	const MOVES: { to: WaitingMove; label: string; icon: string }[] = [
-		{ to: 'top', label: 'Move to top', icon: '⤒' },
-		{ to: 'up', label: 'Move up', icon: '↑' },
-		{ to: 'down', label: 'Move down', icon: '↓' },
-		{ to: 'bottom', label: 'Move to bottom', icon: '⤓' }
+	const atEnd = $derived({
+		first: queue.waitingIds[0] === task.id,
+		last: queue.waitingIds[queue.waitingIds.length - 1] === task.id
+	});
+	/** Each move, and the end of the waiting tasks where it can't go further. */
+	const MOVES: { to: WaitingMove; label: string; icon: string; stopsAt: 'first' | 'last' }[] = [
+		{ to: 'top', label: 'Move to top', icon: '⤒', stopsAt: 'first' },
+		{ to: 'up', label: 'Move up', icon: '↑', stopsAt: 'first' },
+		{ to: 'down', label: 'Move down', icon: '↓', stopsAt: 'last' },
+		{ to: 'bottom', label: 'Move to bottom', icon: '⤓', stopsAt: 'last' }
 	];
 
 	async function run(action: TaskAction) {
@@ -74,10 +76,14 @@
 	async function move(to: WaitingMove) {
 		if (busy) return;
 		busy = true;
+		const ids = moveWaiting(queue.tasks, task.id, to);
+		// Shown at once so a quick move on another row builds on this one; the
+		// `task.reordered` frame then refreshes every open tab.
+		queue.arrange(ids);
 		try {
-			// The `task.reordered` frame refreshes every open tab, this one included.
-			await api.reorderTasks(moveWaiting(queue.tasks, task.id, to));
+			await api.reorderTasks(ids);
 		} catch {
+			queue.resync();
 			onerror('Could not reorder the queue.');
 		} finally {
 			busy = false;
@@ -136,13 +142,13 @@
 	<div class="actions">
 		{#if reorderable && task.status === 'waiting'}
 			<span class="moves" role="group" aria-label="Move {task.title}">
-				{#each MOVES as { to, label, icon } (to)}
+				{#each MOVES as { to, label, icon, stopsAt } (to)}
 					<button
 						class="btn sm ghost"
 						type="button"
 						aria-label={label}
 						title={label}
-						disabled={busy || (to === 'top' || to === 'up' ? first : last)}
+						disabled={busy || atEnd[stopsAt]}
 						onclick={() => move(to)}>{icon}</button
 					>
 				{/each}

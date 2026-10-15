@@ -84,7 +84,9 @@ describe('TaskRow reorder buttons', () => {
 			onerror
 		});
 		const item = within(screen.getByRole('listitem', { name: title }));
-		return (label: string) => item.getByRole('button', { name: label }) as HTMLButtonElement;
+		const button = (label: string) =>
+			item.getByRole('button', { name: label }) as HTMLButtonElement;
+		return Object.assign(button, { queue });
 	}
 
 	it("disables the first waiting row's Move up and Move to top", () => {
@@ -108,6 +110,15 @@ describe('TaskRow reorder buttons', () => {
 		const button = renderWaiting('Dorohedoro', reorderTasks);
 		await fireEvent.click(button('Move to top'));
 		expect(reorderTasks).toHaveBeenCalledWith([1, 5, 2, 4, 3]);
+	});
+
+	it('shows the new order at once, so a quick second move builds on it', async () => {
+		const button = renderWaiting(
+			'Dorohedoro',
+			vi.fn(async () => {})
+		);
+		await fireEvent.click(button('Move to top'));
+		expect(button.queue.tasks.map((t) => t.id)).toEqual([1, 5, 2, 4, 3]);
 	});
 
 	it('reports a failed reorder', async () => {
