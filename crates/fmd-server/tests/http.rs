@@ -209,6 +209,86 @@ async fn marking_an_unknown_inbox_item_read_is_a_404() {
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
+fn delete(uri: &str) -> Request<Body> {
+    Request::delete(uri).body(Body::empty()).unwrap()
+}
+
+/// The `read` flag of each inbox item, newest first.
+async fn inbox_read_flags(h: &Harness) -> Vec<bool> {
+    let items = body_json(send(&h.state, get("/api/inbox")).await).await;
+    items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["read"].as_bool().unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn marking_the_whole_inbox_read() {
+    let h = harness();
+    h.db.events().push(&new_chapters_event()).unwrap();
+    h.db.events().push(&new_chapters_event()).unwrap();
+
+    let res = send(&h.state, post("/api/inbox/read")).await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(inbox_read_flags(&h).await, [true, true]);
+}
+
+#[tokio::test]
+async fn deleting_one_inbox_item() {
+    let h = harness();
+    let first = h.db.events().push(&new_chapters_event()).unwrap();
+    let second = h.db.events().push(&new_chapters_event()).unwrap();
+
+    let res = send(&h.state, delete(&format!("/api/inbox/{}", first.id.0))).await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let items = body_json(send(&h.state, get("/api/inbox")).await).await;
+    let ids: Vec<&str> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, [second.id.0.to_string()]);
+
+    let res = send(&h.state, delete(&format!("/api/inbox/{}", first.id.0))).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn deleting_an_unknown_inbox_item_is_a_404() {
+    let h = harness();
+    let res = send(&h.state, delete("/api/inbox/42")).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let res = send(&h.state, delete("/api/inbox/nope")).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn clearing_the_read_inbox_items() {
+    let h = harness();
+    let read = h.db.events().push(&new_chapters_event()).unwrap();
+    h.db.events().push(&new_chapters_event()).unwrap();
+    h.db.events().mark_read(&[read.id]).unwrap();
+
+    let res = send(&h.state, delete("/api/inbox?read=true")).await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(inbox_read_flags(&h).await, [false]);
+}
+
+#[tokio::test]
+async fn clearing_the_inbox_needs_read_true() {
+    let h = harness();
+    h.db.events().push(&new_chapters_event()).unwrap();
+
+    for uri in ["/api/inbox", "/api/inbox?read=false"] {
+        let res = send(&h.state, delete(uri)).await;
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{uri}");
+    }
+    assert_eq!(inbox_read_flags(&h).await, [false]);
+}
+
 const SECRET: &str = "hunter2";
 
 fn authed_harness() -> Harness {
@@ -304,6 +384,8 @@ async fn openapi_document_is_3_1_and_lists_the_api_paths() {
         "/api/login",
         "/api/inbox",
         "/api/inbox/{id}/read",
+        "/api/inbox/read",
+        "/api/inbox/{id}",
         "/api/events",
         "/api/logs",
         "/api/jobs",
@@ -397,6 +479,28 @@ async fn events_stream_replays_inbox_events_after_last_event_id() {
     assert!(seen.contains(&format!("id: {}\n", second.id.0)), "{seen}");
     assert!(seen.contains("module update failed"), "{seen}");
     assert!(!seen.contains("2 new chapters"), "{seen}");
+}
+
+#[tokio::test]
+async fn events_stream_does_not_replay_deleted_inbox_items() {
+    let h = harness();
+    let first = h.db.events().push(&new_chapters_event()).unwrap();
+    let mut deleted = new_chapters_event();
+    deleted.title = "deleted item".into();
+    let deleted = h.db.events().push(&deleted).unwrap();
+    let mut kept = new_chapters_event();
+    kept.title = "kept item".into();
+    h.db.events().push(&kept).unwrap();
+    let res = send(&h.state, delete(&format!("/api/inbox/{}", deleted.id.0))).await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    let req = Request::get("/api/events")
+        .header("last-event-id", first.id.0.to_string())
+        .body(Body::empty())
+        .unwrap();
+    let seen = read_sse_until(send(&h.state, req).await, "kept item").await;
+    assert!(seen.contains("kept item"), "{seen}");
+    assert!(!seen.contains("deleted item"), "{seen}");
 }
 
 #[tokio::test]
@@ -609,7 +713,7 @@ async fn wrong_method_on_an_api_route_is_a_405_problem() {
     let h = harness();
     let res = send(
         &h.state,
-        Request::delete("/api/inbox").body(Body::empty()).unwrap(),
+        Request::put("/api/inbox").body(Body::empty()).unwrap(),
     )
     .await;
     assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);

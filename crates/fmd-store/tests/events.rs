@@ -53,3 +53,49 @@ fn push_list_and_mark_read() {
     events.mark_all_read().unwrap();
     assert_eq!(events.unread_count().unwrap(), 0);
 }
+
+#[test]
+fn delete_removes_only_the_given_events() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let events = db.events();
+
+    let first = events.push(&event("first", EventSeverity::Info)).unwrap();
+    let second = events.push(&event("second", EventSeverity::Info)).unwrap();
+    let third = events.push(&event("third", EventSeverity::Info)).unwrap();
+
+    events.delete(&[first.id, third.id]).unwrap();
+
+    assert_eq!(events.list(&EventQuery::default()).unwrap(), [second]);
+    assert_eq!(events.get(first.id).unwrap(), None);
+}
+
+#[test]
+fn delete_read_removes_read_events_and_keeps_unread_ones() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let events = db.events();
+
+    let first = events.push(&event("first", EventSeverity::Info)).unwrap();
+    let second = events.push(&event("second", EventSeverity::Info)).unwrap();
+    let third = events.push(&event("third", EventSeverity::Info)).unwrap();
+    events.mark_read(&[first.id, third.id]).unwrap();
+
+    events.delete_read().unwrap();
+
+    assert_eq!(events.list(&EventQuery::default()).unwrap(), [second]);
+}
+
+/// SSE clients resume after the last event id they saw, so a deleted id must never come back.
+#[test]
+fn deleted_ids_are_never_reused() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDb::open(dir.path().join("app.db")).unwrap();
+    let events = db.events();
+
+    let newest = events.push(&event("newest", EventSeverity::Info)).unwrap();
+    events.delete(&[newest.id]).unwrap();
+    let next = events.push(&event("next", EventSeverity::Info)).unwrap();
+
+    assert!(next.id > newest.id, "{next:?} reuses {newest:?}'s id");
+}

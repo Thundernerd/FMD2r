@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
+import { describe, expect, it, vi } from 'vitest';
 import type { Api } from '#lib/api/client.ts';
 import type { TaskSummary } from '#lib/api/types.ts';
 import { QueueStore } from '#lib/queue.svelte.ts';
@@ -51,5 +51,103 @@ describe('TaskRow', () => {
 		const row = renderRow(new Map([['other', '18Kami']]));
 		expect(row.textContent).not.toContain('18Kami');
 		expect(row.textContent).not.toContain(MODULE_ID);
+	});
+});
+
+describe('TaskRow reorder buttons', () => {
+	const waiting = (id: number, title: string): TaskSummary => ({
+		...task,
+		id,
+		title,
+		status: 'waiting'
+	});
+	/** Three waiting tasks around a downloading and a finished one. */
+	const tasks: TaskSummary[] = [
+		{ ...task, id: 1, title: 'Berserk', status: 'downloading' },
+		waiting(2, 'Blue Lock'),
+		waiting(3, 'Vagabond'),
+		{ ...task, id: 4, title: 'Blame!', status: 'finished' },
+		waiting(5, 'Dorohedoro')
+	];
+
+	function renderWaiting(title: string, reorderTasks: Api['reorderTasks'], onerror = () => {}) {
+		const queue = new QueueStore();
+		queue.load(tasks);
+		const row = tasks.find((t) => t.title === title);
+		if (!row) throw new Error(title);
+		render(TaskRow, {
+			task: row,
+			api: { ...api, reorderTasks } as Api,
+			queue,
+			websites: new Map(),
+			reorderable: true,
+			onerror
+		});
+		const item = within(screen.getByRole('listitem', { name: title }));
+		const button = (label: string) =>
+			item.getByRole('button', { name: label }) as HTMLButtonElement;
+		return Object.assign(button, { queue });
+	}
+
+	it("disables the first waiting row's Move up and Move to top", () => {
+		const button = renderWaiting('Blue Lock', vi.fn());
+		expect(button('Move to top').disabled).toBe(true);
+		expect(button('Move up').disabled).toBe(true);
+		expect(button('Move down').disabled).toBe(false);
+		expect(button('Move to bottom').disabled).toBe(false);
+	});
+
+	it("disables the last waiting row's Move down and Move to bottom", () => {
+		const button = renderWaiting('Dorohedoro', vi.fn());
+		expect(button('Move to top').disabled).toBe(false);
+		expect(button('Move up').disabled).toBe(false);
+		expect(button('Move down').disabled).toBe(true);
+		expect(button('Move to bottom').disabled).toBe(true);
+	});
+
+	it('sends the whole queue with the task moved among the waiting tasks', async () => {
+		const reorderTasks = vi.fn(async () => {});
+		const button = renderWaiting('Dorohedoro', reorderTasks);
+		await fireEvent.click(button('Move to top'));
+		expect(reorderTasks).toHaveBeenCalledWith([1, 5, 2, 4, 3]);
+	});
+
+	it('shows the new order at once, so a quick second move builds on it', async () => {
+		const button = renderWaiting(
+			'Dorohedoro',
+			vi.fn(async () => {})
+		);
+		await fireEvent.click(button('Move to top'));
+		expect(button.queue.tasks.map((t) => t.id)).toEqual([1, 5, 2, 4, 3]);
+	});
+
+	it('reports a failed reorder', async () => {
+		const onerror = vi.fn();
+		const button = renderWaiting(
+			'Vagabond',
+			vi.fn(async () => {
+				throw new Error('offline');
+			}),
+			onerror
+		);
+		await fireEvent.click(button('Move up'));
+		await vi.waitFor(() => expect(onerror).toHaveBeenCalledWith('Could not reorder the queue.'));
+	});
+
+	it('has no reorder buttons on rows outside the Waiting group', () => {
+		const queue = new QueueStore();
+		queue.load(tasks);
+		const [downloading] = tasks;
+		if (!downloading) throw new Error('no tasks');
+		render(TaskRow, {
+			task: downloading,
+			api,
+			queue,
+			websites: new Map(),
+			reorderable: true,
+			onerror: () => {}
+		});
+		const item = within(screen.getByRole('listitem', { name: 'Berserk' }));
+		expect(item.queryByRole('button', { name: 'Move up' })).toBeNull();
 	});
 });
