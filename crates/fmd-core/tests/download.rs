@@ -382,11 +382,11 @@ async fn with_page_3_failing_twice(retries: u32) -> (Fixture, TaskId, Vec<TaskSt
 #[tokio::test(flavor = "multi_thread")]
 async fn a_failed_chapter_is_retried_until_its_pages_come_through() {
     // The task finishes once the chapter's last retry gets page 3
-    // (baseunits/uDownloadsManager.pas:1326-1338).
+    // (baseunits/uDownloadsManager.pas:1326-1338). Its failed tries report no failure: a run
+    // reports one, when it ends with failed chapters (issue #307).
     let (f, id, seen) = with_page_3_failing_twice(2).await;
     use TaskStatus::*;
-    let failures = seen.iter().filter(|s| **s == Failed).count();
-    assert_eq!(failures, 2, "{seen:?}");
+    assert!(!seen.contains(&Failed), "{seen:?}");
     assert_eq!(seen.last(), Some(&Finished));
     assert_eq!(
         entries(&f.out().join("Manga/One.cbz")),
@@ -1211,4 +1211,97 @@ async fn a_chapter_that_cannot_be_packed_fails_the_task_saying_why() {
         .unwrap_or_else(|| panic!("{event}"));
     assert!(!cause.is_empty(), "{event}");
     assert_eq!(task.error, Some(event));
+}
+
+/// The reasons of every `Failed` status event task `id` emits until its run ends.
+async fn failed_events(
+    manager: &DownloadManager,
+    events: &mut broadcast::Receiver<EngineEvent>,
+    id: TaskId,
+) -> Vec<Option<String>> {
+    let ended = async {
+        loop {
+            let tasks = manager.list().await.unwrap();
+            let info = tasks.into_iter().find(|t| t.task.id == id).unwrap();
+            if !info.running {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    };
+    tokio::time::timeout(PATIENCE, ended)
+        .await
+        .unwrap_or_else(|_| panic!("task {id:?} kept running"));
+    let mut failed = Vec::new();
+    while let Ok(event) = events.try_recv() {
+        if let EngineEvent::Status {
+            task,
+            status: TaskStatus::Failed,
+            error,
+            ..
+        } = event
+            && task == id
+        {
+            failed.push(error);
+        }
+    }
+    failed
+}
+
+/// The `Failed` events of a run of module `t`'s `chapters`.
+async fn failed_events_of(f: &Fixture, chapters: &[(&str, &str)]) -> Vec<Option<String>> {
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager.add_task(f.download("t", chapters)).await.unwrap();
+    failed_events(&manager, &mut events, id).await
+}
+
+const FIVE: &[(&str, &str)] = &[
+    ("/c/1", "One"),
+    ("/c/2", "Two"),
+    ("/c/3", "Three"),
+    ("/c/4", "Four"),
+    ("/c/5", "Five"),
+];
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_failing_two_of_five_chapters_reports_failed_once_naming_both() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/1/1", 100);
+    f.transport.fail("https://t/img/c/3/1", 100);
+    let failed = failed_events_of(&f, FIVE).await;
+    assert_eq!(
+        failed,
+        [Some(
+            "Chapters failed: Chapter \"One\": 1 of 1 pages did not download; \
+             Chapter \"Three\": 1 of 3 pages did not download"
+                .to_owned()
+        )]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_failing_only_its_last_chapter_reports_failed_once_with_its_reason() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/5/2", 100);
+    let failed = failed_events_of(&f, FIVE).await;
+    assert_eq!(
+        failed,
+        [Some(
+            "Chapter \"Five\": 1 of 5 pages did not download".to_owned()
+        )]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_retrying_failed_chapters_still_reports_failed_once() {
+    let settings = json!({
+        "output": {"format": "cbz"},
+        "connections": {"auto_retry_failed_tasks": 2},
+    });
+    let f = Fixture::new(&[("T.lua", T)], settings);
+    f.transport.fail("https://t/img/c/1/1", 100);
+    f.transport.fail("https://t/img/c/3/1", 100);
+    let failed = failed_events_of(&f, FIVE).await;
+    assert_eq!(failed.len(), 1, "{failed:?}");
 }
