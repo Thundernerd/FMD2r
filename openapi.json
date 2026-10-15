@@ -1154,6 +1154,88 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "inbox"
+        ],
+        "summary": "Delete every read inbox item.",
+        "operationId": "clearInboxRead",
+        "parameters": [
+          {
+            "name": "read",
+            "in": "query",
+            "description": "Must be `true`: only read items can be cleared.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "`read=true` is missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inbox/read": {
+      "post": {
+        "tags": [
+          "inbox"
+        ],
+        "summary": "Mark every inbox item as read.",
+        "operationId": "markInboxAllRead",
+        "responses": {
+          "204": {
+            "description": "Marked as read"
+          }
+        }
+      }
+    },
+    "/api/inbox/{id}": {
+      "delete": {
+        "tags": [
+          "inbox"
+        ],
+        "summary": "Delete one inbox item.",
+        "operationId": "deleteInboxItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Inbox item id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "No such inbox item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/inbox/{id}/read": {
@@ -6110,13 +6192,14 @@
       },
       "NotificationType": {
         "type": "string",
-        "description": "A kind of event a channel can be set to send, one per inbox event kind. Serialised as the\nkind, e.g. `download_failed`.",
+        "description": "A kind of event a channel can be set to send: an inbox event kind, or an event sent without\none. Serialised as the kind, e.g. `download_failed`.",
         "enum": [
           "new_chapters",
           "missing_chapters",
           "missing_check",
           "completed",
           "download_failed",
+          "download_completed",
           "favorites_check_failed",
           "module_update",
           "downloads_moved",

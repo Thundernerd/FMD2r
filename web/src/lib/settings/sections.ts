@@ -123,6 +123,7 @@ const NOTIFICATION_TYPES: { value: NotificationType; label: string }[] = [
 	{ value: 'missing_check', label: 'Missing-chapter check found nothing' },
 	{ value: 'completed', label: 'Completed series removed' },
 	{ value: 'download_failed', label: 'Download failed' },
+	{ value: 'download_completed', label: 'Download completed' },
 	{ value: 'favorites_check_failed', label: 'Library check failed' },
 	{ value: 'module_update', label: 'Module updates' },
 	{ value: 'downloads_moved', label: 'Downloads moved' },

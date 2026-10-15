@@ -420,11 +420,11 @@ async fn with_page_3_failing_twice(retries: u32) -> (Fixture, TaskId, Vec<TaskSt
 #[tokio::test(flavor = "multi_thread")]
 async fn a_failed_chapter_is_retried_until_its_pages_come_through() {
     // The task finishes once the chapter's last retry gets page 3
-    // (baseunits/uDownloadsManager.pas:1326-1338).
+    // (baseunits/uDownloadsManager.pas:1326-1338). Its failed tries report no failure: a run
+    // reports one, when it ends with failed chapters (issue #307).
     let (f, id, seen) = with_page_3_failing_twice(2).await;
     use TaskStatus::*;
-    let failures = seen.iter().filter(|s| **s == Failed).count();
-    assert_eq!(failures, 2, "{seen:?}");
+    assert!(!seen.contains(&Failed), "{seen:?}");
     assert_eq!(seen.last(), Some(&Finished));
     assert_eq!(
         entries(&f.out().join("Manga/One.cbz")),
@@ -1170,6 +1170,11 @@ async fn failing_chapters(
     let error = tokio::time::timeout(PATIENCE, failed)
         .await
         .unwrap_or_else(|_| panic!("task {id:?} did not fail"));
+    (error, ended(&manager, id).await)
+}
+
+/// Task `id` once its run has ended.
+async fn ended(manager: &DownloadManager, id: TaskId) -> fmd_store::Task {
     let ended = async {
         loop {
             let tasks = manager.list().await.unwrap();
@@ -1180,10 +1185,9 @@ async fn failing_chapters(
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     };
-    let task = tokio::time::timeout(PATIENCE, ended)
+    tokio::time::timeout(PATIENCE, ended)
         .await
-        .unwrap_or_else(|_| panic!("task {id:?} kept running"));
-    (error, task)
+        .unwrap_or_else(|_| panic!("task {id:?} kept running"))
 }
 
 /// [`failing_chapters`] for a one-chapter task.
@@ -1249,6 +1253,87 @@ async fn a_chapter_that_cannot_be_packed_fails_the_task_saying_why() {
         .unwrap_or_else(|| panic!("{event}"));
     assert!(!cause.is_empty(), "{event}");
     assert_eq!(task.error, Some(event));
+}
+
+/// The reasons of every `Failed` status event a run of module `t`'s `chapters` emits.
+async fn failed_events(f: &Fixture, chapters: &[(&str, &str)]) -> Vec<Option<String>> {
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager.add_task(f.download("t", chapters)).await.unwrap();
+    ended(&manager, id).await;
+    let mut failed = Vec::new();
+    loop {
+        match events.try_recv() {
+            Ok(EngineEvent::Status {
+                task,
+                status: TaskStatus::Failed,
+                error,
+                ..
+            }) if task == id => failed.push(error),
+            Ok(_) => {}
+            Err(broadcast::error::TryRecvError::Empty) => return failed,
+            Err(e) => panic!("events of task {id:?} were lost: {e}"),
+        }
+    }
+}
+
+const FIVE_CHAPTERS: &[(&str, &str)] = &[
+    ("/c/1", "One"),
+    ("/c/2", "Two"),
+    ("/c/3", "Three"),
+    ("/c/4", "Four"),
+    ("/c/5", "Five"),
+];
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_failing_two_of_five_chapters_reports_failed_once_naming_both() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/1/1", 100);
+    f.transport.fail("https://t/img/c/3/1", 100);
+    let failed = failed_events(&f, FIVE_CHAPTERS).await;
+    assert_eq!(
+        failed,
+        [Some(
+            "Chapters failed: Chapter \"One\": 1 of 1 pages did not download; \
+             Chapter \"Three\": 1 of 3 pages did not download"
+                .to_owned()
+        )]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_failing_only_its_last_chapter_reports_failed_once_with_its_reason() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/5/2", 100);
+    let failed = failed_events(&f, FIVE_CHAPTERS).await;
+    assert_eq!(
+        failed,
+        [Some(
+            "Chapter \"Five\": 1 of 5 pages did not download".to_owned()
+        )]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_retrying_failed_chapters_still_reports_failed_once() {
+    let settings = json!({
+        "output": {"format": "cbz"},
+        "connections": {"auto_retry_failed_tasks": 2},
+    });
+    let f = Fixture::new(&[("T.lua", T)], settings);
+    f.transport.fail("https://t/img/c/1/1", 100);
+    f.transport.fail("https://t/img/c/3/1", 100);
+    let failed = failed_events(&f, FIVE_CHAPTERS).await;
+    // The failed chapters were retried.
+    assert!(f.transport.count("https://t/img/c/3/1") > 1);
+    assert_eq!(
+        failed,
+        [Some(
+            "Chapters failed: Chapter \"One\": 1 of 1 pages did not download; \
+             Chapter \"Three\": 1 of 3 pages did not download"
+                .to_owned()
+        )]
+    );
 }
 
 /// Downloads hold while a disk has less than `saveto.min_free_space_mb` free (issue #308).

@@ -18,10 +18,11 @@ use fmd_core::disk_space::FreeSpace;
 use fmd_core::download::{DownloadManager, EngineConfig};
 use fmd_core::favorites::{CheckMode, CheckScope, CheckerConfig, FavoritesChecker};
 use fmd_core::jobs::JobRegistry;
+use fmd_core::modules::ModuleInfo;
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
-use fmd_server::{AppState, EventBus, LogBuffer, build_router};
+use fmd_server::{AppState, EventBus, LogBuffer, ModuleCatalog, ModulesReport, build_router};
 use fmd_store::{AppDb, NewFavorite};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -60,7 +61,8 @@ impl Transport for Site {
 }
 
 /// A module whose series `/manga` has chapters `/c/1` and `/c/2`, and whose chapter `/c/<n>` has
-/// `n` pages at `https://t/img/c/<n>/<page>`; chapter `/c/0` has no pages, so it fails.
+/// `n` pages at `https://t/img/c/<n>/<page>`; chapter `/c/0` (or any link ending in `/0`, such
+/// as `/d/0`) has no pages, so it fails.
 const T: &str = r#"
 function Init()
   local m = NewWebsiteModule(); m.ID='t'; m.Name='T'; m.RootURL='https://t'
@@ -94,6 +96,27 @@ impl FakeDisk {
 impl FreeSpace for FakeDisk {
     fn free_bytes(&self, _dir: &Path) -> Option<u64> {
         Some(*self.0.lock().unwrap())
+    }
+}
+
+/// The catalog entry of module `t`, named "Test Site".
+struct Modules;
+
+impl ModuleCatalog for Modules {
+    fn report(&self) -> ModulesReport {
+        ModulesReport::default()
+    }
+
+    fn modules(&self) -> Vec<ModuleInfo> {
+        vec![ModuleInfo {
+            id: "t".into(),
+            name: "Test Site".into(),
+            root_url: "https://t".into(),
+            category: String::new(),
+            limits: Default::default(),
+            options: Vec::new(),
+            capabilities: Default::default(),
+        }]
     }
 }
 
@@ -250,7 +273,8 @@ async fn harness(logs: LogBuffer) -> Harness {
         .unwrap()
         .with_logs(logs)
         .with_settings(settings.clone())
-        .with_engine(engine);
+        .with_engine(engine)
+        .with_modules(Modules);
     let checker = FavoritesChecker::new(
         CheckerConfig {
             db: db.clone(),
@@ -305,8 +329,17 @@ async fn body_json(res: Response) -> Value {
 
 /// Queues chapter `link` of "Manga" and answers the new task's ID.
 async fn add(state: &AppState, link: &str) -> i64 {
+    add_chapters(state, &[("Ch", link)]).await
+}
+
+/// Queues `chapters` (name, link) of "Manga" as one task and answers its ID.
+async fn add_chapters(state: &AppState, chapters: &[(&str, &str)]) -> i64 {
+    let chapters: Vec<Value> = chapters
+        .iter()
+        .map(|(name, link)| json!({"name": name, "link": link}))
+        .collect();
     let body = json!({"module_id": "t", "link": "/manga", "title": "Manga",
-        "chapters": [{"name": "Ch", "link": link}]});
+        "chapters": chapters});
     let req = Request::post("/api/tasks")
         .header("content-type", "application/json")
         .body(Body::from(body.to_string()))
@@ -381,6 +414,32 @@ async fn a_failed_download_shows_in_the_inbox_and_goes_to_the_channels_that_tick
     assert_eq!(item["title"], "Download failed: Manga");
 }
 
+/// "Download completed" is off by default; ticked on the webhook only, a finished task goes there
+/// and nowhere else, and not to the inbox (issue #300).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_finished_download_goes_only_to_channels_that_tick_it_and_not_to_the_inbox() {
+    let h = harness(logs()).await;
+    let patch = json!({"notifications": {"webhook": {"enabled": true,
+        "types": ["download_completed"]}}});
+    let req = Request::patch("/api/settings")
+        .header("content-type", "application/json")
+        .body(Body::from(patch.to_string()))
+        .unwrap();
+    assert_eq!(send(&h.state, req).await.status(), StatusCode::OK);
+
+    let id = add(&h.state, "/c/2").await;
+    wait_for(&h.state, id, "finished").await;
+
+    assert_eq!(h.stub.paths_after(1).await, ["/webhook"]);
+    let body: Value = serde_json::from_str(&h.stub.received()[0].body).unwrap();
+    assert_eq!(body["kind"], "download_completed");
+    assert_eq!(body["severity"], "info");
+    assert_eq!(body["title"], "Download completed: Manga");
+    assert_eq!(body["body"], "Chapters: Ch\nWebsite: Test Site");
+    let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
+    assert_eq!(inbox, json!([]));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_failed_downloads_inbox_item_and_notification_say_why_it_failed() {
     let h = harness(logs()).await;
@@ -451,6 +510,28 @@ async fn holding_downloads_for_a_full_disk_posts_one_warning_and_resuming_one_in
     assert_eq!(resumed["kind"], "info");
     // ntfy takes "Disk almost full" by default; Discord here only chapters.
     assert_eq!(h.stub.paths_after(2).await, ["/ntfy", "/ntfy"]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_failing_two_chapters_makes_one_inbox_item_naming_both() {
+    let h = harness(logs()).await;
+
+    let id = add_chapters(
+        &h.state,
+        &[("Ch A", "/c/0"), ("Ch B", "/c/2"), ("Ch C", "/d/0")],
+    )
+    .await;
+    wait_for(&h.state, id, "failed").await;
+
+    assert_eq!(h.stub.paths_after(1).await, ["/ntfy"]);
+    let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
+    let items = inbox.as_array().unwrap();
+    assert_eq!(items.len(), 1, "{inbox}");
+    assert_eq!(items[0]["title"], "Download failed: Manga");
+    assert_eq!(
+        items[0]["body"],
+        "Chapters failed: Chapter \"Ch A\" has no pages; Chapter \"Ch C\" has no pages"
+    );
 }
 
 /// A channel answering 500 and one that never answers delay neither the check nor a download,
