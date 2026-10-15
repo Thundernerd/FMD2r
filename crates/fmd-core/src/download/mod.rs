@@ -81,7 +81,7 @@ pub struct EngineConfig {
     /// Folders a library move is working in: a waiting task downloading into one starts once
     /// the move is done.
     pub moving: MovingFolders,
-    /// Paces page downloads under `connections.max_download_kbps`.
+    /// The engine's time; it paces page downloads under `connections.max_download_kbps`.
     pub clock: Arc<dyn Clock>,
 }
 

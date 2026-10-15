@@ -54,6 +54,7 @@ struct State {
     taken: u128,
     /// The part of `taken` paid for, up to `at`.
     paid: u128,
+    /// When `paid` was last brought up to date.
     at: Duration,
     /// Bytes per second since `at`; 0 for no limit.
     rate: u128,
@@ -106,7 +107,7 @@ impl SpeedLimiter {
             state.taken
         };
         loop {
-            let wait = {
+            let deadline = {
                 let mut state = self.state();
                 let now = self.clock.now();
                 state.advance(now, self.rate());
@@ -121,7 +122,7 @@ impl SpeedLimiter {
             if cancelled() {
                 return false;
             }
-            self.clock.sleep_until(wait);
+            self.clock.sleep_until(deadline);
         }
     }
 }

@@ -86,6 +86,25 @@ fn a_changed_limit_applies_to_the_next_take() {
 }
 
 #[test]
+fn a_take_already_waiting_picks_up_a_changed_limit() {
+    let clock = Arc::new(FakeClock::default());
+    let at = clock.clone();
+    // 1 KB/s for the first two seconds, 100 KB/s after.
+    let limiter = SpeedLimiter::new(clock.clone(), move || {
+        if at.elapsed() < Duration::from_secs(2) {
+            1
+        } else {
+            100
+        }
+    });
+
+    assert!(limiter.take(102 * KB, &never));
+
+    // 2 KB in the first two seconds, the other 100 KB in one more: not 102 seconds.
+    assert_eq!(clock.elapsed(), Duration::from_secs(3));
+}
+
+#[test]
 fn a_cancelled_take_stops_waiting() {
     let clock = Arc::new(FakeClock::default());
     let limiter = limiter(&clock, &Arc::new(AtomicU32::new(1)));
