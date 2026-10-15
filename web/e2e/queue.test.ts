@@ -62,3 +62,16 @@ test('the queue page fits a phone screen', async ({ page }) => {
 	);
 	expect(overflow).toBeLessThanOrEqual(0);
 });
+
+test('a task shows the name of the website it downloads from, not its module ID', async ({
+	page
+}) => {
+	await page.goto('/queue');
+	const row = group(page, 'Downloading').getByRole('listitem', { name: 'Kagurabachi' });
+	await expect(row).toContainText('MangaDex');
+	await expect(group(page, 'Finished').getByRole('listitem', { name: 'Dandadan' })).toContainText(
+		'ComicK'
+	);
+	await expect(page.getByRole('main')).not.toContainText('mangadex');
+	await expect(page.getByRole('main')).not.toContainText('comick');
+});
