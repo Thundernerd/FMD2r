@@ -9,6 +9,10 @@ set -euo pipefail
 static="$(cd "$(dirname "$0")/../web/static" && pwd)"
 svg="$static/favicon.svg"
 square="$(sed 's/ rx="6"//' "$svg")"
+if [[ "$square" == "$(cat "$svg")" ]]; then
+	echo "no rx=\"6\" corner in $svg to square off; update this script" >&2
+	exit 1
+fi
 
 rsvg-convert -w 192 -h 192 "$svg" -o "$static/icon-192.png"
 rsvg-convert -w 512 -h 512 "$svg" -o "$static/icon-512.png"
