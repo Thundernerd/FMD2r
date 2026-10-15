@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TaskProgress, TaskSummary } from '#lib/api/types.ts';
+import type { TaskProgress, TaskQueue, TaskSummary } from '#lib/api/types.ts';
 import { moveWaiting, QueueStore } from '#lib/queue.svelte.ts';
 
 const task = (over: Partial<TaskSummary> & Pick<TaskSummary, 'id' | 'title'>): TaskSummary => ({
@@ -181,7 +181,7 @@ describe('queue store', () => {
 
 	it('refetches the queue, debounced, when a frame is about a task it does not know', async () => {
 		const fresh = [...queue(), task({ id: 7, title: 'Dandadan', status: 'waiting' })];
-		const refresh = vi.fn(() => Promise.resolve(fresh));
+		const refresh = vi.fn(() => Promise.resolve({ tasks: fresh, pausedUntil: null }));
 		const store = new QueueStore({ refresh });
 		store.load(queue());
 
@@ -196,7 +196,12 @@ describe('queue store', () => {
 
 	it('keeps tasks a frame changed while a refetch was in flight', async () => {
 		let answer: (tasks: TaskSummary[]) => void = () => {};
-		const refresh = vi.fn(() => new Promise<TaskSummary[]>((resolve) => (answer = resolve)));
+		const refresh = vi.fn(
+			() =>
+				new Promise<TaskQueue>(
+					(resolve) => (answer = (tasks) => resolve({ tasks, pausedUntil: null }))
+				)
+		);
 		const store = new QueueStore({ refresh });
 		store.load(queue());
 		store.reordered();
@@ -210,7 +215,12 @@ describe('queue store', () => {
 
 	it('keeps an action’s answer over a refetch that was in flight', async () => {
 		let answer: (tasks: TaskSummary[]) => void = () => {};
-		const refresh = vi.fn(() => new Promise<TaskSummary[]>((resolve) => (answer = resolve)));
+		const refresh = vi.fn(
+			() =>
+				new Promise<TaskQueue>(
+					(resolve) => (answer = (tasks) => resolve({ tasks, pausedUntil: null }))
+				)
+		);
 		const store = new QueueStore({ refresh });
 		store.load(queue());
 		store.reordered();

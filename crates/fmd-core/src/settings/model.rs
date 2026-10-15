@@ -223,6 +223,16 @@ pub struct ConnectionSettings {
     /// `lua/websitebypass/websitebypass_config.json` at startup
     /// ([`write_websitebypass_config`](super::write_websitebypass_config)).
     pub flaresolverr_url: String,
+    /// Downloads run only from `schedule_start` until `schedule_end` each day. No FMD2
+    /// setting: FMD2r's download schedule (issue #310).
+    pub schedule_enabled: bool,
+    /// When downloads may start, `HH:MM` in the server's local time.
+    #[schema(example = "23:00")]
+    pub schedule_start: String,
+    /// When downloads stop, `HH:MM` in the server's local time. Before `schedule_start`, the
+    /// window crosses midnight; equal to it, the window is all day.
+    #[schema(example = "07:00")]
+    pub schedule_end: String,
 }
 
 impl Default for ConnectionSettings {
@@ -240,6 +250,9 @@ impl Default for ConnectionSettings {
             user_agent: DEFAULT_USER_AGENT.into(),
             proxy: ProxySettings::default(),
             flaresolverr_url: String::new(),
+            schedule_enabled: false,
+            schedule_start: "23:00".into(),
+            schedule_end: "07:00".into(),
         }
     }
 }

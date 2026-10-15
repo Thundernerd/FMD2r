@@ -205,6 +205,17 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         bad_flaresolverr
             .then(|| "must be empty or an http(s) URL such as http://flaresolverr:8191".into()),
     );
+    for (field, time) in [
+        ("connections.schedule_start", &c.schedule_start),
+        ("connections.schedule_end", &c.schedule_end),
+    ] {
+        check(
+            field,
+            crate::download::parse_time(time)
+                .is_none()
+                .then(|| "must be a time such as 07:00 (HH:MM)".into()),
+        );
+    }
     for (field, template) in [
         ("saveto.manga_rename", &s.saveto.manga_rename),
         ("saveto.chapter_rename", &s.saveto.chapter_rename),

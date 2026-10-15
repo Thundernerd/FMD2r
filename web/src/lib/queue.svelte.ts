@@ -3,6 +3,7 @@ import type {
 	TaskGroup,
 	TaskProgress,
 	TaskState,
+	TaskQueue,
 	TaskStatusChange,
 	TaskSummary
 } from '#lib/api/types.ts';
@@ -67,7 +68,7 @@ export type FinishedSort = 'newest' | 'oldest';
 
 export interface QueueStoreOptions {
 	/** Fetches the whole queue; called when frames mention tasks the store has not seen. */
-	refresh?: () => Promise<TaskSummary[]>;
+	refresh?: () => Promise<TaskQueue>;
 	/** Speed samples kept for the graph. */
 	historySize?: number;
 }
@@ -84,6 +85,8 @@ const lastActive = (task: TaskSummary) => Date.parse(task.date_last_downloaded ?
 export class QueueStore {
 	/** In queue order. */
 	tasks = $state<TaskSummary[]>([]);
+	/** While the download schedule keeps downloads paused, when they resume (`HH:MM`). */
+	pausedUntil = $state<string | null>(null);
 	filter = $state<QueueFilter>({ text: '', status: 'all', from: '', to: '' });
 	finishedSort = $state<FinishedSort>('newest');
 	/** Total download speed samples, oldest first. */
@@ -179,7 +182,8 @@ export class QueueStore {
 			const changes: Record<number, Partial<TaskSummary> | null> = {};
 			this.#inFlight = changes;
 			refresh()
-				.then((tasks) => {
+				.then(({ tasks, pausedUntil }) => {
+					this.pausedUntil = pausedUntil;
 					this.tasks = tasks.flatMap((t) => {
 						if (!(t.id in changes)) return [t];
 						const change = changes[t.id];

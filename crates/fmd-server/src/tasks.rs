@@ -150,6 +150,10 @@ pub struct TaskList {
     pub per_page: u32,
     /// Tasks per group matching the text and date filters (not the status filter).
     pub counts: TaskCounts,
+    /// While the download schedule keeps downloads paused, when they resume: `HH:MM` in the
+    /// server's local time.
+    #[schema(example = "23:00")]
+    pub paused_until: Option<String>,
 }
 
 const DEFAULT_PER_PAGE: u32 = 100;
@@ -390,6 +394,10 @@ pub(crate) async fn list(
         page,
         per_page,
         counts,
+        paused_until: state
+            .engine
+            .paused_until()
+            .map(|time| time.strftime("%H:%M").to_string()),
     }))
 }
 

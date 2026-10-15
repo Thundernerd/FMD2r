@@ -396,6 +396,11 @@ export interface MockOptions {
 	overridden?: string[];
 	/** Whether the server says it runs in a container, like the Docker image. */
 	inContainer?: boolean;
+	/**
+	 * When downloads resume (`HH:MM`) while the download schedule keeps them paused; `null` when
+	 * they run. Defaults to `sessionStorage['fmd2r.mock.paused-until']`.
+	 */
+	pausedUntil?: string | null;
 }
 
 const PASSWORD_KEY = 'fmd2r.mock.password';
@@ -405,6 +410,7 @@ const MODULE_SETTINGS_DELAY_KEY = 'fmd2r.mock.module-settings-delay-ms';
 const IMPORT_STEP_KEY = 'fmd2r.mock.import-step-delay-ms';
 const FRESH_INSTALL_KEY = 'fmd2r.mock.fresh-install';
 const OPEN_KEY = 'fmd2r.mock.open';
+const PAUSED_UNTIL_KEY = 'fmd2r.mock.paused-until';
 const MANGABAKA_KEY = 'fmd2r.mock.mangabaka';
 const SAVED_PASSWORD_KEY = 'fmd2r.mock.saved-password';
 /** The library groups, which outlive a reload as fmd-server's do. */
@@ -440,7 +446,8 @@ export function createMockBackend({
 	open = stored(OPEN_KEY) !== null,
 	externalAuth,
 	overridden = [],
-	inContainer = false
+	inContainer = false,
+	pausedUntil = stored(PAUSED_UNTIL_KEY)
 }: MockOptions = {}): MockBackend {
 	/** Whether this tab holds a session; kept in sessionStorage so it survives a reload, like the cookie. */
 	let loggedIn = stored(SESSION_KEY) !== null;
@@ -834,7 +841,14 @@ export function createMockBackend({
 			const page = Number(searchParams.get('page') ?? 1);
 			const perPage = Number(searchParams.get('per_page') ?? 100);
 			const items = tasks.slice((page - 1) * perPage, page * perPage);
-			return json({ items, total: tasks.length, page, per_page: perPage, counts });
+			return json({
+				items,
+				total: tasks.length,
+				page,
+				per_page: perPage,
+				counts,
+				paused_until: pausedUntil
+			});
 		}
 		if (route === 'POST /api/tasks/start-all' || route === 'POST /api/tasks/stop-all') {
 			for (const task of tasks) {
@@ -1239,8 +1253,8 @@ export function createMockBackend({
 		let ticks = 0;
 		const tick = () => {
 			ticks++;
-			// Waiting tasks start while fewer than two download.
-			for (const task of tasks) {
+			// Waiting tasks start while fewer than two download, unless the schedule pauses them.
+			for (const task of pausedUntil === null ? tasks : []) {
 				const running = tasks.filter((t) => t.status === 'downloading').length;
 				if (task.status === 'waiting' && running < 2) setStatus(task, 'downloading');
 			}

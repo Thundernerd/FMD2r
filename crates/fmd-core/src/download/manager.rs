@@ -14,7 +14,8 @@ use fmd_store::{ChapterStatus, NewChapter, NewTask, TaskId, TaskStatus};
 use tokio::sync::broadcast;
 
 use super::{
-    EngineConfig, EngineError, EngineEvent, NewDownload, Progress, SpeedLimiter, TaskInfo, task,
+    EngineConfig, EngineError, EngineEvent, NewDownload, Progress, Schedule, SpeedLimiter,
+    TaskInfo, task,
 };
 use crate::modules::ModuleInfo;
 use crate::settings::{
@@ -58,7 +59,8 @@ struct Running {
     thread: Option<JoinHandle<()>>,
     /// `TTaskThread.IsForDelete`.
     deleting: bool,
-    /// Went back to Waiting for free space: it stays Waiting when its thread ends.
+    /// Went back to Waiting for free space or the download schedule: it stays Waiting when its
+    /// thread ends.
     held: bool,
 }
 
@@ -67,6 +69,9 @@ struct ProgressClock {
     last: Progress,
     at: Instant,
 }
+
+/// The longest the download schedule's timer sleeps before looking at the clock again.
+const RECHECK: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 /// Minimum time between a task's progress reports.
 const PROGRESS_INTERVAL_MS: u128 = 250;
@@ -110,6 +115,12 @@ impl Inner {
 
     pub(super) fn is_exiting(&self) -> bool {
         self.exiting.load(Ordering::SeqCst)
+    }
+
+    /// The download schedule's window, when it is closed now.
+    pub(super) fn closed_schedule(&self) -> Option<Schedule> {
+        Schedule::of(&self.settings().connections)
+            .filter(|schedule| !schedule.is_open(self.config.wall_clock.now()))
     }
 
     pub(super) fn limits(&self, module: &Module) -> EffectiveLimits {
@@ -245,6 +256,7 @@ impl Inner {
         if count >= max {
             return Ok(());
         }
+        let closed = self.closed_schedule().is_some();
         for task in self.config.db.tasks().list()? {
             if count >= max {
                 break;
@@ -254,6 +266,10 @@ impl Inner {
             }
             if self.config.moving.blocks(Path::new(&task.save_to)) {
                 continue;
+            }
+            // Outside the download schedule's window it waits for the window to open.
+            if closed {
+                break;
             }
             if self.hold_if_disk_low(Path::new(&task.save_to)) {
                 continue;
@@ -380,7 +396,8 @@ impl Inner {
         Ok(())
     }
 
-    /// Marks running task `id` as gone back to Waiting for free space.
+    /// Marks running task `id` as gone back to Waiting, for free space or the download
+    /// schedule's window.
     pub(super) fn hold_running(&self, id: TaskId) {
         if let Some(running) = lock(&self.state).running.get_mut(&id) {
             running.held = true;
@@ -388,8 +405,8 @@ impl Inner {
     }
 
     /// `TTaskThread.Destroy` (baseunits/uDownloadsManager.pas:485-528): an unfinished task
-    /// becomes Stopped (or Disabled) unless deleting or exiting, or held for free space and
-    /// not stopped meanwhile.
+    /// becomes Stopped (or Disabled) unless deleting or exiting, or held (for free space or the
+    /// download schedule) and not stopped meanwhile.
     fn task_ended(self: &Arc<Self>, id: TaskId) {
         let (deleting, held) = {
             let mut state = lock(&self.state);
@@ -437,6 +454,7 @@ impl Inner {
     /// and Compressing tasks, left by a killed process, resume too (T44).
     pub(super) fn check_and_active_task_at_startup(self: &Arc<Self>) -> Result<(), EngineError> {
         let max = self.settings().connections.max_parallel_tasks;
+        let closed = self.closed_schedule().is_some();
         let mut started = 0;
         {
             let mut state = lock(&self.state);
@@ -458,7 +476,8 @@ impl Inner {
                         log_task(task.id, &task.title, why);
                     }
                     Some(module)
-                        if started < max
+                        if !closed
+                            && started < max
                             && self.can_create_task(&module)
                             && !self.hold_if_disk_low(Path::new(&task.save_to)) =>
                     {
@@ -669,6 +688,41 @@ impl Inner {
                 })
             })
             .collect()
+    }
+
+    /// Runs [`Self::check_and_active_task`] when the download schedule's window opens, and
+    /// whenever the settings change, until the settings service is gone.
+    pub(super) async fn watch_schedule(self: Arc<Self>) {
+        let mut settings = self.config.settings.subscribe();
+        loop {
+            // Until the window opens, but at most a few minutes, so the window closing or the
+            // clock changing is noticed.
+            let wait = Schedule::of(&settings.borrow_and_update().connections).map(|schedule| {
+                schedule
+                    .until_open(self.config.wall_clock.now())
+                    .map_or(RECHECK, |wait| wait.min(RECHECK))
+            });
+            let opened = async {
+                match wait {
+                    Some(wait) => self.config.wall_clock.sleep(wait).await,
+                    None => std::future::pending().await,
+                }
+            };
+            tokio::select! {
+                changed = settings.changed() => if changed.is_err() {
+                    return;
+                },
+                () = opened => {}
+            }
+            let inner = self.clone();
+            let checked = tokio::task::spawn_blocking(move || inner.check_and_active_task())
+                .await
+                .map_err(|e| EngineError::Thread(e.to_string()))
+                .and_then(|checked| checked);
+            if let Err(e) = checked {
+                tracing::error!(target: "fmd_core", "download schedule: {e}");
+            }
+        }
     }
 
     /// `StopAllDownloadTasksForExit` (baseunits/uDownloadsManager.pas:1957-1977); statuses

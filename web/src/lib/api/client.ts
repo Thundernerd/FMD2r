@@ -44,6 +44,7 @@ import type {
 	Settings,
 	SettingsSave,
 	TaskDetail,
+	TaskQueue,
 	TaskSummary
 } from './types';
 
@@ -101,7 +102,7 @@ export interface Api {
 	/** Deletes every read inbox item. */
 	clearReadInbox(): Promise<void>;
 	/** The whole download queue, in queue order. */
-	listTasks(): Promise<TaskSummary[]>;
+	listTasks(): Promise<TaskQueue>;
 	/** A task with its chapters; rejects with status 404 when there is no such task. */
 	getTask(id: number): Promise<TaskDetail>;
 	/** Runs a task action and resolves to the task as it is then. */
@@ -422,7 +423,9 @@ export function createApi({
 					})
 				);
 				tasks.push(...list.items);
-				if (list.items.length === 0 || tasks.length >= list.total) return tasks;
+				if (list.items.length === 0 || tasks.length >= list.total) {
+					return { tasks, pausedUntil: list.paused_until ?? null };
+				}
 			}
 		},
 		async getTask(id) {

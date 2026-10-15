@@ -20,6 +20,8 @@ fmd-pack = { path = "../fmd-pack" }
 fmd-store = { path = "../fmd-store" }
 futures-util = "0.3"
 getrandom = "0.3"
+# The download schedule's times of day.
+jiff = { version = "0.2.38", default-features = false, features = ["std"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 mime_guess = "2"
 rust-embed = { version = "8", features = ["mime-guess"] }

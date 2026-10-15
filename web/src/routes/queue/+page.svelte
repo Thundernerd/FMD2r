@@ -25,6 +25,19 @@
 			.catch(() => {});
 	});
 
+	/** While downloads are paused, how often the page refetches the queue to see them resume. */
+	const PAUSED_REFRESH_MS = 60_000;
+
+	// The schedule may have changed on the Settings page, which sends no task frame.
+	$effect(() => queue.resync());
+
+	$effect(() => {
+		// The window can open without any task to start, so no frame says so.
+		if (!queue.pausedUntil) return;
+		const timer = setInterval(() => queue.resync(), PAUSED_REFRESH_MS);
+		return () => clearInterval(timer);
+	});
+
 	function readFinishedSort(): FinishedSort {
 		try {
 			const saved = localStorage.getItem(FINISHED_SORT_KEY);
@@ -159,6 +172,10 @@
 		<p class="problem small" role="alert">{error}</p>
 	{/if}
 
+	{#if queue.pausedUntil}
+		<p class="paused small" role="status">Downloads are paused until {queue.pausedUntil}</p>
+	{/if}
+
 	{#if queue.tasks.length === 0}
 		<p class="muted">The queue is empty. Queue chapters from a series page.</p>
 	{:else}
@@ -285,6 +302,13 @@
 		border-radius: var(--r);
 		background: var(--bad-soft);
 		color: var(--bad);
+	}
+	.paused {
+		margin: 0;
+		padding: 6px 10px;
+		border-radius: var(--r);
+		background: var(--warn-soft);
+		color: var(--warn);
 	}
 	.group {
 		display: flex;

@@ -366,8 +366,20 @@ impl<'a> TaskRun<'a> {
             if self.terminated() {
                 return Ok(());
             }
+            // Outside the download schedule's window, or on a nearly full disk, it goes back to
+            // the queue at this chapter, to carry on once the window opens or the disk has room.
+            if let Some(schedule) = self.inner.closed_schedule() {
+                self.inner.hold_running(self.id);
+                self.set_status(TaskStatus::Waiting)?;
+                let until = schedule.start().strftime("%H:%M");
+                log_task(
+                    self.id,
+                    &self.title,
+                    format!("waiting: paused until {until}"),
+                );
+                return Ok(());
+            }
             if self.inner.hold_if_disk_low(&self.save_to) {
-                // Back in the queue at this chapter, to carry on once the disk has room.
                 self.inner.hold_running(self.id);
                 self.set_status(TaskStatus::Waiting)?;
                 log_task(self.id, &self.title, "waiting: the disk is almost full");

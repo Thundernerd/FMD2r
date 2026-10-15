@@ -279,6 +279,16 @@ export const SETTINGS_SECTIONS: Section[] = [
 				'FlareSolverr URL',
 				'Solves Cloudflare challenges, e.g. http://flaresolverr:8191. Takes effect after a restart.'
 			),
+			checkbox('connections.schedule_enabled', 'Only download during set hours'),
+			text('connections.schedule_start', 'From', 'HH:MM, in the server’s local time.', {
+				placeholder: '23:00'
+			}),
+			text(
+				'connections.schedule_end',
+				'Until',
+				'HH:MM. Before “From”, the hours cross midnight; equal to it, downloads run all day.',
+				{ placeholder: '07:00' }
+			),
 			checkbox('connections.proxy.enabled', 'Use a proxy'),
 			select('connections.proxy.type', 'Proxy type', [
 				{ value: 'http', label: 'HTTP' },
