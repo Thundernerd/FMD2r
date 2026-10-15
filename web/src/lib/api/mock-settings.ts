@@ -30,7 +30,8 @@ const defaultNotificationTypes = (): NotificationType[] => [
 	'module_update',
 	'downloads_moved',
 	'comic_server',
-	'missing_check'
+	'missing_check',
+	'disk_space_low'
 ];
 
 /** The server's defaults (fmd_core::settings::Settings::default()). */
@@ -61,8 +62,12 @@ export const defaultSettings = (): Settings => ({
 		max_favorite_threads: 1,
 		max_update_list_threads: 1,
 		timeout_secs: 30,
+		max_download_kbps: 0,
 		user_agent: DEFAULT_USER_AGENT,
 		flaresolverr_url: '',
+		schedule_enabled: false,
+		schedule_start: '23:00',
+		schedule_end: '07:00',
 		proxy: { enabled: false, type: 'http', host: '', port: null, username: '', has_password: false }
 	},
 	saveto: {
@@ -80,7 +85,8 @@ export const defaultSettings = (): Settings => ({
 		digit_volume_length: 2,
 		convert_digit_chapter: true,
 		digit_chapter_length: 3,
-		illegal_chars: 'posix'
+		illegal_chars: 'posix',
+		min_free_space_mb: 1024
 	},
 	output: { format: 'folder', pdf_quality: 100, comic_metadata: 'none' },
 	images: {

@@ -2,13 +2,15 @@
 	import { api, events } from '#lib/app.ts';
 	import SpeedGraph from '#lib/components/queue/SpeedGraph.svelte';
 	import TaskRow from '#lib/components/queue/TaskRow.svelte';
-	import { GROUPS } from '#lib/queue.svelte.ts';
+	import { GROUPS, type FinishedSort } from '#lib/queue.svelte.ts';
 	import { formatRate } from '#lib/queue-format.ts';
 
 	const queue = events.queue;
 
 	/** The page's graph spans five minutes of one sample a second. */
 	const SLOTS = 300;
+	/** Where this browser remembers the Finished group's order. */
+	const FINISHED_SORT_KEY = 'fmd2r.queue.finishedSort';
 
 	let error = $state<string | null>(null);
 	let busy = $state(false);
@@ -22,6 +24,41 @@
 			.then((modules) => (websites = new Map(modules.map((m) => [m.id, m.name]))))
 			.catch(() => {});
 	});
+
+	/** While downloads are paused, how often the page refetches the queue to see them resume. */
+	const PAUSED_REFRESH_MS = 60_000;
+
+	// The schedule may have changed on the Settings page, which sends no task frame.
+	$effect(() => queue.resync());
+
+	$effect(() => {
+		// The window can open without any task to start, so no frame says so.
+		if (!queue.pausedUntil) return;
+		const timer = setInterval(() => queue.resync(), PAUSED_REFRESH_MS);
+		return () => clearInterval(timer);
+	});
+
+	function readFinishedSort(): FinishedSort {
+		try {
+			const saved = localStorage.getItem(FINISHED_SORT_KEY);
+			if (saved === 'newest' || saved === 'oldest') return saved;
+		} catch {
+			// Unavailable: the default.
+		}
+		return 'newest';
+	}
+
+	queue.finishedSort = readFinishedSort();
+
+	function toggleFinishedSort() {
+		const sort: FinishedSort = queue.finishedSort === 'newest' ? 'oldest' : 'newest';
+		queue.finishedSort = sort;
+		try {
+			localStorage.setItem(FINISHED_SORT_KEY, sort);
+		} catch {
+			// Sorted this way for this visit only.
+		}
+	}
 
 	async function bulk(what: string, call: () => Promise<void>) {
 		if (busy) return;
@@ -135,20 +172,46 @@
 		<p class="problem small" role="alert">{error}</p>
 	{/if}
 
+	{#if queue.pausedUntil}
+		<p class="paused small" role="status">Downloads are paused until {queue.pausedUntil}</p>
+	{/if}
+
 	{#if queue.tasks.length === 0}
 		<p class="muted">The queue is empty. Queue chapters from a series page.</p>
 	{:else}
 		{#each queue.groups as group (group.key)}
 			<section class="group" aria-labelledby="group-{group.key}">
-				<h2 id="group-{group.key}">
-					{group.label} <span class="count num muted">{group.tasks.length}</span>
-				</h2>
+				<div class="group-head">
+					<h2 id="group-{group.key}">
+						{group.label} <span class="count num muted">{group.tasks.length}</span>
+					</h2>
+					{#if group.key === 'finished'}
+						<button
+							class="btn sm ghost"
+							type="button"
+							aria-label="Sort finished tasks"
+							onclick={toggleFinishedSort}
+							>{queue.finishedSort === 'newest' ? 'Newest first' : 'Oldest first'}</button
+						>
+					{/if}
+				</div>
 				{#if group.tasks.length === 0}
 					<p class="small muted">{filtering ? 'No matching tasks.' : 'None.'}</p>
 				{:else}
+					{#if group.key === 'waiting' && filtering}
+						<!-- "Up" among filtered rows is ambiguous. -->
+						<p class="small muted">Clear the filter to reorder.</p>
+					{/if}
 					<ul class="tasks">
 						{#each group.tasks as task (task.id)}
-							<TaskRow {task} {api} {queue} {websites} onerror={(message) => (error = message)} />
+							<TaskRow
+								{task}
+								{api}
+								{queue}
+								{websites}
+								reorderable={!filtering}
+								onerror={(message) => (error = message)}
+							/>
 						{/each}
 					</ul>
 				{/if}
@@ -240,9 +303,22 @@
 		background: var(--bad-soft);
 		color: var(--bad);
 	}
+	.paused {
+		margin: 0;
+		padding: 6px 10px;
+		border-radius: var(--r);
+		background: var(--warn-soft);
+		color: var(--warn);
+	}
 	.group {
 		display: flex;
 		flex-direction: column;
+		gap: var(--sp-2);
+	}
+	.group-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		gap: var(--sp-2);
 	}
 	.group h2 {

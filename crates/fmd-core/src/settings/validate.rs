@@ -137,6 +137,10 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
     );
     check("connections.timeout_secs", out_of(c.timeout_secs, 1..=300));
     check(
+        "connections.max_download_kbps",
+        out_of(c.max_download_kbps, 0..=1_000_000),
+    );
+    check(
         "connections.proxy.port",
         (c.proxy.port == Some(0)).then(|| "must be 1..=65535".into()),
     );
@@ -201,6 +205,17 @@ pub(super) fn validate(s: &Settings) -> Vec<FieldError> {
         bad_flaresolverr
             .then(|| "must be empty or an http(s) URL such as http://flaresolverr:8191".into()),
     );
+    for (field, time) in [
+        ("connections.schedule_start", &c.schedule_start),
+        ("connections.schedule_end", &c.schedule_end),
+    ] {
+        check(
+            field,
+            crate::download::parse_time(time)
+                .is_none()
+                .then(|| "must be a time such as 07:00 (HH:MM)".into()),
+        );
+    }
     for (field, template) in [
         ("saveto.manga_rename", &s.saveto.manga_rename),
         ("saveto.chapter_rename", &s.saveto.chapter_rename),

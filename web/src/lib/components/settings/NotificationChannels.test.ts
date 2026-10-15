@@ -69,10 +69,12 @@ describe('NotificationChannels', () => {
 				'Missing-chapter check found nothing',
 				'Completed series removed',
 				'Download failed',
+				'Download completed',
 				'Library check failed',
 				'Module updates',
 				'Downloads moved',
-				'Comic server rescan'
+				'Comic server rescan',
+				'Disk almost full'
 			]);
 			expect(
 				(types.getByRole('checkbox', { name: 'Module updates' }) as HTMLInputElement).checked
@@ -80,6 +82,9 @@ describe('NotificationChannels', () => {
 			expect(
 				(types.getByRole('checkbox', { name: 'Completed series removed' }) as HTMLInputElement)
 					.checked
+			).toBe(false);
+			expect(
+				(types.getByRole('checkbox', { name: 'Download completed' }) as HTMLInputElement).checked
 			).toBe(false);
 		}
 	});

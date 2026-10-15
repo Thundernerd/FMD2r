@@ -84,7 +84,10 @@ impl Feed {
             // A status change follows each of these when the task's status changes.
             EngineEvent::Added { .. }
             | EngineEvent::Chapter { .. }
-            | EngineEvent::Enabled { .. } => None,
+            | EngineEvent::Enabled { .. }
+            // The inbox reports these (`crate::notifications`).
+            | EngineEvent::DiskSpaceLow { .. }
+            | EngineEvent::DiskSpaceRecovered => None,
         }
     }
 

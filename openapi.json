@@ -1154,6 +1154,88 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "inbox"
+        ],
+        "summary": "Delete every read inbox item.",
+        "operationId": "clearInboxRead",
+        "parameters": [
+          {
+            "name": "read",
+            "in": "query",
+            "description": "Must be `true`: only read items can be cleared.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "`read=true` is missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inbox/read": {
+      "post": {
+        "tags": [
+          "inbox"
+        ],
+        "summary": "Mark every inbox item as read.",
+        "operationId": "markInboxAllRead",
+        "responses": {
+          "204": {
+            "description": "Marked as read"
+          }
+        }
+      }
+    },
+    "/api/inbox/{id}": {
+      "delete": {
+        "tags": [
+          "inbox"
+        ],
+        "summary": "Delete one inbox item.",
+        "operationId": "deleteInboxItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Inbox item id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "No such inbox item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/inbox/{id}/read": {
@@ -4092,9 +4174,13 @@
           "max_favorite_threads",
           "max_update_list_threads",
           "timeout_secs",
+          "max_download_kbps",
           "user_agent",
           "proxy",
-          "flaresolverr_url"
+          "flaresolverr_url",
+          "schedule_enabled",
+          "schedule_start",
+          "schedule_end"
         ],
         "properties": {
           "always_start_from_failed_chapters": {
@@ -4111,6 +4197,13 @@
           "flaresolverr_url": {
             "type": "string",
             "description": "FlareSolverr's URL, e.g. `http://flaresolverr:8191`, for Cloudflare challenges; empty\nfor none. No FMD2 setting: FMD2r writes it into upstream's\n`lua/websitebypass/websitebypass_config.json` at startup\n([`write_websitebypass_config`](super::write_websitebypass_config))."
+          },
+          "max_download_kbps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Total page download speed over all tasks, in KB/s (1 KB = 1024 bytes); 0 for no limit.\nMetadata, list updates and covers aren't limited. No FMD2 setting (issue #309).",
+            "maximum": 1000000,
+            "minimum": 0
           },
           "max_favorite_threads": {
             "type": "integer",
@@ -4143,6 +4236,20 @@
             "description": "HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,\nbaseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;\nmeaning in baseunits/httpsendthread.pas:626).",
             "maximum": 5,
             "minimum": -1
+          },
+          "schedule_enabled": {
+            "type": "boolean",
+            "description": "Downloads run only from `schedule_start` until `schedule_end` each day. No FMD2\nsetting: FMD2r's download schedule (issue #310)."
+          },
+          "schedule_end": {
+            "type": "string",
+            "description": "When downloads stop, `HH:MM` in the server's local time. Before `schedule_start`, the\nwindow crosses midnight; equal to it, the window is all day.",
+            "example": "07:00"
+          },
+          "schedule_start": {
+            "type": "string",
+            "description": "When downloads may start, `HH:MM` in the server's local time.",
+            "example": "23:00"
           },
           "threads_per_task": {
             "type": "integer",
@@ -6110,17 +6217,19 @@
       },
       "NotificationType": {
         "type": "string",
-        "description": "A kind of event a channel can be set to send, one per inbox event kind. Serialised as the\nkind, e.g. `download_failed`.",
+        "description": "A kind of event a channel can be set to send: an inbox event kind, or an event sent without\none. Serialised as the kind, e.g. `download_failed`.",
         "enum": [
           "new_chapters",
           "missing_chapters",
           "missing_check",
           "completed",
           "download_failed",
+          "download_completed",
           "favorites_check_failed",
           "module_update",
           "downloads_moved",
-          "comic_server"
+          "comic_server",
+          "disk_space_low"
         ]
       },
       "NtfySettingsView": {
@@ -6499,6 +6608,7 @@
               "generate_manga_folder": true,
               "illegal_chars": "posix",
               "manga_rename": "%MANGA%",
+              "min_free_space_mb": 1024,
               "remove_manga_name_from_chapter": false,
               "replace_unicode": false,
               "replace_unicode_with": "_"
@@ -6662,6 +6772,13 @@
             "type": "string",
             "description": "`saveto/MangaCustomRename` (mangadownloader/forms/frmMain.pas:5894).",
             "default": "%MANGA%"
+          },
+          "min_free_space_mb": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Downloads hold while the disk they save to has less than this many MB free, and carry on\nonce it has room again (issue #308; FMD2 never checks). 0 turns the guard off.",
+            "default": 1024,
+            "minimum": 0
           },
           "remove_manga_name_from_chapter": {
             "type": "boolean",
@@ -7043,6 +7160,7 @@
               "always_start_from_failed_chapters": true,
               "auto_retry_failed_tasks": 1,
               "flaresolverr_url": "",
+              "max_download_kbps": 0,
               "max_favorite_threads": 1,
               "max_parallel_tasks": 1,
               "max_update_list_threads": 1,
@@ -7055,6 +7173,9 @@
                 "username": ""
               },
               "retry_count": 5,
+              "schedule_enabled": false,
+              "schedule_end": "07:00",
+              "schedule_start": "23:00",
               "threads_per_task": 1,
               "timeout_secs": 30,
               "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
@@ -7179,7 +7300,8 @@
                   "module_update",
                   "downloads_moved",
                   "comic_server",
-                  "missing_check"
+                  "missing_check",
+                  "disk_space_low"
                 ]
               },
               "ntfy": {
@@ -7194,7 +7316,8 @@
                   "module_update",
                   "downloads_moved",
                   "comic_server",
-                  "missing_check"
+                  "missing_check",
+                  "disk_space_low"
                 ]
               },
               "webhook": {
@@ -7208,7 +7331,8 @@
                   "module_update",
                   "downloads_moved",
                   "comic_server",
-                  "missing_check"
+                  "missing_check",
+                  "disk_space_low"
                 ],
                 "url": ""
               }
@@ -7251,6 +7375,7 @@
               "generate_manga_folder": true,
               "illegal_chars": "posix",
               "manga_rename": "%MANGA%",
+              "min_free_space_mb": 1024,
               "remove_manga_name_from_chapter": false,
               "replace_unicode": false,
               "replace_unicode_with": "_"
@@ -7518,6 +7643,14 @@
             "format": "int32",
             "description": "1-based.",
             "minimum": 0
+          },
+          "paused_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "While the download schedule keeps downloads paused, when they resume: `HH:MM` in the\nserver's local time.",
+            "example": "23:00"
           },
           "per_page": {
             "type": "integer",

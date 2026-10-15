@@ -62,6 +62,11 @@ pub trait DownloadEngine: Send + Sync + 'static {
         None
     }
 
+    /// When downloads resume, while the download schedule keeps them paused.
+    fn paused_until(&self) -> Option<jiff::civil::Time> {
+        None
+    }
+
     /// `RemoveAllFinishedTasks` (baseunits/uDownloadsManager.pas:1987-2001): deletes the
     /// finished tasks, keeping their files.
     fn remove_finished(&self) -> BoxFuture<'_, Result<(), EngineError>> {
@@ -107,6 +112,10 @@ impl DownloadEngine for DownloadManager {
 
     fn activate_waiting(&self) -> BoxFuture<'_, Result<(), EngineError>> {
         Box::pin(DownloadManager::activate_waiting(self))
+    }
+
+    fn paused_until(&self) -> Option<jiff::civil::Time> {
+        DownloadManager::paused_until(self)
     }
 
     fn start_all(&self) -> BoxFuture<'_, Result<(), EngineError>> {

@@ -44,6 +44,7 @@ import type {
 	Settings,
 	SettingsSave,
 	TaskDetail,
+	TaskQueue,
 	TaskSummary
 } from './types';
 
@@ -95,8 +96,13 @@ export interface Api {
 	changePassword(password: string): Promise<boolean>;
 	listInbox(): Promise<InboxItem[]>;
 	markRead(id: string): Promise<void>;
+	markAllRead(): Promise<void>;
+	/** Rejects with status 404 when there is no such item. */
+	deleteInboxItem(id: string): Promise<void>;
+	/** Deletes every read inbox item. */
+	clearReadInbox(): Promise<void>;
 	/** The whole download queue, in queue order. */
-	listTasks(): Promise<TaskSummary[]>;
+	listTasks(): Promise<TaskQueue>;
 	/** A task with its chapters; rejects with status 404 when there is no such task. */
 	getTask(id: number): Promise<TaskDetail>;
 	/** Runs a task action and resolves to the task as it is then. */
@@ -391,6 +397,22 @@ export function createApi({
 			});
 			if (!response.ok) throw new ApiError(response.status, 'markRead');
 		},
+		async markAllRead() {
+			const { response } = await client.POST('/api/inbox/read');
+			if (!response.ok) throw new ApiError(response.status, 'markInboxAllRead');
+		},
+		async deleteInboxItem(id) {
+			const { response } = await client.DELETE('/api/inbox/{id}', {
+				params: { path: { id } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'deleteInboxItem');
+		},
+		async clearReadInbox() {
+			const { response } = await client.DELETE('/api/inbox', {
+				params: { query: { read: true } }
+			});
+			if (!response.ok) throw new ApiError(response.status, 'clearInboxRead');
+		},
 		async listTasks() {
 			const tasks: TaskSummary[] = [];
 			for (let page = 1; ; page++) {
@@ -401,7 +423,9 @@ export function createApi({
 					})
 				);
 				tasks.push(...list.items);
-				if (list.items.length === 0 || tasks.length >= list.total) return tasks;
+				if (list.items.length === 0 || tasks.length >= list.total) {
+					return { tasks, pausedUntil: list.paused_until ?? null };
+				}
 			}
 		},
 		async getTask(id) {

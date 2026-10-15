@@ -43,6 +43,8 @@ fn fresh_db_returns_fmd2_defaults() {
     assert_eq!(s.connections.retry_count, 5);
     assert_eq!(s.connections.timeout_secs, 30);
     assert!(s.connections.user_agent.starts_with("Mozilla/5.0"));
+    // No FMD2 setting: downloads are unlimited until a limit is set (issue #309).
+    assert_eq!(s.connections.max_download_kbps, 0);
 
     // PDFQuality 100, Compress 0 = None (mangadownloader/forms/frmMain.pas:5888-5889).
     assert_eq!(s.output.format, OutputFormat::Folder);
@@ -764,7 +766,8 @@ fn notification_urls_must_be_http_and_set_on_an_enabled_channel() {
 
 /// A channel stored before per-type picks (issue #299) keeps sending what it sent: "New chapters"
 /// becomes new and missing chapters, "Problems" every kind that could be a warning or an error,
-/// including a missing-chapter check that could not check some series.
+/// including a missing-chapter check that could not check some series and a full disk
+/// (issue #308).
 #[test]
 fn stored_new_chapters_and_problems_load_as_the_matching_types() {
     use NotificationType::*;
@@ -776,6 +779,7 @@ fn stored_new_chapters_and_problems_load_as_the_matching_types() {
         DownloadsMoved,
         ComicServer,
         MissingCheck,
+        DiskSpaceLow,
     ];
     let both = [chapters.clone(), problems.clone()].concat();
     for (stored, types) in [

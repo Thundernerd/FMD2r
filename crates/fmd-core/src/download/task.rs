@@ -366,6 +366,25 @@ impl<'a> TaskRun<'a> {
             if self.terminated() {
                 return Ok(());
             }
+            // Outside the download schedule's window, or on a nearly full disk, it goes back to
+            // the queue at this chapter, to carry on once the window opens or the disk has room.
+            if let Some(schedule) = self.inner.closed_schedule() {
+                self.inner.hold_running(self.id);
+                self.set_status(TaskStatus::Waiting)?;
+                let until = schedule.start().strftime("%H:%M");
+                log_task(
+                    self.id,
+                    &self.title,
+                    format!("waiting: paused until {until}"),
+                );
+                return Ok(());
+            }
+            if self.inner.hold_if_disk_low(&self.save_to) {
+                self.inner.hold_running(self.id);
+                self.set_status(TaskStatus::Waiting)?;
+                log_task(self.id, &self.title, "waiting: the disk is almost full");
+                return Ok(());
+            }
             self.enter_chapter()?;
 
             let chapter_name = self.chapter_names[self.chapter].clone();
@@ -460,10 +479,11 @@ impl<'a> TaskRun<'a> {
                         failure => failure,
                     })
             };
+            // A failed chapter only marks itself failed: the task goes on with the next one and
+            // becomes `Failed` once, when the run ends.
             let reason = failure.map(|failure| failure.reason(&chapter_name));
             if let Some(reason) = &reason {
                 tracing::warn!(target: "fmd_core", "task {}: {reason}", self.id.0);
-                self.set_failed(reason)?;
             }
             let failed = reason.is_some();
             self.chapter_failures[self.chapter] = reason;
@@ -493,7 +513,7 @@ impl<'a> TaskRun<'a> {
             self.save_chapter_pointer()?;
             let failed = self.failed_chapters();
             let reason = match failed.as_slice() {
-                // The reason its `Failed` event already gave.
+                // One failed chapter is reported as is, without a list around it.
                 [(_, Some(reason))] => reason.clone(),
                 _ => {
                     let chapters: Vec<String> = failed

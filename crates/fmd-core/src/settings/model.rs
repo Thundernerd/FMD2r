@@ -209,6 +209,10 @@ pub struct ConnectionSettings {
     /// (mangadownloader/forms/frmMain.lfm:3387-3388).
     #[schema(minimum = 1, maximum = 300)]
     pub timeout_secs: u32,
+    /// Total page download speed over all tasks, in KB/s (1 KB = 1024 bytes); 0 for no limit.
+    /// Metadata, list updates and covers aren't limited. No FMD2 setting (issue #309).
+    #[schema(minimum = 0, maximum = 1000000)]
+    pub max_download_kbps: u32,
     /// Default user agent; an empty value resets to [`DEFAULT_USER_AGENT`]
     /// (`connections/DefaultUserAgent`, mangadownloader/forms/frmMain.pas:5867-5871).
     pub user_agent: String,
@@ -219,6 +223,16 @@ pub struct ConnectionSettings {
     /// `lua/websitebypass/websitebypass_config.json` at startup
     /// ([`write_websitebypass_config`](super::write_websitebypass_config)).
     pub flaresolverr_url: String,
+    /// Downloads run only from `schedule_start` until `schedule_end` each day. No FMD2
+    /// setting: FMD2r's download schedule (issue #310).
+    pub schedule_enabled: bool,
+    /// When downloads may start, `HH:MM` in the server's local time.
+    #[schema(example = "23:00")]
+    pub schedule_start: String,
+    /// When downloads stop, `HH:MM` in the server's local time. Before `schedule_start`, the
+    /// window crosses midnight; equal to it, the window is all day.
+    #[schema(example = "07:00")]
+    pub schedule_end: String,
 }
 
 impl Default for ConnectionSettings {
@@ -232,9 +246,13 @@ impl Default for ConnectionSettings {
             max_favorite_threads: 1,
             max_update_list_threads: 1,
             timeout_secs: 30,
+            max_download_kbps: 0,
             user_agent: DEFAULT_USER_AGENT.into(),
             proxy: ProxySettings::default(),
             flaresolverr_url: String::new(),
+            schedule_enabled: false,
+            schedule_start: "23:00".into(),
+            schedule_end: "07:00".into(),
         }
     }
 }
@@ -325,6 +343,9 @@ pub struct SaveToSettings {
     /// Which characters are stripped from names. FMD2 always strips the Windows set
     /// (`RemoveSymbols`, baseunits/uBaseUnit.pas:1382); FMD2r defaults to POSIX.
     pub illegal_chars: SymbolMode,
+    /// Downloads hold while the disk they save to has less than this many MB free, and carry on
+    /// once it has room again (issue #308; FMD2 never checks). 0 turns the guard off.
+    pub min_free_space_mb: u32,
 }
 
 impl Default for SaveToSettings {
@@ -349,6 +370,7 @@ impl Default for SaveToSettings {
             convert_digit_chapter: true,
             digit_chapter_length: 3,
             illegal_chars: SymbolMode::Posix,
+            min_free_space_mb: 1024,
         }
     }
 }

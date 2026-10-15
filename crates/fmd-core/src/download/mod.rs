@@ -14,7 +14,7 @@
 //! | (new) | Waiting, or Stopped when `add_as_stopped` | [`DownloadManager::add_task`] | mangadownloader/forms/frmMain.pas:2754-2763 |
 //! | Stopped, Failed | Waiting | `start`, `start_all` | `SetTaskActive`, `StartAllTasks` (baseunits/uDownloadsManager.pas:1835-1844, :1922-1941) |
 //! | any but Waiting, while not running | Waiting, all chapters pending | `redownload` | `RedownloadTask` (:1846-1857) |
-//! | Waiting | running (Preparing) | a free slot: under `max_parallel_tasks` and the module's `CanCreateTask` | `CheckAndActiveTask` (:1784-1833), baseunits/WebsiteModules.pas:414-420 |
+//! | Waiting | running (Preparing) | a free slot: under `max_parallel_tasks` and the module's `CanCreateTask`, inside the download schedule's window | `CheckAndActiveTask` (:1784-1833), baseunits/WebsiteModules.pas:414-420; the schedule is FMD2r's own |
 //! | Preparing | Downloading | page count and page links known | `TTaskThread.Execute` (:1180-1268) |
 //! | Downloading | Converting, then Compressing | every page saved | :1276-1294 |
 //! | Downloading, Converting, Compressing | Failed (the task carries on with the next chapter) | a page missing, conversion or packing failed | :1280-1310 |
@@ -22,7 +22,10 @@
 //! | last chapter done | Finished, or Failed when a chapter failed | | :1346-1362 |
 //! | Waiting | Stopped | `stop`, `stop_all` | `StopTask` (:1900-1920) |
 //! | running | Stopped | `stop`, `stop_all`: the thread is terminated | `TTaskThread.Destroy` (:485-528) |
+//! | running | Waiting | between chapters, outside the download schedule's window; it carries on once the window opens | FMD2r's own ([`Schedule`]) |
 //! | any | Disabled / Stopped | `disable` / `enable` | `TTaskContainer.SetEnabled` (:1384-1397) |
+//! | Waiting | stays Waiting | its disk has less than `saveto.min_free_space_mb` free (issue #308; FMD2 never checks) | |
+//! | running | Waiting | before a chapter, its disk has less than `saveto.min_free_space_mb` free | |
 //! | Downloading, Preparing, Waiting (and Converting, Compressing: a killed process) at startup | running, or Waiting; Stopped when the module is gone | [`DownloadManager::open`] | `CheckAndActiveTaskAtStartup` (:1859-1893) |
 //!
 //! A task running when the manager is dropped keeps its status, so the next
@@ -30,18 +33,22 @@
 
 mod comic_metadata;
 mod files;
+mod limiter;
 mod manager;
 mod page;
 mod preview;
+mod schedule;
 mod task;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use fmd_http::HttpClient;
 use fmd_lua::{Module, ModuleRegistry, WorkerPool};
 use fmd_store::{AppDb, MetadataSeries, StoreError};
 use tokio::sync::broadcast;
 
+use crate::disk_space::{FreeSpace, Statvfs};
 use crate::folder_move::MovingFolders;
 use crate::settings::{SettingsError, SettingsService};
 use manager::Inner;
@@ -49,7 +56,10 @@ pub(crate) use manager::rename_options;
 pub use manager::save_to;
 
 pub use fmd_store::{ChapterStatus, Task, TaskChapter, TaskId, TaskStatus};
+pub use limiter::{Clock, SpeedLimiter, SystemClock};
 pub use preview::{PagePlacement, SampleChapter, first_page};
+pub(crate) use schedule::{Schedule, parse_time};
+pub use schedule::{SystemWallClock, WallClock};
 
 pub type ModuleLookup = dyn Fn(&str) -> Option<Arc<Module>> + Send + Sync;
 
@@ -79,7 +89,18 @@ pub struct EngineConfig {
     /// Folders a library move is working in: a waiting task downloading into one starts once
     /// the move is done.
     pub moving: MovingFolders,
+    /// The engine's time; it paces page downloads under `connections.max_download_kbps`.
+    pub clock: Arc<dyn Clock>,
+    /// Reads the free space on the disks tasks save to.
+    pub free_space: Arc<dyn FreeSpace>,
+    /// How often a disk holding downloads is measured again.
+    pub disk_recheck: Duration,
+    /// The local time the download schedule goes by.
+    pub wall_clock: Arc<dyn WallClock>,
 }
+
+/// How often a disk holding downloads is measured again, by default.
+pub const DISK_RECHECK: Duration = Duration::from_secs(60);
 
 impl EngineConfig {
     pub fn new(
@@ -97,11 +118,36 @@ impl EngineConfig {
             http,
             series: None,
             moving: MovingFolders::default(),
+            clock: Arc::new(SystemClock),
+            free_space: Arc::new(Statvfs),
+            disk_recheck: DISK_RECHECK,
+            wall_clock: Arc::new(SystemWallClock),
         }
+    }
+
+    /// Measures free space with `reader`, again every `recheck` while downloads are held.
+    pub fn with_free_space(
+        mut self,
+        reader: Arc<dyn FreeSpace>,
+        recheck: Duration,
+    ) -> EngineConfig {
+        self.free_space = reader;
+        self.disk_recheck = recheck;
+        self
     }
 
     pub fn with_series_lookup(mut self, lookup: Arc<SeriesLookup>) -> EngineConfig {
         self.series = Some(lookup);
+        self
+    }
+
+    pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> EngineConfig {
+        self.clock = clock;
+        self
+    }
+
+    pub fn with_wall_clock(mut self, clock: Arc<dyn WallClock>) -> EngineConfig {
+        self.wall_clock = clock;
         self
     }
 }
@@ -154,6 +200,14 @@ pub enum EngineEvent {
         task: TaskId,
     },
     Reordered,
+    /// Downloads are on hold: the disk `folder` is on has `free_bytes` free, under
+    /// `saveto.min_free_space_mb`. Sent once until [`EngineEvent::DiskSpaceRecovered`].
+    DiskSpaceLow {
+        folder: String,
+        free_bytes: u64,
+    },
+    /// No waiting task's disk is short of space any more; held tasks carry on.
+    DiskSpaceRecovered,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,6 +253,8 @@ pub enum EngineError {
 /// [`DownloadManager::open`] resumes them.
 pub struct DownloadManager {
     inner: Arc<Inner>,
+    /// [`Inner::watch_schedule`].
+    schedule: tokio::task::JoinHandle<()>,
 }
 
 impl DownloadManager {
@@ -207,7 +263,8 @@ impl DownloadManager {
     /// :1859-1893).
     pub async fn open(config: EngineConfig) -> Result<DownloadManager, EngineError> {
         let inner = Arc::new(Inner::new(config));
-        let manager = DownloadManager { inner };
+        let schedule = tokio::spawn(inner.clone().watch_schedule());
+        let manager = DownloadManager { inner, schedule };
         manager
             .blocking(Inner::check_and_active_task_at_startup)
             .await?;
@@ -295,6 +352,13 @@ impl DownloadManager {
         self.inner.subscribe()
     }
 
+    /// When downloads resume, while the download schedule's window is closed.
+    pub fn paused_until(&self) -> Option<jiff::civil::Time> {
+        self.inner
+            .closed_schedule()
+            .map(|schedule| schedule.start())
+    }
+
     /// Like dropping the manager, but waits on a blocking thread instead of a tokio worker.
     pub async fn shutdown(self) -> Result<(), EngineError> {
         self.blocking(|inner| {
@@ -307,6 +371,7 @@ impl DownloadManager {
 
 impl Drop for DownloadManager {
     fn drop(&mut self) {
+        self.schedule.abort();
         self.inner.shutdown();
     }
 }
