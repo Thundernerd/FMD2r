@@ -12,6 +12,14 @@
 
 	let error = $state<string | null>(null);
 	let busy = $state(false);
+	/** Website names by module ID; empty until the list loads, and if it fails. */
+	let websites = $state<ReadonlyMap<string, string>>(new Map());
+
+	// Without the list the rows just leave out the website.
+	api
+		.listModules()
+		.then((modules) => (websites = new Map(modules.map((m) => [m.id, m.name]))))
+		.catch(() => {});
 
 	async function bulk(what: string, call: () => Promise<void>) {
 		if (busy) return;
@@ -138,7 +146,7 @@
 				{:else}
 					<ul class="tasks">
 						{#each group.tasks as task (task.id)}
-							<TaskRow {task} {api} {queue} onerror={(message) => (error = message)} />
+							<TaskRow {task} {api} {queue} {websites} onerror={(message) => (error = message)} />
 						{/each}
 					</ul>
 				{/if}
