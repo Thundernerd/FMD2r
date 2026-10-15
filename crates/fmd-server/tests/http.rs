@@ -109,6 +109,39 @@ async fn without_a_built_web_ui_a_placeholder_page_is_served() {
     assert!(body_text(res).await.contains("web UI has not been built"));
 }
 
+/// The home-screen icons that `manifest.webmanifest` and `app.html` name.
+const APP_ICONS: [&str; 4] = [
+    "icon-192.png",
+    "icon-512.png",
+    "icon-maskable-512.png",
+    "apple-touch-icon.png",
+];
+
+/// The web app manifest and its icons, as `web/static` ships them into the build.
+fn install_files() -> HashMap<String, Vec<u8>> {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/static");
+    std::iter::once("manifest.webmanifest")
+        .chain(APP_ICONS)
+        .map(|name| (name.to_owned(), std::fs::read(dir.join(name)).unwrap()))
+        .collect()
+}
+
+#[tokio::test]
+async fn the_web_app_manifest_and_icons_load_without_a_session() {
+    let h = authed_harness();
+    let state = h.state.clone().with_assets(install_files());
+
+    let res = send(&state, get("/manifest.webmanifest")).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["content-type"], "application/manifest+json");
+
+    for icon in APP_ICONS {
+        let res = send(&state, get(&format!("/{icon}"))).await;
+        assert_eq!(res.status(), StatusCode::OK, "{icon}");
+        assert_eq!(res.headers()["content-type"], "image/png", "{icon}");
+    }
+}
+
 fn new_chapters_event() -> NewEvent {
     NewEvent {
         kind: "new_chapters".into(),
