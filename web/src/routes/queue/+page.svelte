@@ -25,14 +25,17 @@
 			.catch(() => {});
 	});
 
-	$effect(() => {
+	function readFinishedSort(): FinishedSort {
 		try {
 			const saved = localStorage.getItem(FINISHED_SORT_KEY);
-			if (saved === 'newest' || saved === 'oldest') queue.finishedSort = saved;
+			if (saved === 'newest' || saved === 'oldest') return saved;
 		} catch {
-			// Newest first, the default.
+			// Unavailable: the default.
 		}
-	});
+		return 'newest';
+	}
+
+	queue.finishedSort = readFinishedSort();
 
 	function toggleFinishedSort() {
 		const sort: FinishedSort = queue.finishedSort === 'newest' ? 'oldest' : 'newest';
