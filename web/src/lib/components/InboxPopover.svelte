@@ -13,15 +13,41 @@
 	const formatTime = (iso: string): string =>
 		new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 
-	async function markRead(item: InboxItem) {
+	/** Runs `request`, then applies its result to the store, or shows `failure` when it fails. */
+	async function act(request: () => Promise<void>, apply: () => void, failure: string) {
 		error = null;
 		try {
-			await api.markRead(item.id);
-			store.markRead(item.id);
+			await request();
+			apply();
 		} catch {
-			error = 'Could not mark the item read.';
+			error = failure;
 		}
 	}
+
+	const markRead = (item: InboxItem) =>
+		act(
+			() => api.markRead(item.id),
+			() => store.markRead(item.id),
+			'Could not mark the item read.'
+		);
+	const remove = (item: InboxItem) =>
+		act(
+			() => api.deleteInboxItem(item.id),
+			() => store.remove(item.id),
+			'Could not delete the item.'
+		);
+	const markAllRead = () =>
+		act(
+			() => api.markAllRead(),
+			() => store.markAllRead(),
+			'Could not mark the inbox read.'
+		);
+	const clearRead = () =>
+		act(
+			() => api.clearReadInbox(),
+			() => store.removeRead(),
+			'Could not clear the read items.'
+		);
 
 	function close() {
 		inboxUi.open = false;
@@ -63,6 +89,19 @@
 
 	{#if inboxUi.open}
 		<div class="pop" role="dialog" aria-label="Inbox" bind:this={pop}>
+			<div class="actions">
+				<button class="btn sm" type="button" disabled={store.unread === 0} onclick={markAllRead}>
+					Mark all read
+				</button>
+				<button
+					class="btn sm"
+					type="button"
+					disabled={store.unread === store.inbox.length}
+					onclick={clearRead}
+				>
+					Clear read
+				</button>
+			</div>
 			{#if store.inbox.length === 0}
 				<p class="empty muted">Nothing needs you.</p>
 			{:else}
@@ -82,13 +121,14 @@
 									<div class="line">{line}</div>
 								{/each}
 							</div>
-							{#if !item.read}
-								<div>
+							<div class="item-actions">
+								{#if !item.read}
 									<button class="btn sm" type="button" onclick={() => markRead(item)}>
 										Mark read
 									</button>
-								</div>
-							{/if}
+								{/if}
+								<button class="btn sm" type="button" onclick={() => remove(item)}>Delete</button>
+							</div>
 						</li>
 					{/each}
 				</ul>
@@ -136,6 +176,17 @@
 		box-shadow: var(--shadow);
 		z-index: 30;
 		padding: 6px;
+	}
+	.item-actions {
+		display: flex;
+		gap: var(--sp-2);
+	}
+	.actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--sp-2);
+		padding: 4px 4px 8px;
+		border-bottom: 1px solid var(--line);
 	}
 	ul {
 		list-style: none;
