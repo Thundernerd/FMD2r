@@ -88,6 +88,11 @@ fn plain_text(value: &Value) -> String {
     }
 }
 
+/// An inbox item id from the path; one that isn't a number names no item.
+fn parse_id(id: &str) -> Result<EventId, ApiError> {
+    id.parse().map(EventId).map_err(|_| ApiError::NotFound)
+}
+
 /// Inbox items, newest first.
 #[utoipa::path(get, path = "/api/inbox", tag = "inbox", operation_id = "listInbox",
     responses((status = 200, body = Vec<InboxItem>)))]
@@ -114,7 +119,7 @@ pub(crate) async fn mark_read(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let id = EventId(id.parse().map_err(|_| ApiError::NotFound)?);
+    let id = parse_id(&id)?;
     state
         .blocking(move |db| {
             if db.events().get(id)?.is_none() {
@@ -145,7 +150,7 @@ pub(crate) async fn delete(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let id = EventId(id.parse().map_err(|_| ApiError::NotFound)?);
+    let id = parse_id(&id)?;
     let deleted = state.blocking(move |db| db.events().delete(&[id])).await?;
     if deleted == 0 {
         return Err(ApiError::NotFound);

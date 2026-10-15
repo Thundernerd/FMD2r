@@ -13,45 +13,41 @@
 	const formatTime = (iso: string): string =>
 		new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 
-	async function markRead(item: InboxItem) {
+	/** Runs `request`, then applies its result to the store, or shows `failure` when it fails. */
+	async function act(request: () => Promise<void>, apply: () => void, failure: string) {
 		error = null;
 		try {
-			await api.markRead(item.id);
-			store.markRead(item.id);
+			await request();
+			apply();
 		} catch {
-			error = 'Could not mark the item read.';
+			error = failure;
 		}
 	}
 
-	async function remove(item: InboxItem) {
-		error = null;
-		try {
-			await api.deleteInboxItem(item.id);
-			store.remove(item.id);
-		} catch {
-			error = 'Could not delete the item.';
-		}
-	}
-
-	async function markAllRead() {
-		error = null;
-		try {
-			await api.markAllRead();
-			store.markAllRead();
-		} catch {
-			error = 'Could not mark the inbox read.';
-		}
-	}
-
-	async function clearRead() {
-		error = null;
-		try {
-			await api.clearReadInbox();
-			store.removeRead();
-		} catch {
-			error = 'Could not clear the read items.';
-		}
-	}
+	const markRead = (item: InboxItem) =>
+		act(
+			() => api.markRead(item.id),
+			() => store.markRead(item.id),
+			'Could not mark the item read.'
+		);
+	const remove = (item: InboxItem) =>
+		act(
+			() => api.deleteInboxItem(item.id),
+			() => store.remove(item.id),
+			'Could not delete the item.'
+		);
+	const markAllRead = () =>
+		act(
+			() => api.markAllRead(),
+			() => store.markAllRead(),
+			'Could not mark the inbox read.'
+		);
+	const clearRead = () =>
+		act(
+			() => api.clearReadInbox(),
+			() => store.removeRead(),
+			'Could not clear the read items.'
+		);
 
 	function close() {
 		inboxUi.open = false;

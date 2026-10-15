@@ -181,6 +181,7 @@ impl<'a> EventRepo<'a> {
         Ok(deleted)
     }
 
+    /// Deletes every read event.
     pub fn delete_read(&self) -> Result<()> {
         let conn = self.db.lock();
         conn.execute("DELETE FROM events WHERE read = 1", [])?;
