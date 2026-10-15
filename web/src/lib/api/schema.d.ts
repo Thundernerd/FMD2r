@@ -1571,10 +1571,8 @@ export interface components {
 			enabled: boolean;
 			/** @description Whether a webhook URL is set. Patch `webhook_url` to set it; an empty one clears it. */
 			has_webhook_url: boolean;
-			/** @description Send new and missing chapters. */
-			new_chapters: boolean;
-			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
-			problems: boolean;
+			/** @description The kinds of event to send. */
+			types: components['schemas']['NotificationType'][];
 		};
 		/** @description How many matching titles carry a genre or status. */
 		FacetValue: {
@@ -2427,17 +2425,30 @@ export interface components {
 			/** @description Why it was not delivered. */
 			error?: string | null;
 		};
+		/**
+		 * @description A kind of event a channel can be set to send, one per inbox event kind. Serialised as the
+		 *     kind, e.g. `download_failed`.
+		 * @enum {string}
+		 */
+		NotificationType:
+			| 'new_chapters'
+			| 'missing_chapters'
+			| 'missing_check'
+			| 'completed'
+			| 'download_failed'
+			| 'favorites_check_failed'
+			| 'module_update'
+			| 'downloads_moved'
+			| 'comic_server';
 		/** @description [`NtfySettings`] with the access token left out. */
 		NtfySettingsView: {
 			enabled: boolean;
 			/** @description Whether an access token is set. Patch `token` to set it; an empty one clears it. */
 			has_token: boolean;
-			/** @description Send new and missing chapters. */
-			new_chapters: boolean;
-			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
-			problems: boolean;
 			/** @description The topic to publish to, e.g. `https://ntfy.sh/my-topic`. */
 			topic_url: string;
+			/** @description The kinds of event to send. */
+			types: components['schemas']['NotificationType'][];
 		};
 		/**
 		 * @description `rgOptionCompress` items None/ZIP/CBZ/PDF/EPUB (mangadownloader/forms/frmMain.lfm:3912-3918).
@@ -2985,21 +2996,42 @@ export interface components {
 			 *       "discord": {
 			 *         "enabled": false,
 			 *         "has_webhook_url": false,
-			 *         "new_chapters": true,
-			 *         "problems": true
+			 *         "types": [
+			 *           "new_chapters",
+			 *           "missing_chapters",
+			 *           "download_failed",
+			 *           "favorites_check_failed",
+			 *           "module_update",
+			 *           "downloads_moved",
+			 *           "comic_server"
+			 *         ]
 			 *       },
 			 *       "ntfy": {
 			 *         "enabled": false,
 			 *         "has_token": false,
-			 *         "new_chapters": true,
-			 *         "problems": true,
-			 *         "topic_url": ""
+			 *         "topic_url": "",
+			 *         "types": [
+			 *           "new_chapters",
+			 *           "missing_chapters",
+			 *           "download_failed",
+			 *           "favorites_check_failed",
+			 *           "module_update",
+			 *           "downloads_moved",
+			 *           "comic_server"
+			 *         ]
 			 *       },
 			 *       "webhook": {
 			 *         "enabled": false,
 			 *         "has_authorization": false,
-			 *         "new_chapters": true,
-			 *         "problems": true,
+			 *         "types": [
+			 *           "new_chapters",
+			 *           "missing_chapters",
+			 *           "download_failed",
+			 *           "favorites_check_failed",
+			 *           "module_update",
+			 *           "downloads_moved",
+			 *           "comic_server"
+			 *         ],
 			 *         "url": ""
 			 *       }
 			 *     }
@@ -3360,10 +3392,8 @@ export interface components {
 			 *     clears it.
 			 */
 			has_authorization: boolean;
-			/** @description Send new and missing chapters. */
-			new_chapters: boolean;
-			/** @description Send warnings and errors: failed downloads, a failed library check, module problems. */
-			problems: boolean;
+			/** @description The kinds of event to send. */
+			types: components['schemas']['NotificationType'][];
 			url: string;
 		};
 		/**

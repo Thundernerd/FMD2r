@@ -152,13 +152,13 @@ describe('the settings page', () => {
 		await fireEvent.input(discord.getByLabelText('Webhook URL'), {
 			target: { value: 'https://discord.com/api/webhooks/1/abc' }
 		});
-		await fireEvent.click(discord.getByRole('checkbox', { name: 'Problems' }));
+		await fireEvent.click(discord.getByRole('checkbox', { name: 'Module updates' }));
 		const webhook = within(screen.getByRole('group', { name: 'Webhook' }));
 		await fireEvent.click(webhook.getByRole('checkbox', { name: 'Send to Webhook' }));
 		await fireEvent.input(webhook.getByRole('textbox', { name: 'URL' }), {
 			target: { value: 'http://n8n.local/webhook/fmd' }
 		});
-		await fireEvent.click(webhook.getByRole('checkbox', { name: 'New chapters' }));
+		await fireEvent.click(webhook.getByRole('checkbox', { name: 'Completed series removed' }));
 
 		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
 		await within(saveBar()).findByText('Saved');
@@ -168,16 +168,42 @@ describe('the settings page', () => {
 				enabled: true,
 				topic_url: 'https://ntfy.sh/my-topic',
 				has_token: true,
-				new_chapters: true,
-				problems: true
+				types: [
+					'new_chapters',
+					'missing_chapters',
+					'download_failed',
+					'favorites_check_failed',
+					'module_update',
+					'downloads_moved',
+					'comic_server'
+				]
 			},
-			discord: { enabled: true, has_webhook_url: true, new_chapters: true, problems: false },
+			discord: {
+				enabled: true,
+				has_webhook_url: true,
+				types: [
+					'new_chapters',
+					'missing_chapters',
+					'download_failed',
+					'favorites_check_failed',
+					'downloads_moved',
+					'comic_server'
+				]
+			},
 			webhook: {
 				enabled: true,
 				url: 'http://n8n.local/webhook/fmd',
 				has_authorization: false,
-				new_chapters: false,
-				problems: true
+				types: [
+					'new_chapters',
+					'missing_chapters',
+					'completed',
+					'download_failed',
+					'favorites_check_failed',
+					'module_update',
+					'downloads_moved',
+					'comic_server'
+				]
 			}
 		});
 	});

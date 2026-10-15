@@ -308,3 +308,23 @@ test('picking another module asks before dropping the open one’s edits', async
 	await expect(saveBar).toBeHidden();
 	await expect(panel.getByRole('heading', { name: 'TuMangaOnline' })).toBeVisible();
 });
+
+test('an unticked notification type stays unticked after a reload', async ({ page }) => {
+	await page.goto('/settings#section-notifications');
+	const types = () =>
+		page
+			.getByRole('group', { name: 'Discord' })
+			.getByRole('group', { name: 'Send these' })
+			.getByRole('checkbox', { name: 'Module updates' });
+	await expect(types()).toBeChecked();
+	await types().uncheck();
+
+	const bar = page.getByRole('region', { name: 'Save changes' });
+	await bar.getByRole('button', { name: 'Save' }).click();
+	await expect(bar).toContainText('Saved');
+	await page.reload();
+	await expect(types()).not.toBeChecked();
+	await expect(
+		page.getByRole('group', { name: 'ntfy' }).getByRole('checkbox', { name: 'Module updates' })
+	).toBeChecked();
+});

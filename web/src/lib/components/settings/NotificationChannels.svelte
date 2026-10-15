@@ -43,8 +43,7 @@
 </script>
 
 <p class="small muted intro">
-	Pushes new chapters and problems to services you already use. Each one is off until you turn it
-	on.
+	Pushes the events you pick to services you already use. Each one is off until you turn it on.
 </p>
 {#each NOTIFICATION_CHANNELS as channel (channel.id)}
 	<fieldset class="channel">

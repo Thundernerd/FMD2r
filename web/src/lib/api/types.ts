@@ -44,6 +44,7 @@ export type LibraryTitle = Schemas['LibraryTitle'];
 export type Accent = Schemas['Accent'];
 export type Theme = Schemas['Theme'];
 export type Channel = Schemas['Channel'];
+export type NotificationType = Schemas['NotificationType'];
 export type NotificationTest = Schemas['NotificationTest'];
 export type ModuleCapabilities = Schemas['ModuleCapabilities'];
 export type SearchPage = Schemas['SearchPage'];

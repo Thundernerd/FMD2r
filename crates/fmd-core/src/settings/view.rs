@@ -13,6 +13,7 @@ use super::model::{
     WebhookSettings, XPathSettings,
 };
 use super::module_overrides::{HttpOverrides, ProxyOverride, ProxyOverrideType};
+use crate::notifications::NotificationType;
 
 /// Every application setting, with the secrets left out: [`Settings`] as the API shows it.
 /// Each group's schema carries its defaults.
@@ -350,10 +351,8 @@ pub struct NtfySettingsView {
     pub topic_url: String,
     /// Whether an access token is set. Patch `token` to set it; an empty one clears it.
     pub has_token: bool,
-    /// Send new and missing chapters.
-    pub new_chapters: bool,
-    /// Send warnings and errors: failed downloads, a failed library check, module problems.
-    pub problems: bool,
+    /// The kinds of event to send.
+    pub types: Vec<NotificationType>,
 }
 
 impl From<NtfySettings> for NtfySettingsView {
@@ -362,15 +361,13 @@ impl From<NtfySettings> for NtfySettingsView {
             enabled,
             topic_url,
             token,
-            new_chapters,
-            problems,
+            types,
         } = n;
         Self {
             enabled,
             topic_url,
             has_token: is_set(Some(&token)),
-            new_chapters,
-            problems,
+            types,
         }
     }
 }
@@ -381,10 +378,8 @@ pub struct DiscordSettingsView {
     pub enabled: bool,
     /// Whether a webhook URL is set. Patch `webhook_url` to set it; an empty one clears it.
     pub has_webhook_url: bool,
-    /// Send new and missing chapters.
-    pub new_chapters: bool,
-    /// Send warnings and errors: failed downloads, a failed library check, module problems.
-    pub problems: bool,
+    /// The kinds of event to send.
+    pub types: Vec<NotificationType>,
 }
 
 impl From<DiscordSettings> for DiscordSettingsView {
@@ -392,14 +387,12 @@ impl From<DiscordSettings> for DiscordSettingsView {
         let DiscordSettings {
             enabled,
             webhook_url,
-            new_chapters,
-            problems,
+            types,
         } = d;
         Self {
             enabled,
             has_webhook_url: is_set(Some(&webhook_url)),
-            new_chapters,
-            problems,
+            types,
         }
     }
 }
@@ -412,10 +405,8 @@ pub struct WebhookSettingsView {
     /// Whether an `Authorization` header is set. Patch `authorization` to set it; an empty one
     /// clears it.
     pub has_authorization: bool,
-    /// Send new and missing chapters.
-    pub new_chapters: bool,
-    /// Send warnings and errors: failed downloads, a failed library check, module problems.
-    pub problems: bool,
+    /// The kinds of event to send.
+    pub types: Vec<NotificationType>,
 }
 
 impl From<WebhookSettings> for WebhookSettingsView {
@@ -424,15 +415,13 @@ impl From<WebhookSettings> for WebhookSettingsView {
             enabled,
             url,
             authorization,
-            new_chapters,
-            problems,
+            types,
         } = w;
         Self {
             enabled,
             url,
             has_authorization: is_set(Some(&authorization)),
-            new_chapters,
-            problems,
+            types,
         }
     }
 }

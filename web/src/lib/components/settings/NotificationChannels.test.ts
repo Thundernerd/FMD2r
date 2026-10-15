@@ -55,4 +55,47 @@ describe('NotificationChannels', () => {
 		).toBe(false);
 		expect(test).not.toHaveBeenCalled();
 	});
+
+	it('shows one checkbox per notification type under each channel', () => {
+		setup([]);
+
+		for (const name of ['ntfy', 'Discord', 'Webhook']) {
+			const types = within(group(name).getByRole('group', { name: 'Send these' }));
+			expect(
+				types.getAllByRole('checkbox').map((c) => c.closest('label')?.textContent?.trim())
+			).toEqual([
+				'New chapters',
+				'Missing chapters',
+				'Missing-chapter check found nothing',
+				'Completed series removed',
+				'Download failed',
+				'Library check failed',
+				'Module updates',
+				'Downloads moved',
+				'Comic server rescan'
+			]);
+			expect(
+				(types.getByRole('checkbox', { name: 'Module updates' }) as HTMLInputElement).checked
+			).toBe(true);
+			expect(
+				(types.getByRole('checkbox', { name: 'Completed series removed' }) as HTMLInputElement)
+					.checked
+			).toBe(false);
+		}
+	});
+
+	it('marks the channel’s types dirty when one is ticked', async () => {
+		const { draft } = setup([]);
+		const discord = within(group('Discord').getByRole('group', { name: 'Send these' }));
+
+		await fireEvent.click(discord.getByRole('checkbox', { name: 'Completed series removed' }));
+
+		expect(draft.isDirty('notifications.discord.types')).toBe(true);
+		expect(draft.isDirty('notifications.ntfy.types')).toBe(false);
+		expect(draft.get('notifications.discord.types')).toContain('completed');
+		expect(
+			(discord.getByRole('checkbox', { name: 'Completed series removed' }) as HTMLInputElement)
+				.checked
+		).toBe(true);
+	});
 });

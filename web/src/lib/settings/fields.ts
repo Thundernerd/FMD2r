@@ -17,6 +17,8 @@ export type Control =
 	| { kind: 'secret' }
 	| { kind: 'number'; min: number; max: number; nullable?: boolean }
 	| { kind: 'select'; choices: Choice[] }
+	/** One checkbox per choice; the value is the ticked choices' values, in the choices' order. */
+	| { kind: 'checklist'; choices: Choice[] }
 	/**
 	 * A row of preview cards, one per theme (`data-style` in tokens.css) of `choices`, each in the
 	 * accent set at `accentPath`.

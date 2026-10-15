@@ -1,6 +1,7 @@
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 
+use fmd_core::notifications::NotificationType;
 use fmd_core::settings::{
     Accent, ComicMetadataFiles, LibraryTitle, OutputFormat, SettingsError, SettingsService,
     SymbolMode, TextSize, Theme, ThemeMode, WebpSaveAs, XPathBackend,
@@ -759,4 +760,69 @@ fn notification_urls_must_be_http_and_set_on_an_enabled_channel() {
         }))
         .unwrap();
     assert!(s.notifications.ntfy.enabled);
+}
+
+/// A channel stored before per-type picks (issue #299) keeps sending what it sent: "New chapters"
+/// becomes new and missing chapters, "Problems" every kind that could be a warning or an error.
+#[test]
+fn stored_new_chapters_and_problems_load_as_the_matching_types() {
+    use NotificationType::*;
+    let chapters = vec![NewChapters, MissingChapters];
+    let problems = vec![
+        DownloadFailed,
+        FavoritesCheckFailed,
+        ModuleUpdate,
+        DownloadsMoved,
+        ComicServer,
+    ];
+    let both = [chapters.clone(), problems.clone()].concat();
+    for (stored, types) in [
+        (
+            json!({ "new_chapters": true, "problems": true }),
+            both.clone(),
+        ),
+        (json!({ "new_chapters": true, "problems": false }), chapters),
+        (json!({ "new_chapters": false, "problems": true }), problems),
+        (json!({ "new_chapters": false, "problems": false }), vec![]),
+        // Both were on by default, so a missing flag was on.
+        (json!({ "enabled": true }), both),
+    ] {
+        let (_dir, db) = open_db();
+        let mut ntfy = json!({ "enabled": true, "topic_url": "https://ntfy.sh/t" });
+        ntfy.as_object_mut()
+            .unwrap()
+            .extend(stored.as_object().unwrap().clone());
+        db.settings()
+            .set(
+                "notifications",
+                &json!({ "ntfy": ntfy, "discord": stored, "webhook": stored }),
+            )
+            .unwrap();
+
+        let s = SettingsService::load(db.clone()).unwrap().get();
+        assert_eq!(s.notifications.ntfy.types, types, "{stored}");
+        assert_eq!(s.notifications.discord.types, types, "{stored}");
+        assert_eq!(s.notifications.webhook.types, types, "{stored}");
+        assert_eq!(s.notifications.ntfy.topic_url, "https://ntfy.sh/t");
+        // Stored migrated, so it loads the same again.
+        assert_eq!(*SettingsService::load(db).unwrap().get(), *s);
+    }
+}
+
+#[test]
+fn stored_types_are_kept_as_they_are() {
+    let (_dir, db) = open_db();
+    db.settings()
+        .set(
+            "notifications",
+            &json!({ "discord": { "types": ["completed"], "new_chapters": true } }),
+        )
+        .unwrap();
+    let s = SettingsService::load(db).unwrap().get();
+    assert_eq!(s.notifications.discord.types, [NotificationType::Completed]);
+    assert_eq!(
+        s.notifications.ntfy.types,
+        NotificationType::defaults(),
+        "a channel never stored takes the defaults"
+    );
 }

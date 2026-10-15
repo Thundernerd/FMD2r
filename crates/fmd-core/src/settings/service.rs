@@ -14,6 +14,7 @@ use super::password::{hash_patched, hash_stored};
 use super::secrets::{Found, seal_group, unseal_group};
 use super::validate::{normalize, sync_default_dir, validate, validate_destinations};
 use crate::modules::OptionDef;
+use crate::notifications::NotificationType;
 
 #[derive(Debug, Error)]
 pub enum SettingsError {
@@ -108,6 +109,9 @@ impl SettingsService {
                     repo.set(&key, &stored)?;
                 }
                 if key == "saveto" && migrate_destinations(&mut stored) {
+                    repo.set(&key, &stored)?;
+                }
+                if key == "notifications" && migrate_notification_types(&mut stored) {
                     repo.set(&key, &stored)?;
                 }
                 if unseal_group(db.cipher(), &key, &mut stored) == Found::Plain {
@@ -370,6 +374,41 @@ fn migrate_destinations(saveto: &mut Value) -> bool {
     };
     fields.insert("destinations".into(), serde_json::json!([destination]));
     true
+}
+
+/// Turns each channel's `new_chapters` and `problems` switches, stored by a build before
+/// per-type picks (issue #299), into the `types` that send the same: [`NotificationType::CHAPTERS`]
+/// and [`NotificationType::PROBLEMS`]. A missing switch was on, its default. `false` when no
+/// channel had the switches.
+fn migrate_notification_types(notifications: &mut Value) -> bool {
+    let Value::Object(channels) = notifications else {
+        return false;
+    };
+    let mut migrated = false;
+    for channel in channels.values_mut() {
+        let Value::Object(fields) = channel else {
+            continue;
+        };
+        let new_chapters = fields.remove("new_chapters");
+        let problems = fields.remove("problems");
+        if new_chapters.is_none() && problems.is_none() {
+            continue;
+        }
+        migrated = true;
+        if fields.contains_key("types") {
+            continue;
+        }
+        let on = |switch: Option<Value>| switch.and_then(|v| v.as_bool()).unwrap_or(true);
+        let mut types = Vec::new();
+        if on(new_chapters) {
+            types.extend(NotificationType::CHAPTERS);
+        }
+        if on(problems) {
+            types.extend(NotificationType::PROBLEMS);
+        }
+        fields.insert("types".into(), serde_json::json!(types));
+    }
+    migrated
 }
 
 /// One module's part of [`SettingsService::update_with_modules`].

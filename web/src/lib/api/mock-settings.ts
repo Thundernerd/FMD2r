@@ -10,6 +10,7 @@ import type {
 	ModuleSummary,
 	RenamePreview,
 	RenamePreviewRequest,
+	NotificationType,
 	Settings
 } from './types';
 
@@ -19,6 +20,17 @@ import type {
 
 const DEFAULT_USER_AGENT =
 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
+
+/** What a channel sends by default (fmd_core::notifications::NotificationType::defaults()). */
+const defaultNotificationTypes = (): NotificationType[] => [
+	'new_chapters',
+	'missing_chapters',
+	'download_failed',
+	'favorites_check_failed',
+	'module_update',
+	'downloads_moved',
+	'comic_server'
+];
 
 /** The server's defaults (fmd_core::settings::Settings::default()). */
 export const defaultSettings = (): Settings => ({
@@ -116,14 +128,13 @@ export const defaultSettings = (): Settings => ({
 	xpath: { backend: 'native' },
 	comic_server: { kind: 'none', url: '', has_api_key: false, library_id: null },
 	notifications: {
-		ntfy: { enabled: false, topic_url: '', has_token: false, new_chapters: true, problems: true },
-		discord: { enabled: false, has_webhook_url: false, new_chapters: true, problems: true },
+		ntfy: { enabled: false, topic_url: '', has_token: false, types: defaultNotificationTypes() },
+		discord: { enabled: false, has_webhook_url: false, types: defaultNotificationTypes() },
 		webhook: {
 			enabled: false,
 			url: '',
 			has_authorization: false,
-			new_chapters: true,
-			problems: true
+			types: defaultNotificationTypes()
 		}
 	}
 });
