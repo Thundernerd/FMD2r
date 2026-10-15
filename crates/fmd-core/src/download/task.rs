@@ -460,10 +460,11 @@ impl<'a> TaskRun<'a> {
                         failure => failure,
                     })
             };
+            // A failed chapter only marks itself failed: the task goes on with the next one and
+            // becomes `Failed` once, when the run ends.
             let reason = failure.map(|failure| failure.reason(&chapter_name));
             if let Some(reason) = &reason {
                 tracing::warn!(target: "fmd_core", "task {}: {reason}", self.id.0);
-                self.set_failed(reason)?;
             }
             let failed = reason.is_some();
             self.chapter_failures[self.chapter] = reason;
@@ -493,7 +494,7 @@ impl<'a> TaskRun<'a> {
             self.save_chapter_pointer()?;
             let failed = self.failed_chapters();
             let reason = match failed.as_slice() {
-                // The reason its `Failed` event already gave.
+                // One failed chapter is reported as is, without a list around it.
                 [(_, Some(reason))] => reason.clone(),
                 _ => {
                     let chapters: Vec<String> = failed

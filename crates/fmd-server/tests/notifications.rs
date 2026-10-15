@@ -59,7 +59,8 @@ impl Transport for Site {
 }
 
 /// A module whose series `/manga` has chapters `/c/1` and `/c/2`, and whose chapter `/c/<n>` has
-/// `n` pages at `https://t/img/c/<n>/<page>`; chapter `/c/0` has no pages, so it fails.
+/// `n` pages at `https://t/img/c/<n>/<page>`; chapter `/c/0` (or any link ending in `/0`, such
+/// as `/d/0`) has no pages, so it fails.
 const T: &str = r#"
 function Init()
   local m = NewWebsiteModule(); m.ID='t'; m.Name='T'; m.RootURL='https://t'
@@ -303,8 +304,17 @@ async fn body_json(res: Response) -> Value {
 
 /// Queues chapter `link` of "Manga" and answers the new task's ID.
 async fn add(state: &AppState, link: &str) -> i64 {
+    add_chapters(state, &[("Ch", link)]).await
+}
+
+/// Queues `chapters` (name, link) of "Manga" as one task and answers its ID.
+async fn add_chapters(state: &AppState, chapters: &[(&str, &str)]) -> i64 {
+    let chapters: Vec<Value> = chapters
+        .iter()
+        .map(|(name, link)| json!({"name": name, "link": link}))
+        .collect();
     let body = json!({"module_id": "t", "link": "/manga", "title": "Manga",
-        "chapters": [{"name": "Ch", "link": link}]});
+        "chapters": chapters});
     let req = Request::post("/api/tasks")
         .header("content-type", "application/json")
         .body(Body::from(body.to_string()))
@@ -419,6 +429,28 @@ async fn a_failed_downloads_inbox_item_and_notification_say_why_it_failed() {
     assert_eq!(h.stub.paths_after(1).await, ["/ntfy"]);
     let ntfy = &h.stub.received()[0];
     assert!(ntfy.body.contains(reason), "{}", ntfy.body);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_failing_two_chapters_makes_one_inbox_item_naming_both() {
+    let h = harness(logs()).await;
+
+    let id = add_chapters(
+        &h.state,
+        &[("Ch A", "/c/0"), ("Ch B", "/c/2"), ("Ch C", "/d/0")],
+    )
+    .await;
+    wait_for(&h.state, id, "failed").await;
+
+    assert_eq!(h.stub.paths_after(1).await, ["/ntfy"]);
+    let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
+    let items = inbox.as_array().unwrap();
+    assert_eq!(items.len(), 1, "{inbox}");
+    assert_eq!(items[0]["title"], "Download failed: Manga");
+    assert_eq!(
+        items[0]["body"],
+        "Chapters failed: Chapter \"Ch A\" has no pages; Chapter \"Ch C\" has no pages"
+    );
 }
 
 /// A channel answering 500 and one that never answers delay neither the check nor a download,
