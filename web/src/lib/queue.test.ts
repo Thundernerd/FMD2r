@@ -254,4 +254,27 @@ describe('moving a waiting task', () => {
 		expect(moveWaiting(mixed(), 2, 'up')).toEqual([1, 2, 3, 4, 5, 6, 7]);
 		expect(moveWaiting(mixed(), 6, 'bottom')).toEqual([1, 2, 3, 4, 5, 6, 7]);
 	});
+
+	it('keeps the finished tasks in queue order, while their group stays sorted', () => {
+		const store = new QueueStore();
+		store.load([
+			...mixed(),
+			// After Blame! in the queue, but downloaded since: newest first shows it first.
+			task({
+				id: 8,
+				title: 'Monster',
+				status: 'finished',
+				date_last_downloaded: '2026-10-10T10:00:00Z'
+			})
+		]);
+		const finished = () => titles(store.groups.find((g) => g.key === 'finished')!.tasks);
+		expect(finished()).toEqual(['Monster', 'Blame!']);
+
+		const ids = moveWaiting(store.tasks, 6, 'top');
+		// The server gets the queue order, not the order the Finished group shows.
+		expect(ids).toEqual([1, 6, 3, 2, 5, 4, 7, 8]);
+		store.arrange(ids);
+		expect(store.waitingIds).toEqual([6, 2, 4]);
+		expect(finished()).toEqual(['Monster', 'Blame!']);
+	});
 });
