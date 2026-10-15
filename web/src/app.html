@@ -4,6 +4,13 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
+		<!-- Installing to a phone's home screen (issue #311): the manifest, the iOS icon and name, and
+		     the status bar colours, which follow the default theme's `--bg` (src/lib/styles/tokens.css). -->
+		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+		<meta name="apple-mobile-web-app-title" content="FMD2r" />
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f5f6" />
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101618" />
 		<title>FMD2r</title>
 		<script>
 			// The appearance last applied (`adoptAppearance` in src/lib/appearance.ts, which writes this

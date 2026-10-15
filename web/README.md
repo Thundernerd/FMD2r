@@ -4,6 +4,8 @@ The FMD2r web UI: a SvelteKit (Svelte 5, TypeScript strict) single-page app buil
 
 Layout follows prototype variant B "Library" (https://claude.ai/artifact/As3XTN7NjxM8ydAP9oEcqL): a top bar with the main nav, the add-by-URL field and the inbox, and a queue dock at the bottom. Styles are mobile-first: phones get a bottom tab bar, and from 861px up the main nav moves into the top bar.
 
+"Add to Home Screen" installs it as an app (`static/manifest.webmanifest`, linked from `src/app.html`): its own icon and name, opening full-screen on the Library. The PNG icons in `static/` are rendered from `static/favicon.svg` by `../scripts/app-icons.sh`; rerun it after changing the favicon. There's no service worker, so the app still needs the server.
+
 ## Scripts
 
 | Command                 | What it does                                                                                                                                                                                         |
