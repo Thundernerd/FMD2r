@@ -39,7 +39,7 @@ pub(super) struct Inner {
     progress: Mutex<HashMap<TaskId, ProgressClock>>,
     /// Whether downloads are held for a full disk; while they are, a thread measures again
     /// every [`EngineConfig::disk_recheck`].
-    disk_held: Mutex<bool>,
+    disk_held: AtomicBool,
 }
 
 #[derive(Default)]
@@ -79,7 +79,7 @@ impl Inner {
             state: Mutex::default(),
             exiting: AtomicBool::new(false),
             progress: Mutex::default(),
-            disk_held: Mutex::new(false),
+            disk_held: AtomicBool::new(false),
         }
     }
 
@@ -264,7 +264,7 @@ impl Inner {
 
     /// The free space on `dir`'s disk when it is under `saveto.min_free_space_mb`; `None` when
     /// it isn't, the limit is 0, or the disk can't be measured.
-    fn disk_low(&self, dir: &Path) -> Option<u64> {
+    fn free_if_low(&self, dir: &Path) -> Option<u64> {
         let limit = u64::from(self.settings().saveto.min_free_space_mb) * MB;
         if limit == 0 {
             return None;
@@ -279,15 +279,12 @@ impl Inner {
     /// downloads: [`EngineEvent::DiskSpaceLow`] is sent and the disks are measured again until
     /// they have room.
     pub(super) fn hold_if_disk_low(self: &Arc<Self>, dir: &Path) -> bool {
-        let Some(free_bytes) = self.disk_low(dir) else {
+        let Some(free_bytes) = self.free_if_low(dir) else {
             return false;
         };
-        let mut held = lock(&self.disk_held);
-        if *held {
+        if self.disk_held.swap(true, Ordering::SeqCst) {
             return true;
         }
-        *held = true;
-        drop(held);
         tracing::warn!(target: "fmd_core",
             "downloads are on hold: {} has {} MB free", dir.display(), free_bytes / MB);
         self.emit(EngineEvent::DiskSpaceLow {
@@ -314,7 +311,7 @@ impl Inner {
             .list()?
             .iter()
             .filter(|task| task.status == TaskStatus::Waiting)
-            .any(|task| self.disk_low(Path::new(&task.save_to)).is_some()))
+            .any(|task| self.free_if_low(Path::new(&task.save_to)).is_some()))
     }
 
     /// One measurement of [`recheck_disks`]: ends the hold once no waiting task's disk is short
@@ -322,7 +319,7 @@ impl Inner {
     fn recheck_disks_once(self: &Arc<Self>) -> Result<bool, EngineError> {
         let still_low = self.any_disk_low()?;
         if !still_low {
-            *lock(&self.disk_held) = false;
+            self.disk_held.store(false, Ordering::SeqCst);
             tracing::info!(target: "fmd_core", "downloads resumed: the disk has room again");
             self.emit(EngineEvent::DiskSpaceRecovered);
         }
@@ -451,7 +448,11 @@ impl Inner {
                         let why = format!("stopped: module {} is not installed", task.module_id);
                         log_task(task.id, &task.title, why);
                     }
-                    Some(module) if started < max && self.can_create_task(&module) => {
+                    Some(module)
+                        if started < max
+                            && self.can_create_task(&module)
+                            && !self.hold_if_disk_low(Path::new(&task.save_to)) =>
+                    {
                         let was = task.status;
                         log_task(
                             task.id,

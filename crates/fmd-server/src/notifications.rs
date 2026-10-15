@@ -32,9 +32,9 @@ const TEST: &str = "test";
 
 impl AppState {
     /// Adds each download that fails, and downloads held for a full disk and resumed, to the
-    /// inbox, and sends every new inbox item and failed
-    /// favorites check to the notification channels that take it. Sending never holds up the work
-    /// that caused it: each request runs on its own, and a failure is only logged.
+    /// inbox, and sends every new inbox item and failed favorites check to the notification
+    /// channels that take it. Sending never holds up the work that caused it: each request runs
+    /// on its own, and a failure is only logged.
     pub fn start_notifications(&self) {
         let sender = match Sender::new(SEND_TIMEOUT) {
             Ok(sender) => sender,
