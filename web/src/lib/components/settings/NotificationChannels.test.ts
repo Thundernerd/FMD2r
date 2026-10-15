@@ -73,7 +73,8 @@ describe('NotificationChannels', () => {
 				'Library check failed',
 				'Module updates',
 				'Downloads moved',
-				'Comic server rescan'
+				'Comic server rescan',
+				'Disk almost full'
 			]);
 			expect(
 				(types.getByRole('checkbox', { name: 'Module updates' }) as HTMLInputElement).checked

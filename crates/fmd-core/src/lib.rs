@@ -2,6 +2,7 @@
 
 pub mod accounts;
 pub mod comic_server;
+pub mod disk_space;
 pub mod download;
 pub mod favorites;
 pub mod folder_move;

@@ -2475,7 +2475,8 @@ export interface components {
 			| 'favorites_check_failed'
 			| 'module_update'
 			| 'downloads_moved'
-			| 'comic_server';
+			| 'comic_server'
+			| 'disk_space_low';
 		/** @description [`NtfySettings`] with the access token left out. */
 		NtfySettingsView: {
 			enabled: boolean;
@@ -2651,6 +2652,7 @@ export interface components {
 			 *       "generate_manga_folder": true,
 			 *       "illegal_chars": "posix",
 			 *       "manga_rename": "%MANGA%",
+			 *       "min_free_space_mb": 1024,
 			 *       "remove_manga_name_from_chapter": false,
 			 *       "replace_unicode": false,
 			 *       "replace_unicode_with": "_"
@@ -2766,6 +2768,13 @@ export interface components {
 			 * @default %MANGA%
 			 */
 			manga_rename: string;
+			/**
+			 * Format: int32
+			 * @description Downloads hold while the disk they save to has less than this many MB free, and carry on
+			 *     once it has room again (issue #308; FMD2 never checks). 0 turns the guard off.
+			 * @default 1024
+			 */
+			min_free_space_mb: number;
 			/**
 			 * @description `saveto/RemoveMangaNameFromChapter`, default false
 			 *     (mangadownloader/forms/frmMain.pas:5892).
@@ -3040,7 +3049,8 @@ export interface components {
 			 *           "module_update",
 			 *           "downloads_moved",
 			 *           "comic_server",
-			 *           "missing_check"
+			 *           "missing_check",
+			 *           "disk_space_low"
 			 *         ]
 			 *       },
 			 *       "ntfy": {
@@ -3055,7 +3065,8 @@ export interface components {
 			 *           "module_update",
 			 *           "downloads_moved",
 			 *           "comic_server",
-			 *           "missing_check"
+			 *           "missing_check",
+			 *           "disk_space_low"
 			 *         ]
 			 *       },
 			 *       "webhook": {
@@ -3069,7 +3080,8 @@ export interface components {
 			 *           "module_update",
 			 *           "downloads_moved",
 			 *           "comic_server",
-			 *           "missing_check"
+			 *           "missing_check",
+			 *           "disk_space_low"
 			 *         ],
 			 *         "url": ""
 			 *       }
@@ -3104,6 +3116,7 @@ export interface components {
 			 *       "generate_manga_folder": true,
 			 *       "illegal_chars": "posix",
 			 *       "manga_rename": "%MANGA%",
+			 *       "min_free_space_mb": 1024,
 			 *       "remove_manga_name_from_chapter": false,
 			 *       "replace_unicode": false,
 			 *       "replace_unicode_with": "_"

@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use fmd_core::accounts::AccountService;
 use fmd_core::comic_server::SCAN_DELAY;
-use fmd_core::download::{DownloadManager, EngineConfig, ModuleLookup, SeriesLookup};
+use fmd_core::disk_space::Statvfs;
+use fmd_core::download::{DISK_RECHECK, DownloadManager, EngineConfig, ModuleLookup, SeriesLookup};
 use fmd_core::favorites::{CheckerConfig, FavoritesChecker, TaskQueue};
 use fmd_core::lists::{DbImporter, ListJobs, ListUpdater};
 use fmd_core::metadata::{HttpDumpSource, MangaBakaDb, MangaDexLinks, Matcher, MetadataJobs};
@@ -205,6 +206,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), ServeError> {
                     lookup
                 }),
                 moving: state.moving.clone(),
+                free_space: Arc::new(Statvfs),
+                disk_recheck: DISK_RECHECK,
             })
             .await;
             let queue = match engine {

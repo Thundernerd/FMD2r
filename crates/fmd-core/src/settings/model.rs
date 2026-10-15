@@ -325,6 +325,9 @@ pub struct SaveToSettings {
     /// Which characters are stripped from names. FMD2 always strips the Windows set
     /// (`RemoveSymbols`, baseunits/uBaseUnit.pas:1382); FMD2r defaults to POSIX.
     pub illegal_chars: SymbolMode,
+    /// Downloads hold while the disk they save to has less than this many MB free, and carry on
+    /// once it has room again (issue #308; FMD2 never checks). 0 turns the guard off.
+    pub min_free_space_mb: u32,
 }
 
 impl Default for SaveToSettings {
@@ -349,6 +352,7 @@ impl Default for SaveToSettings {
             convert_digit_chapter: true,
             digit_chapter_length: 3,
             illegal_chars: SymbolMode::Posix,
+            min_free_space_mb: 1024,
         }
     }
 }

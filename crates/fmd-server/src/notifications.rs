@@ -25,16 +25,18 @@ pub(crate) const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 const DOWNLOAD_FAILED: &str = "download_failed";
 /// The kind of a finished download, which has no inbox event.
 const DOWNLOAD_COMPLETED: &str = "download_completed";
+/// The kind of the inbox events saying downloads are held for a full disk, and resumed.
+const DISK_SPACE_LOW: &str = "disk_space_low";
 /// The kind reported for a favorites check that failed, which has no inbox event.
 const FAVORITES_CHECK_FAILED: &str = "favorites_check_failed";
 /// The kind of a "Send test" notification.
 const TEST: &str = "test";
 
 impl AppState {
-    /// Adds each download that fails to the inbox, and sends every new inbox item, finished
-    /// download and failed favorites check to the notification channels that take it. Sending
-    /// never holds up the work that caused it: each request runs on its own, and a failure is
-    /// only logged.
+    /// Adds each download that fails, and downloads held for a full disk and resumed, to the
+    /// inbox, and sends every new inbox item, finished download and failed favorites check to the
+    /// notification channels that take it. Sending never holds up the work that caused it: each
+    /// request runs on its own, and a failure is only logged.
     pub fn start_notifications(&self) {
         let sender = match Sender::new(SEND_TIMEOUT) {
             Ok(sender) => sender,
@@ -107,43 +109,78 @@ fn from_inbox(item: &InboxItem) -> Notification {
     }
 }
 
-/// Adds an error to the inbox for each task that fails, which [`forward`] then sends on, and
-/// sends each task that finishes straight to the channels that take it.
+/// Adds an error to the inbox for each task that fails, and an item when downloads are held for
+/// a full disk and when they resume, which [`forward`] then sends on; sends each task that
+/// finishes straight to the channels that take it.
 async fn report_downloads(
     state: AppState,
     mut engine: tokio::sync::broadcast::Receiver<EngineEvent>,
     sender: Sender,
 ) {
     loop {
-        let (task, status, error) = match engine.recv().await {
+        let event = match engine.recv().await {
             Ok(EngineEvent::Status {
                 task,
                 status: status @ (TaskStatus::Failed | TaskStatus::Finished),
                 error,
                 ..
-            }) => (task, status, error),
+            }) => {
+                let info = task_info(&state, task).await;
+                if status == TaskStatus::Finished {
+                    let website = info
+                        .as_ref()
+                        .map(|info| website_name(&state, &info.task.module_id));
+                    let notification = completed_download(
+                        task,
+                        info.as_ref(),
+                        website.as_deref().unwrap_or_default(),
+                    );
+                    push(&state, &sender, &notification);
+                    continue;
+                }
+                failed_download(task, info, error)
+            }
+            Ok(EngineEvent::DiskSpaceLow { folder, free_bytes }) => {
+                downloads_on_hold(&folder, free_bytes)
+            }
+            Ok(EngineEvent::DiskSpaceRecovered) => downloads_resumed(),
             Ok(_) => continue,
             Err(RecvError::Lagged(missed)) => {
                 tracing::warn!(target: "fmd_server",
-                    "{missed} download events were skipped; a failed download may be missing from the inbox, or a finished one unsent");
+                    "{missed} download events were skipped; a failed download or a full disk may be missing from the inbox, or a finished one unsent");
                 continue;
             }
             Err(RecvError::Closed) => return,
         };
-        let info = task_info(&state, task).await;
-        if status == TaskStatus::Finished {
-            let website = info
-                .as_ref()
-                .map(|info| website_name(&state, &info.task.module_id));
-            let notification =
-                completed_download(task, info.as_ref(), website.as_deref().unwrap_or_default());
-            push(&state, &sender, &notification);
-            continue;
-        }
-        let event = failed_download(task, info, error);
         if let Err(e) = state.notify(event).await {
-            tracing::warn!(target: "fmd_server", "adding a failed download to the inbox: {e}");
+            tracing::warn!(target: "fmd_server", "adding a download event to the inbox: {e}");
         }
+    }
+}
+
+/// Downloads are held: `folder`'s disk has only `free_bytes` free.
+fn downloads_on_hold(folder: &str, free_bytes: u64) -> NewEvent {
+    NewEvent {
+        kind: DISK_SPACE_LOW.into(),
+        severity: EventSeverity::Warning,
+        module_id: None,
+        task_id: None,
+        title: "Downloads are on hold: the disk is almost full".into(),
+        body: serde_json::Value::String(format!(
+            "{folder} has {} MB free. Downloads carry on by themselves once there is room again.",
+            free_bytes / (1024 * 1024)
+        )),
+    }
+}
+
+fn downloads_resumed() -> NewEvent {
+    NewEvent {
+        kind: DISK_SPACE_LOW.into(),
+        severity: EventSeverity::Info,
+        module_id: None,
+        task_id: None,
+        title: "Downloads resumed".into(),
+        body: serde_json::Value::String("The disk has room again.".into()),
     }
 }
 

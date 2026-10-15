@@ -31,6 +31,10 @@ unicode-normalization = "0.1"
 utoipa = "5"
 zstd = "0.13"
 
+[target.'cfg(unix)'.dependencies]
+# `statvfs`, for the free space on the disks downloads save to.
+rustix = { version = "1", features = ["fs"] }
+
 [dev-dependencies]
 fmd-lua = { path = "../fmd-lua", default-features = false }
 rusqlite = { version = "0.32", features = ["bundled"] }
