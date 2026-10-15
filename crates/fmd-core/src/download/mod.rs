@@ -23,6 +23,8 @@
 //! | Waiting | Stopped | `stop`, `stop_all` | `StopTask` (:1900-1920) |
 //! | running | Stopped | `stop`, `stop_all`: the thread is terminated | `TTaskThread.Destroy` (:485-528) |
 //! | any | Disabled / Stopped | `disable` / `enable` | `TTaskContainer.SetEnabled` (:1384-1397) |
+//! | Waiting | stays Waiting | its disk has less than `saveto.min_free_space_mb` free (issue #308; FMD2 never checks) | |
+//! | running | Waiting | before a chapter, its disk has less than `saveto.min_free_space_mb` free | |
 //! | Downloading, Preparing, Waiting (and Converting, Compressing: a killed process) at startup | running, or Waiting; Stopped when the module is gone | [`DownloadManager::open`] | `CheckAndActiveTaskAtStartup` (:1859-1893) |
 //!
 //! A task running when the manager is dropped keeps its status, so the next
@@ -37,12 +39,14 @@ mod preview;
 mod task;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use fmd_http::HttpClient;
 use fmd_lua::{Module, ModuleRegistry, WorkerPool};
 use fmd_store::{AppDb, MetadataSeries, StoreError};
 use tokio::sync::broadcast;
 
+use crate::disk_space::{FreeSpace, Statvfs};
 use crate::folder_move::MovingFolders;
 use crate::settings::{SettingsError, SettingsService};
 use manager::Inner;
@@ -83,7 +87,14 @@ pub struct EngineConfig {
     pub moving: MovingFolders,
     /// The engine's time; it paces page downloads under `connections.max_download_kbps`.
     pub clock: Arc<dyn Clock>,
+    /// Reads the free space on the disks tasks save to.
+    pub free_space: Arc<dyn FreeSpace>,
+    /// How often a disk holding downloads is measured again.
+    pub disk_recheck: Duration,
 }
+
+/// How often a disk holding downloads is measured again, by default.
+pub const DISK_RECHECK: Duration = Duration::from_secs(60);
 
 impl EngineConfig {
     pub fn new(
@@ -102,7 +113,20 @@ impl EngineConfig {
             series: None,
             moving: MovingFolders::default(),
             clock: Arc::new(SystemClock),
+            free_space: Arc::new(Statvfs),
+            disk_recheck: DISK_RECHECK,
         }
+    }
+
+    /// Measures free space with `reader`, again every `recheck` while downloads are held.
+    pub fn with_free_space(
+        mut self,
+        reader: Arc<dyn FreeSpace>,
+        recheck: Duration,
+    ) -> EngineConfig {
+        self.free_space = reader;
+        self.disk_recheck = recheck;
+        self
     }
 
     pub fn with_series_lookup(mut self, lookup: Arc<SeriesLookup>) -> EngineConfig {
@@ -164,6 +188,14 @@ pub enum EngineEvent {
         task: TaskId,
     },
     Reordered,
+    /// Downloads are on hold: the disk `folder` is on has `free_bytes` free, under
+    /// `saveto.min_free_space_mb`. Sent once until [`EngineEvent::DiskSpaceRecovered`].
+    DiskSpaceLow {
+        folder: String,
+        free_bytes: u64,
+    },
+    /// No waiting task's disk is short of space any more; held tasks carry on.
+    DiskSpaceRecovered,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

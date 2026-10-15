@@ -1190,6 +1190,25 @@ export function createMockBackend({
 			return json(job, 202);
 		}
 
+		if (route === 'POST /api/inbox/read') {
+			for (const item of inbox) item.read = true;
+			return new Response(null, { status: 204 });
+		}
+		if (route === 'DELETE /api/inbox') {
+			if (searchParams.get('read') !== 'true') {
+				return json({ status: 400, title: 'Bad Request', detail: 'pass read=true' }, 400);
+			}
+			const unread = inbox.filter((i) => !i.read);
+			inbox.splice(0, inbox.length, ...unread);
+			return new Response(null, { status: 204 });
+		}
+		const one = /^DELETE \/api\/inbox\/([^/]+)$/.exec(route);
+		if (one?.[1]) {
+			const at = inbox.findIndex((i) => i.id === decodeURIComponent(one[1] ?? ''));
+			if (at < 0) return new Response(null, { status: 404 });
+			inbox.splice(at, 1);
+			return new Response(null, { status: 204 });
+		}
 		const read = /^POST \/api\/inbox\/([^/]+)\/read$/.exec(route);
 		if (read?.[1]) {
 			const item = inbox.find((i) => i.id === decodeURIComponent(read[1] ?? ''));

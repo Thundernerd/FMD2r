@@ -372,7 +372,42 @@ export interface paths {
 		get: operations['listInbox'];
 		put?: never;
 		post?: never;
+		/** Delete every read inbox item. */
+		delete: operations['clearInboxRead'];
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/inbox/read': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Mark every inbox item as read. */
+		post: operations['markInboxAllRead'];
 		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/inbox/{id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		post?: never;
+		/** Delete one inbox item. */
+		delete: operations['deleteInboxItem'];
 		options?: never;
 		head?: never;
 		patch?: never;
@@ -2432,8 +2467,8 @@ export interface components {
 			error?: string | null;
 		};
 		/**
-		 * @description A kind of event a channel can be set to send, one per inbox event kind. Serialised as the
-		 *     kind, e.g. `download_failed`.
+		 * @description A kind of event a channel can be set to send: an inbox event kind, or an event sent without
+		 *     one. Serialised as the kind, e.g. `download_failed`.
 		 * @enum {string}
 		 */
 		NotificationType:
@@ -2442,10 +2477,12 @@ export interface components {
 			| 'missing_check'
 			| 'completed'
 			| 'download_failed'
+			| 'download_completed'
 			| 'favorites_check_failed'
 			| 'module_update'
 			| 'downloads_moved'
-			| 'comic_server';
+			| 'comic_server'
+			| 'disk_space_low';
 		/** @description [`NtfySettings`] with the access token left out. */
 		NtfySettingsView: {
 			enabled: boolean;
@@ -2621,6 +2658,7 @@ export interface components {
 			 *       "generate_manga_folder": true,
 			 *       "illegal_chars": "posix",
 			 *       "manga_rename": "%MANGA%",
+			 *       "min_free_space_mb": 1024,
 			 *       "remove_manga_name_from_chapter": false,
 			 *       "replace_unicode": false,
 			 *       "replace_unicode_with": "_"
@@ -2736,6 +2774,13 @@ export interface components {
 			 * @default %MANGA%
 			 */
 			manga_rename: string;
+			/**
+			 * Format: int32
+			 * @description Downloads hold while the disk they save to has less than this many MB free, and carry on
+			 *     once it has room again (issue #308; FMD2 never checks). 0 turns the guard off.
+			 * @default 1024
+			 */
+			min_free_space_mb: number;
 			/**
 			 * @description `saveto/RemoveMangaNameFromChapter`, default false
 			 *     (mangadownloader/forms/frmMain.pas:5892).
@@ -3011,7 +3056,8 @@ export interface components {
 			 *           "module_update",
 			 *           "downloads_moved",
 			 *           "comic_server",
-			 *           "missing_check"
+			 *           "missing_check",
+			 *           "disk_space_low"
 			 *         ]
 			 *       },
 			 *       "ntfy": {
@@ -3026,7 +3072,8 @@ export interface components {
 			 *           "module_update",
 			 *           "downloads_moved",
 			 *           "comic_server",
-			 *           "missing_check"
+			 *           "missing_check",
+			 *           "disk_space_low"
 			 *         ]
 			 *       },
 			 *       "webhook": {
@@ -3040,7 +3087,8 @@ export interface components {
 			 *           "module_update",
 			 *           "downloads_moved",
 			 *           "comic_server",
-			 *           "missing_check"
+			 *           "missing_check",
+			 *           "disk_space_low"
 			 *         ],
 			 *         "url": ""
 			 *       }
@@ -3075,6 +3123,7 @@ export interface components {
 			 *       "generate_manga_folder": true,
 			 *       "illegal_chars": "posix",
 			 *       "manga_rename": "%MANGA%",
+			 *       "min_free_space_mb": 1024,
 			 *       "remove_manga_name_from_chapter": false,
 			 *       "replace_unicode": false,
 			 *       "replace_unicode_with": "_"
@@ -4308,6 +4357,84 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['InboxItem'][];
+				};
+			};
+		};
+	};
+	clearInboxRead: {
+		parameters: {
+			query?: {
+				/** @description Must be `true`: only read items can be cleared. */
+				read?: boolean;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Deleted */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description `read=true` is missing */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
+				};
+			};
+		};
+	};
+	markInboxAllRead: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Marked as read */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+		};
+	};
+	deleteInboxItem: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				/** @description Inbox item id */
+				id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Deleted */
+			204: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content?: never;
+			};
+			/** @description No such inbox item */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Problem'];
 				};
 			};
 		};

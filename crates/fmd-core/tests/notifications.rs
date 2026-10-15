@@ -281,6 +281,7 @@ fn a_new_channel_takes_chapters_and_problems() {
         "downloads_moved",
         "comic_server",
         "missing_check",
+        "disk_space_low",
     ] {
         let mut problem = download_failed();
         problem.kind = kind.into();
@@ -289,4 +290,17 @@ fn a_new_channel_takes_chapters_and_problems() {
     let mut completed = new_chapters();
     completed.kind = "completed".into();
     assert_eq!(channels(&settings, &completed), []);
+}
+
+/// "Download completed" fires for every finished task, including auto-downloaded new chapters,
+/// so a new channel leaves it off (issue #300); ticking it sends it.
+#[test]
+fn download_completed_is_off_by_default_and_sent_when_ticked() {
+    let mut completed = new_chapters();
+    completed.kind = "download_completed".into();
+    assert_eq!(channels(&ntfy(), &completed), []);
+    let settings = settings(json!({"notifications": {"ntfy": {
+        "enabled": true, "topic_url": "https://ntfy.sh/t", "types": ["download_completed"],
+    }}}));
+    assert_eq!(channels(&settings, &completed), [Channel::Ntfy]);
 }

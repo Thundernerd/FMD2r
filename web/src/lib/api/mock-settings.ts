@@ -30,7 +30,8 @@ const defaultNotificationTypes = (): NotificationType[] => [
 	'module_update',
 	'downloads_moved',
 	'comic_server',
-	'missing_check'
+	'missing_check',
+	'disk_space_low'
 ];
 
 /** The server's defaults (fmd_core::settings::Settings::default()). */
@@ -81,7 +82,8 @@ export const defaultSettings = (): Settings => ({
 		digit_volume_length: 2,
 		convert_digit_chapter: true,
 		digit_chapter_length: 3,
-		illegal_chars: 'posix'
+		illegal_chars: 'posix',
+		min_free_space_mb: 1024
 	},
 	output: { format: 'folder', pdf_quality: 100, comic_metadata: 'none' },
 	images: {

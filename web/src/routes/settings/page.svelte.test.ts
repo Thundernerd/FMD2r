@@ -176,7 +176,8 @@ describe('the settings page', () => {
 					'module_update',
 					'downloads_moved',
 					'comic_server',
-					'missing_check'
+					'missing_check',
+					'disk_space_low'
 				]
 			},
 			discord: {
@@ -189,7 +190,8 @@ describe('the settings page', () => {
 					'download_failed',
 					'favorites_check_failed',
 					'downloads_moved',
-					'comic_server'
+					'comic_server',
+					'disk_space_low'
 				]
 			},
 			webhook: {
@@ -205,10 +207,22 @@ describe('the settings page', () => {
 					'favorites_check_failed',
 					'module_update',
 					'downloads_moved',
-					'comic_server'
+					'comic_server',
+					'disk_space_low'
 				]
 			}
 		});
+	});
+
+	it('saves how much space to keep free on the download disks, 1024 MB by default', async () => {
+		await open('#section-saveto');
+		const keep = screen.getByRole('spinbutton', { name: 'Keep this much space free (MB)' });
+		expect((keep as HTMLInputElement).value).toBe('1024');
+
+		await fireEvent.input(keep, { target: { value: '0' } });
+		await fireEvent.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+		await within(saveBar()).findByText('Saved');
+		expect((await api.getSettings()).saveto.min_free_space_mb).toBe(0);
 	});
 
 	it('offers to repoint the library series in a destination whose folder changed; "Leave them" only saves', async () => {
