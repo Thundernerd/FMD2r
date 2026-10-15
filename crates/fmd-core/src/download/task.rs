@@ -155,9 +155,14 @@ impl<'a> TaskRun<'a> {
         self.terminate.is_terminated()
     }
 
-    /// Not for `Failed`, which carries a reason.
+    /// Not for `Failed`: see [`Self::set_failed`].
     fn set_status(&self, status: TaskStatus) -> Result<(), EngineError> {
         self.inner.set_status(self.id, status, None)
+    }
+
+    fn set_failed(&self, reason: &str) -> Result<(), EngineError> {
+        self.inner
+            .set_status(self.id, TaskStatus::Failed, Some(reason))
     }
 
     pub(super) fn caller(&self, affinity: Affinity, http: Option<HttpSession>) -> Caller<'_> {
@@ -368,8 +373,7 @@ impl<'a> TaskRun<'a> {
             if let Err(e) = std::fs::create_dir_all(&self.working_dir) {
                 // `StatusFailedToCreateDir` (baseunits/uDownloadsManager.pas:717-725).
                 let error = format!("failed to create {}: {e}", self.working_dir.display());
-                self.inner
-                    .set_status(self.id, TaskStatus::Failed, Some(&error))?;
+                self.set_failed(&error)?;
                 self.log_failed(&error);
                 return Ok(());
             }
@@ -402,7 +406,8 @@ impl<'a> TaskRun<'a> {
             self.recover_interrupted_writes();
             self.check_for_exists(dynamic_page_link);
 
-            // A module listing no pages still gets one try at a page link (:1237-1240).
+            // A module listing no pages still gets one try at a page link
+            // (baseunits/uDownloadsManager.pas:1237-1240).
             let listed_no_pages = {
                 let mut c = self.container();
                 let empty = c.task.page_links.is_empty();
@@ -438,7 +443,7 @@ impl<'a> TaskRun<'a> {
                 c.task.page_links.is_empty()
             };
             let failure = if no_pages {
-                Some(format!("Chapter {chapter_name:?} has no pages"))
+                Some(ChapterFailure::NoPages)
             } else {
                 self.reset_phase();
                 self.set_status(TaskStatus::Downloading)?;
@@ -446,20 +451,22 @@ impl<'a> TaskRun<'a> {
                 if self.terminated() {
                     return Ok(());
                 }
-                self.finish_chapter(dynamic_page_link, listed_no_pages)?
+                self.finish_chapter(dynamic_page_link)?
                     .err()
-                    .map(|cause| match cause {
-                        None => format!("Chapter {chapter_name:?} has no pages"),
-                        Some(cause) => format!("Chapter {chapter_name:?}: {cause}"),
+                    .map(|failure| match failure {
+                        ChapterFailure::MissingPages { .. } if listed_no_pages => {
+                            ChapterFailure::NoPages
+                        }
+                        failure => failure,
                     })
             };
-            if let Some(reason) = &failure {
+            let reason = failure.map(|failure| failure.reason(&chapter_name));
+            if let Some(reason) = &reason {
                 tracing::warn!(target: "fmd_core", "task {}: {reason}", self.id.0);
-                self.inner
-                    .set_status(self.id, TaskStatus::Failed, Some(reason))?;
+                self.set_failed(reason)?;
             }
-            let failed = failure.is_some();
-            self.chapter_failures[self.chapter] = failure;
+            let failed = reason.is_some();
+            self.chapter_failures[self.chapter] = reason;
             self.leave_chapter(failed)?;
 
             self.chapter += 1;
@@ -484,9 +491,19 @@ impl<'a> TaskRun<'a> {
         if self.first_failed_chapter().is_some() {
             self.chapter = 0;
             self.save_chapter_pointer()?;
-            let reason = format!("Chapters failed: {}", self.failed_chapters().join("; "));
-            self.inner
-                .set_status(self.id, TaskStatus::Failed, Some(&reason))?;
+            let failed = self.failed_chapters();
+            let reason = match failed.as_slice() {
+                // The reason its `Failed` event already gave.
+                [(_, Some(reason))] => reason.clone(),
+                _ => {
+                    let chapters: Vec<String> = failed
+                        .into_iter()
+                        .map(|(name, reason)| reason.unwrap_or_else(|| format!("{name:?}")))
+                        .collect();
+                    format!("Chapters failed: {}", chapters.join("; "))
+                }
+            };
+            self.set_failed(&reason)?;
             self.log_failed(&reason);
             Ok(())
         } else {
@@ -500,35 +517,33 @@ impl<'a> TaskRun<'a> {
         log_task(self.id, &self.title, format!("failed: {reason}"));
     }
 
-    /// Why each failed chapter failed; just its name when it failed in an earlier run.
-    fn failed_chapters(&self) -> Vec<String> {
+    /// The failed chapters' names, with why they failed when it was in this run.
+    fn failed_chapters(&self) -> Vec<(String, Option<String>)> {
         self.container()
             .chapters_status
             .iter()
             .zip(&self.chapter_names)
             .zip(&self.chapter_failures)
             .filter(|((status, _), _)| **status == ChapterStatus::Failed)
-            .map(|((_, name), failure)| failure.clone().unwrap_or_else(|| format!("{name:?}")))
+            .map(|((_, name), reason)| (name.clone(), reason.clone()))
             .collect()
     }
 
     /// Checks every page came through, then converts and packs the chapter
-    /// (baseunits/uDownloadsManager.pas:1305-1323); the cause when a step fails, `None` when
-    /// the chapter turned out to have no pages.
+    /// (baseunits/uDownloadsManager.pas:1305-1328).
     fn finish_chapter(
         &self,
         dynamic_page_link: bool,
-        listed_no_pages: bool,
-    ) -> Result<Result<(), Option<String>>, EngineError> {
-        if let Err(cause) = self.check_for_finish(dynamic_page_link) {
-            return Ok(Err((!listed_no_pages).then_some(cause).flatten()));
+    ) -> Result<Result<(), ChapterFailure>, EngineError> {
+        if let Err(failure) = self.check_for_finish(dynamic_page_link) {
+            return Ok(Err(failure));
         }
         self.set_status(TaskStatus::Converting)?;
         if let Err(cause) = self.convert() {
-            return Ok(Err(Some(cause)));
+            return Ok(Err(ChapterFailure::Other(cause)));
         }
         self.set_status(TaskStatus::Compressing)?;
-        Ok(self.compress().map_err(Some))
+        Ok(self.compress().map_err(ChapterFailure::Other))
     }
 
     fn enter_chapter(&mut self) -> Result<(), EngineError> {
@@ -719,16 +734,16 @@ impl<'a> TaskRun<'a> {
     }
 
     /// `CheckForFinish` (baseunits/uDownloadsManager.pas:1066-1103).
-    fn check_for_finish(&self, dynamic_page_link: bool) -> Result<(), Option<String>> {
+    fn check_for_finish(&self, dynamic_page_link: bool) -> Result<(), ChapterFailure> {
         let pages = self.container().task.page_links.len();
         if pages == 0 {
-            return Err(None);
+            return Err(ChapterFailure::NoPages);
         }
         let missing = pages - self.check_for_exists(dynamic_page_link);
         self.save_pages()
-            .map_err(|e| Some(format!("saving its pages failed: {e}")))?;
+            .map_err(|e| ChapterFailure::Other(format!("saving its pages failed: {e}")))?;
         if missing > 0 {
-            return Err(Some(format!("{missing} of {pages} pages did not download")));
+            return Err(ChapterFailure::MissingPages { missing, pages });
         }
         Ok(())
     }
@@ -816,6 +831,26 @@ impl<'a> TaskRun<'a> {
         packed
             .map(|_| ())
             .map_err(|e| format!("packing the chapter failed: {e}"))
+    }
+}
+
+/// Why a chapter failed.
+enum ChapterFailure {
+    NoPages,
+    MissingPages { missing: usize, pages: usize },
+    Other(String),
+}
+
+impl ChapterFailure {
+    /// For the task's error, naming the chapter.
+    fn reason(&self, chapter_name: &str) -> String {
+        match self {
+            ChapterFailure::NoPages => format!("Chapter {chapter_name:?} has no pages"),
+            ChapterFailure::MissingPages { missing, pages } => {
+                format!("Chapter {chapter_name:?}: {missing} of {pages} pages did not download")
+            }
+            ChapterFailure::Other(cause) => format!("Chapter {chapter_name:?}: {cause}"),
+        }
     }
 }
 

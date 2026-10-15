@@ -1102,13 +1102,17 @@ function Init() local m = NewWebsiteModule(); m.ID='e'; m.Name='E'; m.RootURL='h
 function GPN() return true end
 "#;
 
-/// Runs a one-chapter task of `module` until it fails; returns the reason the `Failed` status
-/// event carried, and the task once its run has ended.
-async fn failing(f: &Fixture, module: &str, chapter: &str) -> (Option<String>, fmd_store::Task) {
+/// Runs a task of `module`'s `chapters` until it fails; returns the reason the first `Failed`
+/// status event carried, and the task once its run has ended.
+async fn failing_chapters(
+    f: &Fixture,
+    module: &str,
+    chapters: &[(&str, &str)],
+) -> (Option<String>, fmd_store::Task) {
     let manager = f.manager().await;
     let mut events = manager.subscribe();
     let id = manager
-        .add_task(f.download(module, &[(chapter, "One")]))
+        .add_task(f.download(module, chapters))
         .await
         .unwrap();
     let failed = async {
@@ -1144,6 +1148,11 @@ async fn failing(f: &Fixture, module: &str, chapter: &str) -> (Option<String>, f
     (error, task)
 }
 
+/// [`failing_chapters`] for a one-chapter task.
+async fn failing(f: &Fixture, module: &str, chapter: &str) -> (Option<String>, fmd_store::Task) {
+    failing_chapters(f, module, &[(chapter, "One")]).await
+}
+
 fn no_retries() -> Value {
     json!({"output": {"format": "cbz"}, "connections": {"auto_retry_failed_tasks": 0}})
 }
@@ -1153,10 +1162,7 @@ async fn a_chapter_without_pages_fails_the_task_saying_so() {
     let f = Fixture::new(&[("E.lua", EMPTY)], no_retries());
     let (event, task) = failing(&f, "e", "/c").await;
     assert_eq!(event.as_deref(), Some("Chapter \"One\" has no pages"));
-    assert_eq!(
-        task.error.as_deref(),
-        Some("Chapters failed: Chapter \"One\" has no pages")
-    );
+    assert_eq!(task.error, event);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1168,9 +1174,21 @@ async fn a_chapter_missing_a_page_fails_the_task_saying_how_many() {
         event.as_deref(),
         Some("Chapter \"One\": 1 of 3 pages did not download")
     );
+    assert_eq!(task.error, event);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_task_failing_several_chapters_says_why_each_failed() {
+    let f = Fixture::new(&[("T.lua", T)], no_retries());
+    f.transport.fail("https://t/img/c/3/3", 2);
+    f.transport.fail("https://t/img/c/2/1", 2);
+    let (_, task) = failing_chapters(&f, "t", &[("/c/3", "One"), ("/c/2", "Two")]).await;
     assert_eq!(
         task.error.as_deref(),
-        Some("Chapters failed: Chapter \"One\": 1 of 3 pages did not download")
+        Some(
+            "Chapters failed: Chapter \"One\": 1 of 3 pages did not download; \
+             Chapter \"Two\": 1 of 2 pages did not download"
+        )
     );
 }
 
@@ -1188,10 +1206,9 @@ async fn a_chapter_that_cannot_be_packed_fails_the_task_saying_why() {
     fs::set_permissions(&manga, fs::Permissions::from_mode(0o755)).unwrap();
 
     let event = event.unwrap();
-    assert!(
-        event.starts_with("Chapter \"One\": packing the chapter failed: "),
-        "{event}"
-    );
-    assert!(event.len() > "Chapter \"One\": packing the chapter failed: ".len());
-    assert_eq!(task.error, Some(format!("Chapters failed: {event}")));
+    let cause = event
+        .strip_prefix("Chapter \"One\": packing the chapter failed: ")
+        .unwrap_or_else(|| panic!("{event}"));
+    assert!(!cause.is_empty(), "{event}");
+    assert_eq!(task.error, Some(event));
 }
