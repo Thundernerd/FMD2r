@@ -9,11 +9,14 @@
 		task,
 		api,
 		queue,
+		websites,
 		onerror
 	}: {
 		task: TaskSummary;
 		api: Api;
 		queue: QueueStore;
+		/** Website names by module ID; a task whose module isn't here shows no website. */
+		websites: ReadonlyMap<string, string>;
 		/** An action failed; `message` says which. */
 		onerror: (message: string) => void;
 	} = $props();
@@ -42,6 +45,7 @@
 	const canStop = $derived(group === 'downloading' || group === 'waiting');
 	const canRedownload = $derived(task.enabled && !task.running && task.status !== 'waiting');
 	const hasFiles = $derived(task.chapters_done > 0);
+	const website = $derived(websites.get(task.module_id));
 
 	async function run(action: TaskAction) {
 		if (busy) return;
@@ -84,7 +88,9 @@
 		{#if group === 'downloading'}
 			<span class="mono num">{formatRate(task.bytes_per_sec)}</span>
 		{/if}
-		<span>{task.module_id}</span>
+		{#if website}
+			<span>{website}</span>
+		{/if}
 		<span class="mono folder" title="Saved in">{task.save_to}</span>
 	</div>
 	{#if group === 'downloading' || task.total > 0}
