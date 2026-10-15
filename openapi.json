@@ -4094,7 +4094,10 @@
           "timeout_secs",
           "user_agent",
           "proxy",
-          "flaresolverr_url"
+          "flaresolverr_url",
+          "schedule_enabled",
+          "schedule_start",
+          "schedule_end"
         ],
         "properties": {
           "always_start_from_failed_chapters": {
@@ -4143,6 +4146,20 @@
             "description": "HTTP retries per request; -1 retries forever (`connections/Retry`, `OptionMaxRetry` = 5,\nbaseunits/FMDOptions.pas:135; -1..=5 in mangadownloader/forms/frmMain.lfm:3633-3634;\nmeaning in baseunits/httpsendthread.pas:626).",
             "maximum": 5,
             "minimum": -1
+          },
+          "schedule_enabled": {
+            "type": "boolean",
+            "description": "Downloads run only from `schedule_start` until `schedule_end` each day. No FMD2\nsetting: FMD2r's download schedule (issue #310)."
+          },
+          "schedule_end": {
+            "type": "string",
+            "description": "When downloads stop, `HH:MM` in the server's local time. Before `schedule_start`, the\nwindow crosses midnight; equal to it, the window is all day.",
+            "example": "07:00"
+          },
+          "schedule_start": {
+            "type": "string",
+            "description": "When downloads may start, `HH:MM` in the server's local time.",
+            "example": "23:00"
           },
           "threads_per_task": {
             "type": "integer",
@@ -7055,6 +7072,9 @@
                 "username": ""
               },
               "retry_count": 5,
+              "schedule_enabled": false,
+              "schedule_end": "07:00",
+              "schedule_start": "23:00",
               "threads_per_task": 1,
               "timeout_secs": 30,
               "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
@@ -7518,6 +7538,14 @@
             "format": "int32",
             "description": "1-based.",
             "minimum": 0
+          },
+          "paused_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "While the download schedule keeps downloads paused, when they resume: `HH:MM` in the\nserver's local time.",
+            "example": "23:00"
           },
           "per_page": {
             "type": "integer",

@@ -64,6 +64,13 @@ export type TaskSummary = Schemas['TaskSummary'];
 export type TaskDetail = Schemas['TaskDetail'];
 export type TaskList = Schemas['TaskList'];
 export type TaskCounts = Schemas['TaskCounts'];
+
+/** The whole download queue: its tasks in queue order, and while the download schedule keeps
+ * downloads paused, when they resume (`HH:MM`, the server's local time). */
+export interface TaskQueue {
+	tasks: TaskSummary[];
+	pausedUntil: string | null;
+}
 export type TaskGroup = Schemas['TaskGroup'];
 export type TaskStatusChange = Schemas['TaskStatusChange'];
 export type TaskRemoved = Schemas['TaskRemoved'];

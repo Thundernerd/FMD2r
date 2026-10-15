@@ -77,15 +77,24 @@ pub(super) struct TaskRun<'a> {
     pub(super) working_dir: PathBuf,
     /// `CurrentCustomFileName`.
     custom_file_name: String,
+    /// Left between chapters because the download schedule's window closed.
+    paused: bool,
 }
 
+/// Runs the task; true when it paused for the download schedule, to carry on once the window
+/// opens.
 pub(super) fn run(
     inner: &Arc<Inner>,
     id: TaskId,
     module: &Arc<Module>,
     terminate: &TerminateToken,
-) {
-    let result = TaskRun::load(inner, id, module, terminate).and_then(|mut run| run.execute());
+) -> bool {
+    let mut paused = false;
+    let result = TaskRun::load(inner, id, module, terminate).and_then(|mut run| {
+        run.execute()?;
+        paused = run.paused;
+        Ok(())
+    });
     if let Err(e) = result {
         tracing::error!(target: "fmd_core", "task {}: failed: {e}", id.0);
         if !terminate.is_terminated()
@@ -94,6 +103,7 @@ pub(super) fn run(
             tracing::error!(target: "fmd_core", "task {}: {e}", id.0);
         }
     }
+    paused
 }
 
 impl<'a> TaskRun<'a> {
@@ -144,6 +154,7 @@ impl<'a> TaskRun<'a> {
             chapter_link: String::new(),
             working_dir: PathBuf::new(),
             custom_file_name: String::new(),
+            paused: false,
         })
     }
 
@@ -364,6 +375,13 @@ impl<'a> TaskRun<'a> {
                 break;
             }
             if self.terminated() {
+                return Ok(());
+            }
+            // Outside the download schedule's window it waits for the window to open.
+            if let Some(schedule) = self.inner.closed_schedule() {
+                let until = schedule.start().strftime("%H:%M");
+                log_task(self.id, &self.title, format!("paused until {until}"));
+                self.paused = true;
                 return Ok(());
             }
             self.enter_chapter()?;

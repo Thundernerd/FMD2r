@@ -1511,6 +1511,22 @@ export interface components {
 			 */
 			retry_count: number;
 			/**
+			 * @description Downloads run only from `schedule_start` until `schedule_end` each day. No FMD2
+			 *     setting: FMD2r's download schedule (issue #310).
+			 */
+			schedule_enabled: boolean;
+			/**
+			 * @description When downloads stop, `HH:MM` in the server's local time. Before `schedule_start`, the
+			 *     window crosses midnight; equal to it, the window is all day.
+			 * @example 07:00
+			 */
+			schedule_end: string;
+			/**
+			 * @description When downloads may start, `HH:MM` in the server's local time.
+			 * @example 23:00
+			 */
+			schedule_start: string;
+			/**
 			 * Format: int32
 			 * @description Page download threads per task (`connections/NumberOfThreadsPerTask`, `OptionMaxThreads`
 			 *     = 1, baseunits/FMDOptions.pas:134). Range 1..=256: the Win64 `MAX_CONNECTIONPERHOSTLIMIT`
@@ -2912,6 +2928,9 @@ export interface components {
 			 *         "username": ""
 			 *       },
 			 *       "retry_count": 5,
+			 *       "schedule_enabled": false,
+			 *       "schedule_end": "07:00",
+			 *       "schedule_start": "23:00",
 			 *       "threads_per_task": 1,
 			 *       "timeout_secs": 30,
 			 *       "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
@@ -3189,6 +3208,12 @@ export interface components {
 			 * @description 1-based.
 			 */
 			page: number;
+			/**
+			 * @description While the download schedule keeps downloads paused, when they resume: `HH:MM` in the
+			 *     server's local time.
+			 * @example 23:00
+			 */
+			paused_until?: string | null;
 			/** Format: int32 */
 			per_page: number;
 			/**

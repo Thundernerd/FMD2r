@@ -23,6 +23,16 @@
 			.catch(() => {});
 	});
 
+	/** How often the page refetches the queue, so the download schedule's pause shows. */
+	const SCHEDULE_REFRESH_MS = 60_000;
+
+	$effect(() => {
+		// The schedule pauses and resumes downloads on the clock, not on a task's frame.
+		queue.resync();
+		const timer = setInterval(() => queue.resync(), SCHEDULE_REFRESH_MS);
+		return () => clearInterval(timer);
+	});
+
 	async function bulk(what: string, call: () => Promise<void>) {
 		if (busy) return;
 		busy = true;
@@ -135,6 +145,10 @@
 		<p class="problem small" role="alert">{error}</p>
 	{/if}
 
+	{#if queue.pausedUntil}
+		<p class="paused small" role="status">Downloads are paused until {queue.pausedUntil}</p>
+	{/if}
+
 	{#if queue.tasks.length === 0}
 		<p class="muted">The queue is empty. Queue chapters from a series page.</p>
 	{:else}
@@ -239,6 +253,13 @@
 		border-radius: var(--r);
 		background: var(--bad-soft);
 		color: var(--bad);
+	}
+	.paused {
+		margin: 0;
+		padding: 6px 10px;
+		border-radius: var(--r);
+		background: var(--warn-soft);
+		color: var(--warn);
 	}
 	.group {
 		display: flex;

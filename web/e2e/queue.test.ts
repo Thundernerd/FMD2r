@@ -75,3 +75,18 @@ test('a task shows the name of the website it downloads from, not its module ID'
 	await expect(page.getByRole('main')).not.toContainText('mangadex');
 	await expect(page.getByRole('main')).not.toContainText('comick');
 });
+
+test('outside the download schedule the queue says when downloads resume', async ({ page }) => {
+	await page.addInitScript(() => sessionStorage.setItem('fmd2r.mock.paused-until', '23:00'));
+	await page.goto('/queue');
+	await expect(group(page, 'Downloading')).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'paused' })).toHaveText(
+		'Downloads are paused until 23:00'
+	);
+});
+
+test('inside the download schedule the queue shows no pause', async ({ page }) => {
+	await page.goto('/queue');
+	await expect(group(page, 'Downloading')).toBeVisible();
+	await expect(page.getByText(/Downloads are paused/)).toHaveCount(0);
+});

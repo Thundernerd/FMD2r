@@ -63,6 +63,9 @@ export const defaultSettings = (): Settings => ({
 		timeout_secs: 30,
 		user_agent: DEFAULT_USER_AGENT,
 		flaresolverr_url: '',
+		schedule_enabled: false,
+		schedule_start: '23:00',
+		schedule_end: '07:00',
 		proxy: { enabled: false, type: 'http', host: '', port: null, username: '', has_password: false }
 	},
 	saveto: {

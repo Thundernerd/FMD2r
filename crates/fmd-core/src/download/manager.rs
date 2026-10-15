@@ -13,7 +13,9 @@ use fmd_pack::{RenameContext, custom_rename};
 use fmd_store::{ChapterStatus, NewChapter, NewTask, TaskId, TaskStatus};
 use tokio::sync::broadcast;
 
-use super::{EngineConfig, EngineError, EngineEvent, NewDownload, Progress, TaskInfo, task};
+use super::{
+    EngineConfig, EngineError, EngineEvent, NewDownload, Progress, Schedule, TaskInfo, task,
+};
 use crate::modules::ModuleInfo;
 use crate::settings::{
     EffectiveLimits, ModuleOverrides, OutputFormat, SaveToSettings, Settings, SymbolMode,
@@ -57,6 +59,9 @@ struct ProgressClock {
     at: Instant,
 }
 
+/// The longest the download schedule's timer sleeps before looking at the clock again.
+const RECHECK: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
 /// Minimum time between a task's progress reports.
 const PROGRESS_INTERVAL_MS: u128 = 250;
 
@@ -93,6 +98,12 @@ impl Inner {
 
     pub(super) fn is_exiting(&self) -> bool {
         self.exiting.load(Ordering::SeqCst)
+    }
+
+    /// The download schedule's window, when it is closed now.
+    pub(super) fn closed_schedule(&self) -> Option<Schedule> {
+        Schedule::of(&self.settings().connections)
+            .filter(|schedule| !schedule.is_open(self.config.clock.now()))
     }
 
     pub(super) fn limits(&self, module: &Module) -> EffectiveLimits {
@@ -228,6 +239,7 @@ impl Inner {
         if count >= max {
             return Ok(());
         }
+        let closed = self.closed_schedule().is_some();
         for task in self.config.db.tasks().list()? {
             if count >= max {
                 break;
@@ -237,6 +249,10 @@ impl Inner {
             }
             if self.config.moving.blocks(Path::new(&task.save_to)) {
                 continue;
+            }
+            // Outside the download schedule's window it waits for the window to open.
+            if closed {
+                break;
             }
             // A task whose module is gone was stopped at startup; one removed since waits.
             let Some(module) = self.module(&task.module_id) else {
@@ -272,8 +288,8 @@ impl Inner {
         let thread = std::thread::Builder::new()
             .name(format!("fmd-task-{}", id.0))
             .spawn(move || {
-                task::run(&inner, id, &thread_module, &token);
-                inner.task_ended(id);
+                let paused = task::run(&inner, id, &thread_module, &token);
+                inner.task_ended(id, paused);
             });
         let thread = match thread {
             Ok(thread) => thread,
@@ -295,16 +311,17 @@ impl Inner {
     }
 
     /// `TTaskThread.Destroy` (baseunits/uDownloadsManager.pas:485-528): an unfinished task
-    /// becomes Stopped (or Disabled) unless deleting or exiting.
-    fn task_ended(self: &Arc<Self>, id: TaskId) {
-        let deleting = {
+    /// becomes Stopped (or Disabled) unless deleting or exiting. One `paused` for the download
+    /// schedule, and not stopped meanwhile, becomes Waiting instead.
+    fn task_ended(self: &Arc<Self>, id: TaskId, paused: bool) {
+        let (deleting, terminated) = {
             let mut state = lock(&self.state);
             match state.running.remove(&id) {
                 Some(running) => {
                     running.module.dec_active_task_count();
-                    running.deleting
+                    (running.deleting, running.terminate.is_terminated())
                 }
-                None => false,
+                None => (false, false),
             }
         };
         lock(&self.progress).remove(&id);
@@ -317,7 +334,9 @@ impl Inner {
                 return Ok(());
             };
             repo.update_progress(id, task.current_chapter, Some(now_ms()))?;
-            if !matches!(
+            if paused && !terminated && task.enabled {
+                self.set_status(id, TaskStatus::Waiting, None)?;
+            } else if !matches!(
                 task.status,
                 TaskStatus::Stopped | TaskStatus::Finished | TaskStatus::Failed
             ) {
@@ -340,6 +359,7 @@ impl Inner {
     /// and Compressing tasks, left by a killed process, resume too (T44).
     pub(super) fn check_and_active_task_at_startup(self: &Arc<Self>) -> Result<(), EngineError> {
         let max = self.settings().connections.max_parallel_tasks;
+        let closed = self.closed_schedule().is_some();
         let mut started = 0;
         {
             let mut state = lock(&self.state);
@@ -360,7 +380,7 @@ impl Inner {
                         let why = format!("stopped: module {} is not installed", task.module_id);
                         log_task(task.id, &task.title, why);
                     }
-                    Some(module) if started < max && self.can_create_task(&module) => {
+                    Some(module) if !closed && started < max && self.can_create_task(&module) => {
                         let was = task.status;
                         log_task(
                             task.id,
@@ -568,6 +588,40 @@ impl Inner {
                 })
             })
             .collect()
+    }
+
+    /// Runs [`Self::check_and_active_task`] when the download schedule's window opens, and
+    /// whenever the settings change, until the settings service is gone.
+    pub(super) async fn watch_schedule(self: Arc<Self>) {
+        let mut settings = self.config.settings.subscribe();
+        loop {
+            // Until the window opens, but at most a few minutes, so the window closing or the
+            // clock changing is noticed.
+            let wait = Schedule::of(&settings.borrow_and_update().connections).map(|schedule| {
+                schedule
+                    .until_open(self.config.clock.now())
+                    .map_or(RECHECK, |wait| wait.min(RECHECK))
+            });
+            let opened = async {
+                match wait {
+                    Some(wait) => self.config.clock.sleep(wait).await,
+                    None => std::future::pending().await,
+                }
+            };
+            tokio::select! {
+                changed = settings.changed() => if changed.is_err() {
+                    return;
+                },
+                () = opened => {}
+            }
+            let inner = self.clone();
+            let checked = tokio::task::spawn_blocking(move || inner.check_and_active_task()).await;
+            match checked {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => tracing::error!(target: "fmd_core", "download schedule: {e}"),
+                Err(e) => tracing::error!(target: "fmd_core", "download schedule: {e}"),
+            }
+        }
     }
 
     /// `StopAllDownloadTasksForExit` (baseunits/uDownloadsManager.pas:1957-1977); statuses

@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fmd_core::download::{
-    ChapterSpec, DownloadManager, EngineConfig, EngineEvent, NewDownload, SeriesMatch,
+    ChapterSpec, Clock, DownloadManager, EngineConfig, EngineEvent, NewDownload, SeriesMatch,
 };
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
@@ -35,12 +35,14 @@ const PNG: &[u8] = &[
 const PATIENCE: Duration = Duration::from_secs(20);
 
 /// Serves a PNG for every URL holding `/img/`, a 404 otherwise; can fail a URL a number of
-/// times first, or never answer the URLs holding a pattern.
+/// times first, or hold the URLs holding a pattern until released.
 #[derive(Default)]
 struct StubTransport {
     requests: Mutex<Vec<String>>,
     failures: Mutex<HashMap<String, u32>>,
     hold: Mutex<Vec<String>>,
+    /// Bumped by each release of the held URLs.
+    releases: tokio::sync::watch::Sender<u64>,
 }
 
 impl StubTransport {
@@ -48,11 +50,15 @@ impl StubTransport {
         self.failures.lock().unwrap().insert(url.into(), times);
     }
 
-    /// Never answers the URLs holding `pattern`; an empty pattern releases them all.
+    /// Holds the URLs holding `pattern` unanswered; an empty pattern releases them all, and
+    /// answers the ones held so far.
     fn hold(&self, pattern: &str) {
         let mut hold = self.hold.lock().unwrap();
         match pattern {
-            "" => hold.clear(),
+            "" => {
+                hold.clear();
+                self.releases.send_modify(|n| *n += 1);
+            }
             pattern => hold.push(pattern.into()),
         }
     }
@@ -84,9 +90,6 @@ impl Transport for StubTransport {
             .unwrap()
             .iter()
             .any(|p| request.url.contains(p));
-        if held {
-            return Box::pin(std::future::pending());
-        }
         let image = request.url.contains("/img/");
         let response = WireResponse {
             status: if image { 200 } else { 404 },
@@ -94,7 +97,17 @@ impl Transport for StubTransport {
             headers: Vec::new(),
             body: if image { PNG.to_vec() } else { Vec::new() },
         };
-        Box::pin(async move { Ok(response) })
+        let mut releases = self.releases.subscribe();
+        let held_at = *releases.borrow_and_update();
+        Box::pin(async move {
+            if held {
+                let released = releases.wait_for(|n| *n != held_at).await.is_ok();
+                if !released {
+                    std::future::pending::<()>().await;
+                }
+            }
+            Ok(response)
+        })
     }
 }
 
@@ -1211,4 +1224,147 @@ async fn a_chapter_that_cannot_be_packed_fails_the_task_saying_why() {
         .unwrap_or_else(|| panic!("{event}"));
     assert!(!cause.is_empty(), "{event}");
     assert_eq!(task.error, Some(event));
+}
+
+/// A local clock that moves only when told; its sleeps end once it has moved far enough.
+struct FakeClock {
+    /// Seconds since midnight of the first day.
+    secs: tokio::sync::watch::Sender<u64>,
+}
+
+impl FakeClock {
+    fn at(hour: u64, minute: u64) -> Arc<FakeClock> {
+        Arc::new(FakeClock {
+            secs: tokio::sync::watch::channel(hour * 3600 + minute * 60).0,
+        })
+    }
+
+    /// Moves forward to the next `hour:minute`.
+    fn advance_to(&self, hour: u64, minute: u64) {
+        self.secs.send_modify(|secs| {
+            let target = hour * 3600 + minute * 60;
+            let today = *secs - *secs % DAY_SECS;
+            *secs = if today + target > *secs {
+                today + target
+            } else {
+                today + DAY_SECS + target
+            };
+        });
+    }
+}
+
+const DAY_SECS: u64 = 24 * 3600;
+
+impl Clock for FakeClock {
+    fn now(&self) -> jiff::civil::Time {
+        let secs = *self.secs.borrow() % DAY_SECS;
+        jiff::civil::time(
+            (secs / 3600) as i8,
+            (secs / 60 % 60) as i8,
+            (secs % 60) as i8,
+            0,
+        )
+    }
+
+    fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
+        let mut secs = self.secs.subscribe();
+        let until = *secs.borrow() + duration.as_secs().max(1);
+        Box::pin(async move {
+            let _ = secs.wait_for(|secs| *secs >= until).await;
+        })
+    }
+}
+
+/// Downloads only from 23:00 until 07:00.
+fn night_only() -> Value {
+    json!({"connections": {"schedule_enabled": true, "schedule_start": "23:00", "schedule_end": "07:00"}})
+}
+
+impl Fixture {
+    async fn manager_at(&self, clock: &Arc<FakeClock>) -> DownloadManager {
+        let clock: Arc<dyn Clock> = clock.clone();
+        DownloadManager::open(self.config().with_clock(clock))
+            .await
+            .unwrap()
+    }
+
+    fn status(&self, id: TaskId) -> TaskStatus {
+        self.db.tasks().get(id).unwrap().unwrap().status
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_waiting_task_outside_the_window_starts_when_the_window_opens() {
+    let f = Fixture::new(&[("T.lua", T)], night_only());
+    let clock = FakeClock::at(12, 0);
+    let manager = f.manager_at(&clock).await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/1", "One")]))
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(f.status(id), TaskStatus::Waiting);
+    assert!(f.transport.requests().is_empty());
+
+    clock.advance_to(23, 0);
+    let seen = statuses(&mut events, id, &[TaskStatus::Finished, TaskStatus::Failed]).await;
+    assert_eq!(seen.last(), Some(&TaskStatus::Finished));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_running_task_waits_after_its_chapter_when_the_window_closes() {
+    let f = Fixture::new(&[("T.lua", T)], night_only());
+    f.transport.hold("/img/c/1/");
+    let clock = FakeClock::at(6, 50);
+    let manager = f.manager_at(&clock).await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/1", "One"), ("/c/2", "Two")]))
+        .await
+        .unwrap();
+    use TaskStatus::*;
+    statuses(&mut events, id, &[Downloading]).await;
+    eventually("chapter One's page", || {
+        f.transport.count("https://t/img/c/1/1") == 1
+    })
+    .await;
+
+    clock.advance_to(7, 0);
+    f.transport.hold("");
+    let seen = statuses(&mut events, id, &[Waiting, Stopped, Failed, Finished]).await;
+    assert_eq!(seen, [Converting, Compressing, Waiting]);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(f.status(id), Waiting);
+    assert_eq!(
+        f.db.downloaded_chapters().list_for("t", "/manga").unwrap(),
+        ["/c/1"]
+    );
+    assert_eq!(f.transport.count("https://t/chapter/c/2"), 0);
+
+    clock.advance_to(23, 0);
+    let seen = statuses(&mut events, id, &[Stopped, Failed, Finished]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+    assert_eq!(f.transport.count("https://t/chapter/c/1"), 1);
+    assert_eq!(f.transport.count("https://t/chapter/c/2"), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn with_the_schedule_off_tasks_download_at_any_hour() {
+    let settings = json!({"connections": {"schedule_enabled": false, "schedule_start": "23:00", "schedule_end": "07:00"}});
+    let f = Fixture::new(&[("T.lua", T)], settings);
+    let clock = FakeClock::at(6, 59);
+    let manager = f.manager_at(&clock).await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/1", "One"), ("/c/2", "Two")]))
+        .await
+        .unwrap();
+    use TaskStatus::*;
+    statuses(&mut events, id, &[Compressing]).await;
+    clock.advance_to(12, 0);
+
+    let seen = statuses(&mut events, id, &[Waiting, Stopped, Failed, Finished]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
 }

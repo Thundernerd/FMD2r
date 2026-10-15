@@ -123,7 +123,9 @@ describe('event store', () => {
 	});
 
 	it('refetches the queue when a connection opens, as frames may have been missed', async () => {
-		const refresh = vi.fn(() => Promise.resolve([task(1, 'Kagurabachi')]));
+		const refresh = vi.fn(() =>
+			Promise.resolve({ tasks: [task(1, 'Kagurabachi')], pausedUntil: null })
+		);
 		const store = new EventStore({
 			url: '/api/events',
 			connect: (url) => new FakeEventSource(url),
