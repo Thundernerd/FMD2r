@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Api, TaskAction } from '#lib/api/client.ts';
 	import type { TaskState, TaskSummary } from '#lib/api/types.ts';
-	import { groupOf, type QueueStore } from '#lib/queue.svelte.ts';
+	import { groupOf, moveWaiting, type QueueStore, type WaitingMove } from '#lib/queue.svelte.ts';
 	import { formatRate, percent } from '#lib/queue-format.ts';
 	import { seriesHref } from '#lib/series/href.ts';
 
@@ -10,6 +10,7 @@
 		api,
 		queue,
 		websites,
+		reorderable = false,
 		onerror
 	}: {
 		task: TaskSummary;
@@ -17,6 +18,8 @@
 		queue: QueueStore;
 		/** Website names by module ID; a task whose module isn't here shows no website. */
 		websites: ReadonlyMap<string, string>;
+		/** Shows a waiting task's move buttons; off while a filter hides part of the queue. */
+		reorderable?: boolean;
 		/** An action failed; `message` says which. */
 		onerror: (message: string) => void;
 	} = $props();
@@ -46,6 +49,17 @@
 	const canRedownload = $derived(task.enabled && !task.running && task.status !== 'waiting');
 	const hasFiles = $derived(task.chapters_done > 0);
 	const website = $derived(websites.get(task.module_id));
+	const atEnd = $derived({
+		first: queue.waitingIds[0] === task.id,
+		last: queue.waitingIds[queue.waitingIds.length - 1] === task.id
+	});
+	/** Each move, and the end of the waiting tasks where it can't go further. */
+	const MOVES: { to: WaitingMove; label: string; icon: string; stopsAt: 'first' | 'last' }[] = [
+		{ to: 'top', label: 'Move to top', icon: '⤒', stopsAt: 'first' },
+		{ to: 'up', label: 'Move up', icon: '↑', stopsAt: 'first' },
+		{ to: 'down', label: 'Move down', icon: '↓', stopsAt: 'last' },
+		{ to: 'bottom', label: 'Move to bottom', icon: '⤓', stopsAt: 'last' }
+	];
 
 	async function run(action: TaskAction) {
 		if (busy) return;
@@ -54,6 +68,23 @@
 			queue.upsert(await api.taskAction(task.id, action));
 		} catch {
 			onerror(`Could not ${action} “${task.title}”.`);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function move(to: WaitingMove) {
+		if (busy) return;
+		busy = true;
+		const ids = moveWaiting(queue.tasks, task.id, to);
+		// Shown at once so a quick move on another row builds on this one; the
+		// `task.reordered` frame then refreshes every open tab.
+		queue.arrange(ids);
+		try {
+			await api.reorderTasks(ids);
+		} catch {
+			queue.resync();
+			onerror('Could not reorder the queue.');
 		} finally {
 			busy = false;
 		}
@@ -109,6 +140,20 @@
 		<p class="error small">{task.error}</p>
 	{/if}
 	<div class="actions">
+		{#if reorderable && task.status === 'waiting'}
+			<span class="moves" role="group" aria-label="Move {task.title}">
+				{#each MOVES as { to, label, icon, stopsAt } (to)}
+					<button
+						class="btn sm ghost"
+						type="button"
+						aria-label={label}
+						title={label}
+						disabled={busy || atEnd[stopsAt]}
+						onclick={() => move(to)}>{icon}</button
+					>
+				{/each}
+			</span>
+		{/if}
 		{#if canStart}
 			<button class="btn sm" type="button" disabled={busy} onclick={() => run('start')}>
 				{task.status === 'failed' ? 'Retry' : 'Start'}
@@ -231,6 +276,7 @@
 		flex-wrap: wrap;
 		gap: var(--sp-1);
 	}
+	.moves,
 	.confirm {
 		display: flex;
 		flex-wrap: wrap;

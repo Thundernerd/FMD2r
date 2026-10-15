@@ -146,9 +146,20 @@
 				{#if group.tasks.length === 0}
 					<p class="small muted">{filtering ? 'No matching tasks.' : 'None.'}</p>
 				{:else}
+					{#if group.key === 'waiting' && filtering}
+						<!-- "Up" among filtered rows is ambiguous. -->
+						<p class="small muted">Clear the filter to reorder.</p>
+					{/if}
 					<ul class="tasks">
 						{#each group.tasks as task (task.id)}
-							<TaskRow {task} {api} {queue} {websites} onerror={(message) => (error = message)} />
+							<TaskRow
+								{task}
+								{api}
+								{queue}
+								{websites}
+								reorderable={!filtering}
+								onerror={(message) => (error = message)}
+							/>
 						{/each}
 					</ul>
 				{/if}
