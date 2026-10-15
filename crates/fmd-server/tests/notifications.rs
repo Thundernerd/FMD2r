@@ -16,10 +16,11 @@ use axum::response::Response;
 use fmd_core::download::{DownloadManager, EngineConfig};
 use fmd_core::favorites::{CheckMode, CheckScope, CheckerConfig, FavoritesChecker};
 use fmd_core::jobs::JobRegistry;
+use fmd_core::modules::ModuleInfo;
 use fmd_core::settings::SettingsService;
 use fmd_http::{BoxFuture, HttpClient, Transport, TransportError, WireRequest, WireResponse};
 use fmd_lua::{ModuleRegistry, PoolConfig, WorkerPool};
-use fmd_server::{AppState, EventBus, LogBuffer, build_router};
+use fmd_server::{AppState, EventBus, LogBuffer, ModuleCatalog, ModulesReport, build_router};
 use fmd_store::{AppDb, NewFavorite};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -77,6 +78,27 @@ function GPN()
   return true
 end
 "#;
+
+/// The catalog entry of module `t`, named "Test Site".
+struct Modules;
+
+impl ModuleCatalog for Modules {
+    fn report(&self) -> ModulesReport {
+        ModulesReport::default()
+    }
+
+    fn modules(&self) -> Vec<ModuleInfo> {
+        vec![ModuleInfo {
+            id: "t".into(),
+            name: "Test Site".into(),
+            root_url: "https://t".into(),
+            category: String::new(),
+            limits: Default::default(),
+            options: Vec::new(),
+            capabilities: Default::default(),
+        }]
+    }
+}
 
 /// How the stub answers a path.
 #[derive(Clone, Copy)]
@@ -226,7 +248,8 @@ async fn harness(logs: LogBuffer) -> Harness {
         .unwrap()
         .with_logs(logs)
         .with_settings(settings.clone())
-        .with_engine(engine);
+        .with_engine(engine)
+        .with_modules(Modules);
     let checker = FavoritesChecker::new(
         CheckerConfig {
             db: db.clone(),
@@ -354,6 +377,32 @@ async fn a_failed_download_shows_in_the_inbox_and_goes_to_the_channels_that_tick
     let item = &inbox[0];
     assert_eq!(item["kind"], "error");
     assert_eq!(item["title"], "Download failed: Manga");
+}
+
+/// "Download completed" is off by default; ticked on the webhook only, a finished task goes there
+/// and nowhere else, and not to the inbox (issue #300).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_finished_download_goes_only_to_channels_that_tick_it_and_not_to_the_inbox() {
+    let h = harness(logs()).await;
+    let patch = json!({"notifications": {"webhook": {"enabled": true,
+        "types": ["download_completed"]}}});
+    let req = Request::patch("/api/settings")
+        .header("content-type", "application/json")
+        .body(Body::from(patch.to_string()))
+        .unwrap();
+    assert_eq!(send(&h.state, req).await.status(), StatusCode::OK);
+
+    let id = add(&h.state, "/c/2").await;
+    wait_for(&h.state, id, "finished").await;
+
+    assert_eq!(h.stub.paths_after(1).await, ["/webhook"]);
+    let body: Value = serde_json::from_str(&h.stub.received()[0].body).unwrap();
+    assert_eq!(body["kind"], "download_completed");
+    assert_eq!(body["severity"], "info");
+    assert_eq!(body["title"], "Download completed: Manga");
+    assert_eq!(body["body"], "Chapters: Ch\nWebsite: Test Site");
+    let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
+    assert_eq!(inbox, json!([]));
 }
 
 #[tokio::test(flavor = "multi_thread")]

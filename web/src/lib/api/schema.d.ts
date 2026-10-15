@@ -2426,8 +2426,8 @@ export interface components {
 			error?: string | null;
 		};
 		/**
-		 * @description A kind of event a channel can be set to send, one per inbox event kind. Serialised as the
-		 *     kind, e.g. `download_failed`.
+		 * @description A kind of event a channel can be set to send: an inbox event kind, or an event sent without
+		 *     one. Serialised as the kind, e.g. `download_failed`.
 		 * @enum {string}
 		 */
 		NotificationType:
@@ -2436,6 +2436,7 @@ export interface components {
 			| 'missing_check'
 			| 'completed'
 			| 'download_failed'
+			| 'download_completed'
 			| 'favorites_check_failed'
 			| 'module_update'
 			| 'downloads_moved'
