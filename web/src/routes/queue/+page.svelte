@@ -23,13 +23,16 @@
 			.catch(() => {});
 	});
 
-	/** How often the page refetches the queue, so the download schedule's pause shows. */
-	const SCHEDULE_REFRESH_MS = 60_000;
+	/** While downloads are paused, how often the page refetches the queue to see them resume. */
+	const PAUSED_REFRESH_MS = 60_000;
+
+	// The schedule may have changed on the Settings page, which sends no task frame.
+	$effect(() => queue.resync());
 
 	$effect(() => {
-		// The schedule pauses and resumes downloads on the clock, not on a task's frame.
-		queue.resync();
-		const timer = setInterval(() => queue.resync(), SCHEDULE_REFRESH_MS);
+		// The window can open without any task to start, so no frame says so.
+		if (!queue.pausedUntil) return;
+		const timer = setInterval(() => queue.resync(), PAUSED_REFRESH_MS);
 		return () => clearInterval(timer);
 	});
 

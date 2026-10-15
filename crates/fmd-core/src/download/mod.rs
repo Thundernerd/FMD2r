@@ -52,7 +52,8 @@ pub use manager::save_to;
 
 pub use fmd_store::{ChapterStatus, Task, TaskChapter, TaskId, TaskStatus};
 pub use preview::{PagePlacement, SampleChapter, first_page};
-pub use schedule::{Clock, Schedule, SystemClock, parse_time};
+pub use schedule::{Clock, SystemClock};
+pub(crate) use schedule::{Schedule, parse_time};
 
 pub type ModuleLookup = dyn Fn(&str) -> Option<Arc<Module>> + Send + Sync;
 

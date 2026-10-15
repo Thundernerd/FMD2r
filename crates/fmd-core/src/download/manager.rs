@@ -334,12 +334,18 @@ impl Inner {
                 return Ok(());
             };
             repo.update_progress(id, task.current_chapter, Some(now_ms()))?;
-            if paused && !terminated && task.enabled {
-                self.set_status(id, TaskStatus::Waiting, None)?;
-            } else if !matches!(
+            // A stop or disable landing after the thread ended has already set the status.
+            if !matches!(
                 task.status,
-                TaskStatus::Stopped | TaskStatus::Finished | TaskStatus::Failed
+                TaskStatus::Stopped
+                    | TaskStatus::Finished
+                    | TaskStatus::Failed
+                    | TaskStatus::Disabled
             ) {
+                if paused && !terminated && task.enabled {
+                    self.set_status(id, TaskStatus::Waiting, None)?;
+                    return self.check_and_active_task();
+                }
                 let status = if task.enabled {
                     TaskStatus::Stopped
                 } else {
@@ -615,11 +621,12 @@ impl Inner {
                 () = opened => {}
             }
             let inner = self.clone();
-            let checked = tokio::task::spawn_blocking(move || inner.check_and_active_task()).await;
-            match checked {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => tracing::error!(target: "fmd_core", "download schedule: {e}"),
-                Err(e) => tracing::error!(target: "fmd_core", "download schedule: {e}"),
+            let checked = tokio::task::spawn_blocking(move || inner.check_and_active_task())
+                .await
+                .map_err(|e| EngineError::Thread(e.to_string()))
+                .and_then(|checked| checked);
+            if let Err(e) = checked {
+                tracing::error!(target: "fmd_core", "download schedule: {e}");
             }
         }
     }
