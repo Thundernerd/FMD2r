@@ -29,7 +29,8 @@ const defaultNotificationTypes = (): NotificationType[] => [
 	'favorites_check_failed',
 	'module_update',
 	'downloads_moved',
-	'comic_server'
+	'comic_server',
+	'missing_check'
 ];
 
 /** The server's defaults (fmd_core::settings::Settings::default()). */

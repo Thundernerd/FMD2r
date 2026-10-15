@@ -266,7 +266,8 @@ fn any_ticked_type_is_sent_whatever_its_severity() {
 }
 
 /// New channels take what "New chapters" and "Problems" took before: new and missing chapters
-/// and every problem, but no other news.
+/// and every kind that can be a problem (a missing-chapter check that could not check some
+/// series is a warning), but no other news.
 #[test]
 fn a_new_channel_takes_chapters_and_problems() {
     let settings = ntfy();
@@ -279,14 +280,13 @@ fn a_new_channel_takes_chapters_and_problems() {
         "module_update",
         "downloads_moved",
         "comic_server",
+        "missing_check",
     ] {
         let mut problem = download_failed();
         problem.kind = kind.into();
         assert_eq!(channels(&settings, &problem), [Channel::Ntfy], "{kind}");
     }
-    for kind in ["completed", "missing_check"] {
-        let mut other = new_chapters();
-        other.kind = kind.into();
-        assert_eq!(channels(&settings, &other), [], "{kind}");
-    }
+    let mut completed = new_chapters();
+    completed.kind = "completed".into();
+    assert_eq!(channels(&settings, &completed), []);
 }

@@ -7178,7 +7178,8 @@
                   "favorites_check_failed",
                   "module_update",
                   "downloads_moved",
-                  "comic_server"
+                  "comic_server",
+                  "missing_check"
                 ]
               },
               "ntfy": {
@@ -7192,7 +7193,8 @@
                   "favorites_check_failed",
                   "module_update",
                   "downloads_moved",
-                  "comic_server"
+                  "comic_server",
+                  "missing_check"
                 ]
               },
               "webhook": {
@@ -7205,7 +7207,8 @@
                   "favorites_check_failed",
                   "module_update",
                   "downloads_moved",
-                  "comic_server"
+                  "comic_server",
+                  "missing_check"
                 ],
                 "url": ""
               }

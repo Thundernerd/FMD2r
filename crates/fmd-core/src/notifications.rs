@@ -52,18 +52,6 @@ pub enum NotificationType {
 }
 
 impl NotificationType {
-    pub const ALL: [NotificationType; 9] = [
-        NotificationType::NewChapters,
-        NotificationType::MissingChapters,
-        NotificationType::MissingCheck,
-        NotificationType::Completed,
-        NotificationType::DownloadFailed,
-        NotificationType::FavoritesCheckFailed,
-        NotificationType::ModuleUpdate,
-        NotificationType::DownloadsMoved,
-        NotificationType::ComicServer,
-    ];
-
     /// What "New chapters" used to send, and new channels send.
     pub const CHAPTERS: [NotificationType; 2] = [
         NotificationType::NewChapters,
@@ -71,34 +59,21 @@ impl NotificationType {
     ];
 
     /// What "Problems" used to send, and new channels send: every kind that could be a warning
-    /// or an error.
-    pub const PROBLEMS: [NotificationType; 5] = [
+    /// or an error. A missing-chapter check is one when it could not check some series
+    /// (`fmd_core::favorites::add_failures`).
+    pub const PROBLEMS: [NotificationType; 6] = [
         NotificationType::DownloadFailed,
         NotificationType::FavoritesCheckFailed,
         NotificationType::ModuleUpdate,
         NotificationType::DownloadsMoved,
         NotificationType::ComicServer,
+        NotificationType::MissingCheck,
     ];
-
-    /// The inbox event kind, e.g. `download_failed`.
-    pub fn kind(self) -> &'static str {
-        match self {
-            NotificationType::NewChapters => "new_chapters",
-            NotificationType::MissingChapters => "missing_chapters",
-            NotificationType::MissingCheck => "missing_check",
-            NotificationType::Completed => "completed",
-            NotificationType::DownloadFailed => "download_failed",
-            NotificationType::FavoritesCheckFailed => "favorites_check_failed",
-            NotificationType::ModuleUpdate => "module_update",
-            NotificationType::DownloadsMoved => "downloads_moved",
-            NotificationType::ComicServer => "comic_server",
-        }
-    }
 
     /// The type of the inbox event kind `kind`; `None` for a kind no channel can pick, like a
     /// test notification.
     pub fn of_kind(kind: &str) -> Option<NotificationType> {
-        NotificationType::ALL.into_iter().find(|t| t.kind() == kind)
+        serde_json::from_value(serde_json::Value::from(kind)).ok()
     }
 
     /// The name the settings show.

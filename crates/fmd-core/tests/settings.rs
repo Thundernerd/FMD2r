@@ -763,7 +763,8 @@ fn notification_urls_must_be_http_and_set_on_an_enabled_channel() {
 }
 
 /// A channel stored before per-type picks (issue #299) keeps sending what it sent: "New chapters"
-/// becomes new and missing chapters, "Problems" every kind that could be a warning or an error.
+/// becomes new and missing chapters, "Problems" every kind that could be a warning or an error,
+/// including a missing-chapter check that could not check some series.
 #[test]
 fn stored_new_chapters_and_problems_load_as_the_matching_types() {
     use NotificationType::*;
@@ -774,6 +775,7 @@ fn stored_new_chapters_and_problems_load_as_the_matching_types() {
         ModuleUpdate,
         DownloadsMoved,
         ComicServer,
+        MissingCheck,
     ];
     let both = [chapters.clone(), problems.clone()].concat();
     for (stored, types) in [

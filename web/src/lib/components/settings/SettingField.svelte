@@ -92,11 +92,12 @@
 	/** Ticks or unticks `choice`, keeping the ticked values in the choices' order. */
 	function onTick(choice: Json, ticked: boolean) {
 		const picked = Array.isArray(value) ? value : [];
-		const next = choicesOf(field.control)
-			.map((c) => c.value as Json)
-			.filter((v) => (v === choice ? ticked : picked.includes(v)));
-		// Ticked values the choices don't know (from a newer server) are kept.
-		draft.set(field.path, [...next, ...picked.filter((v) => !next.includes(v) && v !== choice)]);
+		draft.set(
+			field.path,
+			choicesOf(field.control)
+				.map((c) => c.value as Json)
+				.filter((v) => (v === choice ? ticked : picked.includes(v)))
+		);
 	}
 
 	function onSelect(index: number) {

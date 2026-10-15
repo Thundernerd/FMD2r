@@ -3003,7 +3003,8 @@ export interface components {
 			 *           "favorites_check_failed",
 			 *           "module_update",
 			 *           "downloads_moved",
-			 *           "comic_server"
+			 *           "comic_server",
+			 *           "missing_check"
 			 *         ]
 			 *       },
 			 *       "ntfy": {
@@ -3017,7 +3018,8 @@ export interface components {
 			 *           "favorites_check_failed",
 			 *           "module_update",
 			 *           "downloads_moved",
-			 *           "comic_server"
+			 *           "comic_server",
+			 *           "missing_check"
 			 *         ]
 			 *       },
 			 *       "webhook": {
@@ -3030,7 +3032,8 @@ export interface components {
 			 *           "favorites_check_failed",
 			 *           "module_update",
 			 *           "downloads_moved",
-			 *           "comic_server"
+			 *           "comic_server",
+			 *           "missing_check"
 			 *         ],
 			 *         "url": ""
 			 *       }

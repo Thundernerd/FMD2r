@@ -175,7 +175,8 @@ describe('the settings page', () => {
 					'favorites_check_failed',
 					'module_update',
 					'downloads_moved',
-					'comic_server'
+					'comic_server',
+					'missing_check'
 				]
 			},
 			discord: {
@@ -184,6 +185,7 @@ describe('the settings page', () => {
 				types: [
 					'new_chapters',
 					'missing_chapters',
+					'missing_check',
 					'download_failed',
 					'favorites_check_failed',
 					'downloads_moved',
@@ -197,6 +199,7 @@ describe('the settings page', () => {
 				types: [
 					'new_chapters',
 					'missing_chapters',
+					'missing_check',
 					'completed',
 					'download_failed',
 					'favorites_check_failed',
