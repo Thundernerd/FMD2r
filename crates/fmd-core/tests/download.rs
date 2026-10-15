@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use fmd_core::disk_space::FreeSpace;
 use fmd_core::download::{
     ChapterSpec, DownloadManager, EngineConfig, EngineEvent, NewDownload, SeriesMatch,
 };
@@ -33,6 +34,40 @@ const PNG: &[u8] = &[
 
 /// How long a test waits for the engine before failing.
 const PATIENCE: Duration = Duration::from_secs(20);
+
+/// How often the engine looks at a full disk again; a minute outside tests.
+const DISK_RECHECK: Duration = Duration::from_millis(50);
+
+const MB: u64 = 1024 * 1024;
+
+/// Free bytes on the disk holding a folder.
+type FreeOn = Box<dyn Fn(&Path) -> Option<u64> + Send>;
+
+/// The free space the engine sees: plenty, until a test says otherwise.
+struct FakeDisk(Mutex<FreeOn>);
+
+impl Default for FakeDisk {
+    fn default() -> Self {
+        FakeDisk(Mutex::new(Box::new(|_| Some(1024 * 1024 * MB))))
+    }
+}
+
+impl FakeDisk {
+    /// `mb` free on every disk.
+    fn set_free_mb(&self, mb: u64) {
+        self.set(move |_| Some(mb * MB));
+    }
+
+    fn set(&self, free: impl Fn(&Path) -> Option<u64> + Send + 'static) {
+        *self.0.lock().unwrap() = Box::new(free);
+    }
+}
+
+impl FreeSpace for FakeDisk {
+    fn free_bytes(&self, dir: &Path) -> Option<u64> {
+        (self.0.lock().unwrap())(dir)
+    }
+}
 
 /// Serves a PNG for every URL holding `/img/`, a 404 otherwise; can fail a URL a number of
 /// times first, or never answer the URLs holding a pattern.
@@ -117,6 +152,7 @@ struct Fixture {
     http: HttpClient,
     settings: Arc<SettingsService>,
     transport: Arc<StubTransport>,
+    disk: Arc<FakeDisk>,
 }
 
 impl Fixture {
@@ -145,6 +181,7 @@ impl Fixture {
             http,
             settings: Arc::new(service),
             transport,
+            disk: Arc::default(),
             dir,
         }
     }
@@ -161,6 +198,7 @@ impl Fixture {
             self.settings.clone(),
             self.http.clone(),
         )
+        .with_free_space(self.disk.clone(), DISK_RECHECK)
     }
 
     async fn manager(&self) -> DownloadManager {
@@ -1211,4 +1249,109 @@ async fn a_chapter_that_cannot_be_packed_fails_the_task_saying_why() {
         .unwrap_or_else(|| panic!("{event}"));
     assert!(!cause.is_empty(), "{event}");
     assert_eq!(task.error, Some(event));
+}
+
+/// Downloads hold while a disk has less than `saveto.min_free_space_mb` free (issue #308).
+fn min_free_mb(mb: u64) -> Value {
+    json!({"output": {"format": "cbz"}, "saveto": {"min_free_space_mb": mb}})
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_waiting_task_does_not_start_while_its_disk_is_low_and_starts_once_it_is_not() {
+    let f = Fixture::new(&[("T.lua", T)], min_free_mb(100));
+    f.disk.set_free_mb(99);
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One")]))
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let task = f.db.tasks().get(id).unwrap().unwrap();
+    assert_eq!(task.status, TaskStatus::Waiting);
+    assert!(f.transport.requests().is_empty());
+
+    f.disk.set_free_mb(100);
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_running_task_goes_back_to_waiting_before_its_next_chapter_when_its_disk_goes_low() {
+    let f = Fixture::new(&[("T.lua", T)], min_free_mb(100));
+    // The disk fills up as the first chapter is packed.
+    let first = f.out().join("Manga/One.cbz");
+    f.disk
+        .set(move |_| Some(if first.exists() { 99 } else { 100 } * MB));
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One"), ("/c/3", "Two")]))
+        .await
+        .unwrap();
+
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Waiting, Finished, Failed]).await;
+    assert_eq!(seen, [Waiting]);
+    let seen = statuses(&mut events, id, &[Waiting, Finished, Failed]).await;
+    assert_eq!(
+        seen,
+        [Preparing, Downloading, Converting, Compressing, Waiting]
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let task = f.db.tasks().get(id).unwrap().unwrap();
+    assert_eq!(task.status, Waiting);
+    let chapters = f.db.tasks().chapters(id).unwrap();
+    assert_eq!(chapters[0].status, fmd_store::ChapterStatus::Downloaded);
+    assert_eq!(chapters[1].status, fmd_store::ChapterStatus::Pending);
+    assert_eq!(f.transport.count("https://t/chapter/c/3"), 0);
+
+    // It carries on with the second chapter once there is room.
+    f.disk.set_free_mb(100);
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+    assert_eq!(f.transport.count("https://t/chapter/c/2"), 1);
+    assert_eq!(
+        entries(&f.out().join("Manga/Two.cbz")),
+        ["001.png", "002.png", "003.png"]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_limit_of_0_never_holds_a_download() {
+    let f = Fixture::new(&[("T.lua", T)], min_free_mb(0));
+    f.disk.set_free_mb(0);
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One"), ("/c/3", "Two")]))
+        .await
+        .unwrap();
+
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
+    assert_eq!(
+        seen.iter().filter(|s| **s == Waiting).count(),
+        1,
+        "{seen:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_disk_that_cannot_be_measured_does_not_hold_a_download() {
+    let f = Fixture::new(&[("T.lua", T)], min_free_mb(100));
+    f.disk.set(|_| None);
+    let manager = f.manager().await;
+    let mut events = manager.subscribe();
+    let id = manager
+        .add_task(f.download("t", &[("/c/2", "One")]))
+        .await
+        .unwrap();
+
+    use TaskStatus::*;
+    let seen = statuses(&mut events, id, &[Finished, Failed]).await;
+    assert_eq!(seen.last(), Some(&Finished), "{seen:?}");
 }

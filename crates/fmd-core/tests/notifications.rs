@@ -281,6 +281,7 @@ fn a_new_channel_takes_chapters_and_problems() {
         "downloads_moved",
         "comic_server",
         "missing_check",
+        "disk_space_low",
     ] {
         let mut problem = download_failed();
         problem.kind = kind.into();

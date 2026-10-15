@@ -6120,7 +6120,8 @@
           "favorites_check_failed",
           "module_update",
           "downloads_moved",
-          "comic_server"
+          "comic_server",
+          "disk_space_low"
         ]
       },
       "NtfySettingsView": {
@@ -6499,6 +6500,7 @@
               "generate_manga_folder": true,
               "illegal_chars": "posix",
               "manga_rename": "%MANGA%",
+              "min_free_space_mb": 1024,
               "remove_manga_name_from_chapter": false,
               "replace_unicode": false,
               "replace_unicode_with": "_"
@@ -6662,6 +6664,13 @@
             "type": "string",
             "description": "`saveto/MangaCustomRename` (mangadownloader/forms/frmMain.pas:5894).",
             "default": "%MANGA%"
+          },
+          "min_free_space_mb": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Downloads hold while the disk they save to has less than this many MB free, and carry on\nonce it has room again (issue #308; FMD2 never checks). 0 turns the guard off.",
+            "default": 1024,
+            "minimum": 0
           },
           "remove_manga_name_from_chapter": {
             "type": "boolean",
@@ -7179,7 +7188,8 @@
                   "module_update",
                   "downloads_moved",
                   "comic_server",
-                  "missing_check"
+                  "missing_check",
+                  "disk_space_low"
                 ]
               },
               "ntfy": {
@@ -7194,7 +7204,8 @@
                   "module_update",
                   "downloads_moved",
                   "comic_server",
-                  "missing_check"
+                  "missing_check",
+                  "disk_space_low"
                 ]
               },
               "webhook": {
@@ -7208,7 +7219,8 @@
                   "module_update",
                   "downloads_moved",
                   "comic_server",
-                  "missing_check"
+                  "missing_check",
+                  "disk_space_low"
                 ],
                 "url": ""
               }
@@ -7251,6 +7263,7 @@
               "generate_manga_folder": true,
               "illegal_chars": "posix",
               "manga_rename": "%MANGA%",
+              "min_free_space_mb": 1024,
               "remove_manga_name_from_chapter": false,
               "replace_unicode": false,
               "replace_unicode_with": "_"

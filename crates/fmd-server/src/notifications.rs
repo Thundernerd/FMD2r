@@ -23,13 +23,16 @@ pub(crate) const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The kind of a failed download's inbox event.
 const DOWNLOAD_FAILED: &str = "download_failed";
+/// The kind of the inbox events saying downloads are held for a full disk, and resumed.
+const DISK_SPACE_LOW: &str = "disk_space_low";
 /// The kind reported for a favorites check that failed, which has no inbox event.
 const FAVORITES_CHECK_FAILED: &str = "favorites_check_failed";
 /// The kind of a "Send test" notification.
 const TEST: &str = "test";
 
 impl AppState {
-    /// Adds each download that fails to the inbox, and sends every new inbox item and failed
+    /// Adds each download that fails, and downloads held for a full disk and resumed, to the
+    /// inbox, and sends every new inbox item and failed
     /// favorites check to the notification channels that take it. Sending never holds up the work
     /// that caused it: each request runs on its own, and a failure is only logged.
     pub fn start_notifications(&self) {
@@ -44,7 +47,7 @@ impl AppState {
         let bus = self.events.subscribe();
         tokio::spawn(forward(self.clone(), bus, sender));
         if let Some(engine) = self.engine.subscribe() {
-            tokio::spawn(report_failed_downloads(self.clone(), engine));
+            tokio::spawn(report_downloads(self.clone(), engine));
         }
     }
 }
@@ -112,30 +115,49 @@ fn from_inbox(item: &InboxItem) -> Notification {
     }
 }
 
-/// Adds an error to the inbox for each task that fails, which [`forward`] then sends on.
-async fn report_failed_downloads(
+/// Adds an error to the inbox for each task that fails, and an item when downloads are held for
+/// a full disk and when they resume, which [`forward`] then sends on.
+async fn report_downloads(
     state: AppState,
     mut engine: tokio::sync::broadcast::Receiver<EngineEvent>,
 ) {
     loop {
-        let (task, error) = match engine.recv().await {
+        let event = match engine.recv().await {
             Ok(EngineEvent::Status {
                 task,
                 status: TaskStatus::Failed,
                 error,
                 ..
-            }) => (task, error),
+            }) => failed_download(&state, task, error).await,
+            Ok(EngineEvent::DiskSpaceLow { folder, free_bytes }) => NewEvent {
+                kind: DISK_SPACE_LOW.into(),
+                severity: EventSeverity::Warning,
+                module_id: None,
+                task_id: None,
+                title: "Downloads are on hold: the disk is almost full".into(),
+                body: serde_json::Value::String(format!(
+                    "{folder} has {} MB free. Downloads carry on by themselves once there is room again.",
+                    free_bytes / (1024 * 1024)
+                )),
+            },
+            Ok(EngineEvent::DiskSpaceRecovered) => NewEvent {
+                kind: DISK_SPACE_LOW.into(),
+                severity: EventSeverity::Info,
+                module_id: None,
+                task_id: None,
+                title: "Downloads resumed".into(),
+                body: serde_json::Value::String("The disk has room again.".into()),
+            },
             Ok(_) => continue,
             Err(RecvError::Lagged(missed)) => {
                 tracing::warn!(target: "fmd_server",
-                    "{missed} download events were skipped; a failed download may be missing from the inbox");
+                    "{missed} download events were skipped; an inbox item may be missing");
                 continue;
             }
             Err(RecvError::Closed) => return,
         };
-        let event = failed_download(&state, task, error).await;
         if let Err(e) = state.notify(event).await {
-            tracing::warn!(target: "fmd_server", "adding a failed download to the inbox: {e}");
+            tracing::warn!(target: "fmd_server", "adding a download event to the inbox: {e}");
         }
     }
 }

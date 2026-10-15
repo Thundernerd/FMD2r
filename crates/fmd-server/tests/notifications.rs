@@ -5,6 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::panic)]
 
 use std::fs;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -13,6 +14,7 @@ use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::http::{HeaderMap, Request, StatusCode, Uri};
 use axum::response::Response;
+use fmd_core::disk_space::FreeSpace;
 use fmd_core::download::{DownloadManager, EngineConfig};
 use fmd_core::favorites::{CheckMode, CheckScope, CheckerConfig, FavoritesChecker};
 use fmd_core::jobs::JobRegistry;
@@ -77,6 +79,23 @@ function GPN()
   return true
 end
 "#;
+
+const MB: u64 = 1024 * 1024;
+
+/// The free space the engine sees on every disk: plenty, until a test says otherwise.
+struct FakeDisk(Mutex<u64>);
+
+impl FakeDisk {
+    fn set_free_mb(&self, mb: u64) {
+        *self.0.lock().unwrap() = mb * MB;
+    }
+}
+
+impl FreeSpace for FakeDisk {
+    fn free_bytes(&self, _dir: &Path) -> Option<u64> {
+        Some(*self.0.lock().unwrap())
+    }
+}
 
 /// How the stub answers a path.
 #[derive(Clone, Copy)]
@@ -179,6 +198,7 @@ struct Harness {
     state: AppState,
     checker: FavoritesChecker,
     stub: Stub,
+    disk: Arc<FakeDisk>,
 }
 
 /// ntfy (both kinds of event) at `/ntfy`, Discord (new chapters only) at `/discord`, and a
@@ -213,13 +233,17 @@ async fn harness(logs: LogBuffer) -> Harness {
             },
         }))
         .unwrap();
-    let engine = DownloadManager::open(EngineConfig::new(
-        db.clone(),
-        pool.clone(),
-        registry.clone(),
-        settings.clone(),
-        http,
-    ))
+    let disk = Arc::new(FakeDisk(Mutex::new(1024 * 1024 * MB)));
+    let engine = DownloadManager::open(
+        EngineConfig::new(
+            db.clone(),
+            pool.clone(),
+            registry.clone(),
+            settings.clone(),
+            http,
+        )
+        .with_free_space(disk.clone(), Duration::from_millis(50)),
+    )
     .await
     .unwrap();
     let state = AppState::new(db.clone())
@@ -258,6 +282,7 @@ async fn harness(logs: LogBuffer) -> Harness {
         state,
         checker,
         stub,
+        disk,
     }
 }
 
@@ -370,6 +395,62 @@ async fn a_failed_downloads_inbox_item_and_notification_say_why_it_failed() {
     assert_eq!(h.stub.paths_after(1).await, ["/ntfy"]);
     let ntfy = &h.stub.received()[0];
     assert!(ntfy.body.contains(reason), "{}", ntfy.body);
+}
+
+/// The inbox once it holds `count` items, and a while longer so a stray extra one shows.
+async fn inbox_after(state: &AppState, count: usize) -> Vec<Value> {
+    let start = Instant::now();
+    loop {
+        let inbox = body_json(send(state, get("/api/inbox")).await).await;
+        if inbox.as_array().unwrap().len() >= count {
+            break;
+        }
+        assert!(
+            start.elapsed() < PATIENCE,
+            "{count} inbox items; have {inbox}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let inbox = body_json(send(state, get("/api/inbox")).await).await;
+    inbox.as_array().unwrap().clone()
+}
+
+/// Issue #308: however many downloads wait for a full disk, the inbox gets one warning, and one
+/// info item once there is room again; the held downloads then carry on by themselves.
+#[tokio::test(flavor = "multi_thread")]
+async fn holding_downloads_for_a_full_disk_posts_one_warning_and_resuming_one_info_item() {
+    let h = harness(logs()).await;
+    // Under the default 1024 MB.
+    h.disk.set_free_mb(10);
+
+    let first = add(&h.state, "/c/1").await;
+    let second = add(&h.state, "/c/2").await;
+    let inbox = inbox_after(&h.state, 1).await;
+    assert_eq!(inbox.len(), 1, "{inbox:?}");
+    let held = &inbox[0];
+    assert_eq!(held["kind"], "warn");
+    assert_eq!(
+        held["title"],
+        "Downloads are on hold: the disk is almost full"
+    );
+    let body = held["body"].as_str().unwrap();
+    let folder = h._dir.path().join("out").join("Manga");
+    assert!(body.contains(&*folder.to_string_lossy()), "{body}");
+    assert!(body.contains("10 MB"), "{body}");
+
+    h.disk.set_free_mb(2048);
+    wait_for(&h.state, first, "finished").await;
+    wait_for(&h.state, second, "finished").await;
+    let inbox = inbox_after(&h.state, 2).await;
+    assert_eq!(inbox.len(), 2, "{inbox:?}");
+    let resumed = inbox
+        .iter()
+        .find(|item| item["title"] == "Downloads resumed")
+        .unwrap_or_else(|| panic!("{inbox:?}"));
+    assert_eq!(resumed["kind"], "info");
+    // ntfy takes "Disk almost full" by default; Discord here only chapters.
+    assert_eq!(h.stub.paths_after(2).await, ["/ntfy", "/ntfy"]);
 }
 
 /// A channel answering 500 and one that never answers delay neither the check nor a download,

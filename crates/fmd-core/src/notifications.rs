@@ -49,6 +49,8 @@ pub enum NotificationType {
     DownloadsMoved,
     /// The comic server was asked to rescan (`fmd_server::comic_server`).
     ComicServer,
+    /// Downloads were held for a full disk, or resumed (`fmd_server::notifications`).
+    DiskSpaceLow,
 }
 
 impl NotificationType {
@@ -61,13 +63,14 @@ impl NotificationType {
     /// What "Problems" used to send, and new channels send: every kind that could be a warning
     /// or an error. A missing-chapter check is one when it could not check some series
     /// (`fmd_core::favorites::add_failures`).
-    pub const PROBLEMS: [NotificationType; 6] = [
+    pub const PROBLEMS: [NotificationType; 7] = [
         NotificationType::DownloadFailed,
         NotificationType::FavoritesCheckFailed,
         NotificationType::ModuleUpdate,
         NotificationType::DownloadsMoved,
         NotificationType::ComicServer,
         NotificationType::MissingCheck,
+        NotificationType::DiskSpaceLow,
     ];
 
     /// The type of the inbox event kind `kind`; `None` for a kind no channel can pick, like a
@@ -88,6 +91,7 @@ impl NotificationType {
             NotificationType::ModuleUpdate => "Module updates",
             NotificationType::DownloadsMoved => "Downloads moved",
             NotificationType::ComicServer => "Comic server rescan",
+            NotificationType::DiskSpaceLow => "Disk almost full",
         }
     }
 

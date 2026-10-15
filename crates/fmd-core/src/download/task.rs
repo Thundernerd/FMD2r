@@ -366,6 +366,13 @@ impl<'a> TaskRun<'a> {
             if self.terminated() {
                 return Ok(());
             }
+            if self.inner.hold_if_disk_low(&self.save_to) {
+                // Back in the queue at this chapter, to carry on once the disk has room.
+                self.inner.hold_running(self.id);
+                self.set_status(TaskStatus::Waiting)?;
+                log_task(self.id, &self.title, "waiting: the disk is almost full");
+                return Ok(());
+            }
             self.enter_chapter()?;
 
             let chapter_name = self.chapter_names[self.chapter].clone();
