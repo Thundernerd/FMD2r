@@ -70,6 +70,8 @@ describe('NotificationChannels', () => {
 				'Completed series removed',
 				'Download failed',
 				'Download completed',
+				'Series added to library',
+				'Download queued',
 				'Library check failed',
 				'Module updates',
 				'Downloads moved',

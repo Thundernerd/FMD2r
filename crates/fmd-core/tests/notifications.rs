@@ -3,14 +3,14 @@
 //!
 //! Expected values: ntfy's publishing API (https://docs.ntfy.sh/publish/: `POST` to the topic,
 //! `Title`/`Priority`/`Click` headers, `Authorization: Bearer <token>`, RFC 2047 for non-ASCII
-//! headers), Discord's Execute Webhook (`content` of up to 2000 characters) and the webhook
-//! payload the ticket specifies.
+//! headers), Discord's Execute Webhook with Components V2 (`flags` 32768, `with_components=true`,
+//! at most 4000 characters of text) and the webhook payload the ticket specifies.
 
 // Integration tests may panic (CODING_STANDARDS.md); clippy only exempts `#[test]` fns, not helpers.
 #![allow(clippy::unwrap_used)]
 
 use fmd_core::notifications::{
-    Channel, Notification, NotificationType, Request, request, requests,
+    Channel, Notification, NotificationType, Request, chapter_ranges, request, requests,
 };
 use fmd_core::settings::Settings;
 use fmd_store::EventSeverity;
@@ -24,6 +24,9 @@ fn new_chapters() -> Notification {
         body: "Found 2 new chapter from 1 manga(s):\n- One Piece <MangaDex> has 2 new chapter(s)."
             .into(),
         created_at: "2026-10-13T08:00:00Z".into(),
+        fields: Vec::new(),
+        cover_url: None,
+        link: None,
     }
 }
 
@@ -34,6 +37,9 @@ fn download_failed() -> Notification {
         title: "Download failed: One Piece".into(),
         body: "Ch. 1100: no pages".into(),
         created_at: "2026-10-13T09:00:00Z".into(),
+        fields: Vec::new(),
+        cover_url: None,
+        link: None,
     }
 }
 
@@ -115,41 +121,174 @@ fn discord() -> Settings {
     }}}))
 }
 
-#[test]
-fn discord_posts_the_bold_title_and_the_body_as_content() {
-    let request = request(Channel::Discord, &discord(), &new_chapters()).unwrap();
-    assert_eq!(request.url, "https://discord.com/api/webhooks/1/abc");
-    assert_eq!(header(&request, "Content-Type"), Some("application/json"));
+/// The one container of a Discord card: `body` must use Components V2.
+fn card(request: &Request) -> Value {
     let body: Value = serde_json::from_str(&request.body).unwrap();
+    assert_eq!(body["flags"], 32768, "{body}");
+    assert!(body.get("content").is_none(), "{body}");
+    let components = body["components"].as_array().unwrap();
+    assert_eq!(components.len(), 1, "{body}");
+    assert_eq!(components[0]["type"], 17, "{body}");
+    components[0].clone()
+}
+
+/// Every Text Display's content in `card`, in order, sections included.
+fn texts(card: &Value) -> Vec<String> {
+    let mut texts = Vec::new();
+    for component in card["components"].as_array().unwrap() {
+        match component["type"].as_u64().unwrap() {
+            10 => texts.push(component["content"].as_str().unwrap().to_owned()),
+            9 => texts.extend(
+                component["components"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|t| t["content"].as_str().unwrap().to_owned()),
+            ),
+            _ => {}
+        }
+    }
+    texts
+}
+
+#[test]
+fn discord_posts_a_components_card_with_the_title_and_the_body() {
+    let request = request(Channel::Discord, &discord(), &new_chapters()).unwrap();
+    // Webhooks not owned by an app ignore `components` without this.
     assert_eq!(
-        body,
-        json!({"content": "**Found new chapter(s)**\nFound 2 new chapter from 1 manga(s):\n- One Piece <MangaDex> has 2 new chapter(s)."})
+        request.url,
+        "https://discord.com/api/webhooks/1/abc?with_components=true"
+    );
+    assert_eq!(header(&request, "Content-Type"), Some("application/json"));
+    let card = card(&request);
+    assert_eq!(
+        texts(&card),
+        [
+            "### Found new chapter(s)",
+            "Found 2 new chapter from 1 manga(s):\n- One Piece <MangaDex> has 2 new chapter(s).",
+        ]
     );
 }
 
 #[test]
-fn discord_cuts_long_text_to_2000_characters_ending_in_an_ellipsis() {
-    let mut notification = new_chapters();
-    // Multi-byte characters: the limit counts characters, not bytes.
-    notification.body = "é".repeat(3000);
-    let request = request(Channel::Discord, &discord(), &notification).unwrap();
-    let body: Value = serde_json::from_str(&request.body).unwrap();
-    let content = body["content"].as_str().unwrap();
-    assert_eq!(content.chars().count(), 2000);
-    assert!(content.starts_with("**Found new chapter(s)**\néé"));
-    assert!(content.ends_with("é…"));
+fn discord_keeps_a_query_the_webhook_url_has() {
+    let settings = settings(json!({"notifications": {"discord": {
+        "enabled": true, "webhook_url": "https://discord.com/api/webhooks/1/abc?thread_id=9"
+    }}}));
+    let request = request(Channel::Discord, &settings, &new_chapters()).unwrap();
+    assert_eq!(
+        request.url,
+        "https://discord.com/api/webhooks/1/abc?thread_id=9&with_components=true"
+    );
 }
 
 #[test]
-fn discord_leaves_text_of_exactly_2000_characters_whole() {
+fn discord_colours_the_card_by_severity() {
+    let accent = |n: &Notification| {
+        card(&request(Channel::Discord, &discord(), n).unwrap())["accent_color"]
+            .as_u64()
+            .unwrap()
+    };
+    let (info, warning, error) = (
+        accent(&new_chapters()),
+        accent(&module_update()),
+        accent(&download_failed()),
+    );
+    assert_ne!(info, warning);
+    assert_ne!(warning, error);
+    assert_ne!(info, error);
+}
+
+fn download_completed() -> Notification {
+    Notification {
+        kind: "download_completed".into(),
+        severity: EventSeverity::Info,
+        title: "Download completed: One Piece".into(),
+        body: String::new(),
+        created_at: "2026-10-13T11:00:00Z".into(),
+        fields: vec![
+            (
+                "Chapters".into(),
+                "Chapter 0001 – 0047 (47 chapters)".into(),
+            ),
+            ("Website".into(), "MangaDex".into()),
+        ],
+        cover_url: Some("https://mangadex.org/covers/op.jpg".into()),
+        link: Some("/queue".into()),
+    }
+}
+
+#[test]
+fn discord_shows_the_fields_beside_the_cover() {
+    let request = request(Channel::Discord, &discord(), &download_completed()).unwrap();
+    let card = card(&request);
+    let section = &card["components"][0];
+    assert_eq!(section["type"], 9, "{card}");
+    assert_eq!(
+        section["accessory"],
+        json!({"type": 11, "media": {"url": "https://mangadex.org/covers/op.jpg"}})
+    );
+    assert_eq!(
+        texts(&card),
+        [
+            "### Download completed: One Piece",
+            "**Chapters:** Chapter 0001 – 0047 (47 chapters)\n**Website:** MangaDex",
+        ]
+    );
+}
+
+#[test]
+fn discord_links_to_the_page_in_fmd2r_when_its_address_is_known() {
+    let mut settings = discord();
+    settings.server.public_url = "https://fmd.example.org/".into();
+    let linked = card(&request(Channel::Discord, &settings, &download_completed()).unwrap());
+    assert_eq!(
+        texts(&linked).last().unwrap(),
+        "-# [Open in FMD2r](https://fmd.example.org/queue)"
+    );
+    // Without a page, the link goes to FMD2r itself.
+    let home = card(&request(Channel::Discord, &settings, &new_chapters()).unwrap());
+    assert_eq!(
+        texts(&home).last().unwrap(),
+        "-# [Open in FMD2r](https://fmd.example.org)"
+    );
+}
+
+/// Discord takes at most 4000 characters across a message's Text Displays.
+#[test]
+fn discord_cuts_long_text_to_4000_characters_ending_in_an_ellipsis() {
     let mut notification = new_chapters();
-    let head = "**Found new chapter(s)**\n".chars().count();
-    notification.body = "x".repeat(2000 - head);
-    let request = request(Channel::Discord, &discord(), &notification).unwrap();
-    let body: Value = serde_json::from_str(&request.body).unwrap();
-    let content = body["content"].as_str().unwrap();
-    assert_eq!(content.chars().count(), 2000);
-    assert!(content.ends_with('x'));
+    // Multi-byte characters: the limit counts characters, not bytes.
+    notification.body = "é".repeat(5000);
+    let card = card(&request(Channel::Discord, &discord(), &notification).unwrap());
+    let texts = texts(&card);
+    let total: usize = texts.iter().map(|t| t.chars().count()).sum();
+    assert_eq!(total, 4000);
+    assert_eq!(texts[0], "### Found new chapter(s)");
+    assert!(texts[1].ends_with("é…"));
+}
+
+#[test]
+fn discord_leaves_text_of_exactly_4000_characters_whole() {
+    let mut notification = new_chapters();
+    let head = "### Found new chapter(s)".chars().count();
+    notification.body = "x".repeat(4000 - head);
+    let card = card(&request(Channel::Discord, &discord(), &notification).unwrap());
+    assert!(texts(&card)[1].ends_with('x'));
+}
+
+/// The plain-text channels get the fields as `Label: value` lines after the body.
+#[test]
+fn ntfy_and_the_webhook_get_the_fields_as_lines() {
+    let ntfy = request(Channel::Ntfy, &ntfy(), &download_completed()).unwrap();
+    let lines = "Chapters: Chapter 0001 – 0047 (47 chapters)\nWebsite: MangaDex";
+    assert_eq!(ntfy.body, lines);
+    let settings = settings(json!({"notifications": {"webhook": {
+        "enabled": true, "url": "http://n8n.local/webhook/fmd"
+    }}}));
+    let webhook = request(Channel::Webhook, &settings, &download_completed()).unwrap();
+    let body: Value = serde_json::from_str(&webhook.body).unwrap();
+    assert_eq!(body["body"], lines);
 }
 
 #[test]
@@ -228,6 +367,9 @@ fn module_update() -> Notification {
         title: "Module update failed".into(),
         body: "MangaDex: checksum mismatch".into(),
         created_at: "2026-10-13T10:00:00Z".into(),
+        fields: Vec::new(),
+        cover_url: None,
+        link: None,
     }
 }
 
@@ -303,4 +445,82 @@ fn download_completed_is_off_by_default_and_sent_when_ticked() {
         "enabled": true, "topic_url": "https://ntfy.sh/t", "types": ["download_completed"],
     }}}));
     assert_eq!(channels(&settings, &completed), [Channel::Ntfy]);
+}
+
+/// "Series added" and "Download queued" fire for every series added and every task queued, so
+/// a new channel leaves them off; ticking them sends them.
+#[test]
+fn series_added_and_download_queued_are_off_by_default_and_sent_when_ticked() {
+    for kind in ["series_added", "download_queued"] {
+        let mut notification = new_chapters();
+        notification.kind = kind.into();
+        assert_eq!(channels(&ntfy(), &notification), [], "{kind}");
+        let settings = settings(json!({"notifications": {"ntfy": {
+            "enabled": true, "topic_url": "https://ntfy.sh/t", "types": [kind],
+        }}}));
+        assert_eq!(
+            channels(&settings, &notification),
+            [Channel::Ntfy],
+            "{kind}"
+        );
+    }
+}
+
+fn chapters(names: &[&str]) -> String {
+    chapter_ranges(names)
+}
+
+#[test]
+fn a_single_chapter_is_its_name() {
+    assert_eq!(chapters(&["Chapter 0001"]), "Chapter 0001");
+    assert_eq!(chapters(&[]), "");
+}
+
+#[test]
+fn consecutive_chapters_become_a_range_keeping_their_padding() {
+    let names: Vec<String> = (1..=47).map(|n| format!("Chapter {n:04}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    assert_eq!(chapters(&names), "Chapter 0001 – 0047 (47 chapters)");
+}
+
+#[test]
+fn gaps_split_the_ranges() {
+    assert_eq!(
+        chapters(&["Ch 1", "Ch 2", "Ch 3", "Ch 5", "Ch 7", "Ch 8", "Ch 9"]),
+        "Ch 1 – 3, Ch 5, Ch 7 – 9 (7 chapters)"
+    );
+}
+
+#[test]
+fn part_chapters_stay_in_the_range() {
+    assert_eq!(
+        chapters(&["Ch. 12", "Ch. 12.5", "Ch. 13"]),
+        "Ch. 12 – 13 (3 chapters)"
+    );
+}
+
+/// Only the last number counts, and a range never spans two volumes or other wording.
+#[test]
+fn a_change_of_wording_starts_a_new_range() {
+    assert_eq!(
+        chapters(&["Vol.1 Ch.3", "Vol.1 Ch.4", "Vol.2 Ch.5", "Vol.2 Ch.6"]),
+        "Vol.1 Ch.3 – 4, Vol.2 Ch.5 – 6 (4 chapters)"
+    );
+}
+
+#[test]
+fn chapters_without_a_number_stand_alone() {
+    assert_eq!(
+        chapters(&["Prologue", "Ch 1", "Ch 2", "Extra"]),
+        "Prologue, Ch 1 – 2, Extra (4 chapters)"
+    );
+}
+
+/// Text after the number shows in full at both ends.
+#[test]
+fn a_range_with_text_after_the_number_names_both_ends() {
+    assert_eq!(
+        chapters(&["Ch 1 (raw)", "Ch 2 (raw)"]),
+        "Ch 1 (raw) – Ch 2 (raw) (2 chapters)"
+    );
 }

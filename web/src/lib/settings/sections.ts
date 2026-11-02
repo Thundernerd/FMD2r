@@ -124,6 +124,8 @@ const NOTIFICATION_TYPES: { value: NotificationType; label: string }[] = [
 	{ value: 'completed', label: 'Completed series removed' },
 	{ value: 'download_failed', label: 'Download failed' },
 	{ value: 'download_completed', label: 'Download completed' },
+	{ value: 'series_added', label: 'Series added to library' },
+	{ value: 'download_queued', label: 'Download queued' },
 	{ value: 'favorites_check_failed', label: 'Library check failed' },
 	{ value: 'module_update', label: 'Module updates' },
 	{ value: 'downloads_moved', label: 'Downloads moved' },
