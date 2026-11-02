@@ -12,8 +12,11 @@ use fmd_core::favorites::{
     website_info,
 };
 use fmd_core::metadata::Metadata;
+use fmd_core::notifications::Notification;
 use fmd_core::settings::LibraryTitle;
-use fmd_store::{Favorite, FavoriteId, LibraryGroupId, ListsDb, NewFavorite, StoreError};
+use fmd_store::{
+    EventSeverity, Favorite, FavoriteId, LibraryGroupId, ListsDb, NewFavorite, StoreError,
+};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -166,6 +169,7 @@ pub(crate) async fn add(
         &info,
         req.save_to.as_deref().unwrap_or_default(),
     );
+    let chapters = info.chapters.len();
     let module_id = req.module_id.clone();
     let metadata = state.metadata.clone();
     let favorite = state
@@ -200,8 +204,33 @@ pub(crate) async fn add(
         let module_id = favorite.module_id.clone();
         tokio::task::spawn_blocking(move || jobs.favorites_changed(&module_id));
     }
+    state.push_notification(&series_added(&favorite, &website, chapters));
     let view = view(&state, favorite).await?;
     Ok((StatusCode::CREATED, Json(view)))
+}
+
+/// The kind of a series added to the library, which has no inbox event.
+const SERIES_ADDED: &str = "series_added";
+
+/// Names the series' website and how many chapters it has, with its cover and its page.
+fn series_added(favorite: &Favorite, website: &str, chapters: usize) -> Notification {
+    let page = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("module", &favorite.module_id)
+        .append_pair("link", &favorite.link)
+        .finish();
+    Notification {
+        kind: SERIES_ADDED.into(),
+        severity: EventSeverity::Info,
+        title: format!("Added to the library: {}", favorite.title),
+        body: String::new(),
+        created_at: crate::time::now_rfc3339(),
+        fields: vec![
+            ("Chapters".into(), chapters.to_string()),
+            ("Website".into(), website.to_owned()),
+        ],
+        cover_url: favorite.cover_url.clone(),
+        link: Some(format!("/series?{page}")),
+    }
 }
 
 /// Fields of a favorite to change; missing ones stay.

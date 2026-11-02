@@ -13,9 +13,16 @@ use utoipa::ToSchema;
 
 use crate::settings::Settings;
 
-/// The most characters Discord takes in a message's `content`
-/// (https://docs.discord.com/developers/resources/webhook, Execute Webhook).
-const DISCORD_CONTENT_LIMIT: usize = 2000;
+/// The most characters Discord takes across a message's Text Displays
+/// (https://docs.discord.com/developers/components/reference, Text Display).
+const DISCORD_TEXT_LIMIT: usize = 4000;
+/// `IS_COMPONENTS_V2`: the message is laid out by `components` alone
+/// (https://docs.discord.com/developers/resources/message, Message Flags).
+const DISCORD_COMPONENTS_V2: u32 = 1 << 15;
+/// A card's colour strip: Discord's blurple, yellow and red.
+const DISCORD_INFO: u32 = 0x5865F2;
+const DISCORD_WARNING: u32 = 0xF0B232;
+const DISCORD_ERROR: u32 = 0xDA373C;
 
 /// A service notifications are sent to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
@@ -44,6 +51,12 @@ pub enum NotificationType {
     /// A download finished (`fmd_server::notifications`). Sent to the channels only, never to
     /// the inbox; off by default, as it fires for every task.
     DownloadCompleted,
+    /// A series was added to the library (`fmd_server::favorites`). Sent to the channels only;
+    /// off by default.
+    SeriesAdded,
+    /// A download was queued (`fmd_server::notifications`), by hand or by a library check. Sent
+    /// to the channels only; off by default.
+    DownloadQueued,
     /// A library check failed.
     FavoritesCheckFailed,
     /// Modules were updated, or updating them failed (`fmd_core::module_updater`).
@@ -91,6 +104,8 @@ impl NotificationType {
             NotificationType::Completed => "Completed series removed",
             NotificationType::DownloadFailed => "Download failed",
             NotificationType::DownloadCompleted => "Download completed",
+            NotificationType::SeriesAdded => "Series added to library",
+            NotificationType::DownloadQueued => "Download queued",
             NotificationType::FavoritesCheckFailed => "Library check failed",
             NotificationType::ModuleUpdate => "Module updates",
             NotificationType::DownloadsMoved => "Downloads moved",
@@ -116,12 +131,32 @@ pub struct Notification {
     pub body: String,
     /// RFC 3339 timestamp.
     pub created_at: String,
+    /// Labelled values, e.g. `("Website", "MangaDex")`, shown after the body.
+    pub fields: Vec<(String, String)>,
+    /// The series cover, which Discord shows beside the text.
+    pub cover_url: Option<String>,
+    /// The page of the web UI it is about, e.g. `/queue`, joined to `server.public_url`.
+    pub link: Option<String>,
 }
 
 impl Notification {
     /// A warning or an error, which ntfy sends at high priority.
     pub fn is_problem(&self) -> bool {
         self.severity != EventSeverity::Info
+    }
+
+    /// The body and then the fields as `Label: value` lines: what the plain-text channels send.
+    pub fn text(&self) -> String {
+        let fields = self
+            .fields
+            .iter()
+            .map(|(label, value)| format!("{label}: {value}"));
+        Some(self.body.clone())
+            .filter(|b| !b.is_empty())
+            .into_iter()
+            .chain(fields)
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -198,25 +233,159 @@ fn ntfy(settings: &Settings, notification: &Notification) -> Option<Request> {
     Some(Request {
         url: url.to_owned(),
         headers,
-        body: notification.body.clone(),
+        body: notification.text(),
     })
 }
 
-/// Discord's Execute Webhook (https://docs.discord.com/developers/resources/webhook): the title
-/// in bold over the body, as `content`.
+/// Discord's Execute Webhook (https://docs.discord.com/developers/resources/webhook) with
+/// Components V2 (https://docs.discord.com/developers/components/reference): a Container
+/// coloured by severity holding the title, the body and the fields, the cover beside them when
+/// there is one, and a link to FMD2r when its address is known. `with_components=true` makes a
+/// webhook no app owns take components; such a webhook only takes non-interactive ones, so the
+/// link is Markdown rather than a button.
 fn discord(settings: &Settings, notification: &Notification) -> Option<Request> {
     let url = non_empty(&settings.notifications.discord.webhook_url)?;
-    let content = cut(
-        &format!("**{}**\n{}", notification.title, notification.body),
-        DISCORD_CONTENT_LIMIT,
-    );
-    Some(json_request(
-        url,
-        Vec::new(),
-        &serde_json::json!({ "content": content }),
-    ))
+    let separator = if url.contains('?') { '&' } else { '?' };
+    let url = format!("{url}{separator}with_components=true");
+
+    let title = format!("### {}", notification.title);
+    let fields: Vec<String> = notification
+        .fields
+        .iter()
+        .map(|(label, value)| format!("**{label}:** {value}"))
+        .collect();
+    let footer = non_empty(&settings.server.public_url).map(|public| {
+        let page = notification.link.as_deref().unwrap_or_default();
+        format!("-# [Open in FMD2r]({}{page})", public.trim_end_matches('/'))
+    });
+    let mut texts = vec![title];
+    if !notification.body.is_empty() {
+        texts.push(notification.body.clone());
+    }
+    if !fields.is_empty() {
+        texts.push(fields.join("\n"));
+    }
+    let fixed = footer.as_ref().map_or(0, |f| f.chars().count());
+    fit(&mut texts, DISCORD_TEXT_LIMIT.saturating_sub(fixed));
+
+    let displays: Vec<serde_json::Value> = texts
+        .into_iter()
+        .map(|content| serde_json::json!({"type": 10, "content": content}))
+        .collect();
+    let mut components = match &notification.cover_url {
+        // A Section takes one to three Text Displays and needs an accessory.
+        Some(cover) => vec![serde_json::json!({
+            "type": 9,
+            "components": displays,
+            "accessory": {"type": 11, "media": {"url": cover}},
+        })],
+        None => displays,
+    };
+    if let Some(footer) = footer {
+        components.push(serde_json::json!({"type": 14}));
+        components.push(serde_json::json!({"type": 10, "content": footer}));
+    }
+    let accent = match notification.severity {
+        EventSeverity::Info => DISCORD_INFO,
+        EventSeverity::Warning => DISCORD_WARNING,
+        EventSeverity::Error => DISCORD_ERROR,
+    };
+    let body = serde_json::json!({
+        "flags": DISCORD_COMPONENTS_V2,
+        "components": [{"type": 17, "accent_color": accent, "components": components}],
+    });
+    Some(json_request(&url, Vec::new(), &body))
 }
 
+/// Cuts `texts` to `limit` characters in all, last text first, each cut one ending in "…".
+fn fit(texts: &mut [String], limit: usize) {
+    let mut total: usize = texts.iter().map(|t| t.chars().count()).sum();
+    for text in texts.iter_mut().rev() {
+        if total <= limit {
+            return;
+        }
+        let length = text.chars().count();
+        let keep = length.saturating_sub(total - limit).max(1);
+        *text = cut(text, keep);
+        total = total - length + text.chars().count();
+    }
+}
+
+/// `names`, chapters in task order, as ranges: each run of names worded alike whose last number
+/// goes up by at most 1 at a time (so part chapters like 12.5 stay in) becomes `first – last`,
+/// e.g. `Chapter 0001 – 0047`. Names without a number stand alone. More than one chapter adds the
+/// count, e.g. `Chapter 0001 – 0047 (47 chapters)`.
+pub fn chapter_ranges<S: AsRef<str>>(names: &[S]) -> String {
+    let mut runs: Vec<(&str, &str)> = Vec::new();
+    let mut previous: Option<Numbered<'_>> = None;
+    for name in names {
+        let name = name.as_ref();
+        let numbered = Numbered::parse(name);
+        let extends = match (&previous, &numbered) {
+            (Some(p), Some(n)) => {
+                p.before == n.before && p.after == n.after && {
+                    let step = n.value - p.value;
+                    step > 0.0 && step <= 1.0
+                }
+            }
+            _ => false,
+        };
+        match runs.last_mut() {
+            Some(run) if extends => run.1 = name,
+            _ => runs.push((name, name)),
+        }
+        previous = numbered;
+    }
+    let ranges: Vec<String> = runs
+        .into_iter()
+        .map(|(first, last)| {
+            if first == last {
+                return first.to_owned();
+            }
+            match Numbered::parse(last) {
+                Some(n) if n.after.is_empty() => format!("{first} – {}", n.digits),
+                _ => format!("{first} – {last}"),
+            }
+        })
+        .collect();
+    match names.len() {
+        0 | 1 => ranges.join(", "),
+        count => format!("{} ({count} chapters)", ranges.join(", ")),
+    }
+}
+
+/// A chapter name split around its last number, e.g. `Ch. 12.5` into `Ch. `, `12.5` and ``.
+struct Numbered<'a> {
+    before: &'a str,
+    digits: &'a str,
+    after: &'a str,
+    value: f64,
+}
+
+impl<'a> Numbered<'a> {
+    fn parse(name: &'a str) -> Option<Numbered<'a>> {
+        let bytes = name.as_bytes();
+        let end = bytes.iter().rposition(u8::is_ascii_digit)? + 1;
+        let digits_from = |end: usize| {
+            bytes[..end]
+                .iter()
+                .rposition(|b| !b.is_ascii_digit())
+                .map_or(0, |i| i + 1)
+        };
+        let mut start = digits_from(end);
+        // A part chapter: `12.5`, not the `.5` of it.
+        if start >= 2 && bytes[start - 1] == b'.' && bytes[start - 2].is_ascii_digit() {
+            start = digits_from(start - 1);
+        }
+        let digits = &name[start..end];
+        Some(Numbered {
+            before: &name[..start],
+            digits,
+            after: &name[end..],
+            value: digits.parse().ok()?,
+        })
+    }
+}
 /// Any endpoint taking JSON: the event's kind, severity, title, body and time.
 fn webhook(settings: &Settings, notification: &Notification) -> Option<Request> {
     let webhook = &settings.notifications.webhook;
@@ -229,7 +398,7 @@ fn webhook(settings: &Settings, notification: &Notification) -> Option<Request> 
         "kind": notification.kind,
         "severity": notification.severity.as_str(),
         "title": notification.title,
-        "body": notification.body,
+        "body": notification.text(),
         "created_at": notification.created_at,
     });
     Some(json_request(url, headers, &body))

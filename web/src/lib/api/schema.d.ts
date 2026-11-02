@@ -2494,6 +2494,8 @@ export interface components {
 			| 'completed'
 			| 'download_failed'
 			| 'download_completed'
+			| 'series_added'
+			| 'download_queued'
 			| 'favorites_check_failed'
 			| 'module_update'
 			| 'downloads_moved'

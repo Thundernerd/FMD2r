@@ -67,6 +67,8 @@ pub struct AppState {
     pub(crate) moving: MovingFolders,
     /// The comic server scan [`AppState::start_comic_server_scans`] set up; unset, nothing scans.
     pub(crate) comic_server_scans: Arc<OnceLock<Debounce>>,
+    /// The sender [`AppState::start_notifications`] set up; unset, nothing is sent.
+    pub(crate) notifier: Arc<OnceLock<fmd_core::notifications::Sender>>,
     pub(crate) started: Instant,
     pub(crate) clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
     pub(crate) shutdown: Arc<watch::Sender<bool>>,
@@ -100,6 +102,7 @@ impl AppState {
             move_job: crate::folder_move::job(),
             moving: MovingFolders::default(),
             comic_server_scans: Arc::default(),
+            notifier: Arc::default(),
             started: Instant::now(),
             clock: Arc::new(SystemTime::now),
             shutdown: Arc::new(watch::channel(false).0),

@@ -17,6 +17,7 @@ use axum::response::Response;
 use fmd_core::disk_space::FreeSpace;
 use fmd_core::download::{DownloadManager, EngineConfig};
 use fmd_core::favorites::{CheckMode, CheckScope, CheckerConfig, FavoritesChecker};
+use fmd_core::info::{Chapter, InfoError, InfoOptions, MangaInfo};
 use fmd_core::jobs::JobRegistry;
 use fmd_core::modules::ModuleInfo;
 use fmd_core::settings::SettingsService;
@@ -118,6 +119,26 @@ impl ModuleCatalog for Modules {
             capabilities: Default::default(),
         }]
     }
+
+    /// Series `link` is "Manga" with two chapters.
+    fn get_info(
+        &self,
+        _id: &str,
+        link: &str,
+        _options: InfoOptions,
+    ) -> BoxFuture<'static, Result<MangaInfo, InfoError>> {
+        let chapter = |n: u32| Chapter {
+            name: format!("Ch {n}"),
+            link: format!("/c/{n}"),
+        };
+        let info = MangaInfo {
+            title: "Manga".into(),
+            link: link.into(),
+            chapters: vec![chapter(1), chapter(2)],
+            ..MangaInfo::default()
+        };
+        Box::pin(std::future::ready(Ok(info)))
+    }
 }
 
 /// How the stub answers a path.
@@ -218,6 +239,7 @@ async fn record(
 
 struct Harness {
     _dir: TempDir,
+    db: AppDb,
     state: AppState,
     checker: FavoritesChecker,
     stub: Stub,
@@ -303,6 +325,7 @@ async fn harness(logs: LogBuffer) -> Harness {
         .unwrap();
     Harness {
         _dir: dir,
+        db,
         state,
         checker,
         stub,
@@ -387,13 +410,11 @@ async fn new_chapters_go_to_every_enabled_channel_that_ticks_them() {
     assert_eq!(header(ntfy, "authorization"), Some("Bearer tk"));
     assert!(ntfy.body.contains("Manga"), "{}", ntfy.body);
     let discord = received.iter().find(|r| r.path == "/discord").unwrap();
-    let content: Value = serde_json::from_str(&discord.body).unwrap();
-    assert!(
-        content["content"]
-            .as_str()
-            .unwrap()
-            .starts_with("**Found new chapter(s)**\n"),
-        "{content}"
+    let card: Value = serde_json::from_str(&discord.body).unwrap();
+    assert_eq!(card["flags"], 32768, "{card}");
+    assert_eq!(
+        card["components"][0]["components"][0]["content"], "### Found new chapter(s)",
+        "{card}"
     );
 }
 
@@ -438,6 +459,104 @@ async fn a_finished_download_goes_only_to_channels_that_tick_it_and_not_to_the_i
     assert_eq!(body["body"], "Chapters: Ch\nWebsite: Test Site");
     let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
     assert_eq!(inbox, json!([]));
+}
+
+/// Turns the webhook on, ticking only `types`.
+async fn tick_webhook(state: &AppState, types: &[&str]) {
+    let patch = json!({"notifications": {"webhook": {"enabled": true, "types": types}}});
+    let req = Request::patch("/api/settings")
+        .header("content-type", "application/json")
+        .body(Body::from(patch.to_string()))
+        .unwrap();
+    assert_eq!(send(state, req).await.status(), StatusCode::OK);
+}
+
+/// A queued task names its chapters as ranges, not one by one, and goes to the channels that
+/// tick "Download queued", not to the inbox.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_queued_download_names_its_chapters_as_ranges() {
+    let h = harness(logs()).await;
+    tick_webhook(&h.state, &["download_queued"]).await;
+
+    add_chapters(
+        &h.state,
+        &[
+            ("Ch 1", "/c/1"),
+            ("Ch 2", "/c/2"),
+            ("Ch 3", "/c/3"),
+            ("Ch 5", "/c/5"),
+        ],
+    )
+    .await;
+
+    assert_eq!(h.stub.paths_after(1).await, ["/webhook"]);
+    let body: Value = serde_json::from_str(&h.stub.received()[0].body).unwrap();
+    assert_eq!(body["kind"], "download_queued");
+    assert_eq!(body["title"], "Download queued: Manga");
+    // The names the engine gives the chapters, with their numbers padded.
+    assert_eq!(
+        body["body"],
+        "Chapters: Ch 001 – 003, Ch 005 (4 chapters)\nWebsite: Test Site"
+    );
+    let inbox = body_json(send(&h.state, get("/api/inbox")).await).await;
+    assert_eq!(inbox, json!([]));
+}
+
+/// Adding a series to the library goes to the channels that tick "Series added".
+#[tokio::test(flavor = "multi_thread")]
+async fn adding_a_series_to_the_library_is_sent() {
+    let h = harness(logs()).await;
+    tick_webhook(&h.state, &["series_added"]).await;
+
+    let req = Request::post("/api/favorites")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({"module_id": "t", "link": "/other"}).to_string(),
+        ))
+        .unwrap();
+    assert_eq!(send(&h.state, req).await.status(), StatusCode::CREATED);
+
+    assert_eq!(h.stub.paths_after(1).await, ["/webhook"]);
+    let body: Value = serde_json::from_str(&h.stub.received()[0].body).unwrap();
+    assert_eq!(body["kind"], "series_added");
+    assert_eq!(body["title"], "Added to the library: Manga");
+    assert_eq!(body["body"], "Chapters: 2\nWebsite: Test Site");
+}
+
+/// Discord gets a card linking to the queue, with the cover of a series in the library.
+#[tokio::test(flavor = "multi_thread")]
+async fn discord_shows_a_finished_downloads_cover_from_the_library() {
+    let h = harness(logs()).await;
+    let patch = json!({
+        "server": {"public_url": "https://fmd.example.org"},
+        "notifications": {"discord": {"types": ["download_completed"]}},
+    });
+    let req = Request::patch("/api/settings")
+        .header("content-type", "application/json")
+        .body(Body::from(patch.to_string()))
+        .unwrap();
+    assert_eq!(send(&h.state, req).await.status(), StatusCode::OK);
+    let mut favorite = h.db.favorites().find("t", "/manga").unwrap().unwrap();
+    favorite.cover_url = Some("https://t/cover.jpg".into());
+    h.db.favorites().update(&favorite).unwrap();
+
+    let task = add(&h.state, "/c/2").await;
+    wait_for(&h.state, task, "finished").await;
+
+    let discord = h.stub.paths_after(1).await;
+    assert!(discord.contains(&"/discord".to_owned()), "{discord:?}");
+    let received = h.stub.received();
+    let discord = received.iter().find(|r| r.path == "/discord").unwrap();
+    let card: Value = serde_json::from_str(&discord.body).unwrap();
+    let container = &card["components"][0];
+    assert_eq!(
+        container["components"][0]["accessory"]["media"]["url"], "https://t/cover.jpg",
+        "{card}"
+    );
+    assert_eq!(
+        container["components"].as_array().unwrap().last().unwrap()["content"],
+        "-# [Open in FMD2r](https://fmd.example.org/queue)"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
